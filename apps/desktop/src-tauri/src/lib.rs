@@ -4,6 +4,7 @@
 //! the optional account sync (`sync.rs`) only runs after the user signs in.
 
 mod commands;
+mod friends;
 mod sync;
 mod windows;
 
@@ -46,6 +47,7 @@ pub struct AppState {
     pub main_pos: Mutex<Option<(i32, i32)>>,
     pub tray: Mutex<Option<TrayItems>>,
     pub sync: sync::SyncShared,
+    pub friends: friends::FriendsShared,
 }
 
 pub fn now() -> i64 {
@@ -89,6 +91,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
     let state = app.state::<AppState>();
     if !evs.is_empty() {
         let _ = app.emit(EVENTS, &evs);
+        friends::nudge(app);
     }
     let toasts_on = {
         let e = state.engine.lock().unwrap();
@@ -296,6 +299,7 @@ pub fn set_status(app: &AppHandle, status: &str) {
         }
     }
     let _ = app.emit("fraglink://status", status);
+    friends::nudge(app);
 }
 
 pub fn set_paused(app: &AppHandle, paused: bool) {
@@ -448,6 +452,7 @@ pub fn run() {
                 main_pos: Mutex::new(main_pos),
                 tray: Mutex::new(None),
                 sync: sync::SyncShared::default(),
+                friends: friends::FriendsShared::default(),
             });
             build_tray(&handle)?;
             if !fl.minimized {
@@ -482,6 +487,14 @@ pub fn run() {
             commands::sync_cancel,
             commands::sync_now,
             commands::sync_sign_out,
+            commands::friends_state,
+            commands::friends_refresh,
+            commands::get_server_stats,
+            commands::friend_add,
+            commands::friend_respond,
+            commands::friend_remove,
+            commands::friend_block,
+            commands::friend_mute,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Fraglink");

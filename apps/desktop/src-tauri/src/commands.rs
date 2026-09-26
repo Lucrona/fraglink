@@ -150,6 +150,8 @@ const ALLOWED: &[&str] = &[
     keys::SKIN,
     keys::ZOOM,
     keys::STATUS,
+    crate::friends::keys::FRIEND_TOASTS,
+    crate::friends::keys::FRIEND_TOASTS_DND,
 ];
 
 #[tauri::command]
@@ -253,6 +255,21 @@ pub fn toast_payload(state: State<'_, AppState>) -> Option<ToastPayload> {
 #[tauri::command]
 pub fn toast_clicked(app: AppHandle) {
     windows::show_main(&app);
+    let kind = app
+        .state::<AppState>()
+        .pending_toast
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|t| t.kind.clone())
+        .unwrap_or_default();
+    if let Some(h) = kind
+        .strip_prefix("friend:")
+        .or_else(|| kind.strip_prefix("request:"))
+    {
+        use tauri::Emitter;
+        let _ = app.emit("fraglink://show-friend", h);
+    }
     if let Some(w) = app.get_webview_window("toast") {
         let _ = w.close();
     }
@@ -288,4 +305,91 @@ pub fn sync_now(app: AppHandle) {
 #[tauri::command]
 pub fn sync_sign_out(app: AppHandle) {
     crate::sync::sign_out(&app);
+}
+
+// ------------------------------------------------------------------ friends (M3)
+
+#[tauri::command]
+pub fn friends_state(app: AppHandle) -> serde_json::Value {
+    crate::friends::view(&app)
+}
+
+/// Ask the presence thread to re-fetch the friends list.
+#[tauri::command]
+pub fn friends_refresh(app: AppHandle) {
+    crate::friends::request_refresh(&app);
+}
+
+#[tauri::command]
+pub fn get_server_stats(app: AppHandle) -> Option<serde_json::Value> {
+    crate::sync::server_stats(&app)
+}
+
+fn clean_handle(h: &str) -> CmdResult<String> {
+    let h = h.trim().trim_start_matches('@').to_string();
+    if h.is_empty()
+        || h.len() > 40
+        || !h
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err("Enter a Fraglink username (letters, numbers, _ or -).".into());
+    }
+    Ok(h)
+}
+
+/// Run a friends API call off the UI thread, then refresh the cached list.
+async fn friend_call<T: Send + 'static>(
+    app: AppHandle,
+    f: impl FnOnce(&fraglink_sync::Client) -> Result<T, fraglink_sync::SyncError> + Send + 'static,
+) -> CmdResult<T> {
+    let client = crate::sync::client(&app).ok_or("Sign in to sync first (Options).")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let r = f(&client).map_err(|e| e.to_string());
+        if r.is_ok() {
+            if let Ok(v) = client.friends() {
+                *app.state::<AppState>().friends.list.lock().unwrap() = Some(v);
+                crate::friends::emit(&app);
+            }
+        }
+        r
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub async fn friend_add(app: AppHandle, handle: String) -> CmdResult<String> {
+    let h = clean_handle(&handle)?;
+    friend_call(app, move |c| c.friend_request(&h)).await
+}
+
+#[tauri::command]
+pub async fn friend_respond(app: AppHandle, handle: String, accept: bool) -> CmdResult<()> {
+    let h = clean_handle(&handle)?;
+    friend_call(app, move |c| c.friend_respond(&h, accept)).await
+}
+
+#[tauri::command]
+pub async fn friend_remove(app: AppHandle, handle: String) -> CmdResult<()> {
+    let h = clean_handle(&handle)?;
+    friend_call(app, move |c| c.friend_remove(&h)).await
+}
+
+#[tauri::command]
+pub async fn friend_block(app: AppHandle, handle: String, block: bool) -> CmdResult<()> {
+    let h = clean_handle(&handle)?;
+    friend_call(
+        app,
+        move |c| if block { c.block(&h) } else { c.unblock(&h) },
+    )
+    .await
+}
+
+#[tauri::command]
+pub fn friend_mute(app: AppHandle, handle: String, mute: bool) -> CmdResult<()> {
+    let h = clean_handle(&handle)?;
+    crate::friends::set_muted(&app, &h, mute);
+    crate::friends::emit(&app);
+    Ok(())
 }

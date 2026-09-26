@@ -42,6 +42,9 @@ pub struct SyncShared {
     /// Bumped to cancel an in-flight pairing poll.
     pairing_gen: AtomicU64,
     pairing_error: Mutex<Option<String>>,
+    /// Latest `/api/v1/stats` response (per-game totals by tier). None when
+    /// signed out or the last fetch failed: the Stats tab then uses local data.
+    server_stats: Mutex<Option<(i64, serde_json::Value)>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -85,6 +88,29 @@ fn token(app: &AppHandle) -> Option<String> {
     })
 }
 
+pub fn signed_in(app: &AppHandle) -> bool {
+    setting(app, keys::TOKEN).is_some()
+}
+
+/// An authenticated client, or None when signed out.
+pub fn client(app: &AppHandle) -> Option<Client> {
+    token(app).map(|t| Client::new(&server(app), Some(t)))
+}
+
+/// Server totals for the Stats tab: `{fetched_at, games, overall}` or null.
+pub fn server_stats(app: &AppHandle) -> Option<serde_json::Value> {
+    if !signed_in(app) {
+        return None;
+    }
+    let st = app.state::<AppState>();
+    let g = st.sync.server_stats.lock().unwrap();
+    g.as_ref().map(|(at, v)| {
+        let mut v = v.clone();
+        v["fetched_at"] = serde_json::json!(at);
+        v
+    })
+}
+
 pub fn server(app: &AppHandle) -> String {
     setting(app, keys::SERVER).unwrap_or_else(|| DEFAULT_SERVER.to_string())
 }
@@ -121,6 +147,7 @@ pub fn view(app: &AppHandle) -> SyncView {
 pub fn init(app: &AppHandle) {
     if token(app).is_some() {
         start_worker(app.clone());
+        crate::friends::start(app);
     } else {
         log::info!("sync: not signed in; no network activity");
     }
@@ -158,6 +185,8 @@ fn start_worker(app: AppHandle) {
                         }
                         set(&app, keys::LAST_OK, &now().to_string());
                         set(&app, keys::LAST_ERROR, "");
+                        let stats = client.stats().ok().map(|v| (now(), v));
+                        *app.state::<AppState>().sync.server_stats.lock().unwrap() = stats;
                     }
                     Err(SyncError::Unauthorized) => {
                         log::warn!("sync: the server signed this device out");
@@ -166,11 +195,13 @@ fn start_worker(app: AppHandle) {
                             "Signed out from the website. Sign in again to keep syncing.",
                         );
                         emit(&app);
+                        crate::friends::emit(&app);
                         break;
                     }
                     Err(e) => {
                         log::warn!("sync: {e}");
                         set(&app, keys::LAST_ERROR, &e.to_string());
+                        *app.state::<AppState>().sync.server_stats.lock().unwrap() = None;
                     }
                 }
                 emit(&app);
@@ -234,6 +265,7 @@ fn clear_local(app: &AppHandle, reason: &str) {
     set(app, keys::USER, "");
     set(app, keys::LAST_ERROR, reason);
     let st = app.state::<AppState>();
+    *st.sync.server_stats.lock().unwrap() = None;
     let e = st.engine.lock().unwrap();
     if let Err(err) = e.tracker.store.reset_sync_state() {
         log::error!("sync: reset failed: {err:#}");
@@ -307,6 +339,7 @@ pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
                         *st.sync.pairing.lock().unwrap() = None;
                         log::info!("sync: signed in as {}", user.handle);
                         start_worker(app.clone());
+                        crate::friends::start(&app);
                         emit(&app);
                         return;
                     }

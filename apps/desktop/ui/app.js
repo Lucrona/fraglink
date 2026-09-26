@@ -1,6 +1,6 @@
 /* Fraglink tray client UI (from the classic client prototype).
    Stats and Activity show real local data from the Rust core via window.FL (backend.js).
-   Friends are still sample data until M3. No network calls. */
+   Friends are sample data while signed out; signed in to sync they come from the server (M3). */
 (() => {
   'use strict';
   const $ = (s, r = document) => r.querySelector(s);
@@ -10,7 +10,7 @@
   const FLB = window.FL; const TAURI = !!(FLB && FLB.tauri);
   document.body.classList.add('app-mode'); if (TAURI) document.body.classList.add('tauri');
   // live local data from the tracker
-  const LIVE = { glance: null, activity: [], fetchedAt: 0, settings: null };
+  const LIVE = { glance: null, activity: [], fetchedAt: 0, settings: null, friends: null, server: null };
 
 
   /* ---------------- skinned scrollbars (drawn in DOM so they match the classic skin everywhere) ---------------- */
@@ -193,12 +193,12 @@
   function fmtT(ms) { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; }
   function statusText(f) {
     if (f.kind === 'playing' || f.kind === 'fof') return GAMES[f.game].name;
-    if (f.kind === 'online') return f.status;
+    if (f.kind === 'online' || f.kind === 'req' || f.kind === 'out') return f.status;
     return 'Offline';
   }
   function row(f, cls = '') {
     const icon = f.game && f.kind !== 'off' ? `<i class="gi">${gameIcon(f.game)}</i>` : '<i class="noicon"></i>';
-    const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? 'Last online ' + f.last : '';
+    const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
     return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}" title="${esc(f.name)}"><span class="c-name">${icon}${esc(f.name)}</span><span class="c-status">${esc(statusText(f))}</span><span class="c-info">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls) {
@@ -209,14 +209,53 @@
     const { key, dir } = state.sort;
     return [...arr].sort((a, b) => (key === 'name' ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) : statusText(a).localeCompare(statusText(b))) * dir);
   }
+  /* Real friends (signed in to sync) mapped onto the same row shape as the samples. */
+  const realMode = () => !!(LIVE.friends && LIVE.friends.signed_in);
+  function sinceText(iso) {
+    if (!iso) return '';
+    const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+    return m < 1 ? 'just now' : m < 60 ? `for ${m} min` : `for ${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+  }
+  function realFriends() {
+    const l = LIVE.friends && LIVE.friends.list; if (!l) return [];
+    const out = [];
+    for (const f of l.friends || []) {
+      const p = f.presence || {}, name = f.display_name || f.handle, base = { id: 'u:' + f.handle, handle: f.handle, name, real: true, since: f.since, presence: p, week: 0, total: 0 };
+      if (p.status !== 'offline' && p.game_id) out.push({ ...base, kind: 'playing', game: ensureGame(p.game_id, p.game_name), server: sinceText(p.session_started_at), info: p.status === 'away' ? 'Away' : '' });
+      else if (p.status === 'online' || p.status === 'away') out.push({ ...base, kind: 'online', status: p.status === 'away' ? 'Away' : 'Online' });
+      else out.push({ ...base, kind: 'off', last: '' });
+    }
+    for (const q of l.incoming || []) out.push({ id: 'u:' + q.handle, handle: q.handle, name: q.display_name || q.handle, kind: 'req', status: 'Wants to add you', info: '', real: true, incoming: true });
+    for (const q of l.outgoing || []) out.push({ id: 'u:' + q.handle, handle: q.handle, name: q.display_name || q.handle, kind: 'out', status: 'Request sent', info: '', real: true });
+    return out;
+  }
+  const friendsNow = () => realMode() ? realFriends() : FRIENDS;
   function renderFriends() {
+    const s = state.sort;
+    let h = `<div class="xf-grid"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name</span><span class="c-status" data-sort="status">Status</span><span class="c-info">Game Info</span></div>`;
+    if (realMode()) {
+      const F = realFriends(), fs = LIVE.friends;
+      const playing = sorted(F.filter(f => f.kind === 'playing')), online = sorted(F.filter(f => f.kind === 'online'));
+      const reqs = F.filter(f => f.kind === 'req' || f.kind === 'out'), off = sorted(F.filter(f => f.kind === 'off'));
+      if (!fs.list) h += `<div class="fl-mock">${fs.connected ? 'Loading friends…' : 'Connecting to your Fraglink server…'}</div>`;
+      else if (!fs.connected) h += `<div class="fl-mock">Offline: friends' status may be out of date. Reconnecting…</div>`;
+      h += playing.map(f => row(f)).join('') + online.map(f => row(f)).join('');
+      if (reqs.length) {
+        h += sec('req', `Friend Requests (${reqs.length})`, 's-fof');
+        if (!state.collapsed.req) h += reqs.map(f => row(f, 'req')).join('');
+      }
+      h += sec('off', `Friends Offline`, 's-off');
+      if (!state.collapsed.off) h += off.map(f => row(f, 'off')).join('');
+      if (fs.list && !(fs.list.friends || []).length && !reqs.length) h += `<div class="fl-empty">No friends yet. <a data-action="add-friend">Add a friend</a> by their Fraglink username.</div>`;
+      h += '</div>';
+      list.innerHTML = h;
+      return;
+    }
     const playing = sorted(FRIENDS.filter(f => f.kind === 'playing'));
     const online = sorted(FRIENDS.filter(f => f.kind === 'online'));
     const fof = sorted(FRIENDS.filter(f => f.kind === 'fof'));
     const off = sorted(FRIENDS.filter(f => f.kind === 'off'));
-    const s = state.sort;
-    let h = `<div class="xf-grid"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name</span><span class="c-status" data-sort="status">Status</span><span class="c-info">Game Info</span></div>`;
-    h += `<div class="fl-mock">Sample friends only. Real friends arrive in a later update.</div>`;
+    h += `<div class="fl-mock">Sample friends. <a data-action="options">Sign in to sync</a> (Options) to see your real friends.</div>`;
     h += playing.map(f => row(f)).join('') + online.map(f => row(f)).join('');
     h += sec('fof', 'Friends of&nbsp;<u>Friends Playing</u>', 's-fof');
     if (!state.collapsed.fof) h += fof.map(f => row(f, 'fof')).join('');
@@ -249,8 +288,30 @@
     if (!top.length) h += `<div class="fl-empty">No games tracked yet. Start a game, or use <a data-action="tag-game">Fraglink → This is a game…</a></div>`;
     h += top.map(r => { const id = ensureGame(r.game_id, r.name); return `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(r.name)} · ${fmtDur(r.total_seconds)} tracked on this PC"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w"><i class="st-bar"><b style="width:${Math.round(r.seven_day_seconds / max * 100)}%"></b></i>${hrs(r.seven_day_seconds).toFixed(1)}</span><span class="st-t">${fmtHrs(r.total_seconds)}h${tierMark(r.tier || 'tracked')}</span></div>`; }).join('');
     h += `<div class="st-legend">${tierMark('tracked')}Tracked on this PC · ${g.games_tracked} game${g.games_tracked === 1 ? '' : 's'} · ${fmtHrs(g.total_seconds)} h total</div>`;
+    h += serverStatsHtml(g);
     h += `<div class="st-link"><a data-action="tag-game">&raquo; This is a game…</a> &nbsp; <a data-action="my-stats">&raquo; Full stats</a></div></div>`;
     list.innerHTML = h;
+  }
+  /* Account totals from the server (all devices + Steam + imports + estimates). */
+  function serverStatsHtml(g) {
+    if (!realMode()) return '';
+    const sv = LIVE.server;
+    let h = `<div class="xf-sec s-now"><i class="tri"></i>My Account (all devices)</div>`;
+    if (!sv) return h + `<div class="fl-empty">Server totals unavailable right now, so this shows this PC only.</div>`;
+    const local = {}; for (const r of g.top || []) local[r.game_id] = r.total_seconds / 60;
+    const rows = (sv.games || []).filter(r => r.display_min > 0 || r.estimated_min > 0).slice(0, 8);
+    if (!rows.length) h += `<div class="fl-empty">Nothing on your account yet. Sessions upload a few minutes after they end.</div>`;
+    h += rows.map(r => {
+      const id = ensureGame(r.game_id, r.name), est = r.display_min <= 0;
+      // Never show less than this PC already knows (uploads lag a few minutes).
+      const mins = est ? r.estimated_min : Math.max(r.display_min, r.display_tier === 'tracked' ? (local[r.game_id] || 0) : 0);
+      const tot = est ? `<span class="est">~${nf(mins / 60)}h</span>` : `${fmtHrs(mins * 60)}h${tierMark(r.display_tier)}`;
+      const tip = `${r.name} · tracked ${nf(r.tracked_min / 60)}h · imported ${nf(r.imported_min / 60)}h · estimated ~${nf(r.estimated_min / 60)}h`;
+      return `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(tip)}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w">${r.minutes_7d ? (r.minutes_7d / 60).toFixed(1) : ''}</span><span class="st-t">${tot}</span></div>`;
+    }).join('');
+    const o = sv.overall || {};
+    h += `<div class="st-legend">${tierMark('tracked')}Tracked ${tierMark('imported')}Imported <span class="est">~</span> Estimated · ${nf((o.verified_min || 0) / 60)} h${o.estimated_min ? ` + ${esc(o.estimated_display || '')} est.` : ''}</div>`;
+    return h;
   }
   const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   function dayLabel(ts) {
@@ -302,7 +363,19 @@
   /* ---------------- side panel ---------------- */
   function renderSide() {
     const el = SS.vp; requestAnimationFrame(SS.update);
-    const f = FRIENDS.find(x => x.id === state.sel);
+    const f = friendsNow().find(x => x.id === state.sel);
+    if (f && f.real) {
+      const muted = (LIVE.friends.muted || []).includes(f.handle.toLowerCase()), H = esc(f.handle);
+      let body;
+      if (f.kind === 'req') body = `<div>Wants to be your friend.</div><a data-action="friend-accept" data-handle="${H}">Accept</a> · <a data-action="friend-decline" data-handle="${H}">Decline</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
+      else if (f.kind === 'out') body = `<div>Friend request sent. They'll show up here once they accept.</div><a data-action="friend-remove" data-handle="${H}">Cancel request</a>`;
+      else body = `<div class="act">${f.kind === 'playing' ? `<i class="gi">${gameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b><br>${esc(f.server)}</div>` : `<div>${esc(statusText(f))}</div>`}</div>
+        <a data-action="chat">Send Message</a> · <a data-action="friend-mute" data-handle="${H}" data-mute="${muted ? 0 : 1}">${muted ? 'Unmute' : 'Mute'} toasts</a>
+        <div class="sep"></div><div><span style="color:#8ea3c8">Friends since:</span> <b>${f.since ? esc(new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })) : '?'}</b></div>
+        <div class="sep"></div><a data-action="friend-remove" data-handle="${H}" data-confirm="1">Remove friend</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
+      el.innerHTML = `<h4>${esc(f.name)}</h4><div style="color:#8ea3c8">@${H}</div>${body}<div class="sep"></div><a data-action="clear-sel">« Activity Report</a>`;
+      return;
+    }
     if (f) {
       const playing = f.kind === 'playing' || f.kind === 'fof';
       el.innerHTML = `<h4>${esc(f.name)}</h4>
@@ -313,7 +386,7 @@
         <div class="sep"></div><a data-action="clear-sel">« Activity Report</a>`;
       return;
     }
-    const act = FRIENDS.filter(x => x.kind === 'playing').map(x => `<div class="act"><i class="gi">${gameIcon(x.game)}</i><div><b>${esc(x.name)}</b> is playing <span style="color:var(--cyan)">${esc(GAMES[x.game].name)}</span></div></div>`).join('');
+    const act = friendsNow().filter(x => x.kind === 'playing').map(x => `<div class="act"><i class="gi">${gameIcon(x.game)}</i><div><b>${esc(x.name)}</b> is playing <span style="color:var(--cyan)">${esc(GAMES[x.game].name)}</span></div></div>`).join('');
     el.innerHTML = `<h4>Activity Report</h4>${act}
       <div class="sep"></div><h4>My Games</h4>
       <ul class="games">${((LIVE.glance && LIVE.glance.top) || []).map(r => { const id = ensureGame(r.game_id, r.name); return `<li><i class="gi">${gameIcon(id)}</i><span>${esc(r.name.replace(/:.*/, ''))}</span><em>${fmtHrs(r.total_seconds)}h</em></li>`; }).join('') || '<li><span>No games tracked yet</span></li>'}</ul>`;
@@ -571,6 +644,15 @@
     } catch (e) { console.error('refresh failed', e); }
   }
   function refreshSoon() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 250); }
+  async function refreshFriends() {
+    if (!FLB.friends) return;
+    try {
+      const [f, sv] = await Promise.all([FLB.friends(), FLB.serverStats()]);
+      LIVE.friends = f; LIVE.server = sv;
+      if (state.sel && !friendsNow().some(x => x.id === state.sel)) state.sel = null;
+      render();
+    } catch (e) { console.error('friends refresh failed', e); }
+  }
 
   /* ---- options dialog ---- */
   async function openOptions() {
@@ -655,12 +737,26 @@
     'pause-toggle': async () => { try { await FLB.set('paused', LIVE.glance && LIVE.glance.paused ? '0' : '1'); refreshSoon(); } catch (e) { toastErr(e); } },
     'export': async () => { try { const p = await FLB.exportData(); notice('Export my data', `Saved:<br><code>${p.map(esc).join('</code><br><code>')}</code>`); } catch (e) { toastErr(e); } },
     'open-data': () => FLB.openData().catch(toastErr),
-    'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li><li>How long since you last <b>touched the mouse or keyboard</b> (a single Windows number, not what you typed), so idle time isn\'t counted.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options; then only your game sessions (game, start, end, active time) are uploaded, never program names or paths.'),
-    'add-friend': () => notice('Add Friend', 'Friends arrive in a later update.'),
+    'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li><li>How long since you last <b>touched the mouse or keyboard</b> (a single Windows number, not what you typed), so idle time isn\'t counted.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options. Then your game sessions (game, start, end, active time) are uploaded, and while the app runs your friends see your status and the game you\'re playing now. <b>Invisible</b> shows you as offline. Program names and paths are never sent.'),
+    'add-friend': () => {
+      if (!realMode()) { notice('Add Friend', 'Sign in to sync first (<a data-action="options">Options</a> → Sync). Friends need a Fraglink account.'); return; }
+      notice('Add Friend', `Their Fraglink username:<br><input id="add-handle" maxlength="40" placeholder="username" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="add-friend-go">Send request</button></div><div id="add-msg"></div>`);
+      setTimeout(() => $('#add-handle') && $('#add-handle').focus(), 0);
+    },
+    'add-friend-go': async () => {
+      const h = ($('#add-handle').value || '').trim(); if (!h) return;
+      try { const r = await FLB.friendAdd(h); $('#add-msg').innerHTML = r === 'accepted' ? `You and <b>${esc(h)}</b> are now friends.` : `Request sent. <b>${esc(h)}</b> shows under Friend Requests until they accept.`; $('#add-handle').value = ''; }
+      catch (e) { $('#add-msg').innerHTML = `<span class="bad">${esc(String(e && e.message || e))}</span>`; }
+    },
+    'friend-accept': a => FLB.friendRespond(a.dataset.handle, true).then(refreshFriends).catch(toastErr),
+    'friend-decline': a => FLB.friendRespond(a.dataset.handle, false).then(() => { state.sel = null; refreshFriends(); }).catch(toastErr),
+    'friend-remove': a => { if (a.dataset.confirm && !confirm(`Remove ${a.dataset.handle} from your friends?`)) return; FLB.friendRemove(a.dataset.handle).then(() => { state.sel = null; refreshFriends(); }).catch(toastErr); },
+    'friend-block': a => { if (!confirm(`Block ${a.dataset.handle}? They won't be able to send you requests or see your status. They aren't told.`)) return; FLB.friendBlock(a.dataset.handle, true).then(() => { state.sel = null; refreshFriends(); }).catch(toastErr); },
+    'friend-mute': a => FLB.friendMute(a.dataset.handle, a.dataset.mute === '1').then(refreshFriends).catch(toastErr),
     'my-profile': () => notice('My Profile', LATER), 'friend-profile': () => notice('Profile', LATER),
     'my-stats': () => notice('Full stats', LATER), 'website': () => notice('fraglink.gg', LATER), 'estimate': () => notice('Estimate my history', LATER),
     'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${st.version}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {} notice('About Fraglink', `<b>Fraglink ${esc(v)}</b><br>Local hours tracker (M1) with optional account sync (M2 preview).<br>© 2026 Lucrona. All rights reserved.<br><br>Classic look inspired by 2005-era gaming IM clients; original Fraglink mark. Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).`); },
-    'chat': () => openChat(state.sel),
+    'chat': () => { const f = friendsNow().find(x => x.id === state.sel); if (f && f.real) { notice('Chat', 'Fraglink has no built-in chat. Linking Discord so this opens a DM arrives in a later update.'); return; } openChat(state.sel); },
     'join': () => notice('Join Game', 'Joining friends arrives with friends in a later update.'),
     'clear-sel': () => { state.sel = null; render(); },
     'download': () => notice('Download', 'You are already running Fraglink.'),
@@ -680,6 +776,7 @@
     const w = e.target.closest('[data-web]'); if (w) { website(w.dataset.web); return; }
     const r = e.target.closest('[data-friend]'); if (r) { state.sel = r.dataset.friend; render(); }
   });
+  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); });
   list.addEventListener('dblclick', e => { const r = e.target.closest('[data-friend]'); if (r) openChat(r.dataset.friend); });
   // prototype: single click also opened chat; the app only selects (friends are sample data until M3)
   $('#list').addEventListener('keydown', e => {
@@ -746,8 +843,14 @@
     clock();
     if (params.get('side') === '1') toggleSide(true);
     if (params.get('sel')) { state.sel = params.get('sel'); render(); }
+    if (params.get('add') === '1') setTimeout(() => actions['add-friend'](), 300);
+    await refreshFriends();
     await refresh();
     FLB.on('fraglink://events', refreshSoon);
+    FLB.on('fraglink://friends', refreshFriends);
+    FLB.on('fraglink://sync', refreshFriends);
+    FLB.on('fraglink://show-friend', h => { state.tab = 'friends'; state.sel = 'u:' + h; refreshFriends(); });
+    setInterval(() => { if (realMode() && state.tab === 'friends') render(); }, 60000);
     FLB.on('fraglink://paused', refreshSoon);
     FLB.on('fraglink://status', v => { $('#status').value = v; $('#username').textContent = ME.name + (v === 'online' ? '' : ' (' + $('#status').selectedOptions[0].text + ')'); });
     setInterval(refresh, 30000);

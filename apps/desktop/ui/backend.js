@@ -29,6 +29,14 @@
       syncCancel: () => inv('sync_cancel'),
       syncNow: () => inv('sync_now'),
       syncSignOut: () => inv('sync_sign_out'),
+      friends: () => inv('friends_state'),
+      friendsRefresh: () => inv('friends_refresh'),
+      friendAdd: (handle) => inv('friend_add', { handle }),
+      friendRespond: (handle, accept) => inv('friend_respond', { handle, accept }),
+      friendRemove: (handle) => inv('friend_remove', { handle }),
+      friendBlock: (handle, block) => inv('friend_block', { handle, block }),
+      friendMute: (handle, mute) => inv('friend_mute', { handle, mute }),
+      serverStats: () => inv('get_server_stats'),
       on: (evt, cb) => T.event.listen(evt, e => cb(e.payload)),
       drag: () => T.window.getCurrentWindow().startDragging(),
     };
@@ -90,8 +98,34 @@
     syncCancel: () => { sync.pairing = null; return ok(); },
     syncNow: () => ok(),
     syncSignOut: () => { sync.signed_in = false; sync.user = null; return ok(); },
+    friends: () => ok(sync.signed_in ? { signed_in: true, connected: true, me: sync.user, list: mockFriends, muted } : { signed_in: false, connected: false, me: null, list: null, muted: [] }),
+    friendsRefresh: () => ok(),
+    friendAdd: (h) => { mockFriends.outgoing.push({ handle: h, display_name: h, created_at: new Date().toISOString() }); return ok('pending'); },
+    friendRespond: (h, a) => { const r = mockFriends.incoming.find(x => x.handle === h); mockFriends.incoming = mockFriends.incoming.filter(x => x !== r); if (a && r) mockFriends.friends.push({ handle: h, display_name: r.display_name, since: new Date().toISOString(), presence: { status: 'online' } }); return ok(); },
+    friendRemove: (h) => { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.outgoing = mockFriends.outgoing.filter(f => f.handle !== h); return ok(); },
+    friendBlock: (h, b) => { if (b) { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.blocked.push(h); } else mockFriends.blocked = mockFriends.blocked.filter(x => x !== h); return ok(); },
+    friendMute: (h, m) => { const i = muted.indexOf(h.toLowerCase()); if (m && i < 0) muted.push(h.toLowerCase()); if (!m && i >= 0) muted.splice(i, 1); return ok(); },
+    serverStats: () => ok(sync.signed_in ? { fetched_at: now(), games: [
+      { game_id: 'wc3', name: 'Warcraft III', tracked_min: 0, imported_min: 544 * 60, estimated_min: 0, display_min: 544 * 60, display_tier: 'imported' },
+      { game_id: 'wow', name: 'World of Warcraft', tracked_min: 312 * 60, imported_min: 0, estimated_min: 0, display_min: 312 * 60, display_tier: 'tracked' },
+      { game_id: 'steam:730', name: 'Counter-Strike 2', tracked_min: 118 * 60, imported_min: 0, estimated_min: 0, display_min: 118 * 60, display_tier: 'tracked' },
+      { game_id: 'manual:ut99', name: 'Unreal Tournament', tracked_min: 0, imported_min: 0, estimated_min: 1500 * 60, display_min: 0, display_tier: 'estimated' },
+    ], overall: { verified_min: 974 * 60, estimated_min: 1500 * 60, estimated_display: '~1,500h' } } : null),
     on: () => ok(() => {}),
     drag: () => ok(),
   };
-  const sync = { signed_in: false, server: 'http://localhost:8787', user: null, last_ok: null, last_error: null, pairing: null, pairing_error: null };
+  const iso = (s) => new Date((now() - s) * 1000).toISOString();
+  const muted = [];
+  const mockFriends = {
+    friends: [
+      { handle: 'nova', display_name: 'Nova', since: iso(90 * 86400), presence: { status: 'online', game_id: 'steam:570', game_name: 'Dota 2', session_started_at: iso(38 * 60) } },
+      { handle: 'grimm', display_name: 'Grimm', since: iso(40 * 86400), presence: { status: 'away', game_id: null, game_name: null } },
+      { handle: 'kestrel', display_name: 'Kestrel', since: iso(12 * 86400), presence: { status: 'online', game_id: null, game_name: null } },
+      { handle: 'pixelmoth', display_name: 'PixelMoth', since: iso(5 * 86400), presence: { status: 'offline', game_id: null, game_name: null } },
+    ],
+    incoming: [{ handle: 'oldmate', display_name: 'Old Mate', created_at: iso(3600) }],
+    outgoing: [{ handle: 'zed', display_name: 'Zed', created_at: iso(7200) }],
+    blocked: [],
+  };
+  const sync = { signed_in: /[?&]signed=1/.test(location.search), user: /[?&]signed=1/.test(location.search) ? 'Lucrona' : null, server: 'http://localhost:8787', last_ok: null, last_error: null, pairing: null, pairing_error: null };
 })();

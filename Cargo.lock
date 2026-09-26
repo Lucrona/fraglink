@@ -1468,7 +1468,9 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "tungstenite 0.28.0",
  "ureq",
+ "url",
  "windows-sys 0.59.0",
 ]
 
@@ -5333,9 +5335,12 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.5",
+ "rustls",
+ "rustls-pki-types",
  "sha1 0.10.7",
  "thiserror 2.0.21",
  "utf-8",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]

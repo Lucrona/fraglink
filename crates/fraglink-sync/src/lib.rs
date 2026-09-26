@@ -3,6 +3,7 @@
 //! Nothing here runs unless the user explicitly signs in to sync: the desktop
 //! app only constructs a [`Client`] after the user presses "Sign in to sync".
 
+pub mod presence;
 pub mod secret;
 
 use fraglink_core::outbox::UploadBatch;
@@ -206,12 +207,71 @@ impl Client {
         self.call("POST", "/api/v1/sessions/upload", Some(body))
     }
 
+    /// Server-side per-game totals by trust tier (`GET /api/v1/stats`).
+    pub fn stats(&self) -> Result<serde_json::Value, SyncError> {
+        self.call("GET", "/api/v1/stats", None)
+    }
+
+    pub fn friends(&self) -> Result<serde_json::Value, SyncError> {
+        self.call("GET", "/api/v1/friends", None)
+    }
+
+    /// Returns `"pending"` or `"accepted"`.
+    pub fn friend_request(&self, handle: &str) -> Result<String, SyncError> {
+        let v: serde_json::Value = self.call(
+            "POST",
+            "/api/v1/friends/request",
+            Some(serde_json::json!({ "handle": handle })),
+        )?;
+        Ok(v["status"].as_str().unwrap_or("pending").to_string())
+    }
+
+    pub fn friend_respond(&self, handle: &str, accept: bool) -> Result<(), SyncError> {
+        let _: Option<serde_json::Value> = self.call(
+            "POST",
+            "/api/v1/friends/respond",
+            Some(serde_json::json!({ "handle": handle, "accept": accept })),
+        )?;
+        Ok(())
+    }
+
+    pub fn friend_remove(&self, handle: &str) -> Result<(), SyncError> {
+        let _: Option<serde_json::Value> =
+            self.call("DELETE", &format!("/api/v1/friends/{}", enc(handle)), None)?;
+        Ok(())
+    }
+
+    pub fn block(&self, handle: &str) -> Result<(), SyncError> {
+        let _: Option<serde_json::Value> = self.call(
+            "POST",
+            "/api/v1/blocks",
+            Some(serde_json::json!({ "handle": handle })),
+        )?;
+        Ok(())
+    }
+
+    pub fn unblock(&self, handle: &str) -> Result<(), SyncError> {
+        let _: Option<serde_json::Value> =
+            self.call("DELETE", &format!("/api/v1/blocks/{}", enc(handle)), None)?;
+        Ok(())
+    }
+
+    /// Open the live presence socket.
+    pub fn presence(&self) -> Result<presence::PresenceSocket, SyncError> {
+        let token = self.token.as_deref().ok_or(SyncError::Unauthorized)?;
+        presence::PresenceSocket::connect(&self.base, token)
+    }
+
     /// Revoke this device's token on the server.
     pub fn logout(&self) -> Result<(), SyncError> {
         let _: Option<serde_json::Value> =
             self.call("POST", "/api/v1/auth/logout", Some(serde_json::json!({})))?;
         Ok(())
     }
+}
+
+fn enc(s: &str) -> String {
+    url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
 
 /// Validate a user-entered server URL (http/https only, no path tricks).
