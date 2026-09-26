@@ -24,7 +24,7 @@ M2 checkpoint (accounts, Steam import, trust tiers). Local development only; not
 
 ## [0.1.1] - 2026-09-26
 
-M1 polish.
+M1 polish. Unsigned Windows installers (NSIS + MSI) were built by CI for tag `v0.1.1`: https://github.com/Lucrona/fraglink/actions/runs/36232852969 (artifacts kept until 25 Dec 2026).
 
 ### Added
 - **Epic Games Store detection.** Games installed through the Epic launcher are recognised by install folder, read from its local manifests (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`). DLC, Unreal Engine installs and incomplete installs are skipped.
