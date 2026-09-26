@@ -1,9 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["crates/fraglink-core", "apps/desktop/src-tauri"]
-# `cargo test` / `cargo clippy` at the root only touch the core crate by default,
-# so they work on machines without the Tauri/WebKit system libraries.
-default-members = ["crates/fraglink-core"]
+members = ["crates/fraglink-core", "crates/fraglink-sync", "apps/server", "apps/desktop/src-tauri"]
+# `cargo test` / `cargo clippy` at the root only touch the core + sync crates by
+# default, so they work without the Tauri/WebKit system libraries or Postgres.
+# Server tests: `cargo test -p fraglink-server` with DATABASE_URL set (see apps/server/README.md).
+default-members = ["crates/fraglink-core", "crates/fraglink-sync"]
 
 [workspace.package]
 version = "0.1.1"

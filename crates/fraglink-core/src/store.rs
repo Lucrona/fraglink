@@ -1,5 +1,6 @@
 //! Local SQLite store (WAL). Everything Fraglink records lives here, in the
-//! app data folder. Nothing is uploaded in M1.
+//! app data folder. Nothing is uploaded unless the user signs in to sync
+//! (see `outbox.rs`; the network client lives outside this crate).
 
 use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -7,7 +8,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -155,11 +156,32 @@ impl Store {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.execute_batch(SCHEMA)?;
+        Self::migrate(&conn)?;
         conn.execute(
-            "INSERT INTO meta(key, value) VALUES('schema_version', ?1) ON CONFLICT(key) DO NOTHING",
+            "INSERT INTO meta(key, value) VALUES('schema_version', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![SCHEMA_VERSION.to_string()],
         )?;
         Ok(Store { conn })
+    }
+
+    /// Additive, idempotent migrations for databases created by older versions.
+    fn migrate(conn: &Connection) -> Result<()> {
+        let has_col = |table: &str, col: &str| -> Result<bool> {
+            let mut st = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+            let names = st
+                .query_map([], |r| r.get::<_, String>(1))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(names.iter().any(|n| n == col))
+        };
+        // v2 (0.2.0): sync outbox state per session.
+        if !has_col("sessions", "synced_at")? {
+            conn.execute_batch(
+                "ALTER TABLE sessions ADD COLUMN synced_at INTEGER;
+                 ALTER TABLE sessions ADD COLUMN sync_error TEXT;",
+            )?;
+        }
+        Ok(())
     }
 
     pub fn conn(&self) -> &Connection {
@@ -358,7 +380,7 @@ impl Store {
     ) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute(
-            "UPDATE sessions SET ended_at = ?2, last_checkpoint_at = ?2, active_seconds = ?3, idle_trimmed_seconds = ?4, status = 'closed' WHERE id = ?1",
+            "UPDATE sessions SET ended_at = ?2, last_checkpoint_at = ?2, active_seconds = ?3, idle_trimmed_seconds = ?4, status = 'closed', synced_at = NULL, sync_error = NULL WHERE id = ?1",
             params![id, ended_at, active, trimmed],
         )?;
         Self::write_days(&tx, id, game_id, days)?;
@@ -389,7 +411,7 @@ impl Store {
 
     pub fn reopen_session(&self, id: i64) -> Result<()> {
         self.conn.execute(
-            "UPDATE sessions SET status = 'open', ended_at = NULL WHERE id = ?1",
+            "UPDATE sessions SET status = 'open', ended_at = NULL, synced_at = NULL WHERE id = ?1",
             params![id],
         )?;
         Ok(())

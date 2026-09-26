@@ -1,0 +1,19 @@
+[package]
+name = "fraglink-sync"
+description = "Blocking HTTP client the Fraglink desktop app uses to pair with and upload to a Fraglink server (opt-in)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license-file.workspace = true
+publish.workspace = true
+
+[dependencies]
+fraglink-core = { path = "../fraglink-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+ureq = { version = "2", features = ["json", "tls"] }
+base64 = "0.22"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
