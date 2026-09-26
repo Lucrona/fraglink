@@ -2,7 +2,7 @@
 
 <p align="center"><b>Track your gaming hours across every launcher and see what your friends are playing, from anywhere.</b></p>
 
-<p align="center"><i>Early development. Current build: M1, a local hours tracker. Private testing only.</i></p>
+<p align="center"><i>Early development. Current build: 0.1.1 (M1, a local hours tracker); M2 (accounts + Steam + trust tiers) in progress. Private testing only.</i></p>
 
 ---
 
@@ -20,8 +20,9 @@ Fraglink sits alongside Discord, Steam and Twitch rather than replacing them.
 
 **Early development.**
 
-- **Done:** M0 (setup) and M1 (local tracker + tray tabs).
-- **Not yet:** accounts, friends and the website.
+- **Done:** M0 (setup) and M1 (local tracker + tray tabs), released as 0.1.1.
+- **In progress:** M2. A local development server (`apps/server`) has accounts, tray pairing, opt-in session sync, Tracked / Imported / Estimated hours and Steam import. Nothing is hosted yet.
+- **Not yet:** friends and the real website.
 - **Builds:** CI produces unsigned Windows installers for private testing.
 
 See the [changelog](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
@@ -45,9 +46,15 @@ See the [changelog](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
 - Pause tracking, per-game exclusions, start with Windows (off by default).
 - **Export everything** (JSON + CSV) from the tray at any time.
 
+**M2 preview (local server, opt-in)**
+
+- Sign in to sync from Options: pair the tray with a code, approved in your browser. Sessions upload in the background, and tracking works the same offline.
+- Server: email accounts, Steam link (verified via Steam sign-in) and playtime import, history estimator and self-reported counters, each number labelled **● Tracked / ◆ Imported / ~ Estimated**. Leaderboards count Tracked only.
+- See [`apps/server/README.md`](apps/server/README.md) and [`docs/decisions.md`](docs/decisions.md).
+
 **Coming** (see the [roadmap](docs/ROADMAP.md))
 
-- **M2:** accounts, Steam hours import, and trust tiers (Tracked / Imported / Estimated) on every number.
+- **M2 (rest):** Discord login, email verification/password reset, hosting, privacy policy.
 - **M3:** friends with live presence, friend toasts and an activity feed.
 - **M4:** fraglink.gg profiles, gaming history, onboarding estimator and signature images.
 - **M5:** verified WoW character cards and exact `/played` import.
@@ -62,7 +69,7 @@ See the [changelog](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
 
 - **No game memory reading, no injection, no overlays, no packet sniffing.** Fraglink only lists running processes and reads documented files (Steam library manifests), so it is safe alongside anti-cheat (VAC, EAC, BattlEye, Vanguard, Ricochet).
 - **No keyboard or mouse hooks.** Idle detection uses Windows' `GetLastInputInfo`, which only gives the time since your last input, never what you typed.
-- **Local-first, no telemetry.** The current build makes no network connections at all. Sync in later milestones will be explicit and opt-in.
+- **Local-first, no telemetry.** The tray makes no network connections unless you sign in to sync (Options). Even then it only uploads game sessions (game, start, end, active time), never program names or paths.
 - **Export-everything pledge.** All your data is exportable, free, at any time. That is already in the tray menu today. If Fraglink ever shuts down, you'll get plenty of notice and a full export.
 
 Details: [`docs/privacy.md`](docs/privacy.md).
@@ -73,12 +80,15 @@ Details: [`docs/privacy.md`](docs/privacy.md).
 apps/desktop/            Tauri 2 app
   ui/                    webview frontend: plain HTML/CSS/JS from the prototype, no bundler
   src-tauri/             Rust shell: tray, windows, commands, tracker thread
-crates/fraglink-core/    detector, Steam library reader, tracker, SQLite store, stats, export, simulation
+apps/server/             M2 server: axum + Postgres, accounts, pairing, sync, trust tiers, Steam import
+crates/fraglink-core/    detector, Steam/Epic/GOG library readers, tracker, SQLite store + upload outbox, stats, export, simulation
+crates/fraglink-sync/    HTTP client the tray uses for opt-in sync (DPAPI-protected token)
   src/bin/fraglink-sim.rs  headless runner for testing on any OS
   tests/fixtures/steam/  VDF/ACF fixtures for the Steam parser tests
 packages/signatures/     games.json (game signatures) + the script that generates it
 docs/                    spec, privacy notes, Windows testing checklist
-.github/workflows/ci.yml Linux (fmt/clippy/tests/sim) + Windows (tests + unsigned NSIS/MSI installers)
+.github/workflows/ci.yml Linux (fmt/clippy/tests incl. server on Postgres/sim) + Windows (tests + unsigned NSIS/MSI installers)
+docker-compose.yml       local Postgres (+ optional server container) for development
 ```
 
 ## How detection works (read-only)
@@ -99,7 +109,7 @@ Excluded games are ignored. **Fraglink never reads game memory, injects, hooks o
 
 ## Build from source
 
-Prerequisites: Rust stable (1.85+) and Node 20+. On Windows, WebView2 (preinstalled on Windows 10/11) and the MSVC build tools. On Linux, the Tauri deps: `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`.
+Prerequisites: Rust stable (1.94+) and Node 20+. On Windows, WebView2 (preinstalled on Windows 10/11) and the MSVC build tools. On Linux, the Tauri deps: `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`.
 
 ```bash
 cd apps/desktop
@@ -119,6 +129,16 @@ cargo run --release -p fraglink-core --bin fraglink-sim -- --fast            # s
 cargo run --release -p fraglink-core --bin fraglink-sim -- --system --duration 60   # watch real processes for 60 s
 cargo run --release -p fraglink-core --bin fraglink-sim -- --help
 ```
+
+Server (M2, local development; needs Postgres, e.g. `docker compose up -d db`):
+
+```bash
+export DATABASE_URL=postgres://fraglink:fraglink@127.0.0.1:5432/fraglink
+cargo run -p fraglink-server      # http://localhost:8787
+cargo test -p fraglink-server     # fresh database per test, Steam mocked
+```
+
+Details, env vars and the API: [`apps/server/README.md`](apps/server/README.md).
 
 Simulation script format: `exe[:seconds[:idle]]` or `steam:<appid>:<seconds>`, comma-separated. `-:<seconds>` means nothing is running. Example: `cs2.exe:150,-:20,steam:570:150,C:/Games/X/X.exe:120,Wow.exe:180:idle`.
 

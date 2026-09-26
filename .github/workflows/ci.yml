@@ -18,6 +18,20 @@ jobs:
   linux:
     name: Linux - fmt, clippy, tests
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fraglink
+          POSTGRES_PASSWORD: fraglink
+          POSTGRES_DB: fraglink
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fraglink"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Throwaway CI database (not a secret). sqlx::test creates one DB per test.
+      DATABASE_URL: postgres://fraglink:fraglink@localhost:5432/fraglink
     steps:
       - uses: actions/checkout@v5
       - name: Install Tauri system dependencies
@@ -32,7 +46,7 @@ jobs:
         run: cargo fmt --all -- --check
       - name: cargo clippy (whole workspace incl. desktop app)
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: cargo test
+      - name: cargo test (core, sync client, server against Postgres, desktop)
         run: cargo test --workspace
       - name: Simulation smoke run
         run: cargo run --release -p fraglink-core --bin fraglink-sim -- --fast --export sim-export
@@ -53,8 +67,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo clippy (Windows code paths)
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: cargo test (core, Windows)
-        run: cargo test -p fraglink-core
+      - name: cargo test (core + sync client incl. DPAPI, Windows)
+        run: cargo test -p fraglink-core -p fraglink-sync
       - name: npm ci
         working-directory: apps/desktop
         run: npm ci

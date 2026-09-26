@@ -11,6 +11,12 @@
 
 **Stores (locally, SQLite in `%APPDATA%\gg.fraglink.desktop\`):** games seen, play sessions (start, end, active seconds, idle seconds trimmed), daily totals, your manual tags and exclusions, your local activity feed, and settings.
 
-**Sends:** nothing. M1 makes no network connections and has no telemetry. Friends and sync come in later milestones and will be opt-in.
+**Sends:** nothing by default. The app makes no network connections and has no telemetry until you choose **Options → Sync (optional) → Sign in to sync** (M2 preview).
+
+**After you sign in to sync**, the app uploads to the server you chose (default: a server on your own PC, `http://localhost:8787`):
+- closed game sessions: a random session id, game id and name, Steam app id if known, start and end time, active seconds, idle-trimmed seconds, and the app version.
+- **Never:** program names, install paths, the list of running programs, idle timestamps or anything about other apps.
+
+The device token is encrypted with Windows DPAPI on your PC. Signing out forgets it and revokes it on the server. Excluded games are never uploaded. Sessions already on the server stay there until you delete them (or your account) on the website. Details: [`decisions.md`](decisions.md) D4, D9, D14.
 
 **Your control:** Pause tracking (tray or Fraglink menu), exclude any game, Export my data (JSON + CSV), and delete everything by quitting and removing the folder above.

@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+M2 checkpoint (accounts, Steam import, trust tiers). Local development only; nothing is hosted.
+
+### Added
+- **`apps/server`**, a Rust server (axum + Postgres via sqlx) with migrations, `docker-compose.yml` for local Postgres, and a `.env.example` with no secrets.
+  - Accounts: email + password (Argon2id), opaque tokens stored hashed, login rate limit, logout, immediate account deletion, JSON export.
+  - Desktop pairing with a device code: the tray shows a code, you approve it in the browser, and the tray gets a revocable device token.
+  - Session sync API: idempotent uploads, and it rejects sessions over 24 h, future or overlapping ones.
+  - Trust tiers: **Tracked** (Fraglink sessions, or Steam's own counter if that is higher), **Imported** (a game's own counter you type in, marked self-reported) and **Estimated** (history estimator, one per game, never added to totals). Leaderboards use Tracked only.
+  - Steam: link by profile URL/custom URL/SteamID64, or verified with "Sign in through Steam" (OpenID). Import via `GetOwnedGames` with the `STEAM_API_KEY` env var, a 10-min cooldown and a daily refresh. Private game details get clear instructions.
+  - Minimal no-JavaScript pages: sign up/in, approve pairing, dashboard with tier markers (● ◆ ~), Steam, add hours, paired devices.
+- **`crates/fraglink-sync`**, the blocking client the tray uses. The device token is encrypted with Windows DPAPI.
+- Tray: **Options → Sync (optional)**. Sign in to sync, see sessions waiting and last sync, Sync now, Sign out. Off by default: no network activity until you sign in. It uploads every 5 min and after each session, and retries quietly when offline. Program names and paths are never uploaded.
+- Local database schema v2: per-session sync state (outbox).
+- `docs/decisions.md`: the product/technical defaults picked for M2 and the open questions.
+- CI: Linux runs the server tests against a Postgres 17 service. Windows also tests the sync client (including DPAPI).
+
+
 ## [0.1.1] - 2026-09-26
 
 M1 polish.
