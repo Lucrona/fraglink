@@ -1,0 +1,24 @@
+"AppState"
+{
+	"appid"		"570"
+	"universe"		"1"
+	"LauncherPath"		"C:\\Program Files (x86)\\Steam\\steam.exe"
+	"name"		"Dota 2"
+	"StateFlags"		"4"
+	"installdir"		"dota 2 beta"
+	"LastUpdated"		"1727300000"
+	"SizeOnDisk"		"40000000000"
+	"buildid"		"15000000"
+	"InstalledDepots"
+	{
+		"373301"
+		{
+			"manifest"		"1111111111111111111"
+			"size"		"30000000000"
+		}
+	}
+	"UserConfig"
+	{
+		"language"		"english"
+	}
+}
