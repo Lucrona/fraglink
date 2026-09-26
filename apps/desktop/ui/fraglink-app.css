@@ -19,7 +19,7 @@ body.app-mode #notice { z-index: 30; }
 .fl-empty a, .st-live a { color: var(--cyan); cursor: pointer; text-decoration: underline; }
 .fl-muted .nm { color: var(--grey-txt); font-style: italic; }
 .fl-note { color: #f3c969; padding: 1px 6px 3px 24px; font-size: 10px; }
-.fl-mock { color: #9fb3d6; background: rgba(4, 193, 250, .08); border-bottom: 1px solid rgba(4, 193, 250, .25); padding: 2px 5px; font-size: 10px; line-height: 1.25; white-space: normal; max-width: 226px; box-sizing: border-box; }
+.fl-mock { color: #9fb3d6; background: rgba(4, 193, 250, .08); border-bottom: 1px solid rgba(4, 193, 250, .25); padding: 2px 5px; font-size: 10px; line-height: 1.25; white-space: normal; max-width: 212px; box-sizing: border-box; }
 .st-sum em.down { color: #ff8a7a; }
 .av-tx small { color: var(--grey-txt); }
 .side-scroll .games em { margin-left: auto; color: #8ea3c8; font-style: normal; }

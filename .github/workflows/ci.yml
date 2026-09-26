@@ -19,7 +19,7 @@ jobs:
     name: Linux - fmt, clippy, tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -41,8 +41,8 @@ jobs:
     name: Windows - tests + unsigned installer
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -62,7 +62,7 @@ jobs:
         working-directory: apps/desktop
         run: npx tauri build --ci
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: fraglink-windows-installers-${{ github.sha }}
           path: |
@@ -70,7 +70,7 @@ jobs:
             target/release/bundle/msi/*.msi
           if-no-files-found: error
       - name: Upload portable exe
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: fraglink-windows-exe-${{ github.sha }}
           path: target/release/fraglink.exe
