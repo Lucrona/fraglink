@@ -1,13 +1,14 @@
 //! Fraglink core: everything the tray app does that is not UI.
 //!
 //! Read-only by design: the detector enumerates processes and reads Steam's
-//! documented files/registry values. It never reads game memory, injects
+//! documented files/registry values (Steam, Epic, GOG). It never reads game memory, injects
 //! code or installs hooks (anti-cheat safety). No network access.
 
 pub mod detector;
 pub mod engine;
 pub mod env;
 pub mod export;
+pub mod libraries;
 pub mod signatures;
 pub mod sim;
 pub mod stats;

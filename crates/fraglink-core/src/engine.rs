@@ -109,6 +109,12 @@ impl Engine {
             }
             None => log::info!("steam: not installed / not found"),
         }
+        self.detector.libs = crate::libraries::LibraryIndex::load();
+        log::info!(
+            "libraries: {} Epic, {} GOG installs",
+            self.detector.libs.count(crate::libraries::Launcher::Epic),
+            self.detector.libs.count(crate::libraries::Launcher::Gog)
+        );
     }
 
     /// One poll of the environment. Call every [`DEFAULT_POLL_SECS`].

@@ -1,7 +1,9 @@
 //! Turns a process snapshot into "which games are running".
-//! Priority: manual tags > signature DB > Steam library path > Steam RunningAppID.
+//! Priority: manual tags > signature DB > Steam library path > Epic/GOG install
+//! folder > Steam RunningAppID.
 
 use crate::env::ProcInfo;
+use crate::libraries::{InstalledGame, Launcher, LibraryIndex};
 use crate::signatures::{normalize_path, SignatureDb};
 use crate::steam::SteamIndex;
 use serde::Serialize;
@@ -14,6 +16,8 @@ pub enum DetectSource {
     Signature,
     SteamLibrary,
     SteamRunning,
+    EpicLibrary,
+    GogLibrary,
 }
 
 impl DetectSource {
@@ -23,6 +27,8 @@ impl DetectSource {
             DetectSource::Signature => "signature",
             DetectSource::SteamLibrary => "steam_library",
             DetectSource::SteamRunning => "steam_running",
+            DetectSource::EpicLibrary => "epic_library",
+            DetectSource::GogLibrary => "gog_library",
         }
     }
 }
@@ -47,6 +53,8 @@ pub struct Candidate {
 pub struct Detector {
     pub sigs: SignatureDb,
     pub steam: SteamIndex,
+    /// Epic Games Store + GOG Galaxy installs.
+    pub libs: LibraryIndex,
     /// lower-case exe -> (game id, display name)
     pub tags: HashMap<String, (String, String)>,
     pub excluded_games: HashSet<String>,
@@ -83,6 +91,7 @@ impl Detector {
         Detector {
             sigs,
             steam,
+            libs: LibraryIndex::default(),
             tags: HashMap::new(),
             excluded_games: HashSet::new(),
             excluded_exes: HashSet::new(),
@@ -97,6 +106,17 @@ impl Detector {
             .get(appid)
             .map(|a| a.name.clone())
             .unwrap_or_else(|| format!("Steam app {appid}"))
+    }
+
+    /// Signature id/name for an Epic/GOG install (via its launch exe), else `epic:<key>` / `gog:<key>`.
+    fn library_identity(&self, g: &InstalledGame) -> (String, String) {
+        if let Some(exe) = &g.launch_exe {
+            let full = format!("{}{}", g.prefix, exe.to_lowercase());
+            if let Some(sig) = self.sigs.match_process(exe, Some(&full)) {
+                return (sig.id.clone(), sig.name.clone());
+            }
+        }
+        (g.fallback_id(), g.name.clone())
     }
 
     fn classify(&self, p: &ProcInfo) -> Option<Detection> {
@@ -134,6 +154,21 @@ impl Detector {
                         source: DetectSource::SteamLibrary,
                         exe: Some(p.name.clone()),
                         steam_appid: Some(app.appid),
+                    });
+                }
+            }
+            if let Some(g) = self.libs.game_for_path(path) {
+                if !looks_like_helper(&exe_l, &normalize_path(path)) {
+                    let (game_id, name) = self.library_identity(g);
+                    return Some(Detection {
+                        game_id,
+                        name,
+                        source: match g.store {
+                            Launcher::Epic => DetectSource::EpicLibrary,
+                            Launcher::Gog => DetectSource::GogLibrary,
+                        },
+                        exe: Some(p.name.clone()),
+                        steam_appid: None,
                     });
                 }
             }
@@ -348,5 +383,76 @@ mod tests {
             c.iter().map(|c| c.exe.as_str()).collect::<Vec<_>>(),
             vec!["Indie.exe"]
         );
+    }
+
+    #[test]
+    fn detects_epic_and_gog_installs_by_folder() {
+        use crate::libraries::{parse_epic_item, parse_gog_values};
+        let mut d = det();
+        d.libs.insert(
+            parse_epic_item(
+                r#"{"AppName":"Obscure","DisplayName":"Obscure Indie","InstallLocation":"D:\\Epic Games\\ObscureIndie","LaunchExecutable":"Obscure.exe","AppCategories":["games"]}"#,
+            )
+            .unwrap(),
+        );
+        d.libs.insert(
+            parse_epic_item(
+                r#"{"AppName":"Fortnite","DisplayName":"Fortnite","InstallLocation":"C:\\Program Files\\Epic Games\\Fortnite","LaunchExecutable":"FortniteGame/Binaries/Win64/FortniteLauncher.exe"}"#,
+            )
+            .unwrap(),
+        );
+        let mut v = std::collections::HashMap::new();
+        v.insert("gameID".to_string(), "1207658924".to_string());
+        v.insert("gameName".to_string(), "Unreal Tournament 2004".to_string());
+        v.insert("path".to_string(), r"C:\GOG Games\UT2004".to_string());
+        d.libs.insert(parse_gog_values("1207658924", &v).unwrap());
+
+        let procs = vec![
+            p(
+                1,
+                "Obscure.exe",
+                Some(r"D:\Epic Games\ObscureIndie\Obscure.exe"),
+            ),
+            p(
+                2,
+                "UT2004.exe",
+                Some(r"C:\GOG Games\UT2004\System\UT2004.exe"),
+            ),
+            p(
+                3,
+                "CrashReportClient.exe",
+                Some(r"D:\Epic Games\ObscureIndie\CrashReportClient.exe"),
+            ),
+        ];
+        let found = d.detect(&procs, None);
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert_eq!(found[0].game_id, "epic:Obscure");
+        assert_eq!(found[0].name, "Obscure Indie");
+        assert_eq!(found[0].source, DetectSource::EpicLibrary);
+        // UT2004 is in the signature DB, so the signature wins with its own id
+        assert_eq!(found[1].source, DetectSource::Signature);
+
+        // A helper process in the Fortnite folder maps to the signature id via the launch exe
+        let helper = vec![p(
+            4,
+            "FortniteClient-Win64-Shipping_EAC_EOS.exe",
+            Some(
+                r"C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping_EAC_EOS.exe",
+            ),
+        )];
+        let f = d.detect(&helper, None);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].source, DetectSource::EpicLibrary);
+        assert_eq!(
+            f[0].game_id,
+            d.sigs
+                .match_process("FortniteLauncher.exe", None)
+                .map(|g| g.id.clone())
+                .unwrap_or("epic:Fortnite".into())
+        );
+
+        // exclusions apply to library games too
+        d.excluded_games.insert("epic:Obscure".into());
+        assert_eq!(d.detect(&procs, None).len(), 1);
     }
 }

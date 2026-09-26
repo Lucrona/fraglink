@@ -312,7 +312,18 @@ impl Tracker {
             };
             c.trimmed += dt - counted;
             c.active += counted;
-            *c.days.entry(today).or_insert(0) += counted;
+            // The counted seconds are (now - counted, now]. Split them at local
+            // midnight so each day gets exactly its share.
+            let mut on_today = counted;
+            if counted > 0 && (self.day)(now - counted + 1) != today {
+                let first_today = (now - counted + 1..=now)
+                    .find(|&t| (self.day)(t) == today)
+                    .unwrap_or(now);
+                on_today = now - first_today + 1;
+                let prev = (self.day)(now - counted + 1);
+                *c.days.entry(prev).or_insert(0) += counted - on_today;
+            }
+            *c.days.entry(today).or_insert(0) += on_today;
             c.pending_idle = idle.min(c.pending_idle + counted);
         }
         let after = c.base_total + c.active;
@@ -341,6 +352,8 @@ impl Tracker {
             DetectSource::Manual => "manual",
             DetectSource::Signature => "signature",
             DetectSource::SteamLibrary | DetectSource::SteamRunning => "steam",
+            DetectSource::EpicLibrary => "epic",
+            DetectSource::GogLibrary => "gog",
         };
         self.store
             .upsert_game(&d.game_id, &d.name, src, d.steam_appid, now)?;
@@ -813,8 +826,9 @@ mod tests {
             .store
             .session_days(t.now_playing().unwrap().session_id)
             .unwrap();
-        // ticks up to 23:59:55 count for the 22nd, from 00:00:00 for the 23rd
-        assert_eq!(days.get("2026-09-22"), Some(&590));
-        assert_eq!(days.get("2026-09-23"), Some(&605));
+        // Split at the exact second: the tick at 00:00:00 covers (23:59:55, 00:00:00],
+        // so 4 of its 5 seconds belong to the 22nd and 1 to the 23rd.
+        assert_eq!(days.get("2026-09-22"), Some(&594));
+        assert_eq!(days.get("2026-09-23"), Some(&601));
     }
 }
