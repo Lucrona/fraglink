@@ -1,0 +1,86 @@
+/* Fraglink backend bridge.
+   In the Tauri app this calls the Rust core via window.__TAURI__ (withGlobalTauri).
+   Opened as a plain file in a browser it falls back to a small in-memory mock so the
+   UI can still be previewed and screenshotted without the app. No network calls. */
+(() => {
+  'use strict';
+  const T = window.__TAURI__;
+  if (T && T.core) {
+    const inv = (cmd, args) => T.core.invoke(cmd, args);
+    window.FL = {
+      tauri: true,
+      glance: () => inv('get_glance'),
+      activity: (limit = 50) => inv('get_activity', { limit }),
+      games: () => inv('get_games'),
+      candidates: () => inv('get_candidates'),
+      tag: (exe, name) => inv('tag_process', { exe, name }),
+      untag: (exe) => inv('untag_process', { exe }),
+      exclude: (gameId, excluded) => inv('set_game_excluded', { gameId, excluded }),
+      settings: () => inv('get_settings'),
+      set: (key, value) => inv('set_setting', { key, value: String(value) }),
+      autostart: (enabled) => inv('set_autostart', { enabled }),
+      exportData: () => inv('export_data'),
+      openData: () => inv('open_data_dir'),
+      hide: () => inv('hide_main'),
+      quit: () => inv('quit_app'),
+      scale: (zoom, sideOpen) => inv('set_window_scale', { zoom: Number(zoom), sideOpen: !!sideOpen }),
+      on: (evt, cb) => T.event.listen(evt, e => cb(e.payload)),
+      drag: () => T.window.getCurrentWindow().startDragging(),
+    };
+    return;
+  }
+
+  /* ---------------- browser preview mock ---------------- */
+  const now = () => Math.floor(Date.now() / 1000);
+  const day = (off = 0) => { const d = new Date(Date.now() - off * 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const t0 = now() - (47 * 60 + 12);
+  const games = [
+    { id: 'wow', name: 'World of Warcraft', source: 'signature', steam_appid: null, excluded: false, total_seconds: 312 * 3600, sessions: 140, last_played: now() },
+    { id: 'hl2', name: 'Half-Life 2', source: 'signature', steam_appid: 220, excluded: false, total_seconds: 41 * 3600, sessions: 30, last_played: now() - 86400 },
+    { id: 'cs2', name: 'Counter-Strike 2', source: 'signature', steam_appid: 730, excluded: false, total_seconds: 96 * 3600, sessions: 70, last_played: now() - 2 * 86400 },
+    { id: 'steam:1145350', name: 'Hades II', source: 'steam', steam_appid: 1145350, excluded: false, total_seconds: 12 * 3600, sessions: 9, last_played: now() - 3 * 86400 },
+    { id: 'wc3', name: 'Warcraft III', source: 'signature', steam_appid: null, excluded: false, total_seconds: 544 * 3600, sessions: 300, last_played: now() - 20 * 86400 },
+  ];
+  const seven = { wow: 6.8, hl2: 3.1, cs2: 2.2, 'steam:1145350': 1.4, wc3: 0 };
+  const activity = [
+    { id: 6, ts: t0, kind: 'started', game_id: 'wow', game_name: 'World of Warcraft', payload: {} },
+    { id: 5, ts: now() - 86400 - 3600, kind: 'milestone', game_id: 'wow', game_name: 'World of Warcraft', payload: { hours: 250 } },
+    { id: 4, ts: now() - 86400 - 7200, kind: 'stopped', game_id: 'hl2', game_name: 'Half-Life 2', payload: { active_seconds: 5400 } },
+    { id: 3, ts: now() - 3 * 86400, kind: 'first_time', game_id: 'steam:1145350', game_name: 'Hades II', payload: {} },
+    { id: 2, ts: now() - 3 * 86400, kind: 'tagged', game_id: 'manual:myindie', game_name: 'My Indie', payload: { exe_name: 'MyIndie.exe' } },
+    { id: 1, ts: now() - 12 * 86400, kind: 'stopped', game_id: 'cs2', game_name: 'Counter-Strike 2', payload: { active_seconds: 7300 } },
+  ];
+  const settings = { skin: localStorage.getItem('fl-skin') || 'classic', zoom: '2', toasts: '1', idle_threshold_min: '15', min_session_min: '2', status: 'online' };
+  let paused = false;
+  const ok = v => Promise.resolve(v);
+  window.FL = {
+    tauri: false,
+    glance: () => {
+      const active = now() - t0;
+      const top = games.filter(g => !g.excluded).map(g => ({ game_id: g.id, name: g.name, seven_day_seconds: Math.round((seven[g.id] || 0) * 3600) + (g.id === 'wow' ? active : 0), total_seconds: g.total_seconds + (g.id === 'wow' ? active : 0), tier: 'tracked', last_played: g.last_played }))
+        .sort((a, b) => b.seven_day_seconds - a.seven_day_seconds || b.total_seconds - a.total_seconds).slice(0, 5);
+      return ok({
+        now_playing: paused ? null : { game_id: 'wow', name: 'World of Warcraft', session_id: 6, started_at: t0, active_seconds: active, idle_trimmed_seconds: 0, idle: false, source: 'signature' },
+        paused, today: day(), today_seconds: 5760 + active, today_by_game: [], week_seconds: 13.5 * 3600 + active, last_week_seconds: 11.4 * 3600,
+        seven_day_seconds: 13.5 * 3600 + active, last_7_days: [6, 5, 4, 3, 2, 1, 0].map(i => ({ day: day(i), seconds: i === 0 ? 5760 + active : (i % 3) * 3600 })),
+        streak_days: 6, total_seconds: games.reduce((a, g) => a + g.total_seconds, 0), top, games_tracked: games.length,
+      });
+    },
+    activity: () => ok(activity),
+    games: () => ok(games.map(g => ({ ...g }))),
+    candidates: () => ok([{ exe: 'MyIndie.exe', path: 'C:\\Games\\MyIndie\\MyIndie.exe' }, { exe: 'Obscure2004.exe', path: 'D:\\Old\\Obscure2004.exe' }]),
+    tag: (exe, name) => { games.push({ id: 'manual:' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, source: 'manual', excluded: false, total_seconds: 0, sessions: 0 }); return ok('manual:x'); },
+    untag: () => ok(),
+    exclude: (id, ex) => { const g = games.find(x => x.id === id); if (g) g.excluded = ex; return ok(); },
+    settings: () => ok({ settings, autostart: false, sim: false, data_dir: '(browser preview: no data is stored)', log_dir: '', version: 'preview', signatures: 170, signatures_version: 'preview', steam_apps: 0, idle_threshold_min: 15, min_session_min: 2 }),
+    set: (k, v) => { settings[k] = String(v); if (k === 'paused') paused = v === '1' || v === true; return ok(); },
+    autostart: (e) => ok(e),
+    exportData: () => ok(['(preview) fraglink-export.json', '(preview) fraglink-sessions.csv']),
+    openData: () => ok(),
+    hide: () => ok(),
+    quit: () => ok(),
+    scale: () => ok(),
+    on: () => ok(() => {}),
+    drag: () => ok(),
+  };
+})();

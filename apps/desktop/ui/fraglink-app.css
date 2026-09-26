@@ -1,0 +1,57 @@
+/* Fraglink app additions on top of the prototype's styles.css.
+   body.tauri = running inside the Tauri window (the window IS the chassis). */
+
+/* ---- window = chassis: transparent page, no fake desktop/taskbar ---- */
+body.tauri, body.tauri #desktop { background: transparent; }
+body.tauri #desktop { inset: 0; }
+body.tauri #taskbar, body.tauri #web, body.tauri #chat, body.tauri #toast { display: none !important; }
+body.tauri .xf-app { left: 0 !important; top: 0 !important; }
+.tauri-only { display: none; }
+body.tauri .tauri-only { display: block; }
+/* dialogs sit inside the 290x381 window */
+body.tauri .xf-dialog { left: 20px; top: 34px; max-height: 330px; overflow: auto; z-index: 20; }
+body.app-mode .xf-dialog { z-index: 20; }
+body.app-mode #notice { z-index: 30; }
+.xf-dropdown em, .dlg-body em { color: #777; font-style: normal; font-size: 9px; }
+
+/* ---- stats / activity helpers ---- */
+.fl-empty { color: var(--grey-txt); padding: 6px 6px 8px; line-height: 1.35; }
+.fl-empty a, .st-live a { color: var(--cyan); cursor: pointer; text-decoration: underline; }
+.fl-muted .nm { color: var(--grey-txt); font-style: italic; }
+.fl-note { color: #f3c969; padding: 1px 6px 3px 24px; font-size: 10px; }
+.fl-mock { color: #9fb3d6; background: rgba(4, 193, 250, .08); border-bottom: 1px solid rgba(4, 193, 250, .25); padding: 2px 5px; font-size: 10px; line-height: 1.25; white-space: normal; max-width: 226px; box-sizing: border-box; }
+.st-sum em.down { color: #ff8a7a; }
+.av-tx small { color: var(--grey-txt); }
+.side-scroll .games em { margin-left: auto; color: #8ea3c8; font-style: normal; }
+
+/* ---- options / games / notice dialogs ---- */
+.dlg-body select { font-size: 10px; margin: 0 2px; }
+.opt-btns { display: flex; gap: 6px; margin: 2px 0 4px; }
+.opt-btns .hw, .g-tag .hw, .g-row .hw { position: static; height: 17px; padding: 0 6px; width: auto; font-weight: bold; font-size: 10px; }
+.opt-info { font-size: 9.5px; color: #444; line-height: 1.3; word-break: break-all; }
+.opt-info code, #notice-body code { font: 9.5px/1.3 Consolas, "Lucida Console", monospace; word-break: break-all; }
+.bad { color: #b0172a; }
+.games-body { padding: 4px 6px; }
+.g-hint { font-size: 9.5px; color: #555; margin-bottom: 3px; }
+.g-list { max-height: 92px; overflow: auto; background: #fff; border: 1px solid #7f9db9; }
+.g-row { padding: 2px 4px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 4px; font-size: 10px; }
+.g-row small { display: block; color: #777; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+.g-row.cand { display: block; cursor: pointer; }
+.g-row.cand.sel { background: var(--sel); color: #fff; }
+.g-row.cand.sel small { color: #d8e4ff; }
+.g-row.known span { flex: 1; min-width: 0; }
+.g-row.known.ex b { color: #999; text-decoration: line-through; }
+.g-tag { display: flex; gap: 4px; margin-top: 4px; }
+.g-tag input { flex: 1; min-width: 0; font-size: 10px; }
+#notice { width: 236px; }
+#notice-body { line-height: 1.35; font-size: 10.5px; }
+.fl-ul { margin: 0 0 6px; padding-left: 14px; }
+.fl-ul li { margin-bottom: 3px; }
+
+/* ---- standalone toast window (toast.html) ---- */
+body.toast-page { background: transparent; overflow: hidden; }
+body.toast-page .xf-toast { zoom: var(--z); position: absolute; right: 4px; bottom: 4px; left: auto; top: auto; }
+body.toast-page .toast-body .g { display: inline; }
+
+/* keep ligatures off everywhere (mirrors the last rule of styles.css) */
+* { font-variant-ligatures: none; }

@@ -1,0 +1,15 @@
+{
+  "name": "fraglink-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fraglink tray client (Tauri 2). The frontend in ui/ is plain HTML/CSS/JS: no bundler.",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "dev:sim": "tauri dev -- -- --sim",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

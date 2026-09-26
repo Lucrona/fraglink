@@ -1,0 +1,32 @@
+[package]
+name = "fraglink-desktop"
+description = "Fraglink tray client (Tauri 2)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license-file.workspace = true
+publish.workspace = true
+
+[lib]
+name = "fraglink_desktop_lib"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "fraglink"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+fraglink-core = { path = "../../../crates/fraglink-core" }
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
