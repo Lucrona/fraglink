@@ -1,0 +1,14 @@
+Copyright (c) 2026 Lucrona. All rights reserved.
+
+This repository is private and proprietary. No licence is granted to use, copy,
+modify or distribute this software or its assets without written permission
+from the copyright holder.
+
+(Placeholder: the final licence is an open decision for Lucrona.)
+
+Third-party components keep their own licences:
+- Russo One font (apps/desktop/ui/fonts/RussoOne-Regular.ttf): SIL Open Font
+  License 1.1, see apps/desktop/ui/fonts/RussoOne-OFL.txt.
+- Wine Tahoma-metric fallback fonts (apps/desktop/ui/fonts/tahoma*.ttf): GNU
+  LGPL 2.1 or later, see apps/desktop/ui/fonts/LICENSE-wine-tahoma.txt.
+- Rust crates and Tauri: their respective MIT / Apache-2.0 licences.

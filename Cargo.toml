@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/fraglink-core", "apps/desktop/src-tauri"]
+# `cargo test` / `cargo clippy` at the root only touch the core crate by default,
+# so they work on machines without the Tauri/WebKit system libraries.
+default-members = ["crates/fraglink-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Lucrona"]
+license-file = "LICENSE"
+publish = false
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "unwind"
+strip = true

@@ -1,0 +1,10 @@
+/target/
+**/node_modules/
+apps/desktop/src-tauri/gen/schemas/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+Thumbs.db
+/tmp/
+*.log
