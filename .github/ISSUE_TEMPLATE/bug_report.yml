@@ -1,0 +1,39 @@
+name: Bug report
+description: Something doesn't work (crash, wrong hours, game not detected…)
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for testing Fraglink! Please don't paste anything private. For security problems, use the private report form (see SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game and launcher (if detection related)
+      placeholder: e.g. World of Warcraft via Battle.net, or Hades via Steam
+  - type: input
+    id: version
+    attributes:
+      label: Fraglink version and build
+      description: Tools → Options shows the version. The CI run or commit is a bonus.
+      placeholder: 0.1.0 (CI run #…)
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Tray → Open logs folder, then attach fraglink.log (drag the file here).
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else? (screenshots, Task Manager CPU/RAM)

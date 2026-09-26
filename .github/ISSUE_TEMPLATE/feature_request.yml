@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest an idea or a game to support
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like and why?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Tray client, Game detection / signatures, Stats & hours, Friends, Website, Other]
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else? (mock-ups, examples, exe name for a game)

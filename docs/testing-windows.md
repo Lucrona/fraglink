@@ -1,6 +1,6 @@
 # Testing Fraglink M1 on Windows
 
-1. **Download:** open the latest green run under GitHub Actions (CI workflow), scroll to *Artifacts* and download `fraglink-windows-installers-<sha>`. Unzip it. It contains `Fraglink_0.1.0_x64-setup.exe` (recommended) and `Fraglink_0.1.0_x64_en-US.msi`.
+1. **Download:** open the latest green run under GitHub Actions (CI workflow), scroll to *Artifacts* and download `fraglink-windows-installers-<sha>`. Unzip it. It contains `nsis/Fraglink_0.1.0_x64-setup.exe` (recommended) and `msi/Fraglink_0.1.0_x64_en-US.msi`. (Downloading artifacts needs you to be signed in to GitHub.)
 2. **Install:** run the setup exe. It installs for your user only, no admin needed. SmartScreen will say "Windows protected your PC" because the build isn't code-signed yet. Click **More info → Run anyway**.
 3. **First look:** the classic Fraglink window opens and an icon appears in the tray (check the ^ overflow). Left-click the tray icon to show or hide the window. Right-click it for Open / Status / Pause tracking / Export my data / Open data folder / Open logs folder / Quit. Closing or minimising the window keeps Fraglink running in the tray.
 4. **Play something:**
