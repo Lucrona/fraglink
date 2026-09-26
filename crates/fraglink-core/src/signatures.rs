@@ -282,4 +282,48 @@ mod tests {
         assert_eq!(d.by_steam_appid(730).unwrap().id, "cs2");
         assert!(d.by_steam_appid(1).is_none());
     }
+
+    #[test]
+    fn verified_0_1_1_fixes() {
+        let d = db();
+        assert!(
+            d.games().iter().all(|g| !g.uncertain),
+            "no uncertain rows left"
+        );
+        // Civ VII: real Windows exe (was the macOS name)
+        assert_eq!(
+            d.match_process("Civ7_Win64_DX12_FinalRelease.exe", None)
+                .unwrap()
+                .id,
+            "civ7"
+        );
+        assert!(d.match_process("CivilizationVII.exe", None).is_none());
+        // Minecraft via the Microsoft Store launcher's bundled runtime
+        let ms = r"C:\Users\me\AppData\Local\Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime\java-runtime-delta\windows-x64\java-runtime-delta\bin\javaw.exe";
+        assert_eq!(
+            d.match_process("javaw.exe", Some(ms)).unwrap().id,
+            "minecraft_java"
+        );
+        // THE FINALS: generic Discovery.exe only counts in its own folder
+        assert!(d.match_process("Discovery.exe", None).is_none());
+        assert_eq!(
+            d.match_process(
+                "Discovery.exe",
+                Some(r"D:\SteamLibrary\steamapps\common\The Finals\Discovery.exe")
+            )
+            .unwrap()
+            .id,
+            "thefinals"
+        );
+        assert_eq!(
+            d.match_process("deadlock.exe", None).unwrap().id,
+            "deadlock"
+        );
+        assert_eq!(
+            d.match_process("Marvel-Win64-Shipping.exe", None)
+                .unwrap()
+                .id,
+            "marvel_rivals"
+        );
+    }
 }

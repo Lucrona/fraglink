@@ -2,7 +2,8 @@
 """Regenerates ../games.json from the hand-curated table below.
 
 Sources: hand-curated from public knowledge of each game's executable name and
-Steam app id. NOT derived from Discord's detectable-games list (see README).
+Steam app id; the 0.1.1 review of previously-uncertain rows is documented in
+../SOURCES.md. NOT derived from Discord's detectable-games list (see README).
 Rows marked U=True are unverified guesses: please confirm on a real install.
 
 Row format: (id, name, exes, path_exes, path_hints, steam_appids, platform, uncertain, note)
@@ -42,16 +43,16 @@ g("portal2", "Portal 2", ["portal2.exe"], [620], "steam")
 g("l4d2", "Left 4 Dead 2", ["left4dead2.exe"], [550], "steam")
 g("gmod", "Garry's Mod", ["gmod.exe"], [4000], "steam", path_exes=["hl2.exe"], hints=["/garrysmod/"])
 g("dota2", "Dota 2", ["dota2.exe"], [570], "steam")
-g("deadlock", "Deadlock", ["deadlock.exe", "project8.exe"], [1422450], "steam", U=True)
+g("deadlock", "Deadlock", ["deadlock.exe", "project8.exe"], [1422450], "steam")  # verified: exe renamed project8.exe -> deadlock.exe (Mar 2025), both still shipped; see SOURCES.md
 # ---- Riot
 g("lol", "League of Legends", ["League of Legends.exe"], platform="riot", note="Counts the in-match client only; the lobby (LeagueClientUx.exe) is ignored")
 g("valorant", "VALORANT", ["VALORANT-Win64-Shipping.exe"], platform="riot")
 # ---- Epic
 g("fortnite", "Fortnite", ["FortniteClient-Win64-Shipping.exe"], platform="epic")
 g("rocketleague", "Rocket League", ["RocketLeague.exe"], [252950], "epic")
-g("fallguys", "Fall Guys", ["FallGuys_client_game.exe", "FallGuys_client.exe"], [1097150], "epic", U=True)
+g("fallguys", "Fall Guys", ["FallGuys_client_game.exe", "FallGuys_client.exe"], [1097150], "epic")  # verified: Steam launch config + Epic/community docs
 # ---- Microsoft / Mojang
-g("minecraft_java", "Minecraft: Java Edition", [], platform="standalone", path_exes=["javaw.exe", "java.exe"], hints=["/.minecraft/", "/minecraft launcher/", "/prismlauncher/", "/multimc/", "/curseforge/minecraft/"], U=True, note="Java edition runs inside javaw.exe; only counted when the Java runtime lives in a Minecraft folder")
+g("minecraft_java", "Minecraft: Java Edition", [], platform="standalone", path_exes=["javaw.exe", "java.exe"], hints=["/.minecraft/", "/minecraft launcher/", "/microsoft.4297127d64ec6_8wekyb3d8bbwe/", "/runtime/java-runtime-", "/runtime/jre-legacy/", "/prismlauncher/", "/multimc/", "/curseforge/minecraft/", "/modrinthapp/"], note="Java edition runs inside javaw.exe; counted when the Java runtime is Mojang's bundled runtime or lives in a launcher folder. A system-wide Java (e.g. Program Files\\Java) is not detected: tag it manually.")
 g("minecraft_bedrock", "Minecraft (Bedrock)", ["Minecraft.Windows.exe"], platform="msstore")
 g("halo_mcc", "Halo: The Master Chief Collection", ["MCC-Win64-Shipping.exe", "MCCWinStore-Win64-Shipping.exe"], [976730], "steam")
 g("halo_infinite", "Halo Infinite", ["HaloInfinite.exe"], [1240440], "steam")
@@ -62,7 +63,7 @@ g("aoe2de", "Age of Empires II: Definitive Edition", ["AoE2DE_s.exe"], [813780],
 g("aoe2", "Age of Empires II (2000)", ["age2_x1.exe", "empires2.exe"], platform="standalone")
 g("aoe4", "Age of Empires IV", ["RelicCardinal.exe"], [1466860], "steam")
 # ---- Activision
-g("cod", "Call of Duty (HQ / Warzone / Black Ops 6+)", ["cod.exe", "cod24-cod.exe", "cod25-cod.exe"], [1938090], "battlenet", U=True, note="Call of Duty HQ launches cod.exe; per-title exe names change often")
+g("cod", "Call of Duty (HQ / Warzone / Black Ops 6+)", ["cod.exe", "cod24-cod.exe", "cod25-cod.exe"], [1938090], "battlenet", note="Call of Duty HQ runs cod.exe (Steam launches bootstrapper.exe first); some betas use codNN-cod.exe")
 g("cod_mw2019", "Call of Duty: Modern Warfare (2019)", ["ModernWarfare.exe"], platform="battlenet")
 g("cod_bocw", "Call of Duty: Black Ops Cold War", ["BlackOpsColdWar.exe"], platform="battlenet")
 g("cod4", "Call of Duty 4: Modern Warfare", ["iw3mp.exe", "iw3sp.exe"], [7940], "steam")
@@ -72,7 +73,7 @@ g("cod_bo1", "Call of Duty: Black Ops", ["BlackOps.exe", "BlackOpsMP.exe"], [427
 g("cod2", "Call of Duty 2", ["CoD2MP_s.exe", "CoD2SP_s.exe"], [2630], "steam")
 # ---- EA
 g("bf2042", "Battlefield 2042", ["BF2042.exe"], [1517290], "ea")
-g("bf6", "Battlefield 6", ["bf6.exe"], [2807960], "ea", U=True)
+g("bf6", "Battlefield 6", ["bf6.exe"], [2807960], "ea")  # verified: Steam launch config
 g("bf1", "Battlefield 1", ["bf1.exe"], [1238840], "ea")
 g("bfv", "Battlefield V", ["bfv.exe"], [1238810], "ea")
 g("bf4", "Battlefield 4", ["bf4.exe"], [1238860], "ea")
@@ -97,31 +98,31 @@ g("falloutnv", "Fallout: New Vegas", ["FalloutNV.exe"], [22380], "steam")
 g("starfield", "Starfield", ["Starfield.exe"], [1716740], "steam")
 g("eso", "The Elder Scrolls Online", ["eso64.exe"], [306130], "steam")
 g("doom_eternal", "DOOM Eternal", ["DOOMEternalx64vk.exe"], [782330], "steam")
-g("doom_tda", "DOOM: The Dark Ages", ["DOOMTheDarkAges.exe"], [3017860], "steam", U=True)
+g("doom_tda", "DOOM: The Dark Ages", ["DOOMTheDarkAges.exe"], [3017860], "steam")  # verified: Bethesda support + community (Steam launches idTechLauncher.exe first)
 g("quake3", "Quake III Arena", ["quake3.exe"], [2200], "steam")
 g("quakelive", "Quake Live", ["quakelive_steam.exe"], [282440], "steam")
 # ---- FromSoftware
 g("eldenring", "Elden Ring", ["eldenring.exe"], [1245620], "steam")
-g("nightreign", "Elden Ring Nightreign", ["nightreign.exe"], [2622380], "steam", U=True)
+g("nightreign", "Elden Ring Nightreign", ["nightreign.exe"], [2622380], "steam")  # verified: PCGamingWiki (Steam launches start_protected_game.exe)
 g("ds3", "Dark Souls III", ["DarkSoulsIII.exe"], [374320], "steam")
 g("sekiro", "Sekiro: Shadows Die Twice", ["sekiro.exe"], [814380], "steam")
 # ---- MMOs
 g("ffxiv", "Final Fantasy XIV", ["ffxiv_dx11.exe"], [39210], "square")
 g("gw2", "Guild Wars 2", ["Gw2-64.exe", "Gw2.exe"], [1284210], "arenanet")
-g("osrs", "Old School RuneScape", ["osclient.exe", "RuneLite.exe"], [1343370], "jagex", U=True, note="RuneLite.exe covers the popular third-party client")
+g("osrs", "Old School RuneScape", ["osclient.exe", "RuneLite.exe"], [1343370], "jagex", note="osclient.exe = official client (Steam launch config); RuneLite.exe = popular third-party client (PCGamingWiki)")
 g("rs3", "RuneScape 3", ["rs2client.exe"], [1343400], "jagex")
 g("lostark", "Lost Ark", ["LOSTARK.exe"], [1599340], "steam")
 g("newworld", "New World: Aeternum", ["NewWorld.exe"], [1063730], "steam")
 g("swtor", "Star Wars: The Old Republic", ["swtor.exe"], [1286830], "steam")
 g("eve", "EVE Online", ["exefile.exe"], [8500], "ccp")
-g("albion", "Albion Online", ["Albion-Online.exe"], [761890], "steam", U=True)
+g("albion", "Albion Online", ["Albion-Online.exe"], [761890], "steam")  # verified: game\\Albion-Online.exe (launcher is AlbionLauncher.exe)
 g("bdo", "Black Desert", ["BlackDesert64.exe"], [582660], "steam")
 g("everquest", "EverQuest", ["eqgame.exe"], [205710], "daybreak")
 g("everquest2", "EverQuest II", ["EverQuest2.exe"], [201230], "daybreak")
 g("warframe", "Warframe", ["Warframe.x64.exe"], [230410], "steam")
 g("destiny2", "Destiny 2", ["destiny2.exe"], [1085660], "steam")
 g("poe", "Path of Exile", ["PathOfExile.exe", "PathOfExile_x64.exe", "PathOfExileSteam.exe", "PathOfExile_x64Steam.exe"], [238960], "ggg")
-g("poe2", "Path of Exile 2", [], [2694490], "ggg", path_exes=["PathOfExile.exe", "PathOfExile_x64.exe", "PathOfExileSteam.exe", "PathOfExile_x64Steam.exe"], hints=["/path of exile 2/"], U=True)
+g("poe2", "Path of Exile 2", [], [2694490], "ggg", path_exes=["PathOfExile.exe", "PathOfExile_x64.exe", "PathOfExileSteam.exe", "PathOfExile_x64Steam.exe"], hints=["/path of exile 2/"])  # verified: Steam launch config (PathOfExileSteam.exe) + GGG forum (standalone PathOfExile.exe)
 g("lastepoch", "Last Epoch", ["Last Epoch.exe"], [899770], "steam")
 g("genshin", "Genshin Impact", ["GenshinImpact.exe", "YuanShen.exe"], platform="hoyoverse")
 g("hsr", "Honkai: Star Rail", ["StarRail.exe"], platform="hoyoverse")
@@ -130,13 +131,13 @@ g("zzz", "Zenless Zone Zero", ["ZenlessZoneZero.exe"], platform="hoyoverse")
 g("pubg", "PUBG: Battlegrounds", ["TslGame.exe"], [578080], "steam")
 g("r6siege", "Tom Clancy's Rainbow Six Siege", ["RainbowSix.exe", "RainbowSix_Vulkan.exe", "RainbowSix_DX11.exe"], [359550], "ubisoft")
 g("tarkov", "Escape from Tarkov", ["EscapeFromTarkov.exe"], platform="bsg")
-g("marvel_rivals", "Marvel Rivals", ["Marvel-Win64-Shipping.exe"], [2767030], "steam", U=True)
-g("thefinals", "THE FINALS", ["Discovery.exe"], [2073850], "steam", U=True)
+g("marvel_rivals", "Marvel Rivals", ["Marvel-Win64-Shipping.exe", "MarvelRivals_Launcher.exe"], [2767030], "steam")  # verified: official FAQ + Steam launch config
+g("thefinals", "THE FINALS", [], [2073850], "steam", path_exes=["Discovery.exe"], hints=["/the finals/"])  # verified: Steam launch config + PCGamingWiki; generic exe name so path-gated
 g("helldivers2", "Helldivers 2", ["helldivers2.exe"], [553850], "steam")
-g("hunt", "Hunt: Showdown 1896", ["HuntGame.exe"], [594650], "steam", U=True)
+g("hunt", "Hunt: Showdown 1896", ["HuntGame.exe"], [594650], "steam")  # verified: bin\\win_x64\\HuntGame.exe (Steam launches hunt.exe first)
 g("squad", "Squad", ["SquadGame.exe"], [393380], "steam")
 g("arma3", "Arma 3", ["arma3_x64.exe", "arma3.exe"], [107410], "steam")
-g("arma_reforger", "Arma Reforger", ["ArmaReforgerSteam.exe"], [1874880], "steam", U=True)
+g("arma_reforger", "Arma Reforger", ["ArmaReforgerSteam.exe"], [1874880], "steam")  # verified: Bohemia wiki / Proton reports (Steam launches ArmaReforger_BE.exe first)
 g("dayz", "DayZ", ["DayZ_x64.exe"], [221100], "steam")
 g("rust", "Rust", ["RustClient.exe"], [252490], "steam")
 g("dbd", "Dead by Daylight", ["DeadByDaylight-Win64-Shipping.exe"], [381210], "steam")
@@ -145,7 +146,7 @@ g("warthunder", "War Thunder", ["aces.exe"], [236390], "gaijin")
 g("wot", "World of Tanks", ["WorldOfTanks.exe"], platform="wargaming")
 g("payday2", "PAYDAY 2", ["payday2_win32_release.exe"], [218620], "steam")
 g("ut2004", "Unreal Tournament 2004", ["UT2004.exe"], [13230], "steam")
-g("tekken8", "Tekken 8", ["Polaris-Win64-Shipping.exe"], [1778820], "steam", U=True)
+g("tekken8", "Tekken 8", ["Polaris-Win64-Shipping.exe", "TEKKEN 8.exe"], [1778820], "steam")  # verified: Steam launch config + UEVR profile name
 g("sf6", "Street Fighter 6", ["StreetFighter6.exe"], [1364780], "steam")
 g("amongus", "Among Us", ["Among Us.exe"], [945360], "steam")
 g("roblox", "Roblox", ["RobloxPlayerBeta.exe"], platform="roblox")
@@ -179,21 +180,21 @@ g("mh_world", "Monster Hunter: World", ["MonsterHunterWorld.exe"], [582010], "st
 g("mh_rise", "Monster Hunter Rise", ["MonsterHunterRise.exe"], [1446780], "steam")
 # ---- RPG / action / indie
 g("bg3", "Baldur's Gate 3", ["bg3.exe", "bg3_dx11.exe"], [1086940], "steam")
-g("wukong", "Black Myth: Wukong", ["b1-Win64-Shipping.exe"], [2358720], "steam", U=True)
-g("stalker2", "S.T.A.L.K.E.R. 2", ["Stalker2-Win64-Shipping.exe"], [1643320], "steam", U=True)
-g("kcd2", "Kingdom Come: Deliverance II", ["KingdomCome.exe"], [1771300], "steam", U=True)
+g("wukong", "Black Myth: Wukong", ["b1-Win64-Shipping.exe"], [2358720], "steam", path_exes=["b1.exe"], hints=["/blackmythwukong/", "/black myth wukong/"])  # verified: Steam launch config (b1.exe) + UEVR profile name
+g("stalker2", "S.T.A.L.K.E.R. 2", ["Stalker2-Win64-Shipping.exe", "Stalker2.exe"], [1643320], "steam")  # verified: Steam launch config + PCGamingWiki
+g("kcd2", "Kingdom Come: Deliverance II", ["KingdomCome.exe"], [1771300], "steam")  # verified: Steam launch config (Bin\\Win64MasterMasterSteamPGO\\KingdomCome.exe)
 g("borderlands3", "Borderlands 3", ["Borderlands3.exe"], [397540], "steam")
 g("hades2", "Hades II", ["Hades2.exe"], [1145350], "steam")
 g("hades", "Hades", ["Hades.exe"], [1145360], "steam")
 g("hollow_knight", "Hollow Knight", ["hollow_knight.exe"], [367520], "steam")
-g("silksong", "Hollow Knight: Silksong", ["Hollow Knight Silksong.exe"], [1030300], "steam", U=True)
+g("silksong", "Hollow Knight: Silksong", ["Hollow Knight Silksong.exe"], [1030300], "steam")  # verified: Steam launch config
 g("ror2", "Risk of Rain 2", ["Risk of Rain 2.exe"], [632360], "steam")
 g("vampire_survivors", "Vampire Survivors", ["VampireSurvivors.exe"], [1794680], "steam")
 g("balatro", "Balatro", ["Balatro.exe"], [2379780], "steam")
 g("bannerlord", "Mount & Blade II: Bannerlord", ["Bannerlord.exe"], [261550], "steam")
 # ---- Strategy
 g("civ6", "Sid Meier's Civilization VI", ["CivilizationVI.exe", "CivilizationVI_DX12.exe"], [289070], "steam")
-g("civ7", "Sid Meier's Civilization VII", ["CivilizationVII.exe"], [1295660], "steam", U=True)
+g("civ7", "Sid Meier's Civilization VII", ["Civ7_Win64_DX12_FinalRelease.exe", "Civ7_Win64_Vulkan_FinalRelease.exe", "Civ7_Win64_DX12_Release.exe"], [1295660], "steam")  # FIXED (was CivilizationVII.exe, the macOS name); verified: Steam launch config
 g("tww3", "Total War: WARHAMMER III", ["Warhammer3.exe"], [1142710], "steam")
 g("stellaris", "Stellaris", ["stellaris.exe"], [281990], "steam")
 g("ck3", "Crusader Kings III", ["ck3.exe"], [1158310], "steam")
@@ -241,7 +242,7 @@ NON_GAME = [
   "bash", "zsh", "sh", "systemd", "sshd", "node", "cargo", "rustc", "python3", "Xorg", "Xvfb",
 ]
 
-out = dict(schema=1, version="2026.09.26",
+out = dict(schema=1, version="2026.09.26.2",
            note="Fraglink seed signatures. Hand-curated exe names + Steam app ids only; uncertain=true means unverified. Not derived from Discord's detectable list.",
            ignore_exes=sorted(set(IGNORE), key=str.lower), non_game_exes=sorted(set(NON_GAME), key=str.lower), games=G)
 p = pathlib.Path(__file__).resolve().parent.parent / "games.json"

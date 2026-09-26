@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "version": "2026.09.26",
+ "version": "2026.09.26.2",
  "note": "Fraglink seed signatures. Hand-curated exe names + Steam app ids only; uncertain=true means unverified. Not derived from Discord's detectable list.",
  "ignore_exes": [
   "Agent.exe",
@@ -562,7 +562,7 @@
     1422450
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "lol",
@@ -628,7 +628,7 @@
     1097150
    ],
    "platform": "epic",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "minecraft_java",
@@ -641,14 +641,18 @@
    "path_hints": [
     "/.minecraft/",
     "/minecraft launcher/",
+    "/microsoft.4297127d64ec6_8wekyb3d8bbwe/",
+    "/runtime/java-runtime-",
+    "/runtime/jre-legacy/",
     "/prismlauncher/",
     "/multimc/",
-    "/curseforge/minecraft/"
+    "/curseforge/minecraft/",
+    "/modrinthapp/"
    ],
    "steam_appids": [],
    "platform": "standalone",
-   "uncertain": true,
-   "note": "Java edition runs inside javaw.exe; only counted when the Java runtime lives in a Minecraft folder"
+   "uncertain": false,
+   "note": "Java edition runs inside javaw.exe; counted when the Java runtime is Mojang's bundled runtime or lives in a launcher folder. A system-wide Java (e.g. Program Files\\Java) is not detected: tag it manually."
   },
   {
    "id": "minecraft_bedrock",
@@ -788,8 +792,8 @@
     1938090
    ],
    "platform": "battlenet",
-   "uncertain": true,
-   "note": "Call of Duty HQ launches cod.exe; per-title exe names change often"
+   "uncertain": false,
+   "note": "Call of Duty HQ runs cod.exe (Steam launches bootstrapper.exe first); some betas use codNN-cod.exe"
   },
   {
    "id": "cod_mw2019",
@@ -918,7 +922,7 @@
     2807960
    ],
    "platform": "ea",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "bf1",
@@ -1251,7 +1255,7 @@
     3017860
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "quake3",
@@ -1307,7 +1311,7 @@
     2622380
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "ds3",
@@ -1379,8 +1383,8 @@
     1343370
    ],
    "platform": "jagex",
-   "uncertain": true,
-   "note": "RuneLite.exe covers the popular third-party client"
+   "uncertain": false,
+   "note": "osclient.exe = official client (Steam launch config); RuneLite.exe = popular third-party client (PCGamingWiki)"
   },
   {
    "id": "rs3",
@@ -1464,7 +1468,7 @@
     761890
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "bdo",
@@ -1570,7 +1574,7 @@
     2694490
    ],
    "platform": "ggg",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "lastepoch",
@@ -1669,7 +1673,8 @@
    "id": "marvel_rivals",
    "name": "Marvel Rivals",
    "exes": [
-    "Marvel-Win64-Shipping.exe"
+    "Marvel-Win64-Shipping.exe",
+    "MarvelRivals_Launcher.exe"
    ],
    "path_exes": [],
    "path_hints": [],
@@ -1677,21 +1682,23 @@
     2767030
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "thefinals",
    "name": "THE FINALS",
-   "exes": [
+   "exes": [],
+   "path_exes": [
     "Discovery.exe"
    ],
-   "path_exes": [],
-   "path_hints": [],
+   "path_hints": [
+    "/the finals/"
+   ],
    "steam_appids": [
     2073850
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "helldivers2",
@@ -1719,7 +1726,7 @@
     594650
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "squad",
@@ -1762,7 +1769,7 @@
     1874880
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "dayz",
@@ -1878,7 +1885,8 @@
    "id": "tekken8",
    "name": "Tekken 8",
    "exes": [
-    "Polaris-Win64-Shipping.exe"
+    "Polaris-Win64-Shipping.exe",
+    "TEKKEN 8.exe"
    ],
    "path_exes": [],
    "path_hints": [],
@@ -1886,7 +1894,7 @@
     1778820
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "sf6",
@@ -2331,19 +2339,25 @@
    "exes": [
     "b1-Win64-Shipping.exe"
    ],
-   "path_exes": [],
-   "path_hints": [],
+   "path_exes": [
+    "b1.exe"
+   ],
+   "path_hints": [
+    "/blackmythwukong/",
+    "/black myth wukong/"
+   ],
    "steam_appids": [
     2358720
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "stalker2",
    "name": "S.T.A.L.K.E.R. 2",
    "exes": [
-    "Stalker2-Win64-Shipping.exe"
+    "Stalker2-Win64-Shipping.exe",
+    "Stalker2.exe"
    ],
    "path_exes": [],
    "path_hints": [],
@@ -2351,7 +2365,7 @@
     1643320
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "kcd2",
@@ -2365,7 +2379,7 @@
     1771300
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "borderlands3",
@@ -2435,7 +2449,7 @@
     1030300
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "ror2",
@@ -2512,7 +2526,9 @@
    "id": "civ7",
    "name": "Sid Meier's Civilization VII",
    "exes": [
-    "CivilizationVII.exe"
+    "Civ7_Win64_DX12_FinalRelease.exe",
+    "Civ7_Win64_Vulkan_FinalRelease.exe",
+    "Civ7_Win64_DX12_Release.exe"
    ],
    "path_exes": [],
    "path_hints": [],
@@ -2520,7 +2536,7 @@
     1295660
    ],
    "platform": "steam",
-   "uncertain": true
+   "uncertain": false
   },
   {
    "id": "tww3",
