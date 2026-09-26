@@ -102,6 +102,8 @@ pub struct SettingsView {
     pub signatures: usize,
     pub signatures_version: String,
     pub steam_apps: usize,
+    pub epic_apps: usize,
+    pub gog_apps: usize,
     pub idle_threshold_min: i64,
     pub min_session_min: i64,
 }
@@ -123,6 +125,14 @@ pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Set
         signatures: e.detector.sigs.len(),
         signatures_version: e.detector.sigs.version.clone(),
         steam_apps: e.detector.steam.len(),
+        epic_apps: e
+            .detector
+            .libs
+            .count(fraglink_core::libraries::Launcher::Epic),
+        gog_apps: e
+            .detector
+            .libs
+            .count(fraglink_core::libraries::Launcher::Gog),
         idle_threshold_min: e.tracker.cfg.idle_threshold_s / 60,
         min_session_min: e.tracker.cfg.min_session_s / 60,
     })

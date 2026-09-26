@@ -31,8 +31,8 @@ See the [changelog](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
 **In the current build (M1)**
 
 - Automatic game detection:
-  - **any installed Steam game** (read from your local Steam library, no list needed)
-  - 170 curated non-Steam and classic games
+  - **any installed Steam, Epic Games Store or GOG Galaxy game** (read from the launchers' local install lists, no list needed)
+  - 170 curated games from other launchers and classics (all verified against public sources)
   - "This is a game…" for anything else
 - Honest hours: **idle trimming** (no "left it at the menu overnight = 12 h"), short-session filter, crash-safe sessions.
 - Stats tab:
@@ -88,9 +88,10 @@ Every 5 s Fraglink takes a process snapshot (Windows Toolhelp, plus `QueryFullPr
 1. **Your manual tags.** Programs you marked "This is a game".
 2. **Signatures.** Exe names from `packages/signatures/games.json`, some with required path fragments.
 3. **Steam library.** Any process running from `steamapps/common/<installdir>` of an installed Steam game. The game list comes from `libraryfolders.vdf` and `appmanifest_*.acf`, so no per-game entries are needed. Known helpers (crash reporters, launchers, redistributables) are skipped.
-4. **Steam's `HKCU\Software\Valve\Steam\RunningAppID`.** Only trusted while `steam.exe` is running.
+4. **Epic Games Store and GOG Galaxy installs.** Any process running from the install folder of a game listed in the Epic launcher's manifests (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`) or GOG's registry list (`HKLM\SOFTWARE\WOW6432Node\GOG.com\Games`). DLC, engines and overly broad folders are skipped.
+5. **Steam's `HKCU\Software\Valve\Steam\RunningAppID`.** Only trusted while `steam.exe` is running.
 
-Excluded games are ignored. **Fraglink never reads game memory, injects, hooks or overlays anything**, so it is safe with anti-cheat. It only lists process names and paths and reads the Steam files above. `GetLastInputInfo` gives the idle time.
+Excluded games are ignored. **Fraglink never reads game memory, injects, hooks or overlays anything**, so it is safe with anti-cheat. It only lists process names and paths and reads the launcher files above. `GetLastInputInfo` gives the idle time.
 
 **Idle trimming:** if you are idle longer than the threshold (default 15 min, configurable in Options) while a game runs, that whole idle stretch is removed from the session. Minimised games still count unless you are idle.
 

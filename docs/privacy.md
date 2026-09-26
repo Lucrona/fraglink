@@ -4,6 +4,7 @@
 - The list of running processes: exe name, full path, PID. The path is only looked up once per new process.
 - Steam's install location and the `RunningAppID` value in `HKCU\Software\Valve\Steam`.
 - Steam's `libraryfolders.vdf` and `appmanifest_*.acf` files (game names and install folders). Refreshed every 10 min.
+- Epic Games Launcher install manifests (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`: game name, install folder, main exe) and GOG Galaxy's install list in the registry (`HKLM\SOFTWARE\WOW6432Node\GOG.com\Games`: name, folder, exe). Refreshed every 10 min. Nothing else in those files is used.
 - Time since your last keyboard/mouse input (`GetLastInputInfo`). Only the idle duration is read, never which keys or where.
 
 **Never:** reading or writing game memory, injecting DLLs, hooks, overlays, screenshots, keylogging, or reading chat/window contents. This is what keeps it safe with anti-cheat systems (VAC, EAC, BattlEye, Vanguard, Ricochet).

@@ -5,7 +5,7 @@ Fraglink is built in milestones. Durations are rough estimates for a solo develo
 | | Milestone | What it delivers | Status |
 |---|---|---|---|
 | **M0** | Setup | Monorepo, Tauri 2 app running the classic UI, tray, single instance, autostart, CI with Windows installers | ✅ Done (unsigned builds) |
-| **M1** | Local tracker + tray tabs | Game detection (signatures + Steam library), idle trimming, local SQLite, tagging/exclusions, Stats and Activity tabs, local toasts, export | ✅ Done, in testing |
+| **M1** | Local tracker + tray tabs | Game detection (signatures + Steam, Epic and GOG libraries), idle trimming, local SQLite, tagging/exclusions, Stats and Activity tabs, local toasts, export | ✅ Done (0.1.1), in testing |
 | **M2** | Accounts + Steam + trust tiers | Sign-in (email/Discord), Steam link and hours import, offline-safe sync, Tracked / Imported / Estimated hours, export v1, privacy policy | Planned |
 | **M3** | Friends + presence + feed | Friend requests and blocks, live presence (Online/Away/Invisible), Friends tab and side panel, friend toasts, activity feed, Steam friends presence | Planned |
 | **M4** | Website core | `fraglink.gg` profiles (drag/hide/reorder, themes), gaming history with trust markers, onboarding with the history estimator, linked accounts, signature images | Planned |

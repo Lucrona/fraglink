@@ -580,7 +580,7 @@
       $('#opt-idle').value = String(st.idle_threshold_min); $('#opt-min').value = String(st.min_session_min);
       $('#opt-pause').checked = st.settings.paused === '1'; $('#opt-toast').checked = st.settings.toasts !== '0';
       $('#opt-autostart').checked = !!st.autostart;
-      $('#opt-info').innerHTML = `Saved only on this PC:<br><code>${esc(st.data_dir)}</code><br>Fraglink ${esc(st.version)} · ${st.signatures} known games · ${st.steam_apps} Steam games found${st.sim ? '<br><b class="bad">Simulation mode: fake games</b>' : ''}`;
+      $('#opt-info').innerHTML = `Saved only on this PC:<br><code>${esc(st.data_dir)}</code><br>Fraglink ${esc(st.version)} · ${st.signatures} known games · ${st.steam_apps} Steam, ${st.epic_apps || 0} Epic, ${st.gog_apps || 0} GOG games found${st.sim ? '<br><b class="bad">Simulation mode: fake games</b>' : ''}`;
     } catch (e) { toastErr(e); }
   }
   $('#opt-idle').addEventListener('change', e => FLB.set('idle_threshold_min', e.target.value).catch(toastErr));
@@ -628,7 +628,7 @@
     'pause-toggle': async () => { try { await FLB.set('paused', LIVE.glance && LIVE.glance.paused ? '0' : '1'); refreshSoon(); } catch (e) { toastErr(e); } },
     'export': async () => { try { const p = await FLB.exportData(); notice('Export my data', `Saved:<br><code>${p.map(esc).join('</code><br><code>')}</code>`); } catch (e) { toastErr(e); } },
     'open-data': () => FLB.openData().catch(toastErr),
-    'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, to name Steam games.</li><li>How long since you last <b>touched the mouse or keyboard</b> (a single Windows number, not what you typed), so idle time isn\'t counted.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC in this version.'),
+    'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li><li>How long since you last <b>touched the mouse or keyboard</b> (a single Windows number, not what you typed), so idle time isn\'t counted.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC in this version.'),
     'add-friend': () => notice('Add Friend', 'Friends arrive in a later update.'),
     'my-profile': () => notice('My Profile', LATER), 'friend-profile': () => notice('Profile', LATER),
     'my-stats': () => notice('Full stats', LATER), 'website': () => notice('fraglink.gg', LATER), 'estimate': () => notice('Estimate my history', LATER),

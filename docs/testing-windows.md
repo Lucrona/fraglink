@@ -4,7 +4,7 @@
 2. **Install:** run the setup exe. It installs for your user only, no admin needed. SmartScreen will say "Windows protected your PC" because the build isn't code-signed yet. Click **More info → Run anyway**.
 3. **First look:** the classic Fraglink window opens and an icon appears in the tray (check the ^ overflow). Left-click the tray icon to show or hide the window. Right-click it for Open / Status / Pause tracking / Export my data / Open data folder / Open logs folder / Quit. Closing or minimising the window keeps Fraglink running in the tray.
 4. **Play something:**
-   - A Steam game (any game, no list needed)
+   - A Steam, Epic or GOG game (any game, no list needed)
    - A Battle.net or Riot game (e.g. WoW, Overwatch 2, League, Valorant)
    - Something standalone (e.g. Minecraft launcher, RuneLite)
 
