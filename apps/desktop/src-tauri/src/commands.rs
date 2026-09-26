@@ -112,7 +112,11 @@ pub struct SettingsView {
 pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> CmdResult<SettingsView> {
     let e = state.engine.lock().unwrap();
     Ok(SettingsView {
-        settings: e.tracker.store.all_settings().map_err(err)?,
+        settings: {
+            let mut s = e.tracker.store.all_settings().map_err(err)?;
+            s.retain(|k, _| !crate::sync::keys::HIDDEN.contains(&k.as_str()));
+            s
+        },
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
         sim: state.sim,
         data_dir: state.data_dir.display().to_string(),
@@ -257,4 +261,31 @@ pub fn toast_clicked(app: AppHandle) {
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
     crate::quit(&app);
+}
+
+// ------------------------------------------------------------ optional sync
+
+#[tauri::command]
+pub fn sync_status(app: AppHandle) -> crate::sync::SyncView {
+    crate::sync::view(&app)
+}
+
+#[tauri::command]
+pub fn sync_sign_in(app: AppHandle, server: String) -> CmdResult<()> {
+    crate::sync::start_pairing(&app, &server)
+}
+
+#[tauri::command]
+pub fn sync_cancel(app: AppHandle) {
+    crate::sync::cancel_pairing(&app);
+}
+
+#[tauri::command]
+pub fn sync_now(app: AppHandle) {
+    crate::sync::nudge(&app);
+}
+
+#[tauri::command]
+pub fn sync_sign_out(app: AppHandle) {
+    crate::sync::sign_out(&app);
 }

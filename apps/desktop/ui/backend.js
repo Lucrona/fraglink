@@ -24,6 +24,11 @@
       hide: () => inv('hide_main'),
       quit: () => inv('quit_app'),
       scale: (zoom, sideOpen) => inv('set_window_scale', { zoom: Number(zoom), sideOpen: !!sideOpen }),
+      syncStatus: () => inv('sync_status'),
+      syncSignIn: (server) => inv('sync_sign_in', { server }),
+      syncCancel: () => inv('sync_cancel'),
+      syncNow: () => inv('sync_now'),
+      syncSignOut: () => inv('sync_sign_out'),
       on: (evt, cb) => T.event.listen(evt, e => cb(e.payload)),
       drag: () => T.window.getCurrentWindow().startDragging(),
     };
@@ -80,7 +85,13 @@
     hide: () => ok(),
     quit: () => ok(),
     scale: () => ok(),
+    syncStatus: () => ok({ ...sync, pending: 3 }),
+    syncSignIn: (server) => { sync.server = server; sync.pairing = { user_code: 'KXRT-7QPM', verification_uri: server + '/pair', verification_uri_complete: server + '/pair?code=KXRT-7QPM', expires_at: now() + 600 }; return ok(); },
+    syncCancel: () => { sync.pairing = null; return ok(); },
+    syncNow: () => ok(),
+    syncSignOut: () => { sync.signed_in = false; sync.user = null; return ok(); },
     on: () => ok(() => {}),
     drag: () => ok(),
   };
+  const sync = { signed_in: false, server: 'http://localhost:8787', user: null, last_ok: null, last_error: null, pairing: null, pairing_error: null };
 })();

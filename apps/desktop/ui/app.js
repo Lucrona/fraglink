@@ -580,9 +580,32 @@
       $('#opt-idle').value = String(st.idle_threshold_min); $('#opt-min').value = String(st.min_session_min);
       $('#opt-pause').checked = st.settings.paused === '1'; $('#opt-toast').checked = st.settings.toasts !== '0';
       $('#opt-autostart').checked = !!st.autostart;
-      $('#opt-info').innerHTML = `Saved only on this PC:<br><code>${esc(st.data_dir)}</code><br>Fraglink ${esc(st.version)} · ${st.signatures} known games · ${st.steam_apps} Steam, ${st.epic_apps || 0} Epic, ${st.gog_apps || 0} GOG games found${st.sim ? '<br><b class="bad">Simulation mode: fake games</b>' : ''}`;
+      renderSync();
+      $('#opt-info').innerHTML = `Saved on this PC:<br><code>${esc(st.data_dir)}</code><br>Fraglink ${esc(st.version)} · ${st.signatures} known games · ${st.steam_apps} Steam, ${st.epic_apps || 0} Epic, ${st.gog_apps || 0} GOG games found${st.sim ? '<br><b class="bad">Simulation mode: fake games</b>' : ''}`;
     } catch (e) { toastErr(e); }
   }
+  /* ---- optional account sync (Options → Sync) ---- */
+  async function renderSync() {
+    if ($('#options').hidden || !FLB.syncStatus) return;
+    let s; try { s = await FLB.syncStatus(); } catch (e) { $('#sync-box').textContent = String(e); return; }
+    const when = t => t ? new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'not yet';
+    const err = s.pairing_error || s.last_error;
+    let h;
+    if (s.signed_in) {
+      h = `Signed in as <b>${esc(s.user || '?')}</b> on <code>${esc(s.server)}</code><br>${s.pending} session(s) waiting · last sync ${esc(when(s.last_ok))}
+        <div class="opt-btns"><button class="hw" type="button" data-action="sync-now">Sync now</button><button class="hw" type="button" data-action="sync-signout">Sign out</button></div>`;
+    } else if (s.pairing) {
+      h = `In your browser, check the code and approve:<div class="sync-code">${esc(s.pairing.user_code)}</div><small>Browser didn't open? Go to <code>${esc(s.pairing.verification_uri)}</code></small>
+        <div class="opt-btns"><button class="hw" type="button" data-action="sync-cancel">Cancel</button></div>`;
+    } else {
+      h = `Off: everything stays on this PC. Sign in to back up your sessions to a Fraglink server.
+        <input id="sync-server" maxlength="200" value="${esc(s.server)}" title="Server address" />
+        <div class="opt-btns"><button class="hw" type="button" data-action="sync-signin">Sign in to sync</button></div>`;
+    }
+    if (err) h += `<div class="bad">${esc(err)}</div>`;
+    $('#sync-box').innerHTML = h;
+  }
+  FLB.on && FLB.on('fraglink://sync', () => renderSync());
   $('#opt-idle').addEventListener('change', e => FLB.set('idle_threshold_min', e.target.value).catch(toastErr));
   $('#opt-min').addEventListener('change', e => FLB.set('min_session_min', e.target.value).catch(toastErr));
   $('#opt-pause').addEventListener('change', e => FLB.set('paused', e.target.checked ? '1' : '0').then(refreshSoon).catch(toastErr));
@@ -615,6 +638,10 @@
     'toggle-side': () => toggleSide(),
     'options': openOptions,
     'options-close': () => { $('#options').hidden = true; },
+    'sync-signin': () => FLB.syncSignIn($('#sync-server').value.trim()).then(renderSync).catch(toastErr),
+    'sync-cancel': () => FLB.syncCancel().then(renderSync).catch(toastErr),
+    'sync-now': () => FLB.syncNow().then(() => setTimeout(renderSync, 3000)).catch(toastErr),
+    'sync-signout': () => FLB.syncSignOut().then(renderSync).catch(toastErr),
     'notice-close': () => { $('#notice').hidden = true; },
     'games-close': () => { $('#games-dlg').hidden = true; },
     'games-refresh': () => openGames($('#games-title').textContent !== 'Manage games'),
@@ -628,11 +655,11 @@
     'pause-toggle': async () => { try { await FLB.set('paused', LIVE.glance && LIVE.glance.paused ? '0' : '1'); refreshSoon(); } catch (e) { toastErr(e); } },
     'export': async () => { try { const p = await FLB.exportData(); notice('Export my data', `Saved:<br><code>${p.map(esc).join('</code><br><code>')}</code>`); } catch (e) { toastErr(e); } },
     'open-data': () => FLB.openData().catch(toastErr),
-    'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li><li>How long since you last <b>touched the mouse or keyboard</b> (a single Windows number, not what you typed), so idle time isn\'t counted.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC in this version.'),
+    'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li><li>How long since you last <b>touched the mouse or keyboard</b> (a single Windows number, not what you typed), so idle time isn\'t counted.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options; then only your game sessions (game, start, end, active time) are uploaded, never program names or paths.'),
     'add-friend': () => notice('Add Friend', 'Friends arrive in a later update.'),
     'my-profile': () => notice('My Profile', LATER), 'friend-profile': () => notice('Profile', LATER),
     'my-stats': () => notice('Full stats', LATER), 'website': () => notice('fraglink.gg', LATER), 'estimate': () => notice('Estimate my history', LATER),
-    'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${st.version}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {} notice('About Fraglink', `<b>Fraglink ${esc(v)}</b><br>Local hours tracker (milestone M1).<br>© 2026 Lucrona. All rights reserved.<br><br>Classic look inspired by 2005-era gaming IM clients; original Fraglink mark. Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).`); },
+    'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${st.version}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {} notice('About Fraglink', `<b>Fraglink ${esc(v)}</b><br>Local hours tracker (M1) with optional account sync (M2 preview).<br>© 2026 Lucrona. All rights reserved.<br><br>Classic look inspired by 2005-era gaming IM clients; original Fraglink mark. Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).`); },
     'chat': () => openChat(state.sel),
     'join': () => notice('Join Game', 'Joining friends arrives with friends in a later update.'),
     'clear-sel': () => { state.sel = null; render(); },

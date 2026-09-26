@@ -55,3 +55,9 @@ body.toast-page .toast-body .g { display: inline; }
 
 /* keep ligatures off everywhere (mirrors the last rule of styles.css) */
 * { font-variant-ligatures: none; }
+/* optional sync box (Options) */
+.opt-sync { font-size: 10px; color: #333; line-height: 1.35; word-break: break-word; }
+.opt-sync code { font: 9.5px/1.3 Consolas, "Lucida Console", monospace; word-break: break-all; }
+.opt-sync input { width: 100%; box-sizing: border-box; margin: 3px 0 0; font: 10px Tahoma, sans-serif; }
+.opt-sync .sync-code { font: bold 15px/1.4 Consolas, "Lucida Console", monospace; letter-spacing: 2px; text-align: center; margin: 3px 0; color: #0b2f6b; }
+.opt-sync .bad { color: #b00000; margin-top: 3px; }

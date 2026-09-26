@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 fraglink-core = { path = "../../../crates/fraglink-core" }
+fraglink-sync = { path = "../../../crates/fraglink-sync" }
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 log = "0.4"

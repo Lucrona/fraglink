@@ -1,8 +1,10 @@
 //! Fraglink tray app (Tauri 2): tray icon + menu, single instance, optional
 //! autostart, the 290x381 classic window, a toast window, and the local tracker
-//! thread from `fraglink-core`. No network calls, no telemetry.
+//! thread from `fraglink-core`. No network calls and no telemetry by default;
+//! the optional account sync (`sync.rs`) only runs after the user signs in.
 
 mod commands;
+mod sync;
 mod windows;
 
 use fraglink_core::engine::{keys, Engine, DEFAULT_POLL_SECS};
@@ -43,6 +45,7 @@ pub struct AppState {
     pub pending_toast: Mutex<Option<ToastPayload>>,
     pub main_pos: Mutex<Option<(i32, i32)>>,
     pub tray: Mutex<Option<TrayItems>>,
+    pub sync: sync::SyncShared,
 }
 
 pub fn now() -> i64 {
@@ -145,6 +148,12 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
         if let (true, Some(t)) = (toasts_on, toast) {
             windows::show_toast(app, t);
         }
+    }
+    if evs
+        .iter()
+        .any(|e| matches!(e, TrackerEvent::Stopped { kept: true, .. }))
+    {
+        sync::nudge(app);
     }
     update_tray_tooltip(app);
 }
@@ -438,11 +447,13 @@ pub fn run() {
                 pending_toast: Mutex::new(None),
                 main_pos: Mutex::new(main_pos),
                 tray: Mutex::new(None),
+                sync: sync::SyncShared::default(),
             });
             build_tray(&handle)?;
             if !fl.minimized {
                 windows::show_main(&handle);
             }
+            sync::init(&handle);
             start_tracker(handle);
             Ok(())
         })
@@ -466,6 +477,11 @@ pub fn run() {
             commands::toast_clicked,
             commands::set_status,
             commands::quit_app,
+            commands::sync_status,
+            commands::sync_sign_in,
+            commands::sync_cancel,
+            commands::sync_now,
+            commands::sync_sign_out,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Fraglink");
