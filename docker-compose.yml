@@ -1,0 +1,34 @@
+# Local development only. Nothing here is meant for production hosting.
+#   docker compose up -d db              # just Postgres (then `cargo run -p fraglink-server`)
+#   docker compose --profile server up   # Postgres + the server in a container
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: fraglink
+      POSTGRES_PASSWORD: fraglink # local dev password, not a secret
+      POSTGRES_DB: fraglink
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [fraglink-pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fraglink"]
+      interval: 5s
+      retries: 10
+
+  server:
+    profiles: [server]
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://fraglink:fraglink@db:5432/fraglink
+      FRAGLINK_BIND: 0.0.0.0:8787
+      FRAGLINK_PUBLIC_URL: http://localhost:8787
+      STEAM_API_KEY: ${STEAM_API_KEY:-}
+    ports: ["127.0.0.1:8787:8787"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  fraglink-pg:

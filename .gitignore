@@ -8,3 +8,4 @@ apps/desktop/src-tauri/gen/schemas/
 Thumbs.db
 /tmp/
 *.log
+.env
