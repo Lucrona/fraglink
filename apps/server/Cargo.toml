@@ -11,7 +11,8 @@ publish.workspace = true
 anyhow = "1"
 fraglink-core = { path = "../../crates/fraglink-core" }
 argon2 = { version = "0.5", features = ["std"] }
-axum = { version = "0.8", features = ["macros"] }
+axum = { version = "0.8", features = ["macros", "ws"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 rand = "0.8"
@@ -28,7 +29,10 @@ url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
+tokio-tungstenite = "0.28"
+futures-util = "0.3"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 fraglink-sync = { path = "../../crates/fraglink-sync" }
 tempfile = "3"
+zip = { version = "8", default-features = false, features = ["deflate"] }

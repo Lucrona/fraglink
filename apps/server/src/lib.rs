@@ -1,11 +1,16 @@
 //! Fraglink server (M2): accounts, desktop pairing, session sync, trust-tier
 //! hours and Steam import. Plain axum + Postgres (sqlx); see `docs/decisions.md`.
 
+// sqlx row tuples are long but clearer inline than named aliases.
+#![allow(clippy::type_complexity)]
+
 pub mod api;
 pub mod auth;
 pub mod config;
 pub mod error;
+pub mod friends;
 pub mod hours;
+pub mod presence;
 pub mod steam;
 pub mod web;
 
@@ -26,6 +31,10 @@ pub struct AppState {
     pub steam: steam::SteamClient,
     /// Failed logins per lower-case email (in-memory, per process).
     pub login_failures: Arc<Mutex<HashMap<String, Vec<Instant>>>>,
+    /// Last zip export per user (at most one per hour).
+    pub export_log: Arc<Mutex<HashMap<uuid::Uuid, Instant>>>,
+    /// Live WebSocket connections for presence fan-out.
+    pub hub: Arc<presence::Hub>,
 }
 
 impl AppState {
@@ -36,6 +45,8 @@ impl AppState {
             cfg: Arc::new(cfg),
             steam,
             login_failures: Arc::new(Mutex::new(HashMap::new())),
+            export_log: Arc::new(Mutex::new(HashMap::new())),
+            hub: Arc::new(presence::Hub::default()),
         }
     }
 }

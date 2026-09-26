@@ -25,6 +25,9 @@ async fn main() -> anyhow::Result<()> {
     );
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     let state = AppState::new(db, cfg);
+    fraglink_server::presence::reset_all(&state)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.message))?;
     let bg = state.clone();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));

@@ -231,7 +231,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let export = MenuItem::with_id(
         app,
         "export",
-        "Export my data (JSON + CSV)",
+        "Export my data (zip: JSON + CSV)",
         true,
         None::<&str>,
     )?;

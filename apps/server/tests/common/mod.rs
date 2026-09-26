@@ -24,6 +24,7 @@ pub struct Resp {
     pub status: StatusCode,
     pub headers: axum::http::HeaderMap,
     pub text: String,
+    pub bytes: Vec<u8>,
 }
 
 impl Resp {
@@ -52,6 +53,7 @@ pub async fn send(app: &Router, req: Request<Body>) -> Resp {
         status,
         headers,
         text: String::from_utf8_lossy(&bytes).into_owned(),
+        bytes: bytes.to_vec(),
     }
 }
 

@@ -194,8 +194,8 @@ pub fn set_autostart(app: AppHandle, enabled: bool) -> CmdResult<bool> {
     al.is_enabled().map_err(err)
 }
 
-/// Write JSON + CSV exports to Documents\Fraglink (fallback: data folder) and reveal them.
-pub fn do_export(app: &AppHandle) -> anyhow::Result<(PathBuf, PathBuf)> {
+/// Write the export zip (JSON + CSVs) to Documents\Fraglink (fallback: data folder) and reveal it.
+pub fn do_export(app: &AppHandle) -> anyhow::Result<PathBuf> {
     let state = app.state::<AppState>();
     let dir = app
         .path()
@@ -205,14 +205,14 @@ pub fn do_export(app: &AppHandle) -> anyhow::Result<(PathBuf, PathBuf)> {
     let e = state.engine.lock().unwrap();
     let paths = fraglink_core::export::write_export(&e.tracker.store, &dir, now())?;
     drop(e);
-    let _ = tauri_plugin_opener::reveal_item_in_dir(&paths.0);
+    let _ = tauri_plugin_opener::reveal_item_in_dir(&paths);
     Ok(paths)
 }
 
 #[tauri::command]
 pub fn export_data(app: AppHandle) -> CmdResult<Vec<String>> {
-    let (j, c) = do_export(&app).map_err(err)?;
-    Ok(vec![j.display().to_string(), c.display().to_string()])
+    let z = do_export(&app).map_err(err)?;
+    Ok(vec![z.display().to_string()])
 }
 
 #[tauri::command]

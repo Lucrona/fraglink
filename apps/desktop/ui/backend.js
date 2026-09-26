@@ -80,7 +80,7 @@
     settings: () => ok({ settings, autostart: false, sim: false, data_dir: '(browser preview: no data is stored)', log_dir: '', version: 'preview', signatures: 170, signatures_version: 'preview', steam_apps: 0, idle_threshold_min: 15, min_session_min: 2 }),
     set: (k, v) => { settings[k] = String(v); if (k === 'paused') paused = v === '1' || v === true; return ok(); },
     autostart: (e) => ok(e),
-    exportData: () => ok(['(preview) fraglink-export.json', '(preview) fraglink-sessions.csv']),
+    exportData: () => ok(['(preview) fraglink-export-20260926-200000.zip']),
     openData: () => ok(),
     hide: () => ok(),
     quit: () => ok(),

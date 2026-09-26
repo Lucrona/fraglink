@@ -122,12 +122,12 @@ fn main() -> anyhow::Result<()> {
     }
     println!("{}", serde_json::to_string_pretty(&glance)?);
     if let Some(dir) = arg(&args, "--export") {
-        let (j, c) = fraglink_core::export::write_export(
+        let z = fraglink_core::export::write_export(
             &engine.tracker.store,
             std::path::Path::new(&dir),
             now,
         )?;
-        eprintln!("exported {} and {}", j.display(), c.display());
+        eprintln!("exported {}", z.display());
     }
     let wall = t_start.elapsed().as_secs_f64();
     if let Some((cpu, rss)) = usage_now() {

@@ -33,6 +33,8 @@ pub fn routes() -> Router<AppState> {
         .route("/web/import", post(web_import))
         .route("/web/hours/{id}/delete", post(web_delete_hours))
         .route("/web/devices/{id}/revoke", post(web_revoke_device))
+        .route("/web/friends/add", post(web_friend_add))
+        .route("/web/friends/{handle}/{action}", post(web_friend_action))
 }
 
 pub fn esc(s: &str) -> String {
@@ -182,7 +184,7 @@ async fn home(
 
     let mut b = flash(&f);
     b += &format!(
-        r#"<div class="card"><h1>Hi {h}</h1><form class="inline" method="post" action="/logout"><button>Sign out</button></form> <a href="/api/v1/export">Export my data (JSON)</a></div>"#,
+        r#"<div class="card"><h1>Hi {h}</h1><form class="inline" method="post" action="/logout"><button>Sign out</button></form> <a href="/api/v1/export.zip">Export my data (zip)</a> · <a href="/api/v1/export">JSON</a></div>"#,
         h = esc(&a.user.handle)
     );
     // stats
@@ -279,6 +281,46 @@ at <input name="hours_per_week" type="number" step="0.5" min="0.5" max="80" valu
             );
         }
         b += "</table>";
+    }
+    b += "</div>";
+    // friends (M3)
+    let fl = crate::friends::list(&st, uid).await?;
+    b += r#"<div class="card"><h2>Friends</h2><form method="post" action="/web/friends/add">Add by name: <input name="handle" required maxlength="20" placeholder="their Fraglink name"> <button>Send request</button></form>"#;
+    for r in &fl.incoming {
+        let h = esc(&r.handle);
+        b += &format!(
+            r#"<div><b>{h}</b> wants to be friends <form class="inline" method="post" action="/web/friends/{h}/accept"><button>Accept</button></form> <form class="inline" method="post" action="/web/friends/{h}/decline"><button>Decline</button></form> <form class="inline" method="post" action="/web/friends/{h}/block"><button>Block</button></form></div>"#
+        );
+    }
+    for r in &fl.outgoing {
+        let h = esc(&r.handle);
+        b += &format!(
+            r#"<div><small class="m">Request sent to {h}</small> <form class="inline" method="post" action="/web/friends/{h}/remove"><button>Cancel</button></form></div>"#
+        );
+    }
+    b += "<table>";
+    for f in &fl.friends {
+        let h = esc(&f.handle);
+        let p = &f.presence;
+        let state = match (p.status.as_str(), &p.game_name) {
+            ("offline", _) => r#"<small class="m">Offline</small>"#.to_string(),
+            (_, Some(g)) => format!(r#"<span class="t-tracked">Playing {}</span>"#, esc(g)),
+            ("away", None) => "Away".to_string(),
+            _ => "Online".to_string(),
+        };
+        b += &format!(
+            r#"<tr><td>{h}</td><td>{state}</td><td class="n"><form class="inline" method="post" action="/web/friends/{h}/remove"><button>Remove</button></form> <form class="inline" method="post" action="/web/friends/{h}/block"><button>Block</button></form></td></tr>"#
+        );
+    }
+    b += "</table>";
+    if fl.friends.is_empty() {
+        b += r#"<small class="m">No friends yet. Ask them for their Fraglink name.</small>"#;
+    }
+    for h in &fl.blocked {
+        let h = esc(h);
+        b += &format!(
+            r#"<div><small class="m">Blocked: {h}</small> <form class="inline" method="post" action="/web/friends/{h}/unblock"><button>Unblock</button></form></div>"#
+        );
     }
     b += "</div>";
     // devices
@@ -708,4 +750,61 @@ fn status_page(code: StatusCode, msg: &str) -> Response {
         ),
     )
         .into_response()
+}
+
+#[derive(Deserialize)]
+struct HandleForm {
+    handle: String,
+}
+
+async fn web_friend_add(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Form(f): Form<HandleForm>,
+) -> Response {
+    if let Err(e) = same_origin(&headers, &st) {
+        return e.into_response();
+    }
+    match crate::friends::request(&st, &api::person(&a), &f.handle).await {
+        Ok(crate::friends::RequestOutcome::Accepted) => {
+            back(&format!("You and {} are now friends.", f.handle.trim()))
+        }
+        Ok(_) => back(&format!("Friend request sent to {}.", f.handle.trim())),
+        Err(e) => back_err(e),
+    }
+}
+
+async fn web_friend_action(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Path((handle, action)): Path<(String, String)>,
+) -> Response {
+    if let Err(e) = same_origin(&headers, &st) {
+        return e.into_response();
+    }
+    let me = api::person(&a);
+    let r = match action.as_str() {
+        "accept" => crate::friends::respond(&st, &me, &handle, true)
+            .await
+            .map(|_| "Friend added."),
+        "decline" => crate::friends::respond(&st, &me, &handle, false)
+            .await
+            .map(|_| "Request declined."),
+        "remove" => crate::friends::remove(&st, &me, &handle)
+            .await
+            .map(|_| "Removed."),
+        "block" => crate::friends::block(&st, &me, &handle)
+            .await
+            .map(|_| "Blocked. They can't see you or send you requests."),
+        "unblock" => crate::friends::unblock(&st, &me, &handle)
+            .await
+            .map(|_| "Unblocked."),
+        _ => return back_err(AppError::not_found()),
+    };
+    match r {
+        Ok(m) => back(m),
+        Err(e) => back_err(e),
+    }
 }

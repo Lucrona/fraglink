@@ -194,3 +194,86 @@ async fn secure_cookie_on_https(pool: PgPool) {
     let c = r.headers.get("set-cookie").unwrap().to_str().unwrap();
     assert!(c.contains("; Secure"), "{c}");
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn web_friends_forms(pool: PgPool) {
+    let app = fraglink_server::router(state(pool));
+    signup(&app, "f1@example.com", "friendone").await;
+    signup(&app, "f2@example.com", "friendtwo").await;
+    let c1 = form(
+        &app,
+        "/login",
+        None,
+        Some(ORIGIN),
+        "email=f1%40example.com&password=correct+horse+battery",
+    )
+    .await
+    .cookie()
+    .unwrap();
+    let c2 = form(
+        &app,
+        "/login",
+        None,
+        Some(ORIGIN),
+        "email=f2%40example.com&password=correct+horse+battery",
+    )
+    .await
+    .cookie()
+    .unwrap();
+    let r = form(
+        &app,
+        "/web/friends/add",
+        Some(&c1),
+        Some(ORIGIN),
+        "handle=friendtwo",
+    )
+    .await;
+    assert!(r.location().starts_with("/?msg="), "{}", r.location());
+    let home = page(&app, "/", Some(&c2)).await;
+    assert!(
+        home.text.contains("<b>friendone</b> wants to be friends"),
+        "{}",
+        home.text
+    );
+    assert_eq!(
+        form(
+            &app,
+            "/web/friends/friendone/accept",
+            Some(&c2),
+            Some("https://evil.example"),
+            ""
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    form(
+        &app,
+        "/web/friends/friendone/accept",
+        Some(&c2),
+        Some(ORIGIN),
+        "",
+    )
+    .await;
+    let home = page(&app, "/", Some(&c1)).await;
+    assert!(home.text.contains("<td>friendtwo</td>") && home.text.contains("Offline"));
+    form(
+        &app,
+        "/web/friends/friendtwo/block",
+        Some(&c1),
+        Some(ORIGIN),
+        "",
+    )
+    .await;
+    let home = page(&app, "/", Some(&c1)).await;
+    assert!(home.text.contains("Blocked: friendtwo"));
+    let r = form(
+        &app,
+        "/web/friends/friendtwo/bogus",
+        Some(&c1),
+        Some(ORIGIN),
+        "",
+    )
+    .await;
+    assert!(r.location().starts_with("/?err="));
+}

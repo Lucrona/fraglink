@@ -2,6 +2,7 @@
 
 use crate::auth::{self, AuthUser, User};
 use crate::error::{ApiResult, AppError};
+use crate::friends;
 use crate::hours::{self, Era};
 use crate::steam::{self, ProfileRef};
 use crate::AppState;
@@ -41,6 +42,14 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/steam/link", post(steam_link))
         .route("/api/v1/steam/sync", post(steam_sync))
         .route("/api/v1/export", get(export))
+        .route("/api/v1/export.zip", get(export_zip))
+        .route("/api/v1/friends", get(friends_list))
+        .route("/api/v1/friends/request", post(friend_request))
+        .route("/api/v1/friends/respond", post(friend_respond))
+        .route("/api/v1/friends/{handle}", delete(friend_remove))
+        .route("/api/v1/blocks", post(block_user))
+        .route("/api/v1/blocks/{handle}", delete(unblock_user))
+        .route("/api/v1/ws", get(crate::presence::ws_handler))
 }
 
 /// Cookie-authenticated writes must come from our own pages (CSRF guard; SameSite=Lax
@@ -859,9 +868,226 @@ pub async fn export_json(st: &AppState, user: &User) -> ApiResult<Value> {
         "hours_entries": q("SELECT coalesce(jsonb_agg(to_jsonb(h) - 'user_id' ORDER BY captured_at), '[]'::jsonb) FROM hours_entries h WHERE user_id = $1").await?,
         "game_stats": q("SELECT coalesce(jsonb_agg(to_jsonb(g) - 'user_id'), '[]'::jsonb) FROM user_game_stats g WHERE user_id = $1").await?,
         "devices": q("SELECT coalesce(jsonb_agg(jsonb_build_object('device_name', device_name, 'created_at', created_at, 'last_used_at', last_used_at, 'revoked_at', revoked_at)), '[]'::jsonb) FROM auth_tokens WHERE user_id = $1 AND kind = 'device'").await?,
+        "friends": crate::friends::export(st, user.id).await?,
     }))
 }
 
 async fn export(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
     Ok(Json(export_json(&st, &a.user).await?))
+}
+
+/// Seconds between zip exports per user (spec W14: at most one per hour).
+pub const EXPORT_ZIP_INTERVAL_SECS: u64 = 3600;
+
+const ZIP_README: &str = "Fraglink account export\n\n\
+profile.json         your account, linked accounts and paired devices\n\
+sessions.csv         every session uploaded by the Fraglink app (tier: tracked)\n\
+games.csv            per-game minutes by tier: tracked, imported (self-reported), estimated, and what is displayed\n\
+hours_entries.json   imported counters and history estimates, with the estimator inputs\n\
+steam_playtime.csv   Steam's own playtime counters (tracked tier)\n\
+friends.json         friends, pending requests and blocks\n\
+fraglink-account.json  everything above in one JSON document\n\n\
+Times are UTC (RFC 3339). Minutes are whole minutes; seconds where the column says _s.\n\
+Estimated hours are never added to totals or rankings.\n";
+
+fn csv_line(fields: &[String]) -> String {
+    let mut l = fields
+        .iter()
+        .map(|f| fraglink_core::export::csv_field(f))
+        .collect::<Vec<_>>()
+        .join(",");
+    l.push('\n');
+    l
+}
+
+async fn export_zip(
+    State(st): State<AppState>,
+    a: AuthUser,
+) -> ApiResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    {
+        let mut log = st.export_log.lock().unwrap();
+        if let Some(t) = log.get(&a.user.id) {
+            let age = t.elapsed().as_secs();
+            if age < EXPORT_ZIP_INTERVAL_SECS {
+                return Err(AppError::new(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "export_cooldown",
+                    format!("One zip export per hour. Try again in {} min (the JSON export has no limit).", (EXPORT_ZIP_INTERVAL_SECS - age) / 60 + 1),
+                ));
+            }
+        }
+        log.insert(a.user.id, std::time::Instant::now());
+    }
+    let uid = a.user.id;
+    let full = export_json(&st, &a.user).await?;
+
+    let rows: Vec<(Uuid, String, String, DateTime<Utc>, DateTime<Utc>, i32, i32, Option<String>, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT s.id, s.game_id, g.name, s.started_at, s.ended_at, s.duration_s, s.idle_trimmed_s, s.client_version, s.uploaded_at
+         FROM sessions s JOIN games g ON g.id = s.game_id WHERE s.user_id = $1 ORDER BY s.started_at",
+    )
+    .bind(uid)
+    .fetch_all(&st.db)
+    .await?;
+    let mut sessions = String::from("session_id,game_id,game_name,started_at_utc,ended_at_utc,active_seconds,idle_trimmed_seconds,tier,client_version,uploaded_at_utc\n");
+    for (id, gid, name, sa, ea, d, idle, cv, up) in rows {
+        sessions += &csv_line(&[
+            id.to_string(),
+            gid,
+            name,
+            sa.to_rfc3339(),
+            ea.to_rfc3339(),
+            d.to_string(),
+            idle.to_string(),
+            "tracked".into(),
+            cv.unwrap_or_default(),
+            up.to_rfc3339(),
+        ]);
+    }
+    let mut games = String::from("game_id,game_name,tracked_minutes,imported_minutes,estimated_minutes,display_minutes,display_tier,minutes_last_7_days,last_played_utc\n");
+    for g in game_stats(&st, uid).await? {
+        games += &csv_line(&[
+            g.game_id,
+            g.name,
+            g.tracked_min.to_string(),
+            g.imported_min.to_string(),
+            g.estimated_min.to_string(),
+            g.display_min.to_string(),
+            g.display_tier,
+            g.minutes_7d.to_string(),
+            g.last_played_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+        ]);
+    }
+    let sp: Vec<(i32, String, i32, i32, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at FROM steam_playtime WHERE user_id = $1 ORDER BY steam_appid",
+    )
+    .bind(uid)
+    .fetch_all(&st.db)
+    .await?;
+    let mut steam_csv =
+        String::from("steam_appid,game_id,minutes_forever,minutes_2weeks,fetched_at_utc\n");
+    for (app, gid, f, w, at) in sp {
+        steam_csv += &csv_line(&[
+            app.to_string(),
+            gid,
+            f.to_string(),
+            w.to_string(),
+            at.to_rfc3339(),
+        ]);
+    }
+    let profile = json!({ "user": full["user"], "linked_accounts": full["linked_accounts"], "devices": full["devices"] });
+    let pretty = |v: &Value| serde_json::to_vec_pretty(v).unwrap_or_default();
+    let bytes = fraglink_core::export::zip_bytes(&[
+        ("README.txt", ZIP_README.as_bytes().to_vec()),
+        ("profile.json", pretty(&profile)),
+        ("sessions.csv", sessions.into_bytes()),
+        ("games.csv", games.into_bytes()),
+        ("hours_entries.json", pretty(&full["hours_entries"])),
+        ("steam_playtime.csv", steam_csv.into_bytes()),
+        ("friends.json", pretty(&full["friends"])),
+        ("fraglink-account.json", pretty(&full)),
+    ])
+    .map_err(AppError::internal)?;
+    let fname = format!(
+        "fraglink-{}-{}.zip",
+        a.user.handle,
+        Utc::now().format("%Y%m%d")
+    );
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/zip".to_string(),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{fname}\""),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+// ------------------------------------------------------------------ friends (M3)
+
+pub fn person(a: &AuthUser) -> friends::Person {
+    friends::Person {
+        id: a.user.id,
+        handle: a.user.handle.clone(),
+        display_name: a.user.display_name.clone(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct HandleReq {
+    pub handle: String,
+}
+
+#[derive(Deserialize)]
+pub struct RespondReq {
+    pub handle: String,
+    pub accept: bool,
+}
+
+async fn friends_list(
+    State(st): State<AppState>,
+    a: AuthUser,
+) -> ApiResult<Json<friends::FriendsList>> {
+    Ok(Json(friends::list(&st, a.user.id).await?))
+}
+
+async fn friend_request(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<HandleReq>,
+) -> ApiResult<Json<Value>> {
+    check_origin(&a, &headers, &st)?;
+    let outcome = friends::request(&st, &person(&a), &r.handle).await?;
+    Ok(Json(json!({ "status": outcome })))
+}
+
+async fn friend_respond(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<RespondReq>,
+) -> ApiResult<StatusCode> {
+    check_origin(&a, &headers, &st)?;
+    friends::respond(&st, &person(&a), &r.handle, r.accept).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn friend_remove(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Path(handle): Path<String>,
+) -> ApiResult<StatusCode> {
+    check_origin(&a, &headers, &st)?;
+    friends::remove(&st, &person(&a), &handle).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn block_user(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<HandleReq>,
+) -> ApiResult<StatusCode> {
+    check_origin(&a, &headers, &st)?;
+    friends::block(&st, &person(&a), &r.handle).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn unblock_user(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Path(handle): Path<String>,
+) -> ApiResult<StatusCode> {
+    check_origin(&a, &headers, &st)?;
+    friends::unblock(&st, &person(&a), &handle).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

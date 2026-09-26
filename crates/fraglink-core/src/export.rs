@@ -1,4 +1,5 @@
-//! "Export my data": everything in the local database as JSON, plus a CSV of sessions.
+//! "Export my data": everything in the local database as one zip with JSON + CSVs.
+//! The server's account export uses the same layout (`sessions.csv`, `games.csv`, JSON).
 
 use crate::store::Store;
 use anyhow::Result;
@@ -7,6 +8,9 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 
 pub const EXPORT_SCHEMA: u32 = 1;
+
+/// Settings that hold credentials and are never exported.
+pub const SECRET_SETTINGS: &[&str] = &["sync_token"];
 
 fn iso_utc(ts: i64) -> String {
     Utc.timestamp_opt(ts, 0)
@@ -43,6 +47,9 @@ pub fn export_json(store: &Store, now: i64) -> Result<serde_json::Value> {
             })
         })
         .collect();
+    let mut settings = store.all_settings()?;
+    // Credentials never go into exports.
+    settings.retain(|k, _| !SECRET_SETTINGS.contains(&k.as_str()));
     Ok(json!({
         "schema": EXPORT_SCHEMA,
         "app": "Fraglink",
@@ -53,13 +60,13 @@ pub fn export_json(store: &Store, now: i64) -> Result<serde_json::Value> {
         "sessions": sessions,
         "session_days": store.all_session_days()?,
         "activity": store.all_activity()?,
-        "settings": store.all_settings()?,
+        "settings": settings,
         "manual_tags": store.manual_tags()?.into_iter().map(|(exe, (id, name))| json!({"exe_name": exe, "game_id": id, "game_name": name})).collect::<Vec<_>>(),
         "excluded_exes": store.excluded_exes()?,
     }))
 }
 
-fn csv_field(s: &str) -> String {
+pub fn csv_field(s: &str) -> String {
     if s.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
@@ -99,22 +106,73 @@ pub fn sessions_csv(store: &Store) -> Result<String> {
     Ok(out)
 }
 
-/// Writes `fraglink-export-<stamp>.json` and `fraglink-sessions-<stamp>.csv` into `dir`.
-pub fn write_export(store: &Store, dir: &Path, now: i64) -> Result<(PathBuf, PathBuf)> {
+pub fn games_csv(store: &Store) -> Result<String> {
+    let mut out = String::from(
+        "game_id,game_name,source,steam_appid,excluded,tier,tracked_seconds,tracked_hours,sessions,last_played_utc\n",
+    );
+    for g in store.list_games()? {
+        let row = [
+            g.id.clone(),
+            g.name.clone(),
+            g.source.clone(),
+            g.steam_appid.map(|a| a.to_string()).unwrap_or_default(),
+            g.excluded.to_string(),
+            "tracked".into(),
+            g.total_seconds.to_string(),
+            format!("{:.2}", g.total_seconds as f64 / 3600.0),
+            g.sessions.to_string(),
+            g.last_played.map(iso_utc).unwrap_or_default(),
+        ];
+        out.push_str(
+            &row.iter()
+                .map(|f| csv_field(f))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// Build a zip archive in memory from `(name, bytes)` entries (deflate).
+pub fn zip_bytes(entries: &[(&str, Vec<u8>)]) -> Result<Vec<u8>> {
+    use std::io::Write;
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, data) in entries {
+        w.start_file(*name, opts)?;
+        w.write_all(data)?;
+    }
+    Ok(w.finish()?.into_inner())
+}
+
+const LOCAL_README: &str = "Fraglink export (this PC)\n\n\
+fraglink-export.json  everything in the local database (games, sessions, daily totals, activity, settings, tags)\n\
+sessions.csv          one row per play session (times UTC + local, active and idle-trimmed seconds)\n\
+games.csv             per-game totals (tier: tracked = logged by Fraglink on this PC)\n\n\
+All times are RFC 3339. Credentials (the sync sign-in token) are never included.\n";
+
+/// Writes `fraglink-export-<stamp>.zip` into `dir` and returns its path.
+pub fn write_export(store: &Store, dir: &Path, now: i64) -> Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
     let stamp = Local
         .timestamp_opt(now, 0)
         .single()
         .map(|t| t.format("%Y%m%d-%H%M%S").to_string())
         .unwrap_or_else(|| now.to_string());
-    let jp = dir.join(format!("fraglink-export-{stamp}.json"));
-    let cp = dir.join(format!("fraglink-sessions-{stamp}.csv"));
-    std::fs::write(
-        &jp,
-        serde_json::to_string_pretty(&export_json(store, now)?)?,
-    )?;
-    std::fs::write(&cp, sessions_csv(store)?)?;
-    Ok((jp, cp))
+    let zp = dir.join(format!("fraglink-export-{stamp}.zip"));
+    let bytes = zip_bytes(&[
+        (
+            "fraglink-export.json",
+            serde_json::to_vec_pretty(&export_json(store, now)?)?,
+        ),
+        ("sessions.csv", sessions_csv(store)?.into_bytes()),
+        ("games.csv", games_csv(store)?.into_bytes()),
+        ("README.txt", LOCAL_README.as_bytes().to_vec()),
+    ])?;
+    std::fs::write(&zp, bytes)?;
+    Ok(zp)
 }
 
 #[cfg(test)]
@@ -157,8 +215,40 @@ mod tests {
         ));
         assert!(lines[1].contains(",3600,1.00,100,tracked,tracked,manual,\"Odd,Name.exe\",closed"));
 
+        let games = games_csv(&s).unwrap();
+        assert!(
+            games.lines().nth(1).unwrap().starts_with(
+                "manual:odd,\"Odd \"\"Game\"\", Deluxe\",manual,,false,tracked,3600,1.00,1,"
+            ),
+            "{games}"
+        );
+
+        s.set_setting("sync_token", "plain:c2VjcmV0").unwrap();
+        s.set_setting("skin", "phoenix").unwrap();
+        let j = export_json(&s, 1_790_010_000).unwrap();
+        assert!(j["settings"].get("sync_token").is_none());
+        assert_eq!(j["settings"]["skin"], "phoenix");
+
         let tmp = tempfile::tempdir().unwrap();
-        let (jp, cp) = write_export(&s, tmp.path(), 1_790_010_000).unwrap();
-        assert!(jp.exists() && cp.exists());
+        let zp = write_export(&s, tmp.path(), 1_790_010_000).unwrap();
+        let mut z = zip::ZipArchive::new(std::fs::File::open(&zp).unwrap()).unwrap();
+        let mut names: Vec<String> = (0..z.len())
+            .map(|i| z.by_index(i).unwrap().name().to_string())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "README.txt",
+                "fraglink-export.json",
+                "games.csv",
+                "sessions.csv"
+            ]
+        );
+        let mut csv2 = String::new();
+        std::io::Read::read_to_string(&mut z.by_name("sessions.csv").unwrap(), &mut csv2).unwrap();
+        assert_eq!(csv2, csv);
+        let raw = std::fs::read(&zp).unwrap();
+        assert!(!String::from_utf8_lossy(&raw).contains("c2VjcmV0"));
     }
 }

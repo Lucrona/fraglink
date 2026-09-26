@@ -14,6 +14,8 @@ pub struct Config {
     pub steam_api_base: String,
     /// `STEAM_OPENID_URL` (default `https://steamcommunity.com/openid/login`).
     pub steam_openid_url: String,
+    /// Seconds without any message before a presence socket is dropped (default 150).
+    pub presence_idle_secs: u64,
 }
 
 impl Config {
@@ -35,6 +37,7 @@ impl Config {
                 .to_string(),
             steam_openid_url: var("STEAM_OPENID_URL")
                 .unwrap_or_else(|| "https://steamcommunity.com/openid/login".into()),
+            presence_idle_secs: crate::presence::IDLE_TIMEOUT_SECS,
         })
     }
 
@@ -47,6 +50,7 @@ impl Config {
             steam_api_key: None,
             steam_api_base: "http://127.0.0.1:9".into(),
             steam_openid_url: "http://127.0.0.1:9/openid/login".into(),
+            presence_idle_secs: crate::presence::IDLE_TIMEOUT_SECS,
         }
     }
 
