@@ -1,0 +1,2596 @@
+{
+ "schema": 1,
+ "version": "2026.09.26",
+ "note": "Fraglink seed signatures. Hand-curated exe names + Steam app ids only; uncertain=true means unverified. Not derived from Discord's detectable list.",
+ "ignore_exes": [
+  "Agent.exe",
+  "Battle.net.exe",
+  "BEClient.exe",
+  "BEService.exe",
+  "BEService_x64.exe",
+  "Blizzard Battle.net.exe",
+  "BlizzardError.exe",
+  "BsSndRpt.exe",
+  "BsSndRpt64.exe",
+  "crashpad_handler.exe",
+  "CrashReportClient.exe",
+  "CrashSender1403.exe",
+  "DayZ_BE.exe",
+  "Discord.exe",
+  "dotNetFx40_Full_setup.exe",
+  "DXSETUP.exe",
+  "EAAntiCheat.GameService.exe",
+  "EAAntiCheat.GameServiceLauncher.exe",
+  "EABackgroundService.exe",
+  "EADesktop.exe",
+  "EALocalHostSvc.exe",
+  "EasyAntiCheat.exe",
+  "EasyAntiCheat_EOS.exe",
+  "EasyAntiCheat_EOS_Setup.exe",
+  "EasyAntiCheat_launcher.exe",
+  "EOSOverlayRenderer-Win64-Shipping.exe",
+  "EpicGamesLauncher.exe",
+  "EpicWebHelper.exe",
+  "faceit.exe",
+  "faceitservice.exe",
+  "GalaxyClient.exe",
+  "GalaxyClientService.exe",
+  "gameoverlayui.exe",
+  "gameoverlayui64.exe",
+  "GamingServices.exe",
+  "GamingServicesNet.exe",
+  "GOG Galaxy Notifications Renderer.exe",
+  "GTA5_BE.exe",
+  "JagexLauncher.exe",
+  "LauncherPatcher.exe",
+  "LeagueClient.exe",
+  "LeagueClientUx.exe",
+  "LeagueClientUxRender.exe",
+  "LeagueCrashHandler64.exe",
+  "mhyprot.exe",
+  "Minecraft.exe",
+  "MinecraftLauncher.exe",
+  "oalinst.exe",
+  "Origin.exe",
+  "OriginWebHelperService.exe",
+  "overwolf.exe",
+  "PlayGTAV.exe",
+  "PnkBstrA.exe",
+  "PnkBstrB.exe",
+  "RainbowSix_BE.exe",
+  "RiotClientCrashHandler.exe",
+  "RiotClientServices.exe",
+  "RiotClientUx.exe",
+  "RiotClientUxRender.exe",
+  "RockstarService.exe",
+  "SocialClubHelper.exe",
+  "steam.exe",
+  "steamservice.exe",
+  "steamwebhelper.exe",
+  "UbisoftConnect.exe",
+  "UbisoftGameLauncher.exe",
+  "UbisoftGameLauncher64.exe",
+  "UE4PrereqSetup_x64.exe",
+  "UEPrereqSetup_x64.exe",
+  "UnityCrashHandler32.exe",
+  "UnityCrashHandler64.exe",
+  "upc.exe",
+  "UplayWebCore.exe",
+  "VC_redist.x64.exe",
+  "VC_redist.x86.exe",
+  "vcredist_x64.exe",
+  "vcredist_x86.exe",
+  "vgc.exe",
+  "vgtray.exe",
+  "werfault.exe",
+  "XboxPcApp.exe",
+  "XboxPcAppFT.exe"
+ ],
+ "non_game_exes": [
+  "1password.exe",
+  "7zfm.exe",
+  "amdrsserv.exe",
+  "applicationframehost.exe",
+  "bash",
+  "brave.exe",
+  "cargo",
+  "chrome.exe",
+  "cmd.exe",
+  "code.exe",
+  "conhost.exe",
+  "ctfmon.exe",
+  "devenv.exe",
+  "dropbox.exe",
+  "dwm.exe",
+  "excel.exe",
+  "explorer.exe",
+  "firefox.exe",
+  "fraglink-desktop.exe",
+  "fraglink.exe",
+  "googledrivefs.exe",
+  "icue.exe",
+  "lghub.exe",
+  "lghub_agent.exe",
+  "lockapp.exe",
+  "logioptionsplus_agent.exe",
+  "ms-teams.exe",
+  "msedge.exe",
+  "msedgewebview2.exe",
+  "msiafterburner.exe",
+  "node",
+  "notepad++.exe",
+  "notepad.exe",
+  "nvcontainer.exe",
+  "nvidia app.exe",
+  "nvidia overlay.exe",
+  "nvidia share.exe",
+  "obs32.exe",
+  "obs64.exe",
+  "onedrive.exe",
+  "openconsole.exe",
+  "opera.exe",
+  "outlook.exe",
+  "phoneexperiencehost.exe",
+  "powerpnt.exe",
+  "powershell.exe",
+  "pwsh.exe",
+  "python3",
+  "radeonsoftware.exe",
+  "razer synapse 3.exe",
+  "rtkaudusservice64.exe",
+  "rtss.exe",
+  "runtimebroker.exe",
+  "rustc",
+  "searchhost.exe",
+  "securityhealthsystray.exe",
+  "sh",
+  "shellexperiencehost.exe",
+  "signal.exe",
+  "sihost.exe",
+  "slack.exe",
+  "spotify.exe",
+  "sshd",
+  "startmenuexperiencehost.exe",
+  "steelseriesgg.exe",
+  "svchost.exe",
+  "systemd",
+  "systemsettings.exe",
+  "taskhostw.exe",
+  "taskmgr.exe",
+  "teams.exe",
+  "telegram.exe",
+  "textinputhost.exe",
+  "vlc.exe",
+  "wallpaper64.exe",
+  "whatsapp.exe",
+  "widgets.exe",
+  "windowsterminal.exe",
+  "winword.exe",
+  "Xorg",
+  "Xvfb",
+  "zoom.exe",
+  "zsh"
+ ],
+ "games": [
+  {
+   "id": "wow",
+   "name": "World of Warcraft",
+   "exes": [
+    "Wow.exe",
+    "WowT.exe",
+    "WowB.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [
+    "/_retail_/",
+    "/_ptr_/",
+    "/_beta_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "wow_classic",
+   "name": "World of Warcraft Classic",
+   "exes": [
+    "WowClassic.exe",
+    "WowClassicT.exe",
+    "WowClassicB.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [
+    "/_classic_/",
+    "/_classic_ptr_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "wow_classic_era",
+   "name": "World of Warcraft Classic Era",
+   "exes": [],
+   "path_exes": [
+    "WowClassic.exe",
+    "WowClassicT.exe"
+   ],
+   "path_hints": [
+    "/_classic_era_/",
+    "/_classic_era_ptr_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "overwatch2",
+   "name": "Overwatch 2",
+   "exes": [
+    "Overwatch.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2357570
+   ],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "diablo4",
+   "name": "Diablo IV",
+   "exes": [
+    "Diablo IV.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2344520
+   ],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "diablo3",
+   "name": "Diablo III",
+   "exes": [
+    "Diablo III64.exe",
+    "Diablo III.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "d2r",
+   "name": "Diablo II: Resurrected",
+   "exes": [
+    "D2R.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "diablo2",
+   "name": "Diablo II",
+   "exes": [
+    "Diablo II.exe"
+   ],
+   "path_exes": [
+    "Game.exe"
+   ],
+   "path_hints": [
+    "/diablo ii/"
+   ],
+   "steam_appids": [],
+   "platform": "standalone",
+   "uncertain": false,
+   "note": "Classic D2 runs as Game.exe inside the 'Diablo II' folder"
+  },
+  {
+   "id": "hearthstone",
+   "name": "Hearthstone",
+   "exes": [
+    "Hearthstone.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "sc2",
+   "name": "StarCraft II",
+   "exes": [
+    "SC2_x64.exe",
+    "SC2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "starcraft",
+   "name": "StarCraft: Remastered",
+   "exes": [
+    "StarCraft.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "wc3",
+   "name": "Warcraft III",
+   "exes": [
+    "Warcraft III.exe",
+    "war3.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false,
+   "note": "war3.exe = classic Reign of Chaos / Frozen Throne"
+  },
+  {
+   "id": "hots",
+   "name": "Heroes of the Storm",
+   "exes": [
+    "HeroesOfTheStorm_x64.exe",
+    "HeroesOfTheStorm.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "cs2",
+   "name": "Counter-Strike 2",
+   "exes": [
+    "cs2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    730
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "cs16",
+   "name": "Counter-Strike 1.6",
+   "exes": [],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    10
+   ],
+   "platform": "steam",
+   "uncertain": false,
+   "note": "Runs as hl.exe (shared with Half-Life); detected via Steam RunningAppID"
+  },
+  {
+   "id": "css",
+   "name": "Counter-Strike: Source",
+   "exes": [
+    "cstrike_win64.exe",
+    "cstrike.exe"
+   ],
+   "path_exes": [
+    "hl2.exe"
+   ],
+   "path_hints": [
+    "/counter-strike source/"
+   ],
+   "steam_appids": [
+    240
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "half_life",
+   "name": "Half-Life",
+   "exes": [
+    "hl.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    70
+   ],
+   "platform": "steam",
+   "uncertain": false,
+   "note": "hl.exe is shared by all GoldSrc games incl. CS 1.6; Steam RunningAppID disambiguates"
+  },
+  {
+   "id": "hl2",
+   "name": "Half-Life 2",
+   "exes": [],
+   "path_exes": [
+    "hl2.exe",
+    "hl2_win64.exe"
+   ],
+   "path_hints": [
+    "/half-life 2/hl2",
+    "/half-life 2/bin/win64/hl2"
+   ],
+   "steam_appids": [
+    220
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "hl2dm",
+   "name": "Half-Life 2: Deathmatch",
+   "exes": [
+    "hl2mp_win64.exe"
+   ],
+   "path_exes": [
+    "hl2.exe"
+   ],
+   "path_hints": [
+    "/half-life 2 deathmatch/"
+   ],
+   "steam_appids": [
+    320
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "tf2",
+   "name": "Team Fortress 2",
+   "exes": [
+    "tf_win64.exe",
+    "tf.exe"
+   ],
+   "path_exes": [
+    "hl2.exe"
+   ],
+   "path_hints": [
+    "/team fortress 2/"
+   ],
+   "steam_appids": [
+    440
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "portal",
+   "name": "Portal",
+   "exes": [],
+   "path_exes": [
+    "hl2.exe"
+   ],
+   "path_hints": [
+    "/common/portal/"
+   ],
+   "steam_appids": [
+    400
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "portal2",
+   "name": "Portal 2",
+   "exes": [
+    "portal2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    620
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "l4d2",
+   "name": "Left 4 Dead 2",
+   "exes": [
+    "left4dead2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    550
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "gmod",
+   "name": "Garry's Mod",
+   "exes": [
+    "gmod.exe"
+   ],
+   "path_exes": [
+    "hl2.exe"
+   ],
+   "path_hints": [
+    "/garrysmod/"
+   ],
+   "steam_appids": [
+    4000
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "dota2",
+   "name": "Dota 2",
+   "exes": [
+    "dota2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    570
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "deadlock",
+   "name": "Deadlock",
+   "exes": [
+    "deadlock.exe",
+    "project8.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1422450
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "lol",
+   "name": "League of Legends",
+   "exes": [
+    "League of Legends.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "riot",
+   "uncertain": false,
+   "note": "Counts the in-match client only; the lobby (LeagueClientUx.exe) is ignored"
+  },
+  {
+   "id": "valorant",
+   "name": "VALORANT",
+   "exes": [
+    "VALORANT-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "riot",
+   "uncertain": false
+  },
+  {
+   "id": "fortnite",
+   "name": "Fortnite",
+   "exes": [
+    "FortniteClient-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "epic",
+   "uncertain": false
+  },
+  {
+   "id": "rocketleague",
+   "name": "Rocket League",
+   "exes": [
+    "RocketLeague.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    252950
+   ],
+   "platform": "epic",
+   "uncertain": false
+  },
+  {
+   "id": "fallguys",
+   "name": "Fall Guys",
+   "exes": [
+    "FallGuys_client_game.exe",
+    "FallGuys_client.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1097150
+   ],
+   "platform": "epic",
+   "uncertain": true
+  },
+  {
+   "id": "minecraft_java",
+   "name": "Minecraft: Java Edition",
+   "exes": [],
+   "path_exes": [
+    "javaw.exe",
+    "java.exe"
+   ],
+   "path_hints": [
+    "/.minecraft/",
+    "/minecraft launcher/",
+    "/prismlauncher/",
+    "/multimc/",
+    "/curseforge/minecraft/"
+   ],
+   "steam_appids": [],
+   "platform": "standalone",
+   "uncertain": true,
+   "note": "Java edition runs inside javaw.exe; only counted when the Java runtime lives in a Minecraft folder"
+  },
+  {
+   "id": "minecraft_bedrock",
+   "name": "Minecraft (Bedrock)",
+   "exes": [
+    "Minecraft.Windows.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "msstore",
+   "uncertain": false
+  },
+  {
+   "id": "halo_mcc",
+   "name": "Halo: The Master Chief Collection",
+   "exes": [
+    "MCC-Win64-Shipping.exe",
+    "MCCWinStore-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    976730
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "halo_infinite",
+   "name": "Halo Infinite",
+   "exes": [
+    "HaloInfinite.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1240440
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "forza_h5",
+   "name": "Forza Horizon 5",
+   "exes": [
+    "ForzaHorizon5.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1551360
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "forza_h4",
+   "name": "Forza Horizon 4",
+   "exes": [
+    "ForzaHorizon4.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1293830
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "sea_of_thieves",
+   "name": "Sea of Thieves",
+   "exes": [
+    "SoTGame.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1172620
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "aoe2de",
+   "name": "Age of Empires II: Definitive Edition",
+   "exes": [
+    "AoE2DE_s.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    813780
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "aoe2",
+   "name": "Age of Empires II (2000)",
+   "exes": [
+    "age2_x1.exe",
+    "empires2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "standalone",
+   "uncertain": false
+  },
+  {
+   "id": "aoe4",
+   "name": "Age of Empires IV",
+   "exes": [
+    "RelicCardinal.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1466860
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "cod",
+   "name": "Call of Duty (HQ / Warzone / Black Ops 6+)",
+   "exes": [
+    "cod.exe",
+    "cod24-cod.exe",
+    "cod25-cod.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1938090
+   ],
+   "platform": "battlenet",
+   "uncertain": true,
+   "note": "Call of Duty HQ launches cod.exe; per-title exe names change often"
+  },
+  {
+   "id": "cod_mw2019",
+   "name": "Call of Duty: Modern Warfare (2019)",
+   "exes": [
+    "ModernWarfare.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "cod_bocw",
+   "name": "Call of Duty: Black Ops Cold War",
+   "exes": [
+    "BlackOpsColdWar.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false
+  },
+  {
+   "id": "cod4",
+   "name": "Call of Duty 4: Modern Warfare",
+   "exes": [
+    "iw3mp.exe",
+    "iw3sp.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    7940
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "cod_mw2_2009",
+   "name": "Call of Duty: Modern Warfare 2 (2009)",
+   "exes": [
+    "iw4mp.exe",
+    "iw4sp.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    10180,
+    10190
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "cod_waw",
+   "name": "Call of Duty: World at War",
+   "exes": [
+    "CoDWaW.exe",
+    "CoDWaWmp.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    10090
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "cod_bo1",
+   "name": "Call of Duty: Black Ops",
+   "exes": [
+    "BlackOps.exe",
+    "BlackOpsMP.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    42700,
+    42710
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "cod2",
+   "name": "Call of Duty 2",
+   "exes": [
+    "CoD2MP_s.exe",
+    "CoD2SP_s.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2630
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "bf2042",
+   "name": "Battlefield 2042",
+   "exes": [
+    "BF2042.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1517290
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "bf6",
+   "name": "Battlefield 6",
+   "exes": [
+    "bf6.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2807960
+   ],
+   "platform": "ea",
+   "uncertain": true
+  },
+  {
+   "id": "bf1",
+   "name": "Battlefield 1",
+   "exes": [
+    "bf1.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1238840
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "bfv",
+   "name": "Battlefield V",
+   "exes": [
+    "bfv.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1238810
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "bf4",
+   "name": "Battlefield 4",
+   "exes": [
+    "bf4.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1238860
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "bf3",
+   "name": "Battlefield 3",
+   "exes": [
+    "bf3.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1238820
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "bfbc2",
+   "name": "Battlefield: Bad Company 2",
+   "exes": [
+    "BFBC2Game.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    24960
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "bf2",
+   "name": "Battlefield 2",
+   "exes": [
+    "BF2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "standalone",
+   "uncertain": false
+  },
+  {
+   "id": "bf1942",
+   "name": "Battlefield 1942",
+   "exes": [
+    "BF1942.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "standalone",
+   "uncertain": false
+  },
+  {
+   "id": "bfvietnam",
+   "name": "Battlefield Vietnam",
+   "exes": [
+    "BfVietnam.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "standalone",
+   "uncertain": false
+  },
+  {
+   "id": "apex",
+   "name": "Apex Legends",
+   "exes": [
+    "r5apex.exe",
+    "r5apex_dx12.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1172470
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "titanfall2",
+   "name": "Titanfall 2",
+   "exes": [
+    "Titanfall2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1237970
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "sims4",
+   "name": "The Sims 4",
+   "exes": [
+    "TS4_x64.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1222670
+   ],
+   "platform": "ea",
+   "uncertain": false
+  },
+  {
+   "id": "gta5",
+   "name": "Grand Theft Auto V",
+   "exes": [
+    "GTA5.exe",
+    "GTA5_Enhanced.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    271590,
+    3240220
+   ],
+   "platform": "rockstar",
+   "uncertain": false
+  },
+  {
+   "id": "rdr2",
+   "name": "Red Dead Redemption 2",
+   "exes": [
+    "RDR2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1174180
+   ],
+   "platform": "rockstar",
+   "uncertain": false
+  },
+  {
+   "id": "cyberpunk",
+   "name": "Cyberpunk 2077",
+   "exes": [
+    "Cyberpunk2077.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1091500
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "witcher3",
+   "name": "The Witcher 3: Wild Hunt",
+   "exes": [
+    "witcher3.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    292030
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "skyrim_se",
+   "name": "The Elder Scrolls V: Skyrim Special Edition",
+   "exes": [
+    "SkyrimSE.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    489830
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "skyrim",
+   "name": "The Elder Scrolls V: Skyrim",
+   "exes": [
+    "TESV.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    72850
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "fallout4",
+   "name": "Fallout 4",
+   "exes": [
+    "Fallout4.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    377160
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "fallout76",
+   "name": "Fallout 76",
+   "exes": [
+    "Fallout76.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1151340
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "falloutnv",
+   "name": "Fallout: New Vegas",
+   "exes": [
+    "FalloutNV.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    22380
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "starfield",
+   "name": "Starfield",
+   "exes": [
+    "Starfield.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1716740
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "eso",
+   "name": "The Elder Scrolls Online",
+   "exes": [
+    "eso64.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    306130
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "doom_eternal",
+   "name": "DOOM Eternal",
+   "exes": [
+    "DOOMEternalx64vk.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    782330
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "doom_tda",
+   "name": "DOOM: The Dark Ages",
+   "exes": [
+    "DOOMTheDarkAges.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    3017860
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "quake3",
+   "name": "Quake III Arena",
+   "exes": [
+    "quake3.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2200
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "quakelive",
+   "name": "Quake Live",
+   "exes": [
+    "quakelive_steam.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    282440
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "eldenring",
+   "name": "Elden Ring",
+   "exes": [
+    "eldenring.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1245620
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "nightreign",
+   "name": "Elden Ring Nightreign",
+   "exes": [
+    "nightreign.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2622380
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "ds3",
+   "name": "Dark Souls III",
+   "exes": [
+    "DarkSoulsIII.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    374320
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "sekiro",
+   "name": "Sekiro: Shadows Die Twice",
+   "exes": [
+    "sekiro.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    814380
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "ffxiv",
+   "name": "Final Fantasy XIV",
+   "exes": [
+    "ffxiv_dx11.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    39210
+   ],
+   "platform": "square",
+   "uncertain": false
+  },
+  {
+   "id": "gw2",
+   "name": "Guild Wars 2",
+   "exes": [
+    "Gw2-64.exe",
+    "Gw2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1284210
+   ],
+   "platform": "arenanet",
+   "uncertain": false
+  },
+  {
+   "id": "osrs",
+   "name": "Old School RuneScape",
+   "exes": [
+    "osclient.exe",
+    "RuneLite.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1343370
+   ],
+   "platform": "jagex",
+   "uncertain": true,
+   "note": "RuneLite.exe covers the popular third-party client"
+  },
+  {
+   "id": "rs3",
+   "name": "RuneScape 3",
+   "exes": [
+    "rs2client.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1343400
+   ],
+   "platform": "jagex",
+   "uncertain": false
+  },
+  {
+   "id": "lostark",
+   "name": "Lost Ark",
+   "exes": [
+    "LOSTARK.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1599340
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "newworld",
+   "name": "New World: Aeternum",
+   "exes": [
+    "NewWorld.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1063730
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "swtor",
+   "name": "Star Wars: The Old Republic",
+   "exes": [
+    "swtor.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1286830
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "eve",
+   "name": "EVE Online",
+   "exes": [
+    "exefile.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    8500
+   ],
+   "platform": "ccp",
+   "uncertain": false
+  },
+  {
+   "id": "albion",
+   "name": "Albion Online",
+   "exes": [
+    "Albion-Online.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    761890
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "bdo",
+   "name": "Black Desert",
+   "exes": [
+    "BlackDesert64.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    582660
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "everquest",
+   "name": "EverQuest",
+   "exes": [
+    "eqgame.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    205710
+   ],
+   "platform": "daybreak",
+   "uncertain": false
+  },
+  {
+   "id": "everquest2",
+   "name": "EverQuest II",
+   "exes": [
+    "EverQuest2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    201230
+   ],
+   "platform": "daybreak",
+   "uncertain": false
+  },
+  {
+   "id": "warframe",
+   "name": "Warframe",
+   "exes": [
+    "Warframe.x64.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    230410
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "destiny2",
+   "name": "Destiny 2",
+   "exes": [
+    "destiny2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1085660
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "poe",
+   "name": "Path of Exile",
+   "exes": [
+    "PathOfExile.exe",
+    "PathOfExile_x64.exe",
+    "PathOfExileSteam.exe",
+    "PathOfExile_x64Steam.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    238960
+   ],
+   "platform": "ggg",
+   "uncertain": false
+  },
+  {
+   "id": "poe2",
+   "name": "Path of Exile 2",
+   "exes": [],
+   "path_exes": [
+    "PathOfExile.exe",
+    "PathOfExile_x64.exe",
+    "PathOfExileSteam.exe",
+    "PathOfExile_x64Steam.exe"
+   ],
+   "path_hints": [
+    "/path of exile 2/"
+   ],
+   "steam_appids": [
+    2694490
+   ],
+   "platform": "ggg",
+   "uncertain": true
+  },
+  {
+   "id": "lastepoch",
+   "name": "Last Epoch",
+   "exes": [
+    "Last Epoch.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    899770
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "genshin",
+   "name": "Genshin Impact",
+   "exes": [
+    "GenshinImpact.exe",
+    "YuanShen.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "hoyoverse",
+   "uncertain": false
+  },
+  {
+   "id": "hsr",
+   "name": "Honkai: Star Rail",
+   "exes": [
+    "StarRail.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "hoyoverse",
+   "uncertain": false
+  },
+  {
+   "id": "zzz",
+   "name": "Zenless Zone Zero",
+   "exes": [
+    "ZenlessZoneZero.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "hoyoverse",
+   "uncertain": false
+  },
+  {
+   "id": "pubg",
+   "name": "PUBG: Battlegrounds",
+   "exes": [
+    "TslGame.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    578080
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "r6siege",
+   "name": "Tom Clancy's Rainbow Six Siege",
+   "exes": [
+    "RainbowSix.exe",
+    "RainbowSix_Vulkan.exe",
+    "RainbowSix_DX11.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    359550
+   ],
+   "platform": "ubisoft",
+   "uncertain": false
+  },
+  {
+   "id": "tarkov",
+   "name": "Escape from Tarkov",
+   "exes": [
+    "EscapeFromTarkov.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "bsg",
+   "uncertain": false
+  },
+  {
+   "id": "marvel_rivals",
+   "name": "Marvel Rivals",
+   "exes": [
+    "Marvel-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2767030
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "thefinals",
+   "name": "THE FINALS",
+   "exes": [
+    "Discovery.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2073850
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "helldivers2",
+   "name": "Helldivers 2",
+   "exes": [
+    "helldivers2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    553850
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "hunt",
+   "name": "Hunt: Showdown 1896",
+   "exes": [
+    "HuntGame.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    594650
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "squad",
+   "name": "Squad",
+   "exes": [
+    "SquadGame.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    393380
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "arma3",
+   "name": "Arma 3",
+   "exes": [
+    "arma3_x64.exe",
+    "arma3.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    107410
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "arma_reforger",
+   "name": "Arma Reforger",
+   "exes": [
+    "ArmaReforgerSteam.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1874880
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "dayz",
+   "name": "DayZ",
+   "exes": [
+    "DayZ_x64.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    221100
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "rust",
+   "name": "Rust",
+   "exes": [
+    "RustClient.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    252490
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "dbd",
+   "name": "Dead by Daylight",
+   "exes": [
+    "DeadByDaylight-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    381210
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "chivalry2",
+   "name": "Chivalry 2",
+   "exes": [
+    "Chivalry2-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1824220
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "warthunder",
+   "name": "War Thunder",
+   "exes": [
+    "aces.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    236390
+   ],
+   "platform": "gaijin",
+   "uncertain": false
+  },
+  {
+   "id": "wot",
+   "name": "World of Tanks",
+   "exes": [
+    "WorldOfTanks.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "wargaming",
+   "uncertain": false
+  },
+  {
+   "id": "payday2",
+   "name": "PAYDAY 2",
+   "exes": [
+    "payday2_win32_release.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    218620
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "ut2004",
+   "name": "Unreal Tournament 2004",
+   "exes": [
+    "UT2004.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    13230
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "tekken8",
+   "name": "Tekken 8",
+   "exes": [
+    "Polaris-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1778820
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "sf6",
+   "name": "Street Fighter 6",
+   "exes": [
+    "StreetFighter6.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1364780
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "amongus",
+   "name": "Among Us",
+   "exes": [
+    "Among Us.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    945360
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "roblox",
+   "name": "Roblox",
+   "exes": [
+    "RobloxPlayerBeta.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "roblox",
+   "uncertain": false
+  },
+  {
+   "id": "osu",
+   "name": "osu!",
+   "exes": [
+    "osu!.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "standalone",
+   "uncertain": false
+  },
+  {
+   "id": "drg",
+   "name": "Deep Rock Galactic",
+   "exes": [
+    "FSD-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    548430
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "valheim",
+   "name": "Valheim",
+   "exes": [
+    "valheim.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    892970
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "terraria",
+   "name": "Terraria",
+   "exes": [
+    "Terraria.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    105600
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "stardew",
+   "name": "Stardew Valley",
+   "exes": [
+    "Stardew Valley.exe",
+    "StardewModdingAPI.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    413150
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "palworld",
+   "name": "Palworld",
+   "exes": [
+    "Palworld-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1623730
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "lethal_company",
+   "name": "Lethal Company",
+   "exes": [
+    "Lethal Company.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1966720
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "phasmophobia",
+   "name": "Phasmophobia",
+   "exes": [
+    "Phasmophobia.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    739630
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "sons_forest",
+   "name": "Sons of the Forest",
+   "exes": [
+    "SonsOfTheForest.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1326470
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "7dtd",
+   "name": "7 Days to Die",
+   "exes": [
+    "7DaysToDie.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    251570
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "zomboid",
+   "name": "Project Zomboid",
+   "exes": [
+    "ProjectZomboid64.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    108600
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "enshrouded",
+   "name": "Enshrouded",
+   "exes": [
+    "enshrouded.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1203620
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "vrising",
+   "name": "V Rising",
+   "exes": [
+    "VRising.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1604030
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "ark_asa",
+   "name": "ARK: Survival Ascended",
+   "exes": [
+    "ArkAscended.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2399830
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "ark_se",
+   "name": "ARK: Survival Evolved",
+   "exes": [],
+   "path_exes": [
+    "ShooterGame.exe"
+   ],
+   "path_hints": [
+    "/ark/shootergame/"
+   ],
+   "steam_appids": [
+    346110
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "subnautica",
+   "name": "Subnautica",
+   "exes": [
+    "Subnautica.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    264710
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "dst",
+   "name": "Don't Starve Together",
+   "exes": [
+    "dontstarve_steam_x64.exe",
+    "dontstarve_steam.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    322330
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "nms",
+   "name": "No Man's Sky",
+   "exes": [
+    "NMS.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    275850
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "factorio",
+   "name": "Factorio",
+   "exes": [
+    "factorio.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    427520
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "satisfactory",
+   "name": "Satisfactory",
+   "exes": [
+    "FactoryGame-Win64-Shipping.exe",
+    "FactoryGameSteam-Win64-Shipping.exe",
+    "FactoryGameEGS-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    526870
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "rimworld",
+   "name": "RimWorld",
+   "exes": [
+    "RimWorldWin64.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    294100
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "ets2",
+   "name": "Euro Truck Simulator 2",
+   "exes": [
+    "eurotrucks2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    227300
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "cities2",
+   "name": "Cities: Skylines II",
+   "exes": [
+    "Cities2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    949230
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "cities",
+   "name": "Cities: Skylines",
+   "exes": [
+    "Cities.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    255710
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "mh_wilds",
+   "name": "Monster Hunter Wilds",
+   "exes": [
+    "MonsterHunterWilds.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2246340
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "mh_world",
+   "name": "Monster Hunter: World",
+   "exes": [
+    "MonsterHunterWorld.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    582010
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "mh_rise",
+   "name": "Monster Hunter Rise",
+   "exes": [
+    "MonsterHunterRise.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1446780
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "bg3",
+   "name": "Baldur's Gate 3",
+   "exes": [
+    "bg3.exe",
+    "bg3_dx11.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1086940
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "wukong",
+   "name": "Black Myth: Wukong",
+   "exes": [
+    "b1-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2358720
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "stalker2",
+   "name": "S.T.A.L.K.E.R. 2",
+   "exes": [
+    "Stalker2-Win64-Shipping.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1643320
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "kcd2",
+   "name": "Kingdom Come: Deliverance II",
+   "exes": [
+    "KingdomCome.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1771300
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "borderlands3",
+   "name": "Borderlands 3",
+   "exes": [
+    "Borderlands3.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    397540
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "hades2",
+   "name": "Hades II",
+   "exes": [
+    "Hades2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1145350
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "hades",
+   "name": "Hades",
+   "exes": [
+    "Hades.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1145360
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "hollow_knight",
+   "name": "Hollow Knight",
+   "exes": [
+    "hollow_knight.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    367520
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "silksong",
+   "name": "Hollow Knight: Silksong",
+   "exes": [
+    "Hollow Knight Silksong.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1030300
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "ror2",
+   "name": "Risk of Rain 2",
+   "exes": [
+    "Risk of Rain 2.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    632360
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "vampire_survivors",
+   "name": "Vampire Survivors",
+   "exes": [
+    "VampireSurvivors.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1794680
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "balatro",
+   "name": "Balatro",
+   "exes": [
+    "Balatro.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    2379780
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "bannerlord",
+   "name": "Mount & Blade II: Bannerlord",
+   "exes": [
+    "Bannerlord.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    261550
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "civ6",
+   "name": "Sid Meier's Civilization VI",
+   "exes": [
+    "CivilizationVI.exe",
+    "CivilizationVI_DX12.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    289070
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "civ7",
+   "name": "Sid Meier's Civilization VII",
+   "exes": [
+    "CivilizationVII.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1295660
+   ],
+   "platform": "steam",
+   "uncertain": true
+  },
+  {
+   "id": "tww3",
+   "name": "Total War: WARHAMMER III",
+   "exes": [
+    "Warhammer3.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1142710
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "stellaris",
+   "name": "Stellaris",
+   "exes": [
+    "stellaris.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    281990
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "ck3",
+   "name": "Crusader Kings III",
+   "exes": [
+    "ck3.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    1158310
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "hoi4",
+   "name": "Hearts of Iron IV",
+   "exes": [
+    "hoi4.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    394360
+   ],
+   "platform": "steam",
+   "uncertain": false
+  },
+  {
+   "id": "eu4",
+   "name": "Europa Universalis IV",
+   "exes": [
+    "eu4.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [
+    236850
+   ],
+   "platform": "steam",
+   "uncertain": false
+  }
+ ]
+}
