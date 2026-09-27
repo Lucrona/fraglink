@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+- Tray client: the Stats and Activity tabs are hidden for now, so only Friends shows. Their buttons are removed, so no empty tab slots are left. The code is kept behind a feature flag (`FEATURES` in `apps/desktop/ui/app.js`). To turn them back on, set the flag to `true`, or for testing use `?features=stats,activity` or localStorage `fl-features`. Friend toasts ("has started playing") are unchanged.
+
 ## [0.2.0-dev] - 2026-09-28
 
 Pre-release for private testing. Builds report version `0.2.0-1` because the MSI installer requires a numeric pre-release identifier. Unsigned Windows installers (NSIS + MSI) from the tag's CI run: https://github.com/Lucrona/fraglink/actions/runs/36334311018 (artifact `fraglink-windows-installers-7b9330a83854c9ff2a03b0f1017298df9b073557`).

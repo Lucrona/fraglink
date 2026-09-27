@@ -187,6 +187,14 @@
   ];
   const REPLIES = ['lol yeah', 'one sec, finishing this round', 'join me! server is in my profile', 'gg', 'brb food', 'you on tonight?', 'haha nice', 'need a medic here'];
 
+  /* ---------------- feature flags ---------------- */
+  // Tabs hidden for now (code kept). Re-enable by flipping to true, or for
+  // testing with ?features=stats,activity or localStorage 'fl-features'.
+  const FEATURES = { stats: false, activity: false };
+  (params.get('features') || localStorage.getItem('fl-features') || '')
+    .split(',').filter(k => k in FEATURES).forEach(k => { FEATURES[k] = true; });
+  const tabOn = t => t === 'friends' || FEATURES[t] === true;
+
   /* ---------------- state ---------------- */
   const state = {
     skin: params.get('skin') || localStorage.getItem('fl-skin') || 'classic',
@@ -196,6 +204,9 @@
     chatWith: null, logs: {},
   };
   if (params.get('off') === '1') state.collapsed.off = false;
+  if (!tabOn(state.tab)) state.tab = 'friends';
+  // Remove the buttons of disabled tabs so no empty tab slots are left.
+  $$('[data-tab]').forEach(b => { if (!tabOn(b.dataset.tab)) b.remove(); });
 
   /* ---------------- skins ---------------- */
   function applySkin(s) {
@@ -796,7 +807,7 @@
     const zo = e.target.closest('.zoom-opt'); if (zo) { setZoom(zo.dataset.zoom); closeMenus(); return; }
     const a = e.target.closest('[data-action]');
     if (a && !a.closest('#toast')) { closeMenus(); const fn = actions[a.dataset.action]; if (fn) { e.preventDefault(); fn(a); } return; }
-    const t = e.target.closest('[data-tab]'); if (t) { state.tab = t.dataset.tab; render(); return; }
+    const t = e.target.closest('[data-tab]'); if (t) { state.tab = tabOn(t.dataset.tab) ? t.dataset.tab : 'friends'; render(); return; }
   });
   $$('input[name=skin]').forEach(r => r.addEventListener('change', () => applySkin(r.value)));
   list.addEventListener('click', e => {
