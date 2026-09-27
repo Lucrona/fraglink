@@ -85,7 +85,8 @@ impl IconCache {
         std::fs::metadata(self.miss_path(game_id))
             .and_then(|m| m.modified())
             .ok()
-            .and_then(|t| now.duration_since(t).ok())
+            // A marker written a moment after `now` (clock granularity) is fresh.
+            .map(|t| now.duration_since(t).unwrap_or(Duration::ZERO))
             .is_some_and(|age| age < MISS_TTL)
     }
 

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev] - 2026-09-28
+
+Pre-release for private testing. Builds report version `0.2.0-1` because the MSI installer requires a numeric pre-release identifier.
+
 M2 checkpoint (accounts, Steam import, trust tiers) and the first M3 checkpoint (friends and live presence). Local development only; nothing is hosted.
 
 ### Added (M3: friends and presence)

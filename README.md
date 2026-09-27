@@ -2,7 +2,7 @@
 
 <p align="center"><b>Track your gaming hours across every launcher and see what your friends are playing, from anywhere.</b></p>
 
-<p align="center"><i>Early development. Current build: 0.1.1 (M1, a local hours tracker); M2 (accounts + Steam + trust tiers) in progress. Private testing only.</i></p>
+<p align="center"><i>Early development. Current pre-release: 0.2.0-dev (M2 checkpoint + first M3 checkpoint: accounts, Steam, trust tiers, friends, live presence, game icons); local development only. Private testing only.</i></p>
 
 ---
 
@@ -20,7 +20,7 @@ Fraglink sits alongside Discord, Steam and Twitch rather than replacing them.
 
 **Early development.**
 
-- **Done:** M0 (setup) and M1 (local tracker + tray tabs), released as 0.1.1.
+- **Done:** M0 (setup) and M1 (local tracker + tray tabs), released as 0.1.1. Pre-release 0.2.0-dev adds the M2 and first M3 checkpoints.
 - **In progress:** M2 (done locally except Discord login, email and hosting) and M3. A local development server (`apps/server`) has accounts, tray pairing, opt-in session sync, Tracked / Imported / Estimated hours, Steam import, zip export, friends and live presence. Nothing is hosted yet.
 - **Not yet:** the activity feed and the real website.
 - **Builds:** CI produces unsigned Windows installers for private testing.
