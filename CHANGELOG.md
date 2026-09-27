@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.2.0-dev] - 2026-09-28
 
-Pre-release for private testing. Builds report version `0.2.0-1` because the MSI installer requires a numeric pre-release identifier.
+Pre-release for private testing. Builds report version `0.2.0-1` because the MSI installer requires a numeric pre-release identifier. Unsigned Windows installers (NSIS + MSI) from the tag's CI run: https://github.com/Lucrona/fraglink/actions/runs/36334311018 (artifact `fraglink-windows-installers-7b9330a…`).
 
 M2 checkpoint (accounts, Steam import, trust tiers) and the first M3 checkpoint (friends and live presence). Local development only; nothing is hosted.
 
