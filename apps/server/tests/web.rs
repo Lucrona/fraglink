@@ -277,3 +277,73 @@ async fn web_friends_forms(pool: PgPool) {
     .await;
     assert!(r.location().starts_with("/?err="));
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn web_delete_account(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let tok = signup(&app, "gone@example.com", "goner").await;
+    let c = form(
+        &app,
+        "/login",
+        None,
+        Some(ORIGIN),
+        "email=gone%40example.com&password=correct+horse+battery",
+    )
+    .await
+    .cookie()
+    .unwrap();
+    assert!(page(&app, "/", Some(&c))
+        .await
+        .text
+        .contains("Delete my account"));
+    // wrong password / unticked box / foreign origin: nothing happens
+    let r = form(
+        &app,
+        "/web/account/delete",
+        Some(&c),
+        Some(ORIGIN),
+        "password=nope&confirm=yes",
+    )
+    .await;
+    assert!(r.location().starts_with("/?err="), "{}", r.location());
+    let r = form(
+        &app,
+        "/web/account/delete",
+        Some(&c),
+        Some(ORIGIN),
+        "password=correct+horse+battery",
+    )
+    .await;
+    assert!(r.location().starts_with("/?err="), "{}", r.location());
+    let r = form(
+        &app,
+        "/web/account/delete",
+        Some(&c),
+        Some("http://evil.example"),
+        "password=correct+horse+battery&confirm=yes",
+    )
+    .await;
+    assert_ne!(r.status, axum::http::StatusCode::SEE_OTHER);
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+    // the real thing
+    let r = form(
+        &app,
+        "/web/account/delete",
+        Some(&c),
+        Some(ORIGIN),
+        "password=correct+horse+battery&confirm=yes",
+    )
+    .await;
+    assert!(r.location().contains("deleted"), "{}", r.location());
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+    let me = api(&app, "GET", "/api/v1/me", Some(&tok), None).await;
+    assert_eq!(me.status, axum::http::StatusCode::UNAUTHORIZED);
+}

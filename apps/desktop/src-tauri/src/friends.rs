@@ -213,6 +213,7 @@ fn run(app: &AppHandle) {
             }
         };
         backoff = 2;
+        log::info!("presence: connected");
         st.friends.connected.store(true, Ordering::SeqCst);
         emit(app);
         let reason = session(app, &client, &mut sock);

@@ -159,7 +159,18 @@ pub fn show_toast(app: &AppHandle, payload: ToastPayload) {
         let y = (wa.position.y as f64 + wa.size.height as f64) / sf - h - 8.0;
         builder = builder.position(x, y);
     }
-    if let Err(e) = builder.build() {
-        log::warn!("toast window failed: {e}");
+    match builder.build() {
+        // Some desktops enforce a bigger minimum window size than requested; keep
+        // the whole toast inside the work area using the size we actually got.
+        Ok(win) => {
+            if let (Ok(Some(m)), Ok(sz)) = (app.primary_monitor(), win.outer_size()) {
+                let wa = m.work_area();
+                let pad = (8.0 * m.scale_factor()) as i32;
+                let x = wa.position.x + wa.size.width as i32 - sz.width as i32 - pad;
+                let y = wa.position.y + wa.size.height as i32 - sz.height as i32 - pad;
+                let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+            }
+        }
+        Err(e) => log::warn!("toast window failed: {e}"),
     }
 }

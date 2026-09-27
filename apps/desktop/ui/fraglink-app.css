@@ -61,3 +61,7 @@ body.toast-page .toast-body .g { display: inline; }
 .opt-sync input { width: 100%; box-sizing: border-box; margin: 3px 0 0; font: 10px Tahoma, sans-serif; }
 .opt-sync .sync-code { font: bold 15px/1.4 Consolas, "Lucida Console", monospace; letter-spacing: 2px; text-align: center; margin: 3px 0; color: #0b2f6b; }
 .opt-sync .bad { color: #b00000; margin-top: 3px; }
+.opt-sub { padding-left: 16px; }
+#add-handle { width: 100%; box-sizing: border-box; margin: 3px 0 0; font: 11px Tahoma, sans-serif; }
+#add-msg { margin-top: 4px; font-size: 10px; }
+.fl-mock a { color: var(--cyan); cursor: pointer; text-decoration: underline; }

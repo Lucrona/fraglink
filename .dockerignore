@@ -1,0 +1,8 @@
+# Keep the build context small: only sources are needed.
+target/
+**/node_modules/
+.git/
+docs/images/
+apps/desktop/src-tauri/gen/
+*.db
+.env

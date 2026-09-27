@@ -34,6 +34,7 @@ pub fn routes() -> Router<AppState> {
         .route("/web/hours/{id}/delete", post(web_delete_hours))
         .route("/web/devices/{id}/revoke", post(web_revoke_device))
         .route("/web/friends/add", post(web_friend_add))
+        .route("/web/account/delete", post(web_delete_account))
         .route("/web/friends/{handle}/{action}", post(web_friend_action))
 }
 
@@ -336,7 +337,44 @@ at <input name="hours_per_week" type="number" step="0.5" min="0.5" max="80" valu
         );
     }
     b += "</div>";
+    b += r#"<div class="card"><h2>Delete account</h2><p><small class="m">Deletes your account, sessions, hours, Steam link, devices, friends and blocks right away. This can't be undone, so export first if you want a copy. The tray keeps its local data.</small></p>
+<form method="post" action="/web/account/delete"><label>Password<br><input name="password" type="password" required autocomplete="current-password"></label> <label><input type="checkbox" name="confirm" value="yes" required> I understand</label> <button>Delete my account</button></form></div>"#;
     Ok(page("Your hours", &b))
+}
+
+#[derive(Deserialize)]
+struct DeleteForm {
+    password: String,
+    #[serde(default)]
+    confirm: String,
+}
+
+async fn web_delete_account(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Form(f): Form<DeleteForm>,
+) -> Response {
+    if let Err(e) = same_origin(&headers, &st) {
+        return e.into_response();
+    }
+    if f.confirm != "yes" {
+        return back_err(AppError::bad_request("confirm", "Tick the box to confirm."));
+    }
+    if let Err(e) = auth::check_login(&st, &a.user.email, &f.password).await {
+        return back_err(e);
+    }
+    if let Err(e) = sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(a.user.id)
+        .execute(&st.db)
+        .await
+    {
+        return back_err(e.into());
+    }
+    let mut r = Redirect::to("/?msg=Your%20account%20was%20deleted.").into_response();
+    r.headers_mut()
+        .insert(header::SET_COOKIE, session_cookie(&st, "", 0));
+    r
 }
 
 #[derive(Deserialize, Default)]

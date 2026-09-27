@@ -293,6 +293,8 @@
     list.innerHTML = h;
   }
   /* Account totals from the server (all devices + Steam + imports + estimates). */
+  // Same rounding as the server: estimates over 1,000 h go to the nearest 100.
+  const roundEst = h => h > 1000 ? Math.floor((h + 50) / 100) * 100 : h;
   function serverStatsHtml(g) {
     if (!realMode()) return '';
     const sv = LIVE.server;
@@ -305,7 +307,7 @@
       const id = ensureGame(r.game_id, r.name), est = r.display_min <= 0;
       // Never show less than this PC already knows (uploads lag a few minutes).
       const mins = est ? r.estimated_min : Math.max(r.display_min, r.display_tier === 'tracked' ? (local[r.game_id] || 0) : 0);
-      const tot = est ? `<span class="est">~${nf(mins / 60)}h</span>` : `${fmtHrs(mins * 60)}h${tierMark(r.display_tier)}`;
+      const tot = est ? `<span class="est">~${nf(roundEst(Math.floor(mins / 60)))}h</span>` : `${fmtHrs(mins * 60)}h${tierMark(r.display_tier)}`;
       const tip = `${r.name} · tracked ${nf(r.tracked_min / 60)}h · imported ${nf(r.imported_min / 60)}h · estimated ~${nf(r.estimated_min / 60)}h`;
       return `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(tip)}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w">${r.minutes_7d ? (r.minutes_7d / 60).toFixed(1) : ''}</span><span class="st-t">${tot}</span></div>`;
     }).join('');
@@ -661,6 +663,7 @@
       const st = await FLB.settings(); LIVE.settings = st;
       $('#opt-idle').value = String(st.idle_threshold_min); $('#opt-min').value = String(st.min_session_min);
       $('#opt-pause').checked = st.settings.paused === '1'; $('#opt-toast').checked = st.settings.toasts !== '0';
+      $('#opt-ftoast').checked = st.settings.friend_toasts !== '0'; $('#opt-fdnd').checked = st.settings.friend_toasts_dnd !== '0';
       $('#opt-autostart').checked = !!st.autostart;
       renderSync();
       $('#opt-info').innerHTML = `Saved on this PC:<br><code>${esc(st.data_dir)}</code><br>Fraglink ${esc(st.version)} · ${st.signatures} known games · ${st.steam_apps} Steam, ${st.epic_apps || 0} Epic, ${st.gog_apps || 0} GOG games found${st.sim ? '<br><b class="bad">Simulation mode: fake games</b>' : ''}`;
@@ -692,6 +695,8 @@
   $('#opt-min').addEventListener('change', e => FLB.set('min_session_min', e.target.value).catch(toastErr));
   $('#opt-pause').addEventListener('change', e => FLB.set('paused', e.target.checked ? '1' : '0').then(refreshSoon).catch(toastErr));
   $('#opt-toast').addEventListener('change', e => FLB.set('toasts', e.target.checked ? '1' : '0').catch(toastErr));
+  $('#opt-ftoast').addEventListener('change', e => FLB.set('friend_toasts', e.target.checked ? '1' : '0').catch(toastErr));
+  $('#opt-fdnd').addEventListener('change', e => FLB.set('friend_toasts_dnd', e.target.checked ? '1' : '0').catch(toastErr));
   $('#opt-autostart').addEventListener('change', e => FLB.autostart(e.target.checked).then(v => { e.target.checked = !!v; }).catch(err => { e.target.checked = !e.target.checked; toastErr(err); }));
 
   /* ---- games dialog: "this is a game" + exclusions ---- */
