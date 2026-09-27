@@ -393,3 +393,19 @@ pub fn friend_mute(app: AppHandle, handle: String, mute: bool) -> CmdResult<()> 
     crate::friends::emit(&app);
     Ok(())
 }
+
+/// Game icons as `data:` URLs (null = draw the generic icon). Max 60 ids.
+#[tauri::command]
+pub async fn game_icons(
+    app: AppHandle,
+    ids: Vec<String>,
+) -> CmdResult<std::collections::HashMap<String, Option<String>>> {
+    let ids: Vec<String> = ids
+        .into_iter()
+        .filter(|i| !i.is_empty() && i.len() <= 120)
+        .take(60)
+        .collect();
+    tauri::async_runtime::spawn_blocking(move || crate::icons::resolve(&app, &ids, true))
+        .await
+        .map_err(err)
+}

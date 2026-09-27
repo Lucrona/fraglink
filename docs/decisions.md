@@ -131,6 +131,14 @@ the entries say what changing them would cost.
 - Docker 26 installs and runs on the dev box. The `apps/server/Dockerfile` image builds and runs (migrations plus signup against the compose `postgres:17` service).
 - The dev sandbox can't route traffic between containers, so the full `docker compose --profile server up` was checked with the server container on the host network. On a normal Docker host the compose file works as written. Nothing is published to a registry.
 
+## D28. Game icons come from the user's own PC
+- Order: our cache → the running game's exe icon (Windows only) → Steam's local library cache → (signed in, friends' games) Steam's public community icon via the server's `steam_icon_hash` from `GetOwnedGames` → a neutral generic icon.
+- Stored at 32x32 PNG and shown at 16x16 CSS px, which is exact at 200 % zoom. Small sources are scaled up with nearest-neighbour so they stay sharp.
+- No third-party icon packs in the repo or installer. Presence messages carry only the game id.
+- "No icon" results are remembered for 24 h. A newly detected game is still tried locally at once, and when the server can't be reached nothing is remembered.
+- Downloads only from `cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/`, max 256 KB, and only while signed in.
+- **Needs a Windows test:** exe icon extraction (GDI code) is only compile-checked on Linux.
+
 ## Open questions for you
 1. **Hosting:** Supabase (as in the spec) vs a small VPS/managed Postgres running `fraglink-server`, and the region (spec: Sydney). Nothing is deployed.
 2. **Steam Web API key:** needed for real imports. Create one at <https://steamcommunity.com/dev/apikey> (needs a Steam account with a purchase). Set it as `STEAM_API_KEY` on the server only. Never commit it.

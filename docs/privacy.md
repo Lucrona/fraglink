@@ -21,4 +21,6 @@ The device token is encrypted with Windows DPAPI on your PC. Signing out forgets
 
 **Friends and presence (M3, only while signed in):** while the app runs it keeps a WebSocket to the server and sends your status (Online / Away / Invisible) and the game being tracked right now (id, name, start time), plus a ping every minute. Only your friends see it. **Invisible** is shown to them as offline with no game. Friend pop-up settings and muted friends stay on this PC. Full draft policy: [`privacy-policy.md`](privacy-policy.md).
 
+**Game icons:** read from the detected game's exe and Steam's local library cache, then cached in `icons\` in the data folder. While you're signed in, icons of friends' games that aren't installed on this PC may be downloaded from Steam's public CDN.
+
 **Your control:** Pause tracking (tray or Fraglink menu), exclude any game, Export my data (a zip with JSON + CSV), and delete everything by quitting and removing the folder above.

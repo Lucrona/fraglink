@@ -31,6 +31,14 @@ pub struct Engine {
     env: Box<dyn Environment>,
     last_procs: Vec<ProcInfo>,
     steam_loaded_at: Option<i64>,
+    /// Exe path and Steam app id of games detected since start (for icons).
+    pub seen: std::collections::HashMap<String, SeenGame>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SeenGame {
+    pub exe_path: Option<String>,
+    pub steam_appid: Option<u32>,
 }
 
 pub fn slug(name: &str) -> String {
@@ -54,6 +62,7 @@ impl Engine {
             env,
             last_procs: vec![],
             steam_loaded_at: None,
+            seen: Default::default(),
         };
         e.apply_settings()?;
         e.reload_rules()?;
@@ -129,6 +138,21 @@ impl Engine {
         let idle = self.env.idle_seconds();
         let appid = self.env.steam_running_appid();
         let dets = self.detector.detect(&procs, appid);
+        for d in &dets {
+            let path = d.exe.as_ref().and_then(|x| {
+                procs
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(x))
+                    .and_then(|p| p.path.clone())
+            });
+            let e = self.seen.entry(d.game_id.clone()).or_default();
+            if path.is_some() {
+                e.exe_path = path;
+            }
+            if d.steam_appid.is_some() {
+                e.steam_appid = d.steam_appid;
+            }
+        }
         self.last_procs = procs;
         self.tracker.tick(now, &dets, idle)
     }
@@ -292,6 +316,17 @@ mod tests {
             .top
             .iter()
             .any(|t| t.game_id == "cs2" && t.total_seconds >= 290));
+
+        // exe paths are remembered for icon extraction
+        let indie = &e.seen["manual:my-indie"];
+        assert_eq!(
+            indie.exe_path.as_deref(),
+            Some("C:/Games/MyIndie/MyIndie.exe")
+        );
+        assert!(e.seen["cs2"]
+            .exe_path
+            .as_deref()
+            .is_some_and(|p| p.ends_with("cs2.exe")));
 
         // exclusion: stop tracking dota2 and hide it
         e.set_game_excluded("dota2", true, t0 + 2600).unwrap();

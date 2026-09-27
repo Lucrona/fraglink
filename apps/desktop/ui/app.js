@@ -86,7 +86,8 @@
   const TILE_ALIAS = { cs2: 'cs', cs16: 'cs', css: 'cs', quake3: 'q3', d2r: 'd2', diablo2: 'd2', ut2004: 'ut', helldivers2: 'hd2', bfvietnam: 'bfv', everquest2: 'eq2', hl2dm: 'hl2' };
   function ensureGame(id, name) {
     if (!id) return '_new';
-    if (GAMES[id] && (!name || GAMES[id].name === name || GAMES[id].real)) return id;
+    if (GAMES[id] && GAMES[id].real) return id;
+    if (GAMES[id] && (!name || GAMES[id].name === name)) { GAMES[id] = { ...GAMES[id], real: true }; return id; }
     const base = GAMES[TILE_ALIAS[id]] || (GAMES[id] && !GAMES[id].real ? GAMES[id] : null);
     if (base) { GAMES[id] = { ...base, name: name || base.name, real: true }; return id; }
     const n = String(name || id);
@@ -97,8 +98,32 @@
     GAMES[id] = { name: n, c1: `hsl(${hue} 70% 72%)`, c2: `hsl(${(hue + 40) % 360} 60% 28%)`, fg: '#fff', g, genre: '', real: true };
     return id;
   }
+  /* Real game icons (Xfire style: the game's own 16x16 icon). The app resolves
+     them locally (icon cache → the game's exe → Steam's library cache → Steam's
+     public icon for friends' games); anything else gets a neutral generic icon. */
+  const ICONS = {}; // game id -> data URL | null (none) ; undefined = not asked yet
+  const iconWant = new Set(); let iconTimer = null;
+  const GENERIC_ICON = '<svg class="gi-gen" viewBox="0 0 16 16"><rect x=".5" y=".5" width="15" height="15" rx="2" fill="#39414f" stroke="#15191f"/><path d="M4.2 6h7.6c1.3 0 2.2 1 2.2 2.3l-.4 2.4c-.2 1-1.4 1.3-2.1.6L10.3 10H5.7l-1.2 1.3c-.7.7-1.9.4-2.1-.6L2 8.3C2 7 2.9 6 4.2 6z" fill="#aab4c4"/><path d="M4 7.3v2M3 8.3h2" stroke="#39414f" stroke-width=".9"/><circle cx="11" cy="7.8" r=".6" fill="#39414f"/><circle cx="12" cy="8.9" r=".6" fill="#39414f"/></svg>';
+  function appIcon(id) {
+    const u = ICONS[id];
+    if (u) return `<img class="gi-img" src="${esc(u)}" alt="" draggable="false">`;
+    if (u === undefined && id) { iconWant.add(id); clearTimeout(iconTimer); iconTimer = setTimeout(loadIcons, 30); }
+    return GENERIC_ICON;
+  }
+  async function loadIcons() {
+    const ids = [...iconWant].filter(id => ICONS[id] === undefined).slice(0, 60); iconWant.clear();
+    if (!ids.length || !FLB.gameIcons) return;
+    ids.forEach(id => { ICONS[id] = null; }); // don't ask twice while loading
+    try {
+      const got = await FLB.gameIcons(ids);
+      let changed = false;
+      for (const id of ids) { const u = got && got[id]; if (u) { ICONS[id] = u; changed = true; } }
+      if (changed) render();
+    } catch (e) { console.warn('icons', e); }
+  }
   function gameIcon(id) {
     const g = GAMES[id]; if (!g) return '';
+    if (g.real) return appIcon(id);
     const gid = 'gi-' + String(id).replace(/[^A-Za-z0-9_-]/g, '_');
     return `<svg viewBox="0 0 16 15"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${g.c1}"/><stop offset="1" stop-color="${g.c2}"/></linearGradient></defs>` +
       `<rect x=".5" y=".5" width="15" height="14" rx="1.5" fill="url(#${gid})" stroke="rgba(0,0,0,.6)"/>` +
@@ -347,7 +372,7 @@
     for (const a of LIVE.activity) {
       const lbl = dayLabel(a.ts);
       if (lbl !== cur) { cur = lbl; h += `<div class="xf-sec s-day"><i class="tri"></i>${esc(lbl)}</div>`; }
-      const kindTile = a.kind === 'milestone' ? '_ach' : a.kind === 'tagged' ? '_new' : ensureGame(a.game_id, a.game_name);
+      const kindTile = a.game_id ? ensureGame(a.game_id, a.game_name) : '_new';
       h += `<div class="av-row" title="${esc(new Date(a.ts * 1000).toLocaleString())}"><i class="gi">${gameIcon(kindTile)}</i><div class="av-tx"><b class="me">You</b> ${activityHtml(a)}</div><span class="av-t">${esc(whenLabel(a.ts))}</span></div>`;
     }
     h += `<div class="st-link"><a data-action="website">&raquo; All activity on fraglink.gg (later)</a></div></div>`;
@@ -851,7 +876,7 @@
     if (params.get('add') === '1') setTimeout(() => actions['add-friend'](), 300);
     await refreshFriends();
     await refresh();
-    FLB.on('fraglink://events', refreshSoon);
+    FLB.on('fraglink://events', () => { for (const k in ICONS) if (ICONS[k] === null) delete ICONS[k]; refreshSoon(); }); // a newly detected game may now have an exe icon
     FLB.on('fraglink://friends', refreshFriends);
     FLB.on('fraglink://sync', refreshFriends);
     FLB.on('fraglink://show-friend', h => { state.tab = 'friends'; state.sel = 'u:' + h; refreshFriends(); });

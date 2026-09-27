@@ -8,6 +8,7 @@ pub mod detector;
 pub mod engine;
 pub mod env;
 pub mod export;
+pub mod icons;
 pub mod libraries;
 pub mod outbox;
 pub mod signatures;

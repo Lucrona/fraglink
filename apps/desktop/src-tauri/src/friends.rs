@@ -336,6 +336,7 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
                         line: "has started playing".into(),
                         game_id: p.game_id.clone().unwrap_or_default(),
                         game: p.game_name.clone().unwrap_or_default(),
+                        icon: crate::icons::one(app, p.game_id.as_deref().unwrap_or(""), true),
                     },
                 );
             }
@@ -359,6 +360,7 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
                         line: "wants to be your friend".into(),
                         game_id: String::new(),
                         game: format!("@{handle}"),
+                        icon: None,
                     },
                 );
             }

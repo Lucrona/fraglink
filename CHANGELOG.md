@@ -25,6 +25,12 @@ M2 checkpoint (accounts, Steam import, trust tiers) and the first M3 checkpoint 
 - `fraglink-sync`: friends API, a blocking `PresenceSocket`, and `examples/presence.rs` (acts as a friend's tray for local testing).
 - Tests: a multi-client WebSocket presence suite (fan-out, invisible, away, pings, second device, disconnects, idle timeout, pushes of requests/blocks) and a test driving the tray's own client against a real server.
 
+### Added (game icons, Xfire style)
+- **Real 16x16 game icons** next to game names in Friends (now playing and side panel), Stats (Now Playing, top games, account totals), Activity and the "started playing" toasts. Games with no icon get a neutral generic icon. The old lettered tiles are only used for the signed-out sample data.
+- Icons are found on your own PC: the detected game's exe (Windows `ExtractIconExW`, read at runtime), then Steam's library cache (`appcache\librarycache\<appid>_icon.jpg` or the per-app folder). They're cached as 32x32 PNGs in `<data dir>\icons\`. Nothing is bundled.
+- For a friend's game that isn't on your PC, only the game id travels over presence. Your tray asks the server for Steam's public icon (the hash recorded from Steam imports, `GET /api/v1/games/icons`) and downloads it from Steam's CDN (only that host, only while signed in), otherwise it shows the generic icon.
+- In simulation mode, a generated placeholder stands in for the exe icon.
+
 ### Added (M2 leftovers)
 - **Zip export** on both sides:
   - Tray: *Export my data* writes `fraglink-export-<time>.zip` (JSON + `sessions.csv` + `games.csv` + README). The sync token is never included.

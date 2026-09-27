@@ -37,6 +37,7 @@
       friendBlock: (handle, block) => inv('friend_block', { handle, block }),
       friendMute: (handle, mute) => inv('friend_mute', { handle, mute }),
       serverStats: () => inv('get_server_stats'),
+      gameIcons: (ids) => inv('game_icons', { ids }),
       on: (evt, cb) => T.event.listen(evt, e => cb(e.payload)),
       drag: () => T.window.getCurrentWindow().startDragging(),
     };
@@ -111,9 +112,19 @@
       { game_id: 'steam:730', name: 'Counter-Strike 2', tracked_min: 118 * 60, imported_min: 0, estimated_min: 0, display_min: 118 * 60, display_tier: 'tracked' },
       { game_id: 'manual:ut99', name: 'Unreal Tournament', tracked_min: 0, imported_min: 0, estimated_min: 1500 * 60, display_min: 0, display_tier: 'estimated' },
     ], overall: { verified_min: 974 * 60, estimated_min: 1500 * 60, estimated_display: '~1,500h' } } : null),
+    // preview: stand-in icons drawn on a canvas (no real game art is bundled)
+    gameIcons: (ids) => ok(Object.fromEntries(ids.map(id => [id, /^(wc3|manual:)/.test(id) ? null : placeholderIcon(id)]))),
     on: () => ok(() => {}),
     drag: () => ok(),
   };
+  function placeholderIcon(id) {
+    const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
+    let h = 0; for (const ch of id) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+    const g = x.createLinearGradient(0, 0, 32, 32); g.addColorStop(0, `hsl(${h % 360} 65% 60%)`); g.addColorStop(1, `hsl(${(h + 40) % 360} 70% 25%)`);
+    x.fillStyle = '#14141c'; x.fillRect(0, 0, 32, 32); x.fillStyle = g; x.fillRect(1, 1, 30, 30);
+    x.fillStyle = 'rgba(255,255,255,.3)'; x.fillRect(1, 1, 30, 12);
+    return c.toDataURL('image/png');
+  }
   const iso = (s) => new Date((now() - s) * 1000).toISOString();
   const muted = [];
   const mockFriends = {

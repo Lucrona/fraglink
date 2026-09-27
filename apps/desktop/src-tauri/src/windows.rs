@@ -133,7 +133,10 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
 }
 
 /// Bottom-right toast (stand-in for friend toasts until M3). Reuses the window if open.
-pub fn show_toast(app: &AppHandle, payload: ToastPayload) {
+pub fn show_toast(app: &AppHandle, mut payload: ToastPayload) {
+    if payload.icon.is_none() && !payload.kind.starts_with("request:") {
+        payload.icon = crate::icons::one(app, &payload.game_id, false);
+    }
     *app.state::<AppState>().pending_toast.lock().unwrap() = Some(payload.clone());
     if app.get_webview_window("toast").is_some() {
         let _ = app.emit_to("toast", TOAST_EVENT, payload);

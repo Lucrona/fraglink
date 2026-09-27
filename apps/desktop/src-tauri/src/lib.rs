@@ -5,6 +5,7 @@
 
 mod commands;
 mod friends;
+mod icons;
 mod sync;
 mod windows;
 
@@ -32,6 +33,8 @@ pub struct ToastPayload {
     pub line: String,
     pub game_id: String,
     pub game: String,
+    /// `data:` URL of the game icon (filled in by `show_toast` if empty).
+    pub icon: Option<String>,
 }
 
 pub struct TrayItems {
@@ -121,6 +124,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 },
                 game_id: game_id.clone(),
                 game: name.clone(),
+                icon: None,
             }),
             TrackerEvent::Milestone {
                 game_id,
@@ -132,6 +136,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 line: format!("hit {hours} hours in"),
                 game_id: game_id.clone(),
                 game: name.clone(),
+                icon: None,
             }),
             TrackerEvent::Stopped {
                 game_id,
@@ -145,6 +150,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 line: format!("played {} of", fmt_hm(*active_seconds)),
                 game_id: game_id.clone(),
                 game: name.clone(),
+                icon: None,
             }),
             _ => None,
         };
@@ -488,6 +494,7 @@ pub fn run() {
             commands::sync_now,
             commands::sync_sign_out,
             commands::friends_state,
+            commands::game_icons,
             commands::friends_refresh,
             commands::get_server_stats,
             commands::friend_add,

@@ -50,6 +50,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/blocks", post(block_user))
         .route("/api/v1/blocks/{handle}", delete(unblock_user))
         .route("/api/v1/ws", get(crate::presence::ws_handler))
+        .route("/api/v1/games/icons", get(game_icons))
 }
 
 /// Cookie-authenticated writes must come from our own pages (CSRF guard; SameSite=Lax
@@ -1090,4 +1091,46 @@ async fn unblock_user(
     check_origin(&a, &headers, &st)?;
     friends::unblock(&st, &person(&a), &handle).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ------------------------------------------------------------------ game icons
+
+#[derive(Deserialize)]
+struct IconsQ {
+    ids: String,
+}
+
+/// Where a client can get a game's icon when it isn't installed locally:
+/// `{ "<game id>": { "steam_appid": 570, "icon_url": "https://cdn...jpg" | null } }`.
+/// Only public Steam data; unknown ids are left out.
+async fn game_icons(
+    State(st): State<AppState>,
+    _a: AuthUser,
+    Query(q): Query<IconsQ>,
+) -> ApiResult<Json<Value>> {
+    let ids: Vec<String> = q
+        .ids
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s.len() <= 120)
+        .take(50)
+        .collect();
+    let rows: Vec<(String, Option<i32>, Option<String>)> =
+        sqlx::query_as("SELECT id, steam_appid, steam_icon_hash FROM games WHERE id = ANY($1)")
+            .bind(&ids)
+            .fetch_all(&st.db)
+            .await?;
+    let mut out = serde_json::Map::new();
+    for id in &ids {
+        let row = rows.iter().find(|r| &r.0 == id);
+        let appid = row
+            .and_then(|r| r.1.map(|a| a as u32))
+            .or_else(|| fraglink_core::icons::appid_from_game_id(id));
+        let Some(appid) = appid else { continue };
+        let url = row
+            .and_then(|r| r.2.as_deref())
+            .and_then(|h| fraglink_core::icons::steam_cdn_icon_url(appid, h));
+        out.insert(id.clone(), json!({ "steam_appid": appid, "icon_url": url }));
+    }
+    Ok(Json(Value::Object(out)))
 }

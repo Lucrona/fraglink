@@ -65,3 +65,10 @@ body.toast-page .toast-body .g { display: inline; }
 #add-handle { width: 100%; box-sizing: border-box; margin: 3px 0 0; font: 11px Tahoma, sans-serif; }
 #add-msg { margin-top: 4px; font-size: 10px; }
 .fl-mock a { color: var(--cyan); cursor: pointer; text-decoration: underline; }
+/* Real game icons: the game's own icon at 16x16 (stored at 32x32 so it stays sharp at 150/200 % zoom). */
+.gi .gi-img, .gi .gi-gen { display: block; width: 16px; height: 16px; }
+.gi .gi-img { image-rendering: auto; }
+.xf-row .gi, .av-row .gi { width: 16px; height: 16px; margin-right: 2px; }
+.toast-body .gi { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+.toast-body .gi .gi-img, .toast-body .gi .gi-gen { width: 16px; height: 16px; }
+.side-scroll .act .gi .gi-img, .side-scroll .games .gi .gi-img, .side-scroll .games .gi .gi-gen { width: 16px; height: 16px; display: block; }

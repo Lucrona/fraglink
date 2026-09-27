@@ -72,6 +72,7 @@ See `.env.example`. Keep real values out of git (`.env` is ignored).
 | DELETE | `/friends/{handle}` | token | remove a friend or cancel your request |
 | POST / DELETE | `/blocks` `{handle}`, `/blocks/{handle}` | token | block (removes friendship, silent) / unblock |
 | GET | `/ws` | token (Bearer or cookie) | presence WebSocket, see below |
+| GET | `/games/icons?ids=a,b` | token | `{id:{steam_appid,icon_url\|null}}` (Steam's public icon, hash recorded from `GetOwnedGames`); max 50 ids |
 
 ### Presence WebSocket
 

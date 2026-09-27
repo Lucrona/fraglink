@@ -129,6 +129,28 @@ async fn link_by_vanity_and_import(pool: PgPool) {
     assert_eq!(cs2["display_tier"], "tracked");
     assert_eq!(cs2["tracked_min"], cs2_min);
 
+    // icon lookup for friends' trays: hash from GetOwnedGames, junk hashes ignored
+    let ic = api(
+        &app,
+        "GET",
+        "/api/v1/games/icons?ids=cs2,dota2,steam:999,wow-unknown",
+        Some(&t),
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(ic["cs2"]["steam_appid"], 730);
+    assert_eq!(
+        ic["cs2"]["icon_url"],
+        "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/730/8dbc71957312bbd3baea65848b545be9eae2a355.jpg"
+    );
+    assert!(
+        ic["dota2"]["icon_url"].is_null(),
+        "invalid hash \"x\" is dropped"
+    );
+    assert_eq!(ic["steam:999"]["steam_appid"], 999);
+    assert!(ic.get("wow-unknown").is_none());
+
     // cooldown
     let r = api(&app, "POST", "/api/v1/steam/sync", Some(&t), None).await;
     assert_eq!(r.status, StatusCode::TOO_MANY_REQUESTS);

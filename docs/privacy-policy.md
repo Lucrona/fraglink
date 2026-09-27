@@ -95,6 +95,13 @@ account is yours. We never see your Steam password. Unlinking Steam on its own i
   own settings (off, not while they're playing, or muted for a particular friend). Those settings
   stay on their PC.
 
+### Game icons
+
+The tray shows each game's icon. It reads icons from the game's own files and from Steam's local
+cache on your PC. For a friend's game you don't have installed, a signed-in tray asks the Fraglink
+server for the game's public Steam icon and downloads that image from Steam's CDN (Valve). That
+request includes no account details, but like any web request it shows Valve your IP address.
+
 ## 5. Cookies
 
 The website sets **one cookie**, `fl_session`. It's HttpOnly and SameSite=Lax, and it keeps you

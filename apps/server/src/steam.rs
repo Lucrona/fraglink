@@ -41,6 +41,9 @@ pub struct OwnedGame {
     pub playtime_forever: i64,
     #[serde(default)]
     pub playtime_2weeks: i64,
+    /// 40-hex hash of the public community icon.
+    #[serde(default)]
+    pub img_icon_url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -402,12 +405,16 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
                 }
             });
         sqlx::query(
-            "INSERT INTO games(id, name, steam_appid) VALUES($1, $2, $3)
-             ON CONFLICT (id) DO UPDATE SET steam_appid = COALESCE(games.steam_appid, excluded.steam_appid)",
+            "INSERT INTO games(id, name, steam_appid, steam_icon_hash) VALUES($1, $2, $3, $4)
+             ON CONFLICT (id) DO UPDATE SET steam_appid = COALESCE(games.steam_appid, excluded.steam_appid),
+               steam_icon_hash = CASE WHEN games.steam_appid IS NULL OR games.steam_appid = excluded.steam_appid
+                                      THEN COALESCE(excluded.steam_icon_hash, games.steam_icon_hash)
+                                      ELSE games.steam_icon_hash END",
         )
         .bind(&gid)
         .bind(&name)
         .bind(g.appid as i32)
+        .bind(icon_hash(&g.img_icon_url))
         .execute(&mut *tx)
         .await?;
         sqlx::query(
@@ -463,6 +470,12 @@ pub async fn sync_due(state: &AppState, limit: i64) -> ApiResult<usize> {
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
     Ok(ok)
+}
+
+/// A valid Steam icon hash (40 lower-case hex chars), or None.
+pub fn icon_hash(s: &str) -> Option<String> {
+    let s = s.trim().to_ascii_lowercase();
+    (s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit())).then_some(s)
 }
 
 #[cfg(test)]
