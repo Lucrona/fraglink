@@ -64,9 +64,25 @@ See `.env.example`. Keep real values out of git (`.env` is ignored).
 | POST | `/hours/import` `{game_id\|game_name, minutes, source: manual\|wow_manual\|xbox_recap, note}` | token | Imported tier (self-reported) |
 | DELETE | `/hours/{id}` | token | |
 | POST | `/steam/link` `{profile}` · `/steam/sync` | token | |
-| GET | `/export` | token | everything about you as JSON |
+| GET | `/export` | token | everything about you as JSON (incl. friends) |
+| GET | `/export.zip` | token | README + JSON + CSVs (sessions, games per tier, Steam playtime); once per hour → 429 `export_cooldown` |
+| GET | `/friends` | token | `{friends:[{handle,display_name,since,presence}],incoming,outgoing,blocked}` |
+| POST | `/friends/request` `{handle}` | token | by exact username (case-insensitive, `@` ok) → `pending` / `accepted` (mutual); 30/hour |
+| POST | `/friends/respond` `{handle,accept}` | token | decline deletes silently |
+| DELETE | `/friends/{handle}` | token | remove a friend or cancel your request |
+| POST / DELETE | `/blocks` `{handle}`, `/blocks/{handle}` | token | block (removes friendship, silent) / unblock |
+| GET | `/ws` | token (Bearer or cookie) | presence WebSocket, see below |
 
-Web pages (no JavaScript): `/`, `/signup`, `/login`, `/pair`, `/auth/steam/start`.
+### Presence WebSocket
+
+Client → server: `{"type":"presence","status":"online|away|invisible","game":{"id","name","started_at"}|null}`, `{"type":"ping"}` (every 60 s).
+Server → client: `hello{friends}` (snapshot), `presence{handle,started,status,game_id,game_name,session_started_at}` (friends only, on change; `started` = a new game), `friend_request`, `friend_accepted`, `friend_removed`, `pong`, `error`.
+Invisible is stored but sent to friends as `offline`. No message for 150 s (`presence_idle_secs`) closes the socket; the last socket closing sets you offline.
+To act as a friend's tray locally: `cargo run -p fraglink-sync --example presence -- http://localhost:8787 TOKEN online steam:570 "Dota 2"`.
+
+Web pages (no JavaScript): `/`, `/signup`, `/login`, `/pair`, `/auth/steam/start`. The dashboard has hours, Steam, friends, devices, export links and Delete account.
+
+Docker: `docker compose up -d db` for Postgres, or `docker compose --profile server up` for Postgres + this server (image from `apps/server/Dockerfile`).
 
 ## Tests
 
@@ -76,4 +92,5 @@ cargo test -p fraglink-server
 ```
 
 Each test gets a fresh database (`#[sqlx::test]`). Steam is mocked by a local axum server, so no key is needed.
+`tests/presence.rs` opens several real WebSocket clients; `tests/tray_presence.rs` drives the tray's own `fraglink-sync` client.
 `tests/e2e.rs` runs the real desktop path: local SQLite store → outbox → `fraglink-sync` client → this server.

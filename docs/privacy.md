@@ -19,4 +19,6 @@
 
 The device token is encrypted with Windows DPAPI on your PC. Signing out forgets it and revokes it on the server. Excluded games are never uploaded. Sessions already on the server stay there until you delete them (or your account) on the website. Details: [`decisions.md`](decisions.md) D4, D9, D14.
 
-**Your control:** Pause tracking (tray or Fraglink menu), exclude any game, Export my data (JSON + CSV), and delete everything by quitting and removing the folder above.
+**Friends and presence (M3, only while signed in):** while the app runs it keeps a WebSocket to the server and sends your status (Online / Away / Invisible) and the game being tracked right now (id, name, start time), plus a ping every minute. Only your friends see it. **Invisible** is shown to them as offline with no game. Friend pop-up settings and muted friends stay on this PC. Full draft policy: [`privacy-policy.md`](privacy-policy.md).
+
+**Your control:** Pause tracking (tray or Fraglink menu), exclude any game, Export my data (a zip with JSON + CSV), and delete everything by quitting and removing the folder above.

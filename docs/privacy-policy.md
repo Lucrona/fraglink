@@ -126,9 +126,9 @@ signed in. There are no analytics, advertising or third-party cookies, and no tr
 ## 8. Security
 
 Passwords are stored as Argon2 hashes and tokens are stored hashed. The tray's token is encrypted
-with Windows DPAPI. Website forms have CSRF protection. Friend requests are limited to 30 an hour
-and zip exports to one an hour. Sign-in rate limiting and HTTPS for the public server are **TBD**
-(they come with hosting).
+with Windows DPAPI. Website forms have CSRF protection. Sign-in is limited to 10 failed attempts per
+15 minutes per email, friend requests to 30 an hour and zip exports to one an hour. HTTPS for the
+public server is **TBD** (it comes with hosting).
 
 ## 9. Children
 

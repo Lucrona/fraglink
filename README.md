@@ -21,8 +21,8 @@ Fraglink sits alongside Discord, Steam and Twitch rather than replacing them.
 **Early development.**
 
 - **Done:** M0 (setup) and M1 (local tracker + tray tabs), released as 0.1.1.
-- **In progress:** M2. A local development server (`apps/server`) has accounts, tray pairing, opt-in session sync, Tracked / Imported / Estimated hours and Steam import. Nothing is hosted yet.
-- **Not yet:** friends and the real website.
+- **In progress:** M2 (done locally except Discord login, email and hosting) and M3. A local development server (`apps/server`) has accounts, tray pairing, opt-in session sync, Tracked / Imported / Estimated hours, Steam import, zip export, friends and live presence. Nothing is hosted yet.
+- **Not yet:** the activity feed and the real website.
 - **Builds:** CI produces unsigned Windows installers for private testing.
 
 See the [changelog](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
@@ -50,12 +50,21 @@ See the [changelog](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
 
 - Sign in to sync from Options: pair the tray with a code, approved in your browser. Sessions upload in the background, and tracking works the same offline.
 - Server: email accounts, Steam link (verified via Steam sign-in) and playtime import, history estimator and self-reported counters, each number labelled **● Tracked / ◆ Imported / ~ Estimated**. Leaderboards count Tracked only.
-- See [`apps/server/README.md`](apps/server/README.md) and [`docs/decisions.md`](docs/decisions.md).
+- Stats tab shows your account totals from all devices with tier markers (falls back to this PC offline).
+- See [`apps/server/README.md`](apps/server/README.md), [`docs/decisions.md`](docs/decisions.md) and the draft [privacy policy](docs/privacy-policy.md).
+
+**M3 preview (friends, local server)**
+
+- Add friends by username, accept/decline, remove, block (silent).
+- Live presence: Online / Away / Invisible (friends see you offline) and the game you're playing, over a WebSocket.
+- Friends tab on real data with a side panel, plus "*friend* has started playing" pop-ups (not while you're playing, by default; mute per friend).
+
+<p align="center"><img src="docs/images/friends-live.png" alt="Friends tab with live presence" width="290"> <img src="docs/images/stats-tiers.png" alt="Stats tab with account totals by tier" width="290"><br><img src="docs/images/friend-toast.png" alt="Friend started playing toast" width="320"><br><sub>Real tray window (simulation mode) against a local server.</sub></p>
 
 **Coming** (see the [roadmap](docs/ROADMAP.md))
 
-- **M2 (rest):** Discord login, email verification/password reset, hosting, privacy policy.
-- **M3:** friends with live presence, friend toasts and an activity feed.
+- **M2 (rest):** Discord login, email verification/password reset, hosting, legal review of the privacy policy.
+- **M3 (rest):** friends' activity feed, Steam friends presence.
 - **M4:** fraglink.gg profiles, gaming history, onboarding estimator and signature images.
 - **M5:** verified WoW character cards and exact `/played` import.
 - **M6:** game pages, achievements, weekly recaps, Twitch live badge.

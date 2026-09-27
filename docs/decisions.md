@@ -82,9 +82,60 @@ the entries say what changing them would cost.
 - They exist so M2 can be used end to end locally. The real website is M4 (Astro in the spec).
 - The cookie is HttpOnly, SameSite=Lax (plus Secure on https). Every cookie-authenticated write also checks Origin/Referer.
 
+## D16. Exports: JSON any time, zip once per hour
+- `GET /api/v1/export` (JSON) has no limit. `GET /api/v1/export.zip` (JSON + CSVs) is limited to once per hour per account, because it's heavier to build. The limit is kept in memory, so it resets when the server restarts.
+- The tray zip has the same shape (JSON + `sessions.csv` + `games.csv` + README) and never includes the sync token.
+
+## D17. Friend requests by exact username only
+- There's no user directory or search in M3, so nobody can scrape a user list. Matching ignores case and a leading `@`.
+- Max 30 requests an hour per user. Unknown usernames return 404 (usernames are public anyway).
+- If both people send a request, it's accepted automatically.
+
+## D18. Declines and blocks are silent
+- Declining deletes the request without telling the sender. A request to someone who blocked you returns `pending` and stores nothing.
+- Blocking removes the friendship. The other person's tray only gets `friend_removed`, the same as a normal removal.
+- Someone you've blocked can't send you requests, and you can't send them any until you unblock.
+
+## D19. Invisible is stored, shown as offline
+- The server keeps `invisible` so your devices agree, but friends only ever see `offline` with no game. The same applies to stale heartbeats (over 150 s).
+
+## D20. One presence per account, last writer wins
+- Presence is one row per user. If two PCs are signed in, the latest update wins. You go offline only when your last socket closes.
+- Only the latest state is kept. There's no presence history.
+
+## D21. Presence hub is in-process
+- Fan-out uses an in-memory map from each user to their open sockets inside the single server process. It's simple and has no extra infrastructure.
+- **Limit:** you can't run more than one server instance. Scaling out needs Postgres `LISTEN/NOTIFY` or Redis pub/sub (M7). Presence is reset to offline at startup.
+
+## D22. WebSocket with a ping every 60 s and a 150 s timeout
+- The tray sends `ping` every 60 s and republishes when its status or game changes (checked every 3 s, and nudged immediately by tracker events and status changes).
+- The server closes sockets that stay silent for 150 s. The tray reconnects with backoff (2 s doubling to 60 s) and stops when signed out or when its token is refused.
+- Only friends get updates, and only when what they can see changes (status, game). `started=true` means a new game id appeared.
+
+## D23. Friend toast rules live in the tray
+- A toast only appears when a friend *starts* a game. At most one per friend per 30 min.
+- Settings (all on this PC, not synced): friend pop-ups on/off, "not while I'm playing" (**on by default**), mute per friend, and the global pop-ups switch.
+- Friend requests also pop up (unless muted or pop-ups are off).
+
+## D24. Away is manual in M3
+- Away is only set from the status drop-down. Automatic away based on idle time is deferred: idle during a game already means "still playing" for friends.
+
+## D25. Tray account totals, with offline fallback
+- After each upload pass the tray fetches `/api/v1/stats` and shows a "My Account (all devices)" section on the Stats tab with tier markers. If that fetch fails, the section says the totals are unavailable, and the local numbers stay as they are.
+- A game's Tracked total never shows lower than what this PC already recorded (uploads lag a few minutes). Estimates use the server's rounding (nearest 100 h above 1,000 h).
+
+## D26. Account deletion from the web dashboard
+- It needs your password plus a confirmation box, then hard-deletes everything at once (D11). It uses the same-origin check as other forms.
+
+## D27. Docker validation on the dev box
+- Docker 26 installs and runs on the dev box. The `apps/server/Dockerfile` image builds and runs (migrations plus signup against the compose `postgres:17` service).
+- The dev sandbox can't route traffic between containers, so the full `docker compose --profile server up` was checked with the server container on the host network. On a normal Docker host the compose file works as written. Nothing is published to a registry.
+
 ## Open questions for you
 1. **Hosting:** Supabase (as in the spec) vs a small VPS/managed Postgres running `fraglink-server`, and the region (spec: Sydney). Nothing is deployed.
 2. **Steam Web API key:** needed for real imports. Create one at <https://steamcommunity.com/dev/apikey> (needs a Steam account with a purchase). Set it as `STEAM_API_KEY` on the server only. Never commit it.
 3. **Discord login** (spec M2): not built yet. It needs a Discord application (client id/secret), which means creating an external account.
 4. **Email verification and password reset:** they need an email provider (external service), so they are not built. Accounts work without verification for now.
 5. **Grace period** for account deletion (D11) and whether excluded games should also be deleted server-side (D9).
+6. **Privacy policy:** `docs/privacy-policy.md` is a DRAFT. It needs an operator name, contact, hosting location, a minimum age and legal review before any public launch.
+7. **Presence scaling (D21):** fine for a single server. Pick Postgres LISTEN/NOTIFY or Redis when hosting is decided.

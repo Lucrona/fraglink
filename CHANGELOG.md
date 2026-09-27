@@ -5,9 +5,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-M2 checkpoint (accounts, Steam import, trust tiers). Local development only; nothing is hosted.
+M2 checkpoint (accounts, Steam import, trust tiers) and the first M3 checkpoint (friends and live presence). Local development only; nothing is hosted.
 
-### Added
+### Added (M3: friends and presence)
+- **Friends on the server:** send a request by exact username (no directory), accept, decline, cancel, remove, block and unblock. Mutual requests are accepted automatically. Blocks and declines are silent, and requests are limited to 30 an hour. JSON API, plus a Friends card on the web dashboard.
+- **Live presence over a WebSocket** (`GET /api/v1/ws`):
+  - statuses: Online, Away, Invisible (shown to friends as offline)
+  - "now playing" with a start time
+  - a ping every 60 s, and you show as offline after 150 s of silence or when your last device disconnects
+  - only friends get updates. The server pushes friend requests, accepts and removals live.
+- **Tray Friends tab on real data** when you're signed in to sync:
+  - sections for Playing, Online, Friend Requests (Accept / Decline) and Offline
+  - side panel with Remove / Block / Mute toasts
+  - an Add Friend dialog
+  - Signed out, it keeps the sample friends, with a banner pointing to Sign in to sync.
+- **Tray presence thread:** publishes your status (the status drop-down) and the game being tracked right now, reconnects with backoff, and stops when you sign out. Excluded games never appear.
+- **Friend "started playing" toasts.** Options control friend pop-ups and "not while I'm playing" (on by default). You get at most one per friend per 30 min, and you can mute a friend.
+- **Stats tab → My Account (all devices):** server totals per game with ● Tracked / ◆ Imported / ~ Estimated markers and a legend. It never shows less than this PC knows. When the server can't be reached, it falls back to local data.
+- `fraglink-sync`: friends API, a blocking `PresenceSocket`, and `examples/presence.rs` (acts as a friend's tray for local testing).
+- Tests: a multi-client WebSocket presence suite (fan-out, invisible, away, pings, second device, disconnects, idle timeout, pushes of requests/blocks) and a test driving the tray's own client against a real server.
+
+### Added (M2 leftovers)
+- **Zip export** on both sides:
+  - Tray: *Export my data* writes `fraglink-export-<time>.zip` (JSON + `sessions.csv` + `games.csv` + README). The sync token is never included.
+  - Server: `GET /api/v1/export.zip` (profile, sessions, games per tier, hours entries, Steam playtime, friends), limited to once per hour. The JSON export also includes friends.
+- **Delete account** form on the web dashboard (password + confirmation).
+- `docs/privacy-policy.md`: **DRAFT v1**, plain English, matching what the code collects. Not legal advice.
+- `.dockerignore`. The server image and `docker compose` were checked locally (see decisions D27).
+
+### Fixed
+- Toast window stays fully on screen when the desktop enforces a larger minimum window size.
+
+### Added (M2)
 - **`apps/server`**, a Rust server (axum + Postgres via sqlx) with migrations, `docker-compose.yml` for local Postgres, and a `.env.example` with no secrets.
   - Accounts: email + password (Argon2id), opaque tokens stored hashed, login rate limit, logout, immediate account deletion, JSON export.
   - Desktop pairing with a device code: the tray shows a code, you approve it in the browser, and the tray gets a revocable device token.
