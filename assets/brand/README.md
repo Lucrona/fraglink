@@ -14,7 +14,7 @@ Original Fraglink art (no Xfire or other third-party artwork).
 | `gen_icons.py` | Regenerates `apps/desktop/src-tauri/icons/*` (all Tauri sizes + `icon.ico`) and the NSIS `installer/*.bmp` from these SVGs (needs `rsvg-convert` and Pillow) |
 
 All art is white/silver on a transparent background, designed for dark backgrounds.
-The app icon puts the mark on a dark rounded tile.
+The app icon (from dev.6) puts a charcoal mark on a light silver tile (the tray icon is unchanged).
 
 ## Font licence
 

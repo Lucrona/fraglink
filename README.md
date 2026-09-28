@@ -1,85 +1,82 @@
-<p align="center"><img src="docs/images/fraglink-lockup.png" alt="Fraglink" width="460"></p>
+<p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
-<p align="center"><b>Track your gaming hours across every launcher and see what your friends are playing, from anywhere.</b></p>
-
-<p align="center"><i>Early development. Current pre-release: 0.2.0-dev.6 (M2 + first M3 checkpoint: accounts, Steam, trust tiers, friends, live presence, game icons; dark Xfire-style client with the new Split Orbit logo); test server at 119.42.54.86, auto-update. Private testing only.</i></p>
+<p align="center">A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
+<sub>Early development · current pre-release <b>0.2.0-dev.6</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 
 ## What is Fraglink?
 
-Fraglink is a **lightweight Windows tray client, inspired by Xfire**, for PC gamers who care about their hours. It sits quietly in the tray, notices which game you are playing on any launcher (Steam, Battle.net, Riot, Epic, EA, standalone), and keeps an honest record of your play time. Later, it will also show which friends are online and what they're playing.
+Fraglink is a **lightweight tray client for Windows, inspired by Xfire**. It notices which game you're playing on any launcher (Steam, Battle.net, Epic, EA, Ubisoft, GOG, Xbox or standalone), keeps an honest record of your play time, and shows your friends list with who is online and what they're playing. It wears a dark, 2013-style client UI.
 
-The tray app is deliberately tiny: a sensor, a friends list and a quick glance at your stats. It wears a faithful 2000s-style chrome UI. **The website (fraglink.gg, coming later) does the heavy lifting:** your auto-filled profile, full stats and gaming history, friends from any device including phones, game pages, recaps, achievements, WoW character cards and forum signature images.
+The client stays small on purpose. The bigger things (profiles, full stats and history, game pages) are planned for the website, fraglink.gg, which comes later.
 
-Fraglink sits alongside Discord, Steam and Twitch rather than replacing them.
+**How it fits with Discord:** Fraglink doesn't do chat, voice or overlays. Discord already does that well. Fraglink adds the part Discord doesn't have: your hours across every launcher and a "who's playing what" list. Discord sign-in and "Message on Discord" are on the roadmap.
 
-<p align="center"><img src="docs/images/app-tabs.png" alt="Fraglink tray client: Friends (sample), Stats and Activity tabs" width="900"><br><sub>The current M1 build (simulation mode): Friends (sample data), Stats and Activity on real local data.</sub></p>
+<p align="center">
+<img src="docs/images/client-friends.png" alt="Main window: friends list" width="300">
+&nbsp;
+<img src="docs/images/client-info-panel.png" alt="Main window with the info panel open on a friend" width="446">
+<br><sub>The main window with the friends list, and with the info panel open on a friend. Browser preview of the dev.6 UI with sample data.</sub>
+</p>
 
-## Status
+## What works today (0.2.0-dev.6)
 
-**Early development.**
+- **Game detection on every launcher:** installed Steam, Epic, GOG, Battle.net, EA app, Ubisoft Connect and Xbox games, 170 curated signatures, and "This is a game…" for anything else. Read-only: no injection, no memory reading.
+- **Honest hours:** idle time is trimmed, very short sessions are dropped, and sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.
+- **Accounts in the client:** log in with username (or email) and password, or **Create Account** right in the main window. Browser pairing is still there as an option.
+- **Friends:** search users and send requests, accept or decline, remove or block. Live status (Online / Away / Invisible) and the game each friend is playing. Friend tooltips, right-click menu, sign-on toasts.
+- **Info panel:** your installed games with **Launch** links, or details of the friend you click.
+- **Classic tray menu:** Launch (installed games), Skin, Status, Log Off, Exit.
+- **Signed auto-update:** checks at startup and every 6 hours. Updates are signature-checked before they install.
+- **Export everything** (JSON + CSV) from Options at any time.
 
-- **Done:** M0 (setup) and M1 (local tracker + tray tabs), released as 0.1.1. Pre-release 0.2.0-dev adds the M2 and first M3 checkpoints.
-- **In progress:** M2 (done locally except Discord login, email and hosting) and M3. A local development server (`apps/server`) has accounts, tray pairing, opt-in session sync, Tracked / Imported / Estimated hours, Steam import, zip export, friends and live presence. Nothing is hosted yet.
-- **Not yet:** the activity feed and the real website.
-- **Builds:** CI produces unsigned Windows installers for private testing.
+Stats and Activity views exist in the code but are hidden for now. They return with the website's stats.
 
-See the [changelog](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
+<p align="center">
+<img src="docs/images/client-login.png" alt="Login screen" width="260">
+&nbsp;
+<img src="docs/images/client-create-account.png" alt="Create Account screen" width="260">
+<br><sub>Signed out: Login and Create Account, inside the main window.</sub>
+</p>
 
-## Features
+<p align="center">
+<img src="docs/images/tray-menu.png" alt="Tray menu with the Launch submenu open" width="385">
+&nbsp;
+<img src="docs/images/client-toast.png" alt="Friend started playing toast" width="226">
+<br><sub>Tray menu (a native Windows menu; drawn from the dev.6 menu definition) and a friend toast.</sub>
+</p>
 
-**In the current build (M1)**
+## Roadmap
 
-- Automatic game detection:
-  - **any installed Steam, Epic Games Store or GOG Galaxy game** (read from the launchers' local install lists, no list needed)
-  - 170 curated games from other launchers and classics (all verified against public sources)
-  - "This is a game…" for anything else
-- Honest hours: **idle trimming** (no "left it at the menu overnight = 12 h"), short-session filter, crash-safe sessions.
-- Stats tab:
-  - Now Playing with a live timer
-  - Today, This week vs last week, Streak
-  - top games with 7-day and total hours
-- Activity tab with your own events and hour milestones.
-- A "started playing" pop-up.
-- Classic Silver, Phoenix and StreamEngine skins, scalable 100–200 %.
-- Pause tracking, per-game exclusions, start with Windows (off by default).
-- **Export everything** (JSON + CSV) from the tray at any time.
+| | Planned | Status |
+|---|---|---|
+| **Hours with trust tiers** | Every number labelled **● Tracked** (seen by the client), **◆ Imported** (e.g. Steam) or **~ Estimated** (self-reported history). Leaderboards count Tracked only. | Server side done; client views return with the website |
+| **Friends and presence** | Requests, live status and game, friend toasts | ✅ In dev.6. Still to come: friends' activity feed, Steam friends presence |
+| **Discord** | Sign in with Discord; "Message on Discord" from a friend's menu (Fraglink has no chat of its own) | Planned |
+| **Website (fraglink.gg)** | Auto-filled profiles, gaming history, stats, signature images, game pages | Planned |
+| **WoW character cards** | Verified characters via Battle.net, exact `/played` import | Planned |
+| **Beta** | Code-signed installers, download page, closed beta | Planned (auto-update is already in) |
 
-**M2 preview (local server, opt-in)**
+**Not planned:** chat, voice, clans or in-game overlays. Discord and Steam already cover those, and overlays and injection risk anti-cheat bans. Details in the [roadmap](docs/ROADMAP.md).
 
-- Sign in to sync from Options: pair the tray with a code, approved in your browser. Sessions upload in the background, and tracking works the same offline.
-- Server: email accounts, Steam link (verified via Steam sign-in) and playtime import, history estimator and self-reported counters, each number labelled **● Tracked / ◆ Imported / ~ Estimated**. Leaderboards count Tracked only.
-- Stats tab shows your account totals from all devices with tier markers (falls back to this PC offline).
-- See [`apps/server/README.md`](apps/server/README.md), [`docs/decisions.md`](docs/decisions.md) and the draft [privacy policy](docs/privacy-policy.md).
+<p align="center"><img src="docs/images/website-concept.png" alt="Concept mock-up of a fraglink.gg profile" width="640"><br><sub>Concept mock-up of a fraglink.gg profile (not built yet; all data fictional).</sub></p>
 
-**M3 preview (friends, local server)**
+## Look and feel
 
-- Add friends by username, accept/decline, remove, block (silent).
-- Live presence: Online / Away / Invisible (friends see you offline) and the game you're playing, over a WebSocket.
-- Friends tab on real data with a side panel, plus "*friend* has started playing" pop-ups (not while you're playing, by default; mute per friend).
-
-<p align="center"><img src="docs/images/friends-live.png" alt="Friends tab with live presence" width="290"> <img src="docs/images/stats-tiers.png" alt="Stats tab with account totals by tier" width="290"><br><img src="docs/images/friend-toast.png" alt="Friend started playing toast" width="320"><br><sub>Real tray window (simulation mode) against a local server.</sub></p>
-
-**Coming** (see the [roadmap](docs/ROADMAP.md))
-
-- **M2 (rest):** Discord login, email verification/password reset, hosting, legal review of the privacy policy.
-- **M3 (rest):** friends' activity feed, Steam friends presence.
-- **M4:** fraglink.gg profiles, gaming history, onboarding estimator and signature images.
-- **M5:** verified WoW character cards and exact `/played` import.
-- **M6:** game pages, achievements, weekly recaps, Twitch live badge.
-- **M7:** signed builds, auto-update, closed beta.
-
-<p align="center"><img src="docs/images/website-concept.png" alt="Concept mock-up of a fraglink.gg profile" width="700"><br><sub>Concept mock-up of a fraglink.gg profile (from the prototype; all data fictional).</sub></p>
-
-<p align="center"><img src="docs/images/skins-concept.png" alt="Phoenix skin concept" width="520"><br><sub>Phoenix skin (prototype).</sub></p>
+<p align="center">
+<img src="docs/images/app-icon.png" alt="Fraglink app icon" width="128">
+&nbsp;&nbsp;
+<img src="docs/images/installer.png" alt="Installer sidebar and header art" width="420">
+<br><sub>The silver app icon and the dark installer art. The logo is "Split Orbit": an original italic F with a split orbit ring (sources in <a href="assets/brand/">assets/brand/</a>).</sub>
+</p>
 
 ## Privacy stance
 
-- **No game memory reading, no injection, no overlays, no packet sniffing.** Fraglink only lists running processes and reads documented files (Steam library manifests), so it is safe alongside anti-cheat (VAC, EAC, BattlEye, Vanguard, Ricochet).
+- **No game memory reading, no injection, no overlays, no packet sniffing.** Fraglink only lists running processes and reads documented launcher files, so it is safe alongside anti-cheat (VAC, EAC, BattlEye, Vanguard, Ricochet).
 - **No keyboard or mouse hooks.** Idle detection uses Windows' `GetLastInputInfo`, which only gives the time since your last input, never what you typed.
-- **Local-first, no telemetry.** The tray makes no network connections unless you sign in to sync (Options). Even then it only uploads game sessions (game, start, end, active time), never program names or paths.
-- **Export-everything pledge.** All your data is exportable, free, at any time. That is already in the tray menu today. If Fraglink ever shuts down, you'll get plenty of notice and a full export.
+- **No telemetry.** Signed out, the only network request is the update check. Signed in, the client uploads game sessions (game, start, end, active time) and your presence, never program names or paths.
+- **Export-everything pledge.** All your data is exportable, free, at any time. If Fraglink ever shuts down, you'll get plenty of notice and a full export.
 
 Details: [`docs/privacy.md`](docs/privacy.md).
 
@@ -108,7 +105,8 @@ Every 5 s Fraglink takes a process snapshot (Windows Toolhelp, plus `QueryFullPr
 2. **Signatures.** Exe names from `packages/signatures/games.json`, some with required path fragments.
 3. **Steam library.** Any process running from `steamapps/common/<installdir>` of an installed Steam game. The game list comes from `libraryfolders.vdf` and `appmanifest_*.acf`, so no per-game entries are needed. Known helpers (crash reporters, launchers, redistributables) are skipped.
 4. **Epic Games Store and GOG Galaxy installs.** Any process running from the install folder of a game listed in the Epic launcher's manifests (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`) or GOG's registry list (`HKLM\SOFTWARE\WOW6432Node\GOG.com\Games`). DLC, engines and overly broad folders are skipped.
-5. **Steam's `HKCU\Software\Valve\Steam\RunningAppID`.** Only trusted while `steam.exe` is running.
+5. **Other launchers' install folders.** Battle.net, EA app, Ubisoft Connect and Xbox (`XboxGames`) installs, plus any Windows Uninstall entry that matches a known game.
+6. **Steam's `HKCU\Software\Valve\Steam\RunningAppID`.** Only trusted while `steam.exe` is running.
 
 Excluded games are ignored. **Fraglink never reads game memory, injects, hooks or overlays anything**, so it is safe with anti-cheat. It only lists process names and paths and reads the launcher files above. `GetLastInputInfo` gives the idle time.
 
@@ -161,13 +159,13 @@ Simulation script format: `exe[:seconds[:idle]]` or `steam:<appid>:<seconds>`, c
 
 The tray menu has **Open data folder**, **Open logs folder** and **Export my data**.
 
-## Releases and code signing
+## Releases and updates
 
-CI builds **unsigned** installers on every push to `main` and on `v*` tags. They are uploaded as Actions artifacts named `fraglink-windows-installers-<sha>`. Code signing is **not set up yet**, so Windows SmartScreen will warn ("Windows protected your PC"). Click **More info → Run anyway**. Signing (e.g. Azure Trusted Signing or an OV certificate) and an auto-updater are planned before any public release.
+Pre-releases are on the [releases page](https://github.com/Lucrona/fraglink/releases) (an NSIS `.exe`, which installs per user with no admin prompt, and an `.msi`). From dev.6 the client updates itself: updates are signed and checked before they install. The installers themselves are **not code-signed yet**, so Windows SmartScreen will warn ("Windows protected your PC"). Click **More info → Run anyway**. CI also builds installers on every push to `main` (Actions artifacts `fraglink-windows-installers-<sha>`).
 
 ## Window notes
 
-The main window is the 290×381 classic client (scaled 100–200 %, default 150 %). It is **frameless and transparent**, so the SVG chassis shapes the window. The transparent corners are not click-through yet, so clicks there hit the (invisible) window. Closing or minimising sends it to the tray. The webview is destroyed while hidden to keep memory low, and recreated when you open it again.
+The default Dark skin is a frameless, resizable window (345×555 at minimum). The info panel joins flush on the right and widens the window when it opens. The Classic Silver skin keeps the fixed 290×381 chassis (scaled 100–200 %). Closing or minimising sends Fraglink to the tray. The webview is destroyed while hidden to keep memory low.
 
 ## Documentation
 
@@ -177,7 +175,7 @@ The main window is the 290×381 classic client (scaled 100–200 %, default 150 
 
 ## License
 
-**All rights reserved; license to be decided before public release.** See [`LICENSE`](LICENSE). Bundled fonts keep their own licences (Russo One: SIL OFL 1.1; Wine Tahoma-metric fonts: LGPL 2.1+).
+**All rights reserved; license to be decided before public release.** See [`LICENSE`](LICENSE). Bundled fonts keep their own licences (Russo One: SIL OFL 1.1; Wine Tahoma-metric fonts: LGPL 2.1+). The wordmark is Saira Expanded Bold (SIL OFL 1.1), converted to outlines.
 
 ## Not affiliated with Xfire
 
