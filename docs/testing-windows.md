@@ -27,3 +27,15 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - Press **Launch** in the info panel (or *Tools → Launch*) for a Battle.net game: Battle.net should open and start it. Try one Steam, Epic, EA and Ubisoft game too.
 - If a game is missing, note its launcher and install folder, and send the log folder (*Options → General → Advanced* shows where it is; the `libraries:` line lists how many installs each launcher gave).
 
+## Main window (0.2.0-dev.5)
+
+- First start on a clean profile: "Detect installed games" with a progress bar and Skip, then the friends list. Not shown on the next start.
+- Signed out: the Login form is in the main window. Login opens your browser with a code; approve it and your friends appear.
+- Hover a friend for about half a second: a tooltip beside the row (username, game, server, IP:port). Right-click a friend: View Profile, Join Game (only on a server), Favorites, Move to Group, Remove Friend…, Block User… (both ask first).
+- Status dropdown: set a custom status, then Reset Status; the custom one is listed for reuse.
+- Have a friend sign in: a bottom-right "<name> logged on" toast; View More selects them.
+- Fold a group, restart: it stays folded. Tools > Launch ends with Detect Games.
+- Right-click the tray icon: Launch > (games A–Z, Detect Games), Skin >, Status >, Log Off…, Exit. Launch a game from it; switch skin; pick Away From Keyboard.
+- Press + (Add Friend): the search opens inside the main window; Cancel returns to the list.
+- Open the info panel with the ◀ tab: it is joined to the window, same height, no gap; moving the window moves both.
+

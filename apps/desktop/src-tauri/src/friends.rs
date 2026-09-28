@@ -107,6 +107,37 @@ pub fn should_toast(
         && last.is_none_or(|t| now - t >= TOAST_GAP_SECS)
 }
 
+/// "<name> logged on": they were offline in our list and are now online/away.
+pub fn signed_on(old: Option<&str>, new: &str) -> bool {
+    old == Some("offline") && matches!(new, "online" | "away")
+}
+
+pub fn should_toast_logon(
+    handle: &str,
+    prefs: &ToastPrefs,
+    i_am_playing: bool,
+    last: Option<i64>,
+    now: i64,
+) -> bool {
+    prefs.toasts
+        && prefs.friend_toasts
+        && !(prefs.dnd && i_am_playing)
+        && !prefs.muted.contains(&handle.to_lowercase())
+        && last.is_none_or(|t| now - t >= TOAST_GAP_SECS)
+}
+
+fn old_status(list: &Option<Value>, handle: &str) -> Option<String> {
+    list.as_ref()?
+        .get("friends")?
+        .as_array()?
+        .iter()
+        .find(|f| f.get("handle").and_then(|h| h.as_str()) == Some(handle))?
+        .get("presence")?
+        .get("status")?
+        .as_str()
+        .map(String::from)
+}
+
 fn prefs(app: &AppHandle) -> ToastPrefs {
     ToastPrefs {
         toasts: setting(app, core_keys::TOASTS).as_deref() != Some("0"),
@@ -324,12 +355,13 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
             emit(app);
         }
         Event::Presence(p) => {
-            let name = {
+            let (name, was) = {
                 let mut l = st.friends.list.lock().unwrap();
+                let was = old_status(&l, &p.handle);
                 if let Some(v) = l.as_mut() {
                     apply_presence(v, &p);
                 }
-                display_name(&l, &p.handle)
+                (display_name(&l, &p.handle), was)
             };
             emit(app);
             let playing = st.engine.lock().unwrap().tracker.now_playing().is_some();
@@ -342,10 +374,26 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
                     ToastPayload {
                         kind: format!("friend:{}", p.handle),
                         title: name,
-                        line: "has started playing".into(),
+                        line: "started playing".into(),
                         game_id: p.game_id.clone().unwrap_or_default(),
                         game: p.game_name.clone().unwrap_or_default(),
                         icon: crate::icons::one(app, p.game_id.as_deref().unwrap_or(""), true),
+                    },
+                );
+            } else if signed_on(was.as_deref(), &p.status)
+                && setting(app, "friend_toasts_logon").as_deref() != Some("0")
+                && should_toast_logon(&p.handle, &prefs(app), playing, last, now())
+            {
+                st.friends.last_toast.lock().unwrap().insert(key, now());
+                crate::windows::show_toast(
+                    app,
+                    ToastPayload {
+                        kind: format!("friend:{}", p.handle),
+                        title: name,
+                        line: "logged on".into(),
+                        game_id: String::new(),
+                        game: String::new(),
+                        icon: None,
                     },
                 );
             }
@@ -401,6 +449,17 @@ mod tests {
             dnd: true,
             muted: vec![],
         }
+    }
+
+    #[test]
+    fn logon_rules() {
+        assert!(signed_on(Some("offline"), "online"));
+        assert!(signed_on(Some("offline"), "away"));
+        assert!(!signed_on(None, "online")); // first snapshot: no toast
+        assert!(!signed_on(Some("online"), "online"));
+        assert!(!signed_on(Some("offline"), "offline"));
+        assert!(should_toast_logon("a", &prefs(), false, None, 1000));
+        assert!(!should_toast_logon("a", &prefs(), true, None, 1000));
     }
 
     #[test]

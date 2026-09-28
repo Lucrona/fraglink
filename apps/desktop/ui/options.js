@@ -31,7 +31,7 @@
     const cur = {
       autostart: st.autostart ? '1' : '0', start_minimized: on(s, 'start_minimized', '0'), minimize_to_tray: on(s, 'minimize_to_tray', '0'),
       show_offline: on(s, 'show_offline'), show_fof: on(s, 'show_fof'), nickname: s.nickname || '', language: s.language || 'en-AU',
-      toasts: on(s, 'toasts'), friend_toasts: on(s, 'friend_toasts'), friend_toasts_dnd: on(s, 'friend_toasts_dnd'),
+      toasts: on(s, 'toasts'), friend_toasts: on(s, 'friend_toasts'), friend_toasts_logon: on(s, 'friend_toasts_logon'), connection_alerts: on(s, 'connection_alerts', '0'), friend_toasts_dnd: on(s, 'friend_toasts_dnd'),
       share_game: on(s, 'share_game'), share_profile: on(s, 'share_profile'), share_fof: on(s, 'share_fof'),
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
       skin: ['dark', 'classic'].includes(s.skin) ? s.skin : 'dark', zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
@@ -61,11 +61,13 @@
   document.addEventListener('change', e => {
     const t = e.target;
     const el = t.closest('[data-key]');
+    $('#apply').disabled = false;
     if (el) { pending.set(el.dataset.key, value(el)); if (el.name === 'skin') scaleBox(); return; }
     if (t.id === 'idle-on' || t.id === 'idle-min') { $('#idle-min').disabled = !$('#idle-on').checked; pending.set('idle_status', idleValue()); return; }
     if (!gsel) return;
     if (t.id === 'gd-path') pending.set('game_path:' + gsel, t.value.trim());
     else if (t.id === 'gd-args') pending.set('launch_args:' + gsel, t.value.trim());
+    else if (t.name === 'gd-mode') { pending.set('detect_mode:' + gsel, t.value); $('#gd-path').placeholder = t.value === 'manual' ? 'Choose the game\'s .exe' : ''; }
     else if (t.id === 'gd-ex') { pending.set('exclude:' + gsel, t.checked ? '1' : '0'); renderTree(); }
   });
 
@@ -77,7 +79,7 @@
         else await FLB.set(k, v);
       } catch (e) { alert(`Could not save ${k}: ${e}`); return false; }
     }
-    pending.clear();
+    pending.clear(); $('#apply').disabled = true;
     return true;
   }
   const close = () => FLB.closeWindow ? FLB.closeWindow() : window.close();
@@ -102,6 +104,8 @@
     $('#gd-detect').value = g ? g.detect_path : '';
     $('#gd-args').value = g ? staged(g.id, 'launch_args:', g.launch_args || '') : '';
     $('#gd-ex').checked = !!g && isEx(g);
+    const mode = g ? staged(g.id, 'detect_mode:', (st.settings || {})['detect_mode:' + g.id] || 'auto') : 'auto';
+    $('#gd-auto').checked = mode !== 'manual'; $('#gd-manual').checked = mode === 'manual';
   }
   async function detect() {
     if (detecting) return; detecting = true;
@@ -161,11 +165,12 @@
   const acts = {
     ok: async () => { if (await apply()) close(); },
     cancel: close,
+    apply: async () => { await apply(); if (catalog) { catalog = null; detect(); } },
     advanced: () => { $('#adv').hidden = !$('#adv').hidden; },
     export: async () => { try { const p = await FLB.exportData(); $('#export-msg').innerHTML = 'Saved: <code>' + p.map(esc).join('</code>, <code>') + '</code>'; } catch (e) { fail(e); } },
     'open-data': () => FLB.openData().catch(fail),
     detect,
-    browse: async () => { if (!gsel) return; try { const p = await FLB.pickExe(); if (p) { $('#gd-path').value = p; pending.set('game_path:' + gsel, p); } } catch (e) { fail(e); } },
+    browse: async () => { if (!gsel) return; try { const p = await FLB.pickExe(); if (p) { $('#gd-path').value = p; pending.set('game_path:' + gsel, p); pending.set('detect_mode:' + gsel, 'manual'); $('#gd-manual').checked = true; $('#apply').disabled = false; } } catch (e) { fail(e); } },
     'add-manual': () => { $('#manual').hidden = !$('#manual').hidden; if (!$('#manual').hidden) loadCands(); },
     'man-refresh': loadCands,
     'man-add': async () => {

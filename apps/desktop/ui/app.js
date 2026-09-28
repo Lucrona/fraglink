@@ -266,7 +266,7 @@
   function row(f, cls = '') {
     const icon = f.game && f.kind !== 'off' ? `<i class="gi">${gameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${esc(f.name)}</span><span class="c-status">${esc(statusText(f))}</span><span class="c-info">${esc(info)}</span></div>`;
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}${esc(f.name)}</span><span class="c-status">${esc(statusText(f))}</span><span class="c-info">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
@@ -285,12 +285,19 @@
     online: 'Friends who are signed in to Fraglink right now. Friends in a game are listed first, with the game in the Status column.',
     fof: 'Friends of your friends who are in a game right now. Click one to see their game and the friends you have in common.',
     req: 'Friend requests you have sent or received. Select one to accept, decline or cancel it.',
-    off: 'Friends who are not signed in. Turn this list off with Tools > Friends > Show Offline Friends.',
+    off: 'Friends who are not signed in. Click a heading to fold or unfold it. Turn this list off with Tools > Friends > Show Offline Friends.',
     custom: 'A group you made. Moving friends into custom groups comes in a later update; for now it is an empty heading.',
   };
   // The grouped list shared by sample and real friends.
+  const groupOf = () => { try { const o = JSON.parse(SET().friend_groups || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
   function groupsHtml(F, note) {
     const hidden = jsonList('hidden_groups');
+    const groups = jsonList('custom_groups'), moved = groupOf();
+    const inGroup = f => groups.includes(moved[f.handle || f.id]);
+    const favs = jsonList('favorite_friends');
+    F = F.map(f => favs.includes(f.handle || f.id) ? { ...f, fav: true } : f);
+    const custom = Object.fromEntries(groups.map(g => [g, sorted(F.filter(f => moved[f.handle || f.id] === g))]));
+    F = F.filter(f => !inGroup(f));
     const on = sorted(F.filter(f => f.kind === 'playing')).concat(sorted(F.filter(f => f.kind === 'online')));
     const fof = sorted(F.filter(f => f.kind === 'fof')), reqs = F.filter(f => f.kind === 'req' || f.kind === 'out'), off = sorted(F.filter(f => f.kind === 'off'));
     const block = (key, label, cls, rows, rowCls = '') => {
@@ -301,7 +308,7 @@
     h += block('online', GROUP_NAMES.online, 's-on', on);
     if (setOn('show_fof')) h += block('fof', 'Friends of Friends Playing', 's-fof', fof, 'fof');
     if (reqs.length) h += block('req', GROUP_NAMES.req, 's-fof', reqs, 'req');
-    for (const g of jsonList('custom_groups')) h += block('c:' + g, esc(g), 's-cus', []);
+    for (const g of groups) h += block('c:' + g, esc(g), 's-cus', custom[g]);
     if (setOn('show_offline')) h += block('off', GROUP_NAMES.off, 's-off', off, 'off');
     return h;
   }
@@ -330,7 +337,57 @@
     return out;
   }
   const friendsNow = () => realMode() ? realFriends() : FRIENDS;
+  /* Signed out: the login form sits in the main window (like the classic client). Fraglink signs
+     in through the browser (device pairing), so there's no password box here. */
+  const signedOut = () => params.get('login') === '1' || (TAURI && !!LIVE.friends && !LIVE.friends.signed_in);
+  function loginHtml() {
+    const sy = LIVE.sync || {}, p = sy.pairing, err = sy.pairing_error || sy.last_error;
+    const used = jsonList('login_history'), last = SET().login_last || used[0] || '';
+    let h = `<div class="lg-wrap"><div class="lg">`;
+    if (p) {
+      const left = Math.max(0, Math.round((p.expires_at || 0) - Date.now() / 1000));
+      h += `<div class="lg-prog"><div class="lg-status">Signing in... confirm in your browser</div><div class="det-track"><div class="det-bar lg-anim"></div></div>
+        <div class="lg-dim" id="lg-tmo" data-exp="${p.expires_at || 0}">Time out in ${left} secs</div>
+        <p>Code: <span class="lg-code">${esc(p.user_code)}</span></p><p class="lg-dim">Browser didn't open? Go to<br>${esc(p.verification_uri)}</p>
+        <button class="hw" type="button" data-action="login-cancel">Cancel</button></div>`;
+    }
+    else {
+      h += `<label class="lg-lbl" for="lg-user">Username</label>
+        <select id="lg-user">${used.map(u => `<option${u === last ? ' selected' : ''}>${esc(u)}</option>`).join('')}<option value="">&lt;New User&gt;</option></select>
+        <a class="lg-a" data-action="register">New User Registration</a>
+        <label class="lg-lbl">Password</label>
+        <div class="lg-row"><input disabled placeholder="in your browser" title="Fraglink confirms your password in your browser, so it never sees it." /><button class="hw" type="button" data-action="login-go">Login</button></div>
+        <a class="lg-a" data-action="forgot">Forgot Password</a>
+        <label class="lg-tick"><input type="checkbox" id="lg-save" ${setOn('save_password') ? 'checked' : ''} /> Save Password</label>
+        <label class="lg-tick"><input type="checkbox" id="lg-auto" ${setOn('auto_login') ? 'checked' : ''} /> Auto-Login</label>
+        <details class="lg-srv"><summary>Server</summary><input id="lg-server" maxlength="200" value="${esc(sy.server || '')}" /></details>`;
+    }
+    if (err) h += `<div class="bad">${esc(err)}</div>`;
+    return h + `</div></div>`;
+  }
+  function offlineSide() {
+    return `<h4>Learn About Fraglink</h4><ul class="lg-learn"><li>${GENRE_ICONS.fps}<a data-action="about">See what friends are playing and join them</a></li><li>${GENRE_ICONS.strategy}<a data-action="options" data-page="games">Track your hours in every game</a></li></ul>
+      <h4>New Users</h4><p class="side-help">Set up a free Fraglink account so you can log in and see your friends. Game tracking works without one.</p><ul class="lg-res"><li><a data-action="register">New User Registration</a></li></ul>
+      <h4>Resources</h4><ul class="lg-res"><li><a data-action="web" data-page="faq">Frequently Asked Questions</a></li><li><a data-action="web" data-page="support">Technical Support Forum</a></li><li><a data-action="web" data-page="releases">Latest Release Notes</a></li></ul>`;
+  }
+  function addFriendHtml() {
+    const A = state.addFriend;
+    if (A.step === 'search') return `<div class="lg-wrap"><div class="lg af-in"><label for="add-handle">Search by name, email, or Fraglink username:</label>
+      <input id="add-handle" maxlength="60" autocomplete="off" value="${esc(A.q)}" />
+      <div class="af-ex">(Example: Jo, Jo Doe, or jo@doe.com)</div>
+      <div class="af-btns"><button class="hw" type="button" data-action="add-cancel">Cancel</button><button class="hw" type="button" id="add-search" data-action="add-friend-go"${A.q ? '' : ' disabled'}>Search</button></div>
+      <a class="lg-a" data-action="invite">Invite friends to join Fraglink</a></div></div>`;
+    // No directory search yet: the server matches the exact username when the request is sent.
+    return `<div class="lg-wrap af-wrap"><div class="lg af-in af-res"><div class="af-h"><span>Search Results (select one):</span><span>1 User Found</span></div>
+      <table class="af-t"><tr><th>Username</th><th>Display Name</th></tr><tr class="sel"><td>${esc(A.u)}</td><td>${esc(A.u)}</td></tr></table>
+      <div class="af-ex">Fraglink matches the exact username when you send the request.</div>
+      <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">Add me to your friends list</textarea>
+      <div class="af-btns"><button class="hw" type="button" data-action="add-back">Back</button><button class="hw" type="button" data-action="friend-profile" data-handle="${esc(A.u)}">View Profile</button><button class="hw" type="button" data-action="add-friend-send" data-handle="${esc(A.u)}">Add Friend</button></div>
+      <div id="add-msg"></div><a class="lg-a" data-action="add-cancel">Back to friends list</a></div></div>`;
+  }
   function renderFriends() {
+    if (state.addFriend && !state.detectRun) { list.innerHTML = addFriendHtml(); return; }
+    if (state.detectRun) { list.innerHTML = `<div class="lg"><div class="lg-h">Detect installed games</div><p>Looking for games from Steam, Battle.net, Epic, GOG, EA app, Ubisoft Connect and Xbox…</p><div class="det-track"><div class="det-bar" id="fd-bar" style="width:${state.detectPct}%"></div></div><button class="dk-btn" data-action="detect-skip">Skip</button></div>`; return; }
     const s = state.sort;
     let h = `<div class="xf-grid"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name</span><span class="c-status" data-sort="status">Status</span><span class="c-info">Game Info</span></div>`;
     if (realMode()) {
@@ -341,7 +398,8 @@
       h += groupsHtml(F, note);
       if (fs.list && !(fs.list.friends || []).length && !F.some(f => f.kind === 'req' || f.kind === 'out')) h += `<div class="fl-empty">No friends yet. <a data-action="add-friend">Add a friend</a> by their Fraglink username.</div>`;
     } else {
-      h += groupsHtml(FRIENDS, `<div class="fl-mock">Sample friends. <a data-action="options" data-page="account">Sign in</a> (Options &gt; Account) to see your real friends.</div>`);
+      if (TAURI || params.get('login') === '1') { list.innerHTML = loginHtml(); return; }
+      h += groupsHtml(FRIENDS, `<div class="fl-mock">Sample friends (browser preview).</div>`);
     }
     list.innerHTML = h + '</div>';
   }
@@ -436,7 +494,7 @@
   }
   function render() {
     $$('.xf-tab, .xf-icontabs [data-tab], .dk-vtabs [data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
-    $('#sechead').textContent = ({ friends: 'Friends', stats: 'Stats', activity: 'Activity' })[state.tab] || '';
+    $('#sechead').textContent = state.tab === 'friends' && state.detectRun ? 'Detect Games' : state.tab === 'friends' && state.addFriend ? 'Add Friend' : state.tab === 'friends' && signedOut() ? 'Login' : ({ friends: 'Friends', stats: 'Stats', activity: 'Activity' })[state.tab] || '';
     $('#list').classList.toggle('nohbar', state.tab !== 'friends');
     const sl = list.scrollLeft, st = list.scrollTop;
     if (state.tab === 'stats') renderStats(); else if (state.tab === 'activity') renderActivity(); else renderFriends();
@@ -447,34 +505,27 @@
   /* ---------------- side panel ---------------- */
   function renderSide() {
     const el = SS.vp; requestAnimationFrame(SS.update);
+    if (signedOut() && !state.detectRun) { el.innerHTML = offlineSide(); return; }
     if (String(state.sel || '').startsWith('g:')) {
       const k = state.sel.slice(2), name = GROUP_NAMES[k] || k.replace(/^c:/, '');
       el.innerHTML = `<h4>${esc(name)}</h4><p class="side-help">${esc(GROUP_HELP[k] || GROUP_HELP.custom)}</p><div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
       return;
     }
     const f = friendsNow().find(x => x.id === state.sel);
-    if (f && f.real) {
-      const muted = (LIVE.friends.muted || []).includes(f.handle.toLowerCase()), H = esc(f.handle);
-      let body;
-      if (f.kind === 'req') body = `<div>Wants to be your friend.</div><a data-action="friend-accept" data-handle="${H}">Accept</a> · <a data-action="friend-decline" data-handle="${H}">Decline</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
-      else if (f.kind === 'out') body = `<div>Friend request sent. They'll show up here once they accept.</div><a data-action="friend-remove" data-handle="${H}">Cancel request</a>`;
-      else body = `<div class="act">${f.kind === 'playing' ? `<i class="gi">${gameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b><br>${esc(f.server)}</div>` : `<div>${esc(statusText(f))}</div>`}</div>
-        <a data-action="friend-mute" data-handle="${H}" data-mute="${muted ? 0 : 1}">${muted ? 'Unmute' : 'Mute'} toasts</a>
-        <div class="sep"></div><div><span style="color:#8ea3c8">Friends since:</span> <b>${f.since ? esc(new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })) : '?'}</b></div>
-        <div class="sep"></div><a data-action="friend-remove" data-handle="${H}" data-confirm="1">Remove friend</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
-      el.innerHTML = `<h4>${esc(f.name)}</h4><div style="color:#8ea3c8">@${H}</div>${body}<div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
-      return;
-    }
     if (f) {
-      const playing = f.kind === 'playing' || f.kind === 'fof';
-      const mutual = f.kind === 'fof' ? (f.mutual || ((f.info || '').match(/via ([^·]+)/) || [])[1] || '').split(',').map(x => x.trim()).filter(Boolean) : null;
-      const mutualHtml = mutual ? `<div class="sep"></div><h4>Mutual Friends <small>(${mutual.length})</small></h4><ul class="games">${mutual.map(m => `<li><i class="noicon"></i><span>${esc(m)}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>` : '';
-      el.innerHTML = `<h4>${esc(f.name)}</h4>
-        <div class="act">${playing ? `<i class="gi">${gameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b><br>${esc(f.server)}<br><span style="color:var(--cyan)">${esc(f.info)}</span></div>` : `<div>${esc(statusText(f))}${f.last ? ' · last online ' + esc(f.last) : ''}</div>`}</div>
-        <a data-action="friend-profile">Profile</a>
-        <div class="sep"></div>
-        <div><span style="color:#8ea3c8">Past 7 days:</span> <b>${fmtH(f.week)}</b><br><span style="color:#8ea3c8">Total logged:</span> <b>${f.total ? f.total + ' h' : 'hidden'}</b></div>${mutualHtml}
-        <div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
+      // Xfire-style: big name, username, Profile link, then status or the game
+      const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';
+      let h = `<div class="sf-name">${esc(f.name)}</div><div class="sf-user">Username: ${H}</div><a data-action="friend-profile" data-handle="${H}">Profile</a><div class="sep"></div>`;
+      if (f.kind === 'req') h += `<div>Wants to be your friend.</div><a data-action="friend-accept" data-handle="${H}">Accept</a> · <a data-action="friend-decline" data-handle="${H}">Decline</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
+      else if (f.kind === 'out') h += `<div>Friend request sent. They'll show up here once they accept.</div><a data-action="friend-remove" data-handle="${H}">Cancel request</a>`;
+      else if (playing) h += `<div class="sf-lbl">Playing Game</div><div class="act"><i class="gi">${gameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b>${f.server ? '<br>' + esc(f.server) : ''}${!f.real && f.info ? `<br><span style="color:var(--cyan)">${esc(f.info)}</span>` : ''}</div></div>`;
+      else h += `<div class="sf-lbl">Status</div><div>${esc(statusText(f))}${f.last ? ' · last online ' + esc(f.last) : ''}</div>`;
+      if (f.kind === 'fof') { const m = mutualOf(f); h += `<div class="sep"></div><h4>Mutual Friends <small>(${m.length})</small></h4><ul class="games">${m.map(x => `<li><i class="noicon"></i><span>${esc(x)}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>`; }
+      if (f.real && (f.kind === 'playing' || f.kind === 'online' || f.kind === 'off')) {
+        const muted = (LIVE.friends.muted || []).includes(f.handle.toLowerCase());
+        h += `<div class="sep"></div><div><span style="color:#8ea3c8">Friends since:</span> <b>${f.since ? esc(new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })) : '?'}</b></div><a data-action="friend-mute" data-handle="${H}" data-mute="${muted ? 0 : 1}">${muted ? 'Unmute' : 'Mute'} pop-ups</a>`;
+      }
+      el.innerHTML = h + `<div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
       return;
     }
     // Nothing selected: the games on this PC with Launch links. (Friends'
@@ -482,8 +533,7 @@
     const inst = (CATALOG || []).filter(g => g.installed && !g.excluded);
     const games = CATALOG === null ? '<li><span>Looking for games…</span></li>'
       : inst.map(g => { const id = ensureGame(g.id, g.name); return `<li title="${esc(g.game_path || g.detect_path || '')}"><i class="gi">${gameIcon(id)}</i><span>${esc(g.name)}</span>${g.can_launch ? `<a data-action="launch" data-game="${esc(g.id)}">Launch</a>` : ''}</li>`; }).join('') || '<li><span>No games found on this PC yet.</span></li>';
-    el.innerHTML = `<h4>My Games <small>(${inst.length})</small></h4><ul class="games launch">${games}</ul>
-      <div class="side-act"><button type="button" class="dk-btn" data-action="detect-games">Detect Games</button></div>`;
+    el.innerHTML = `<h4>${inst.length} Installed Game${inst.length === 1 ? '' : 's'}</h4><a data-action="detect-games" class="side-detect">Detect Games</a><ul class="games launch">${games}</ul>`;
   }
   function toggleSide(force) {
     const app = $('#app');
@@ -741,8 +791,10 @@
   async function refreshFriends() {
     if (!FLB.friends) return;
     try {
+      if (FLB.syncStatus) LIVE.sync = await FLB.syncStatus().catch(() => null);
       const [f, sv] = await Promise.all([FLB.friends(), FLB.serverStats()]);
       LIVE.friends = f; LIVE.server = sv;
+      if (f && f.signed_in && f.me && !jsonList('login_history').includes(f.me)) { saveSetting('login_history', JSON.stringify([f.me, ...jsonList('login_history')].slice(0, 5))); saveSetting('login_last', f.me); }
       if (state.sel && !friendsNow().some(x => x.id === state.sel)) state.sel = null;
       render(); syncMenus(); syncStatus();
     } catch (e) { console.error('friends refresh failed', e); }
@@ -757,7 +809,7 @@
   FLB.on && FLB.on('fraglink://settings', ([k, v]) => {
     if (LIVE.settings) (LIVE.settings.settings = LIVE.settings.settings || {})[k] = v;
     if (k === 'theme') applyTheme(v);
-    if (['show_offline', 'show_fof', 'always_on_top', 'share_game', 'custom_status', 'hidden_groups', 'custom_groups'].includes(k)) { syncMenus(); syncStatus(); render(); }
+    if (['show_offline', 'show_fof', 'always_on_top', 'share_game', 'custom_status', 'hidden_groups', 'custom_groups', 'custom_on', 'status_history'].includes(k)) { syncMenus(); syncStatus(); render(); }
     if (k.startsWith('game_path:') || k.startsWith('launch_args:')) loadCatalog();
     if (k === 'skin' && v !== state.skin) applySkin(v, false);
     else if (k === 'zoom' && state.skin !== 'dark') setZoom(v);
@@ -805,21 +857,35 @@
     'open-data': () => FLB.openData().catch(toastErr),
     'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li><li>How long since you last <b>touched the mouse or keyboard</b> (a single Windows number, not what you typed), so idle time isn\'t counted.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options. Then your game sessions (game, start, end, active time) are uploaded, and while the app runs your friends see your status and the game you\'re playing now. <b>Invisible</b> shows you as offline. Program names and paths are never sent.'),
     'add-friend': () => {
-      if (!realMode()) { notice('Add Friend', 'Sign in to sync first (<a data-action="options" data-page="account">Options → Account</a>). Friends need a Fraglink account.'); return; }
-      notice('Add Friend', `Their Fraglink username:<br><input id="add-handle" maxlength="40" placeholder="username" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="add-friend-go">Send request</button></div><div id="add-msg"></div>`);
+      if (!realMode() && TAURI) { state.tab = 'friends'; render(); notice('Add Friend', 'Log in first. Friends need a Fraglink account.'); return; }
+      state.tab = 'friends'; state.addFriend = { step: 'search', q: '' }; render();
       setTimeout(() => $('#add-handle') && $('#add-handle').focus(), 0);
     },
-    'add-friend-go': async () => {
-      const h = ($('#add-handle').value || '').trim(); if (!h) return;
-      try { const r = await FLB.friendAdd(h); $('#add-msg').innerHTML = r === 'accepted' ? `You and <b>${esc(h)}</b> are now friends.` : `Request sent. <b>${esc(h)}</b> shows under Friend Requests until they accept.`; $('#add-handle').value = ''; }
-      catch (e) { $('#add-msg').innerHTML = `<span class="bad">${esc(String(e && e.message || e))}</span>`; }
+    'add-cancel': () => { state.addFriend = null; render(); },
+    'add-friend-go': () => {
+      const h = (($('#add-handle') || {}).value || '').trim(); if (!h) return;
+      state.addFriend = { step: 'results', q: h, u: h.replace(/@.*/, '') }; render();
     },
+    'add-back': () => { state.addFriend = { step: 'search', q: state.addFriend.q }; render(); },
+    'add-friend-send': async a => {
+      const h = a.dataset.handle, m = $('#add-msg');
+      try { const r = await FLB.friendAdd(h); m.innerHTML = r === 'accepted' ? `You and <b>${esc(h)}</b> are now friends.` : `Request sent. <b>${esc(h)}</b> shows under Friend Requests until they accept.`; refreshFriends(); }
+      catch (e) { m.innerHTML = `<span class="bad">${esc(String(e && e.message || e))}</span>`; }
+    },
+    'detect-skip': () => { state.detectRun = false; render(); },
+    'web': a => { if (TAURI && FLB.openWebsite) FLB.openWebsite(a.dataset.page).catch(toastErr); else notice('Fraglink website', LATER); },
+    'login-go': () => { saveSetting('save_password', $('#lg-save').checked ? '1' : '0'); saveSetting('auto_login', $('#lg-auto').checked ? '1' : '0'); FLB.syncSignIn(($('#lg-server') && $('#lg-server').value.trim()) || (LIVE.sync && LIVE.sync.server) || '').then(refreshFriends).catch(toastErr); },
+    'login-cancel': () => FLB.syncCancel().then(refreshFriends).catch(toastErr),
+    'register': () => { if (TAURI && FLB.openWebsite) FLB.openWebsite('register').catch(toastErr); else notice('New User Registration', LATER); },
+    'forgot': () => { if (TAURI && FLB.openWebsite) FLB.openWebsite('forgot').catch(toastErr); else notice('Forgot Password', LATER); },
+    'invite': () => notice('Invite via Email', 'Inviting friends by email arrives with the Fraglink website. For now, send them the download link and your username.'),
     'friend-accept': a => FLB.friendRespond(a.dataset.handle, true).then(refreshFriends).catch(toastErr),
     'friend-decline': a => FLB.friendRespond(a.dataset.handle, false).then(() => { state.sel = null; refreshFriends(); }).catch(toastErr),
     'friend-remove': a => { if (a.dataset.confirm && !confirm(`Remove ${a.dataset.handle} from your friends?`)) return; FLB.friendRemove(a.dataset.handle).then(() => { state.sel = null; refreshFriends(); }).catch(toastErr); },
     'friend-block': a => { if (!confirm(`Block ${a.dataset.handle}? They won't be able to send you requests or see your status. They aren't told.`)) return; FLB.friendBlock(a.dataset.handle, true).then(() => { state.sel = null; refreshFriends(); }).catch(toastErr); },
     'friend-mute': a => FLB.friendMute(a.dataset.handle, a.dataset.mute === '1').then(refreshFriends).catch(toastErr),
-    'my-profile': () => notice('My Profile', LATER), 'friend-profile': () => notice('Profile', LATER),
+    'my-profile': () => notice('My Profile', LATER),
+    'friend-profile': a => { const h = a && a.dataset && a.dataset.handle || a && a.dataset && a.dataset.key; if (TAURI && FLB.openWebsite && h) FLB.openWebsite('u/' + h).catch(toastErr); else notice('Profile', LATER); },
     'my-stats': () => notice('Full stats', LATER), 'website': () => notice('fraglink.gg', LATER), 'estimate': () => notice('Estimate my history', LATER),
     'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${st.version}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {} notice('About Fraglink', `<b>Fraglink ${esc(v)}</b><br>Local hours tracker (M1) with optional account sync (M2 preview).<br>© 2026 Lucrona. All rights reserved.<br><br>Look inspired by the classic gaming IM clients; original Fraglink art. Logo: <i>Split Orbit</i>, wordmark set in Saira Expanded Bold (SIL OFL 1.1). Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).`); },
     'chat': () => { const f = friendsNow().find(x => x.id === state.sel); if (f && f.real) { notice('Chat', 'Fraglink has no built-in chat. Linking Discord so this opens a DM arrives in a later update.'); return; } openChat(state.sel); },
@@ -831,19 +897,20 @@
     'toggle-offline': () => { saveSetting('show_offline', setOn('show_offline') ? '0' : '1'); syncMenus(); render(); },
     'toggle-fof': () => { saveSetting('show_fof', setOn('show_fof') ? '0' : '1'); syncMenus(); render(); },
     'show-groups': () => { saveSetting('hidden_groups', '[]'); render(); },
-    'help-contents': () => notice('Fraglink Help', '<ul class="fl-ul"><li><b>Friends list</b>: click a group heading to select it, click its arrow to fold it, right-click it to add a custom group or hide the category (Tools &gt; Friends &gt; Show Hidden Categories brings it back).</li><li><b>Info panel</b>: the arrow on the right edge. It shows your games with <b>Launch</b> links, or details for the friend or group you selected.</li><li><b>Status</b>: the box under the banner. While you play, it shows the game automatically.</li><li><b>Games</b>: Options &gt; Games lists what Fraglink found; set paths and launch options there, or add a game by hand.</li><li><b>Privacy</b>: see Options &gt; Privacy for what friends can see.</li></ul>'),
+    'help-contents': () => notice('Fraglink Help', '<ul class="fl-ul"><li><b>Friends list</b>: click a group heading to fold or unfold it (Fraglink remembers), hover a friend for details, right-click a heading to add a custom group or hide the category (Tools &gt; Friends &gt; Show Hidden Categories brings it back).</li><li><b>Info panel</b>: the arrow on the right edge. It shows your games with <b>Launch</b> links, or details for the friend or group you selected.</li><li><b>Status</b>: the box under the banner. While you play, it shows the game automatically.</li><li><b>Games</b>: Options &gt; Games lists what Fraglink found; set paths and launch options there, or add a game by hand.</li><li><b>Privacy</b>: see Options &gt; Privacy for what friends can see.</li></ul>'),
     'my-stats': () => { const u = realMode() && LIVE.friends.me; if (TAURI && FLB.openWebsite) FLB.openWebsite(u ? 'u/' + u : '').catch(toastErr); else notice('My Stats', LATER); },
-    'custom-status-go': () => { const v = ($('#custom-status').value || '').trim(); saveSetting('custom_status', v); saveSetting('custom_on', v ? '1' : '0'); if (v) myStatus = 'online'; $('#notice').hidden = true; syncStatus(); },
-    'add-group-go': () => { const v = ($('#group-name').value || '').trim().slice(0, 30); if (v) saveSetting('custom_groups', JSON.stringify([...new Set([...jsonList('custom_groups'), v])])); $('#notice').hidden = true; render(); },
+    'custom-status-go': () => { useCustom($('#custom-status').value); $('#notice').hidden = true; },
+    'add-group-go': () => { const v = ($('#group-name').value || '').trim().slice(0, 30); if (v) saveSetting('custom_groups', JSON.stringify([...new Set([...jsonList('custom_groups'), v])]));
+      if (v && state.moveAfterAdd) { const o = groupOf(); o[state.moveAfterAdd] = v; saveSetting('friend_groups', JSON.stringify(o)); } state.moveAfterAdd = null; $('#notice').hidden = true; render(); },
     'launch': async a => { try { await FLB.launchGame(a.dataset.game); } catch (e) { notice('Launch', esc(String(e && e.message || e))); } },
-    'detect-games': async a => { if (a) { a.disabled = true; a.textContent = 'Detecting…'; } try { setCatalog(await FLB.detectGames()); } catch (e) { toastErr(e); } },
+    'detect-games': async a => { if (a && a.classList.contains('side-detect')) a.textContent = 'Detecting…'; try { setCatalog(await FLB.detectGames()); } catch (e) { toastErr(e); } },
   };
   /* games on this PC (Options > Games, Tools > Launch, the info panel) */
   function setCatalog(c) {
     CATALOG = c || [];
     for (const g of CATALOG) if (g.genre) { GENRE[g.id] = g.genre; if (g.steam_appid) GENRE['steam:' + g.steam_appid] = g.genre; }
     const inst = CATALOG.filter(g => g.installed && g.can_launch && !g.excluded);
-    $('#menu-launch').innerHTML = inst.map(g => `<button data-action="launch" data-game="${esc(g.id)}">${esc(g.name)}</button>`).join('') || '<button disabled>No games found</button>';
+    $('#menu-launch').innerHTML = (inst.map(g => `<button data-action="launch" data-game="${esc(g.id)}">${esc(g.name)}</button>`).join('') || '<button disabled>No games found</button>') + '<hr /><button data-action="detect-games">Detect Games</button>';
     render();
   }
   const loadCatalog = () => FLB.catalog ? FLB.catalog().then(setCatalog).catch(e => console.warn('catalog', e)) : null;
@@ -870,32 +937,92 @@
   });
   $$('input[name=skin]').forEach(r => r.addEventListener('change', () => applySkin(r.value)));
   list.addEventListener('click', e => {
-    const s = e.target.closest('[data-sec]'); if (s) { const k = s.dataset.sec; if (e.target.closest('.tri') || state.sel === 'g:' + k) { state.collapsed[k] = !state.collapsed[k]; saveSetting('collapsed_groups', JSON.stringify(Object.keys(state.collapsed).filter(x => state.collapsed[x]).slice(0, 30))); } state.sel = 'g:' + k; render(); return; }
+    const s = e.target.closest('[data-sec]'); if (s) { const k = s.dataset.sec; { state.collapsed[k] = !state.collapsed[k]; saveSetting('collapsed_groups', JSON.stringify(Object.keys(state.collapsed).filter(x => state.collapsed[x]).slice(0, 30))); } state.sel = 'g:' + k; render(); return; }
     const so = e.target.closest('[data-sort]'); if (so) { const k = so.dataset.sort; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : 1 }; render(); return; }
     const hs = e.target.closest('[data-hsort]'); if (hs) { const k = hs.dataset.hsort; state.hoursSort = { key: k, dir: state.hoursSort.key === k ? -state.hoursSort.dir : -1 }; render(); return; }
     const w = e.target.closest('[data-web]'); if (w) { website(w.dataset.web); return; }
     const r = e.target.closest('[data-friend]'); if (r) { state.sel = r.dataset.friend; render(); }
   });
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); if (e.key === 'Enter' && e.target.id === 'custom-status') actions['custom-status-go'](); if (e.key === 'Escape') hideCtx(); });
-  // tooltips only for text that is cut off
+  /* Rich friend tooltip (Windows-style), shown after a short hover; the info panel stays click-only. */
+  const tip = $('#ftip'); let tipTimer = null, tipRow = null;
+  const mutualOf = f => (f.mutual || ((f.info || '').match(/via ([^·]+)/) || [])[1] || '').split(',').map(x => x.trim()).filter(Boolean);
+  function tipHtml(f) {
+    const L = (k, v) => v ? `<div><b>${k}</b> ${esc(v)}</div>` : '';
+    const user = f.handle || f.name, nick = f.handle && f.name !== f.handle ? f.name : '';
+    let h = L('Username:', user) + L('Nickname:', nick);
+    if (f.kind === 'playing' || f.kind === 'fof') {
+      h += L('Playing:', GAMES[f.game] && GAMES[f.game].name);
+      if (f.real) h += L('Session:', f.server);
+      else if (/^[\d.]+:\d+$/.test(f.server || '')) h += L('Server:', f.info) + L('IP:', f.server);
+      else h += L('Server:', f.server);
+      if (f.ping) h += L('Ping:', f.ping + ' ms');
+      if (f.kind === 'fof') h += L('Common Friends:', mutualOf(f).join(', ') || 'none known');
+    } else if (f.kind === 'off') h += f.last ? `<div>Last online ${esc(f.last)}</div>` : L('Status:', 'Offline');
+    else h += L('Status:', statusText(f));
+    return h;
+  }
+  function hideTip() { clearTimeout(tipTimer); tipRow = null; tip.hidden = true; }
   list.addEventListener('mouseover', e => {
-    const c = e.target.closest('.xf-row > span'); if (!c) return;
-    if (c.scrollWidth > c.clientWidth + 1) c.title = c.textContent.trim(); else c.removeAttribute('title');
+    const r = e.target.closest('.xf-row[data-friend]');
+    if (r === tipRow) return;
+    hideTip(); if (!r) return;
+    tipRow = r; const mx = e.clientX;
+    tipTimer = setTimeout(() => {
+      const f = friendsNow().find(x => x.id === r.dataset.friend); if (!f || !r.isConnected) return;
+      tip.innerHTML = tipHtml(f); tip.hidden = false;
+      const rr = r.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+      const x = Math.max(2, Math.min(mx + 4, innerWidth - tw - 2));
+      const y = rr.bottom + 2 + th <= innerHeight ? rr.bottom + 2 : Math.max(2, rr.top - th - 2); // never over the row
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    }, 450);
   });
+  list.addEventListener('mouseleave', hideTip);
+  list.addEventListener('mousedown', hideTip);
+  list.addEventListener('wheel', hideTip, { passive: true });
   /* group header right-click menu */
   const ctx = $('#ctx');
   function hideCtx() { ctx.hidden = true; }
+  function showCtx(e, html) { ctx.innerHTML = html; ctx.hidden = false; ctx.style.left = Math.min(e.clientX, innerWidth - 170) + 'px'; ctx.style.top = Math.min(e.clientY, innerHeight - ctx.offsetHeight - 4) + 'px'; }
   list.addEventListener('contextmenu', e => {
+    const r = e.target.closest('.xf-row[data-friend]');
+    if (r) {
+      e.preventDefault(); hideTip();
+      const f = friendsNow().find(x => x.id === r.dataset.friend); if (!f) return;
+      state.sel = f.id; render();
+      const key = esc(f.handle || f.id), fav = jsonList('favorite_friends').includes(f.handle || f.id), join = joinUrl(f);
+      const groups = jsonList('custom_groups'), cur = groupOf()[f.handle || f.id];
+      const friendRow = f.kind !== 'req' && f.kind !== 'out' && f.kind !== 'fof';
+      showCtx(e, `<button data-ctx="profile" data-key="${key}">View ${esc(f.name)}'s Profile</button>` +
+        (join ? `<button data-ctx="join" data-key="${esc(join)}">Join Game</button>` : '') +
+        (friendRow ? `<button data-ctx="fav" data-key="${key}">${fav ? 'Remove from Favorites' : 'Add to Favorites'}</button>
+          <div class="ctx-sub"><button>Move to Group ▸</button><div class="ctx-subm">${groups.map(g => `<button data-ctx="move" data-key="${key}" data-group="${esc(g)}">${cur === g ? '✓ ' : ''}${esc(g)}</button>`).join('')}${cur ? `<button data-ctx="move" data-key="${key}" data-group="">(No group)</button>` : ''}<hr><button data-ctx="add-group" data-key="${key}">Add Custom Group…</button></div></div>
+          <hr><button data-ctx="remove" data-key="${key}">Remove Friend…</button><button data-ctx="block" data-key="${key}">Block User…</button>` : ''));
+      return;
+    }
     const s = e.target.closest('[data-sec]'); if (!s) return;
     e.preventDefault(); const k = s.dataset.sec;
     ctx.innerHTML = `<button data-ctx="add-group">Add Custom Group…</button><button data-ctx="hide" data-key="${esc(k)}">Hide Category</button>${k.startsWith('c:') ? `<button data-ctx="del-group" data-key="${esc(k)}">Delete Group</button>` : ''}`;
     ctx.hidden = false; ctx.style.left = Math.min(e.clientX, innerWidth - 150) + 'px'; ctx.style.top = Math.min(e.clientY, innerHeight - 70) + 'px';
   });
+  // Join Game only when we know a joinable address (e.g. a Source server IP → steam://connect)
+  function joinUrl(f) { return f.kind === 'playing' && /^[\d.]+:\d+$/.test(f.server || '') ? 'steam://connect/' + f.server : f.join || ''; }
+  async function removeFriend(k, block) {
+    const f = friendsNow().find(x => (x.handle || x.id) === k), n = f ? f.name : k;
+    if (!confirm(block ? `Block ${n}? They won't be able to send you requests or see your status. They aren't told.` : `Remove ${n} from your friends list?`)) return;
+    if (f && !f.real) { FRIENDS = FRIENDS.filter(x => x !== f); state.sel = null; render(); return; }
+    try { await (block ? FLB.friendBlock(k, true) : FLB.friendRemove(k)); state.sel = null; refreshFriends(); } catch (e) { toastErr(e); }
+  }
   document.addEventListener('mousedown', e => { if (!e.target.closest('#ctx')) hideCtx(); });
   ctx.addEventListener('click', e => {
     const b = e.target.closest('[data-ctx]'); if (!b) return; hideCtx();
-    const k = b.dataset.key;
-    if (b.dataset.ctx === 'add-group') { notice('Add Custom Group', `Group name:<br><input id="group-name" maxlength="30" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="add-group-go">Add</button></div>`); setTimeout(() => $('#group-name') && $('#group-name').focus(), 0); }
+    const k = b.dataset.key, c = b.dataset.ctx;
+    if (c === 'profile') { actions['friend-profile'](b); return; }
+    if (c === 'join') { if (TAURI && FLB.joinGame) FLB.joinGame(k.replace('steam://connect/', '')).catch(toastErr); else notice('Join Game', esc(k)); return; }
+    if (c === 'fav') { const l = jsonList('favorite_friends'); saveSetting('favorite_friends', JSON.stringify(l.includes(k) ? l.filter(x => x !== k) : [...l, k].slice(-100))); render(); return; }
+    if (c === 'move') { const o = groupOf(); if (b.dataset.group) o[k] = b.dataset.group; else delete o[k]; saveSetting('friend_groups', JSON.stringify(o)); render(); return; }
+    if (c === 'remove' || c === 'block') { removeFriend(k, c === 'block'); return; }
+    if (b.dataset.ctx === 'add-group') { state.moveAfterAdd = k || null; notice('Add Custom Group', `Group name:<br><input id="group-name" maxlength="30" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="add-group-go">Add</button></div>`); setTimeout(() => $('#group-name') && $('#group-name').focus(), 0); }
     else if (b.dataset.ctx === 'hide') { saveSetting('hidden_groups', JSON.stringify([...new Set([...jsonList('hidden_groups'), k])])); if (state.sel === 'g:' + k) state.sel = null; render(); }
     else if (b.dataset.ctx === 'del-group') { saveSetting('custom_groups', JSON.stringify(jsonList('custom_groups').filter(g => 'c:' + g !== k))); render(); }
   });
@@ -914,12 +1041,26 @@
   function statusLabel() { return myStatus === 'online' ? '' : ' (' + ({ away: 'Away', invisible: 'Invisible' })[myStatus] + ')'; }
   function syncStatus() {
     const sel = $('#status'), np = LIVE.glance && LIVE.glance.now_playing, custom = SET().custom_status || '';
-    let g = sel.querySelector('option[value=game]');
-    if (np && setOn('share_game')) { if (!g) { g = document.createElement('option'); g.value = 'game'; sel.prepend(g); } g.textContent = 'Playing ' + np.name; } else if (g) g.remove();
-    let c = sel.querySelector('option[value=customtext]');
-    if (custom) { if (!c) { c = document.createElement('option'); c.value = 'customtext'; sel.querySelector('option[value=custom]').before(c); } c.textContent = custom; } else if (c) c.remove();
-    sel.value = myStatus === 'online' ? (g ? 'game' : c && SET().custom_on === '1' ? 'customtext' : 'online') : myStatus;
+    const hist = jsonList('status_history').slice(0, 5), customOn = SET().custom_on === '1' && custom;
+    const opt = (v, t, dis) => `<option value="${esc(v)}"${dis ? ' disabled' : ''}>${esc(t)}</option>`;
+    let h = opt('reset', 'Reset Status');
+    if (np && setOn('share_game')) h += opt('game', 'Playing ' + np.name);
+    h += opt('online', 'Online') + opt('away', 'Away') + opt('invisible', 'Invisible') + opt('custom', 'Set Custom Status…');
+    if (hist.length) h += opt('', '──────────', true) + hist.map((x, i) => opt('h:' + i, x)).join('');
+    if (customOn && !hist.includes(custom)) h += opt('h:cur', custom);
+    sel.disabled = signedOut();
+    if (sel.disabled) { sel.innerHTML = opt('offline', 'Offline'); $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
+    sel.innerHTML = h;
+    sel.value = myStatus !== 'online' ? myStatus : customOn ? 'h:' + (hist.includes(custom) ? hist.indexOf(custom) : 'cur') : (np && setOn('share_game') ? 'game' : 'online');
     $('#username').textContent = (realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name) + statusLabel();
+    if ($('#px-user') && $('#px-user').textContent === '(Offline)') $('#px-user').textContent = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
+  }
+  function useCustom(v) {
+    v = String(v || '').trim().slice(0, 60);
+    saveSetting('custom_status', v); saveSetting('custom_on', v ? '1' : '0');
+    if (v) saveSetting('status_history', JSON.stringify([v, ...jsonList('status_history').filter(x => x !== v)].slice(0, 5)));
+    if (myStatus !== 'online') { myStatus = 'online'; FLB.set('status', 'online').catch(() => {}); }
+    syncStatus();
   }
   $('#status').addEventListener('change', e => {
     const v = e.target.value;
@@ -928,8 +1069,10 @@
       setTimeout(() => $('#custom-status') && $('#custom-status').focus(), 0);
       syncStatus(); return;
     }
-    const st = v === 'game' || v === 'customtext' ? 'online' : v;
-    saveSetting('custom_on', v === 'customtext' ? '1' : '0');
+    if (v.startsWith('h:')) { useCustom(v === 'h:cur' ? SET().custom_status : jsonList('status_history')[+v.slice(2)]); return; }
+    // Reset Status / the game line: back to automatic (Playing <game> or Online)
+    const st = v === 'game' || v === 'reset' ? 'online' : v;
+    saveSetting('custom_on', '0');
     if (st !== myStatus) { myStatus = st; FLB.set('status', st).catch(() => {}); }
     syncStatus();
   });
@@ -979,6 +1122,9 @@
     const s = $('#session'); if (s) s.textContent = fmtT(liveSeconds() * 1000);
   }
   setInterval(clock, 1000);
+  document.addEventListener('input', e => { if (e.target.id === 'add-handle') { state.addFriend.q = e.target.value; $('#add-search').disabled = !e.target.value.trim(); } });
+  document.addEventListener('keydown', e => { if (e.target.id === 'add-handle' && e.key === 'Enter') actions['add-friend-go'](); });
+  setInterval(() => { const t = $('#lg-tmo'); if (t) t.textContent = `Time out in ${Math.max(0, Math.round(+t.dataset.exp - Date.now() / 1000))} secs`; }, 1000);
 
   /* ---------------- boot ---------------- */
   (async () => {
@@ -995,12 +1141,23 @@
     if (params.get('side') === '1') toggleSide(true);
     if (params.get('sel')) { state.sel = params.get('sel'); render(); }
     if (params.get('add') === '1') setTimeout(() => actions['add-friend'](), 300);
+    /* First run: detect installed games in the main window (progress + Skip) before the friends list. */
+    if ((TAURI && !saved.games_detected_once) || params.get('detect') === '1') {
+      state.detectRun = true; state.detectPct = 0; render();
+      const tick = setInterval(() => { state.detectPct = Math.min(92, state.detectPct + 4); const b = $('#fd-bar'); if (b) b.style.width = state.detectPct + '%'; }, 150);
+      FLB.detectGames().then(c => { setCatalog(c); if (TAURI) saveSetting('games_detected_once', '1'); }).catch(e => console.warn('detect', e)).finally(() => {
+        clearInterval(tick); const b = $('#fd-bar'); if (b) b.style.width = '100%';
+        setTimeout(() => { if (state.detectRun && params.get('detect') !== '1') { state.detectRun = false; render(); } }, 400);
+      });
+    }
     await refreshFriends();
     await refresh();
     loadCatalog();
     FLB.on('fraglink://events', () => { for (const k in ICONS) if (ICONS[k] === null) delete ICONS[k]; refreshSoon(); }); // a newly detected game may now have an exe icon
     FLB.on('fraglink://friends', refreshFriends);
     FLB.on('fraglink://sync', refreshFriends);
+    FLB.on('fraglink://logoff', () => actions['sign-out']());
+    FLB.on('fraglink://catalog', loadCatalog);
     FLB.on('fraglink://show-friend', h => { state.tab = 'friends'; state.sel = 'u:' + h; refreshFriends(); });
     setInterval(() => { if (realMode() && state.tab === 'friends') render(); }, 60000);
     FLB.on('fraglink://paused', refreshSoon);

@@ -19,11 +19,31 @@ Pre-release for private testing (builds report `0.2.0-5`).
   - Epic and GOG were already covered; they now share the same launch rules.
 - A running game inside any of these folders is detected even if its exe isn't in the signature list (like Steam, Epic and GOG before).
 - Folded / unfolded groups in the friends list are remembered across restarts.
+- **First run:** the main window shows "Detect installed games" with a progress bar and **Skip** before the friends list.
+- **Signed out:** the main window shows the classic Login screen: "(Offline)" header and status, a Login bar, a small centred form (Username drop-down of accounts used on this PC plus &lt;New User&gt;, New User Registration, Login, Forgot Password, Save Password and Auto-Login), and an info panel with Learn About Fraglink, New Users and Resources (FAQ, Support, Release Notes). Login confirms in your browser (device pairing), so the password box is a placeholder; a Server field sits under a fold. While signing in it shows a progress bar, "Signing in…", the pairing code, "Time out in N secs" and Cancel.
+- **Friend tooltip:** hovering a friend for a moment shows username, nickname, game, server, IP:port and ping; friends of friends add Common Friends; offline friends show when they were last online. It opens beside the row, never over it.
+- **Friend right-click menu:** View Profile, Join Game (only on a joinable server; opens `steam://connect/<ip:port>`), Add to / Remove from Favorites, Move to Group (custom groups + Add Custom Group…), Remove Friend… and Block User… (both ask first).
+- **Status dropdown:** Reset Status (back to automatic Playing <game> / Online) and your last 5 custom statuses.
+- **Sign-on toasts:** "<name> logged on" / "<name> started playing <game>" in the bottom-right, with View More to jump to the friend. Options > General > Notification alerts: when a friend logs on or off, joins/leaves a game, and when connection state changes.
+- **Add Friend** (the + button, or Tools > Add Friend > Search Fraglink Users…) opens inside the main window under an "Add Friend" bar: search box, example line, Cancel / Search (Search is off until you type) and "Invite friends to join Fraglink"; the results step (Username / Display Name table, Personal Message, View Profile / Add Friend) shows in the same place. Cancel goes back to the friends list. Tools > Add Friend > Invite via Email… is a placeholder.
+- Options > Games: per-game Automatically Detect / Manual Detect with Browse; an **Apply** button in the footer.
+- **Tray menu** (right-click) now matches the classic client: Launch > (installed games A–Z, then Detect Games), Skin > (current skin ticked, then More Skins…), Status > (Reset Status, Away From Keyboard, Invisible and your recent custom statuses), Log Off…, Exit. Left-click still opens the window.
+- The info panel is joined flush to the main window at full height, with the ◀/▶ tab on the seam; the window grows by the panel width when it opens.
+- Tools > Launch ends with a separator and **Detect Games**; the idle info panel reads "<N> Installed Games" with a Detect Games link.
 
 ### Changed
 - The info panel changes only when you click a row, the same for every group. A clicked friend of a friend shows their details plus a **Mutual Friends** section; hovering no longer changes the panel.
-- Friends list tooltips only appear when the text is cut off, and the "Right-click for options" tooltip on group headings is gone.
+- The plain name tooltip that repeated every name is gone (replaced by the friend tooltip above), and so is the "Right-click for options" tooltip on group headings.
+- Selected-friend panel: large display name, Username, a Profile link, then status or Playing Game with icon, title and server.
+- Fraglink > My Stats is now **Activity Report** (still opens the website).
 - Options > Games shows the launcher name next to each game (Steam, Battle.net, EA app, Ubisoft Connect, Xbox, Epic, GOG).
+
+### Not finished yet (saved, but inert)
+- Pause tracking, Export my data and the data/log folder items left the tray menu; pause and export are still in Options, and the folders in Options > General > Advanced.
+- "When connection state changes" alerts; Invite via Email (shows a note); Add Friend has no directory search yet (it offers the exact username you typed).
+- Favorites and Move to Group are remembered, but there's no Favorites group or friends inside custom groups yet.
+- Manual Detect only changes which exe Launch uses; detection itself still follows the signature list.
+- Password sign-in: the Login form uses browser pairing, so the password box is disabled and Save Password / Auto-Login are saved but inert. The Resources / registration links go to placeholder website pages.
 
 ## [0.2.0-dev.4] - 2026-09-28
 

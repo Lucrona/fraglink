@@ -72,3 +72,14 @@ body.toast-page .toast-body .g { display: inline; }
 .toast-body .gi { width: 16px; height: 16px; flex: none; margin-top: 1px; }
 .toast-body .gi .gi-img, .toast-body .gi .gi-gen { width: 16px; height: 16px; }
 .side-scroll .act .gi .gi-img, .side-scroll .games .gi .gi-img, .side-scroll .games .gi .gi-gen { width: 16px; height: 16px; display: block; }
+
+/* 0.2.0-dev.5: plain friend popup on the dark skin (small, bottom-right) */
+body.toast-page.skin-dark .xf-toast { zoom: 1; inset: 0; width: auto; height: auto; padding: 4px 6px 6px; border: 1px solid #000; border-radius: 3px;
+  background: linear-gradient(#2a2d33, #1b1d22); box-shadow: inset 0 0 0 1px #3b3f47, 0 2px 8px rgba(0,0,0,.5); color: #e6e9ee; font: 11px Tahoma, Verdana, sans-serif; }
+body.toast-page.skin-dark .toast-head { color: #aeb6c2; text-shadow: none; font-weight: normal; height: 14px; }
+body.toast-page.skin-dark .toast-head img { width: 12px; height: 10px; }
+body.toast-page.skin-dark .toast-head button { background: linear-gradient(#5a5e67, #25272c); border-color: #000; }
+body.toast-page.skin-dark .toast-body { display: flex; gap: 6px; align-items: flex-start; margin-top: 3px; background: none; border: 0; padding: 0; color: #e6e9ee; }
+body.toast-page.skin-dark .toast-body .gi svg, body.toast-page.skin-dark .toast-body .gi img { width: 16px; height: 16px; }
+body.toast-page.skin-dark .toast-body .g { color: #7fc4ff; }
+body.toast-page .toast-body a.more { color: #5aa2f2; text-decoration: underline; font-size: 10px; cursor: pointer; }

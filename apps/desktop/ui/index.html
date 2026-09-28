@@ -131,7 +131,7 @@
           <div class="xf-dropdown">
             <button data-action="always-on-top" id="menu-ontop" class="chk">Always on <u>T</u>op</button>
             <hr />
-            <button data-action="my-stats">My <u>S</u>tats</button>
+            <button data-action="my-stats"><u>A</u>ctivity Report</button>
             <button data-action="sign-out" id="menu-signout">Sign <u>O</u>ut</button>
             <hr />
             <button data-action="minimize"><u>C</u>lose</button>
@@ -140,7 +140,12 @@
         </div>
         <div class="xf-menu" data-menu="tools"><span><u>T</u>ools</span>
           <div class="xf-dropdown">
-            <button data-action="add-friend"><u>A</u>dd Friend…</button>
+            <div class="has-sub"><span><u>A</u>dd Friend</span><b>▸</b>
+              <div class="xf-dropdown sub">
+                <button data-action="add-friend">Search Fraglink Users…</button>
+                <button data-action="invite">Invite via Email…</button>
+              </div>
+            </div>
             <button data-action="options"><u>O</u>ptions…</button>
             <hr />
             <div class="has-sub"><span><u>L</u>aunch</span><b>▸</b>
@@ -379,6 +384,7 @@
 </div>
 
 <div class="fl-ctx" id="ctx" hidden></div>
+<div class="fl-tip" id="ftip" hidden></div>
 <script src="backend.js"></script>
 <script src="app.js"></script>
 </body>

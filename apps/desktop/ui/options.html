@@ -26,8 +26,10 @@
         <label><input type="checkbox" data-key="show_fof" /> Show friends of friends who are playing</label>
       </fieldset>
       <fieldset><legend>Notification alerts</legend>
-        <label><input type="checkbox" data-key="friend_toasts" /> When a friend starts playing a game</label>
+        <label><input type="checkbox" data-key="friend_toasts_logon" /> When a friend logs on or off</label>
+        <label><input type="checkbox" data-key="friend_toasts" /> When a friend joins/leaves a game</label>
         <label class="sub"><input type="checkbox" data-key="friend_toasts_dnd" /> Not while I'm playing</label>
+        <label><input type="checkbox" data-key="connection_alerts" /> When connection state changes</label>
         <label><input type="checkbox" data-key="toasts" /> When I start or stop playing a game</label>
       </fieldset>
       <div class="line"><label class="row">Language <select data-key="language"><option value="en-AU">English (Australia)</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option></select></label>
@@ -67,6 +69,8 @@
       <div class="detect"><div class="bar"><b id="det-bar"></b></div><span id="det-msg">Detecting games…</span><button type="button" data-do="detect">Detect Games</button></div>
       <div class="tree" id="tree" tabindex="0"></div>
       <fieldset id="gd" class="gd"><legend id="gd-name">Select a game</legend>
+        <label><input type="radio" name="gd-mode" id="gd-auto" value="auto" /> Automatically Detect</label>
+        <label><input type="radio" name="gd-mode" id="gd-manual" value="manual" /> Manual Detect</label>
         <label class="row">Game path <input type="text" id="gd-path" maxlength="500" /><button type="button" data-do="browse">Browse…</button></label>
         <label class="row">Detect path <input type="text" id="gd-detect" readonly /></label>
         <label class="row">Extra launch arguments <input type="text" id="gd-args" maxlength="500" /></label>
@@ -115,6 +119,7 @@
   <footer class="op-foot">
     <button type="button" data-do="ok" class="def">OK</button>
     <button type="button" data-do="cancel">Cancel</button>
+    <button type="button" data-do="apply" id="apply" disabled>Apply</button>
   </footer>
 </div>
 <script src="backend.js"></script>

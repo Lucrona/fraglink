@@ -49,6 +49,7 @@
       launchGame: (id) => inv('launch_game', { id }),
       pickExe: () => inv('pick_game_exe'),
       openWebsite: (page) => inv('open_website', { page }),
+      joinGame: (address) => inv('join_game', { address }),
     };
     return;
   }
@@ -134,6 +135,7 @@
     launchGame: () => ok(),
     pickExe: () => ok('C:\\Games\\MyIndie\\MyIndie.exe'),
     openWebsite: () => ok(),
+    joinGame: () => ok(),
   };
   function placeholderIcon(id) {
     const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');

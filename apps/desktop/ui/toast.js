@@ -10,14 +10,18 @@
   function show(p) {
     if (!p) return;
     const icon = p.icon && /^data:image\/png;base64,/.test(p.icon) ? `<img class="gi-img" src="${p.icon}" alt="">` : GENERIC;
-    body.innerHTML = `<i class="gi">${icon}</i><div><b>${esc(p.title)}</b> ${esc(p.line)}<br><span class="g">${esc(p.game)}</span></div>`;
+    const friend = /^(friend|request):/.test(p.kind || '');
+    // plain one-liner: "<name> logged on" / "<name> started playing <game>"
+    body.innerHTML = (p.game || !friend ? `<i class="gi">${icon}</i>` : '') +
+      `<div><b>${esc(p.title)}</b> ${esc(p.line)}${p.game ? ` <span class="g">${esc(p.game)}</span>` : ''}` +
+      `${friend ? '<br><a class="more" href="#" id="toast-more">View More</a>' : ''}</div>`;
     el.hidden = false; el.classList.remove('out');
     clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 6000);
   }
   document.getElementById('toast-close').addEventListener('click', e => { e.stopPropagation(); close(); });
-  el.addEventListener('click', () => { if (T) T.core.invoke('toast_clicked'); else close(); });
+  el.addEventListener('click', e => { e.preventDefault(); if (T) T.core.invoke('toast_clicked'); else close(); });
   (async () => {
-    if (!T) { show({ title: 'You', line: 'have started playing', game: 'World of Warcraft' }); return; }
+    if (!T) { document.body.className = 'toast-page skin-' + (localStorage.getItem('fl-skin') || 'dark'); const q = new URLSearchParams(location.search); show(q.get('logon') ? { kind: 'friend:nova', title: 'Nova', line: 'logged on', game: '' } : { kind: 'friend:nova', title: 'Nova', line: 'started playing', game: 'Dota 2' }); return; }
     try {
       const st = await window.FL.settings();
       const skin = st.settings.skin || 'classic';

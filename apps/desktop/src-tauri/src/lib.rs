@@ -37,11 +37,6 @@ pub struct ToastPayload {
     pub icon: Option<String>,
 }
 
-pub struct TrayItems {
-    pub pause: CheckMenuItem<tauri::Wry>,
-    pub status: Vec<(String, CheckMenuItem<tauri::Wry>)>,
-}
-
 pub struct AppState {
     pub engine: Mutex<Engine>,
     pub data_dir: PathBuf,
@@ -51,7 +46,6 @@ pub struct AppState {
     /// Dark-skin window size (logical px, without the info panel).
     pub main_size: Mutex<Option<(f64, f64)>>,
     pub side_open: Mutex<bool>,
-    pub tray: Mutex<Option<TrayItems>>,
     pub sync: sync::SyncShared,
     pub friends: friends::FriendsShared,
 }
@@ -191,89 +185,152 @@ pub fn update_tray_tooltip(app: &AppHandle) {
     }
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+fn get_setting(app: &AppHandle, k: &str) -> Option<String> {
     let state = app.state::<AppState>();
-    let (paused, status) = {
-        let e = state.engine.lock().unwrap();
-        (
-            e.tracker.is_paused(),
-            e.tracker
-                .store
-                .get_setting(keys::STATUS)
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "online".into()),
-        )
-    };
-    let open = MenuItem::with_id(app, "open", "Open Fraglink", true, None::<&str>)?;
-    let st_items: Vec<(String, CheckMenuItem<tauri::Wry>)> = [
-        ("online", "Online"),
-        ("away", "Away"),
-        ("invisible", "Invisible"),
-    ]
-    .iter()
-    .map(|(id, label)| {
-        CheckMenuItem::with_id(
-            app,
-            format!("status:{id}"),
-            *label,
-            true,
-            status == *id,
-            None::<&str>,
-        )
-        .map(|i| (id.to_string(), i))
-    })
-    .collect::<tauri::Result<_>>()?;
-    let st_note = MenuItem::with_id(
-        app,
-        "status_note",
-        "(shared with friends in a later update)",
-        false,
-        None::<&str>,
-    )?;
-    let mut st_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = st_items
-        .iter()
-        .map(|(_, i)| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+    let e = state.engine.lock().unwrap();
+    e.tracker.store.get_setting(k).ok().flatten()
+}
+
+/// Save a setting from the tray and let the windows follow it.
+fn put_setting(app: &AppHandle, k: &str, v: &str) {
+    {
+        let state = app.state::<AppState>();
+        let mut e = state.engine.lock().unwrap();
+        let _ = e.tracker.store.set_setting(k, v);
+        let _ = e.apply_settings();
+    }
+    let _ = app.emit("fraglink://settings", (k, v));
+}
+
+const TRAY_SKINS: &[(&str, &str)] = &[("dark", "Dark"), ("classic", "Classic Silver")];
+
+/// The classic tray menu: Launch >, Skin >, Status >, Log Off..., Exit.
+type Item = Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>;
+fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    fn refs(v: &[Item]) -> Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> {
+        v.iter().map(|b| b.as_ref()).collect()
+    }
+    // Launch: installed games A-Z, then Detect Games
+    let mut games: Vec<(String, String)> = commands::catalog_now(&app.state::<AppState>())
+        .into_iter()
+        .filter(|g| g.installed && g.can_launch && !g.excluded)
+        .map(|g| (g.name, g.id))
         .collect();
-    let sep0 = PredefinedMenuItem::separator(app)?;
-    st_refs.push(&sep0);
-    st_refs.push(&st_note);
-    let status_menu = Submenu::with_id_and_items(app, "status", "Status", true, &st_refs)?;
-    let pause = CheckMenuItem::with_id(app, "pause", "Pause tracking", true, paused, None::<&str>)?;
-    let export = MenuItem::with_id(
+    games.sort_by_key(|g| g.0.to_lowercase());
+    let mut launch: Vec<Item> = Vec::new();
+    if games.is_empty() {
+        launch.push(Box::new(MenuItem::with_id(
+            app,
+            "none",
+            "No games found",
+            false,
+            None::<&str>,
+        )?));
+    }
+    for (name, id) in games.iter().take(40) {
+        launch.push(Box::new(MenuItem::with_id(
+            app,
+            format!("launch:{id}"),
+            name,
+            true,
+            None::<&str>,
+        )?));
+    }
+    launch.push(Box::new(PredefinedMenuItem::separator(app)?));
+    launch.push(Box::new(MenuItem::with_id(
         app,
-        "export",
-        "Export my data (zip: JSON + CSV)",
+        "detect",
+        "Detect Games",
         true,
         None::<&str>,
-    )?;
-    let data = MenuItem::with_id(app, "data_dir", "Open data folder", true, None::<&str>)?;
-    let logs = MenuItem::with_id(app, "log_dir", "Open logs folder", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Fraglink", true, None::<&str>)?;
-    let sep1 = PredefinedMenuItem::separator(app)?;
-    let sep2 = PredefinedMenuItem::separator(app)?;
-    let sep3 = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(
+    )?));
+    let launch = Submenu::with_id_and_items(app, "launch", "Launch", true, &refs(&launch))?;
+    // Skin
+    let cur = get_setting(app, "skin").unwrap_or_else(|| "dark".into());
+    let mut skins: Vec<Item> = Vec::new();
+    for (id, label) in TRAY_SKINS {
+        skins.push(Box::new(CheckMenuItem::with_id(
+            app,
+            format!("skin:{id}"),
+            *label,
+            true,
+            cur == *id,
+            None::<&str>,
+        )?));
+    }
+    skins.push(Box::new(PredefinedMenuItem::separator(app)?));
+    skins.push(Box::new(MenuItem::with_id(
         app,
-        &[
-            &open,
-            &sep1,
-            &status_menu,
-            &pause,
-            &sep2,
-            &export,
-            &data,
-            &logs,
-            &sep3,
-            &quit,
-        ],
-    )?;
+        "more_skins",
+        "More Skins...",
+        true,
+        None::<&str>,
+    )?));
+    let skin = Submenu::with_id_and_items(app, "skin", "Skin", true, &refs(&skins))?;
+    // Status
+    let status = get_setting(app, keys::STATUS).unwrap_or_else(|| "online".into());
+    let custom = get_setting(app, "custom_status").unwrap_or_default();
+    let custom_on = get_setting(app, "custom_on").as_deref() == Some("1") && !custom.is_empty();
+    let hist: Vec<String> = get_setting(app, "status_history")
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default();
+    let online = status == "online";
+    let mut st: Vec<Item> = vec![
+        Box::new(CheckMenuItem::with_id(
+            app,
+            "st:reset",
+            "Reset Status",
+            true,
+            online && !custom_on,
+            None::<&str>,
+        )?),
+        Box::new(CheckMenuItem::with_id(
+            app,
+            "st:away",
+            "Away From Keyboard",
+            true,
+            status == "away",
+            None::<&str>,
+        )?),
+        Box::new(CheckMenuItem::with_id(
+            app,
+            "st:invisible",
+            "Invisible",
+            true,
+            status == "invisible",
+            None::<&str>,
+        )?),
+    ];
+    if !hist.is_empty() {
+        st.push(Box::new(PredefinedMenuItem::separator(app)?));
+    }
+    for (i, h) in hist.iter().take(5).enumerate() {
+        let on = online && custom_on && *h == custom;
+        st.push(Box::new(CheckMenuItem::with_id(
+            app,
+            format!("st:h:{i}"),
+            h,
+            true,
+            on,
+            None::<&str>,
+        )?));
+    }
+    let status = Submenu::with_id_and_items(app, "status", "Status", true, &refs(&st))?;
+    let sep = PredefinedMenuItem::separator(app)?;
+    let logoff = MenuItem::with_id(app, "logoff", "Log Off...", true, None::<&str>)?;
+    let exit = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
+    Menu::with_items(app, &[&launch, &skin, &status, &sep, &logoff, &exit])
+}
 
-    *state.tray.lock().unwrap() = Some(TrayItems {
-        pause,
-        status: st_items,
-    });
+/// Rebuild the tray menu (games, skin or statuses changed).
+pub fn refresh_tray(app: &AppHandle) {
+    if let (Some(tray), Ok(menu)) = (app.tray_by_id("main"), tray_menu(app)) {
+        let _ = tray.set_menu(Some(menu));
+    }
+}
 
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = tray_menu(app)?;
     let icon = app.default_window_icon().cloned().expect("bundle icon");
     TrayIconBuilder::with_id("main")
         .icon(icon)
@@ -310,11 +367,7 @@ pub fn set_status(app: &AppHandle, status: &str) {
         let e = state.engine.lock().unwrap();
         let _ = e.tracker.store.set_setting(keys::STATUS, status);
     }
-    if let Some(t) = state.tray.lock().unwrap().as_ref() {
-        for (id, item) in &t.status {
-            let _ = item.set_checked(id == status);
-        }
-    }
+    refresh_tray(app);
     let _ = app.emit("fraglink://status", status);
     friends::nudge(app);
 }
@@ -325,42 +378,55 @@ pub fn set_paused(app: &AppHandle, paused: bool) {
         let mut e = state.engine.lock().unwrap();
         e.set_paused(paused).unwrap_or_default()
     };
-    if let Some(t) = state.tray.lock().unwrap().as_ref() {
-        let _ = t.pause.set_checked(paused);
-    }
     handle_events(app, evs);
     let _ = app.emit("fraglink://paused", paused);
 }
 
 fn on_menu(app: &AppHandle, id: &str) {
+    let app2 = app.clone();
     match id {
-        "open" => windows::show_main(app),
-        "pause" => {
-            let paused = app
-                .state::<AppState>()
-                .engine
-                .lock()
-                .unwrap()
-                .tracker
-                .is_paused();
-            set_paused(app, !paused);
+        "exit" => quit(app),
+        "logoff" => {
+            windows::show_main(app);
+            let _ = app.emit("fraglink://logoff", ());
         }
-        "export" => match commands::do_export(app) {
-            Ok(paths) => log::info!("exported {:?}", paths),
-            Err(e) => log::error!("export failed: {e:#}"),
-        },
-        "data_dir" => {
-            let dir = app.state::<AppState>().data_dir.clone();
-            let _ = tauri_plugin_opener::open_path(dir, None::<&str>);
+        "detect" => {
+            tauri::async_runtime::spawn(async move {
+                commands::detect_games(app2.clone()).await;
+                let _ = app2.emit("fraglink://catalog", ());
+            });
         }
-        "log_dir" => {
-            if let Ok(dir) = app.path().app_log_dir() {
-                let _ = std::fs::create_dir_all(&dir);
-                let _ = tauri_plugin_opener::open_path(dir, None::<&str>);
+        "more_skins" => {
+            tauri::async_runtime::spawn(commands::open_website("skins".into()));
+        }
+        "st:reset" => {
+            put_setting(app, "custom_on", "0");
+            set_status(app, "online");
+        }
+        "st:away" => set_status(app, "away"),
+        "st:invisible" => set_status(app, "invisible"),
+        s if s.starts_with("st:h:") => {
+            let hist: Vec<String> = get_setting(app, "status_history")
+                .and_then(|v| serde_json::from_str(&v).ok())
+                .unwrap_or_default();
+            if let Some(h) = s[5..].parse::<usize>().ok().and_then(|i| hist.get(i)) {
+                put_setting(app, "custom_status", h);
+                put_setting(app, "custom_on", "1");
+                set_status(app, "online");
             }
         }
-        "quit" => quit(app),
-        s if s.starts_with("status:") => set_status(app, &s["status:".len()..]),
+        s if s.starts_with("skin:") => {
+            put_setting(app, "skin", &s[5..]);
+            refresh_tray(app);
+        }
+        s if s.starts_with("launch:") => {
+            let id = s[7..].to_string();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = commands::launch_game(app2, id).await {
+                    log::warn!("tray launch: {e}");
+                }
+            });
+        }
         _ => {}
     }
 }
@@ -493,7 +559,6 @@ pub fn run() {
                 main_pos: Mutex::new(main_pos),
                 main_size: Mutex::new(main_size),
                 side_open: Mutex::new(false),
-                tray: Mutex::new(None),
                 sync: sync::SyncShared::default(),
                 friends: friends::FriendsShared::default(),
             });
@@ -528,6 +593,7 @@ pub fn run() {
             commands::launch_game,
             commands::pick_game_exe,
             commands::open_website,
+            commands::join_game,
             commands::toast_payload,
             commands::toast_clicked,
             commands::set_status,

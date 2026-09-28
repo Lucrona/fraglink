@@ -16,7 +16,7 @@ pub const BASE_H: f64 = 381.0;
 pub const DARK_MIN_W: f64 = 345.0;
 pub const DARK_MIN_H: f64 = 555.0;
 /// The docked info panel adds this much width while it is open.
-pub const DARK_SIDE_W: f64 = 180.0;
+pub const DARK_SIDE_W: f64 = 168.0; // the 180px panel takes over the 12px nub strip
 const TOAST_W: f64 = 226.0;
 const TOAST_H: f64 = 78.0;
 
@@ -297,7 +297,8 @@ pub fn show_toast(app: &AppHandle, mut payload: ToastPayload) {
         if app.get_webview_window("toast").is_some() {
             return;
         }
-        let z = zoom(app);
+        // the dark skin's popup is drawn at 1x; the chassis skins follow their scale
+        let z = if is_dark(app) { 1.0 } else { zoom(app) };
         let (w, h) = (TOAST_W * z, TOAST_H * z);
         let mut builder =
             WebviewWindowBuilder::new(app, "toast", WebviewUrl::App("toast.html".into()))

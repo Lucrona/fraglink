@@ -89,6 +89,7 @@ pub fn set_game_excluded(
         .set_game_excluded(&game_id, excluded, now())
         .map_err(err)?;
     crate::handle_events(&app, evs);
+    crate::refresh_tray(&app);
     Ok(())
 }
 
@@ -174,14 +175,27 @@ const ALLOWED: &[&str] = &[
     "custom_groups",
     "hidden_groups",
     "collapsed_groups",
+    "games_detected_once",
+    "login_history",
+    "login_last",
+    "save_password",
+    "auto_login",
+    "status_history",
+    "favorite_friends",
+    "friend_groups",
+    "friend_toasts_logon",
+    "connection_alerts",
 ];
 
 /// Per-game settings from Options > Games (`game_path:<id>`, `launch_args:<id>`).
 fn per_game_key(key: &str) -> bool {
-    [catalog::PATH_KEY, catalog::ARGS_KEY].iter().any(|p| {
-        key.strip_prefix(p)
-            .is_some_and(|id| !id.is_empty() && id.len() <= 80 && !id.contains(char::is_whitespace))
-    })
+    [catalog::PATH_KEY, catalog::ARGS_KEY, "detect_mode:"]
+        .iter()
+        .any(|p| {
+            key.strip_prefix(p).is_some_and(|id| {
+                !id.is_empty() && id.len() <= 80 && !id.contains(char::is_whitespace)
+            })
+        })
 }
 
 #[tauri::command]
@@ -192,7 +206,13 @@ pub fn set_setting(
     value: String,
 ) -> CmdResult<()> {
     let per_game = per_game_key(&key);
-    let max = if per_game || key.starts_with("custom_") || key.ends_with("_groups") {
+    let max = if key.ends_with("_groups") || key == "favorite_friends" {
+        4096 // small JSON lists / maps
+    } else if per_game
+        || key.starts_with("custom_")
+        || key == "status_history"
+        || key == "login_history"
+    {
         512
     } else {
         64
@@ -223,6 +243,14 @@ pub fn set_setting(
     }
     // let the other windows (main <-> Options) follow the change
     let _ = app.emit("fraglink://settings", (&key, &value));
+    if matches!(
+        key.as_str(),
+        "skin" | "status_history" | "custom_status" | "custom_on"
+    ) || key.starts_with("exclude:")
+        || key.starts_with("game_path:")
+    {
+        crate::refresh_tray(&app);
+    }
     Ok(())
 }
 
@@ -463,7 +491,7 @@ pub async fn game_icons(
         .map_err(err)
 }
 
-fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {
+pub(crate) fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {
     let e = state.engine.lock().unwrap();
     let games = e.tracker.store.list_games().unwrap_or_default();
     let settings = e.tracker.store.all_settings().unwrap_or_default();
@@ -489,6 +517,7 @@ pub async fn detect_games(app: AppHandle) -> Vec<catalog::Entry> {
     if !state.sim {
         state.engine.lock().unwrap().refresh_steam(now());
     }
+    crate::refresh_tray(&app);
     catalog_now(&state)
 }
 
@@ -550,4 +579,17 @@ pub async fn open_website(page: String) -> CmdResult<()> {
         None::<&str>,
     )
     .map_err(err)
+}
+
+/// Right-click > Join Game: `steam://connect/<ip:port>` for a friend's server.
+#[tauri::command]
+pub async fn join_game(address: String) -> CmdResult<()> {
+    let ok = address.len() <= 64
+        && address.split_once(':').is_some_and(|(ip, port)| {
+            ip.parse::<std::net::Ipv4Addr>().is_ok() && port.parse::<u16>().is_ok()
+        });
+    if !ok {
+        return Err("not a joinable server address".into());
+    }
+    tauri_plugin_opener::open_url(format!("steam://connect/{address}"), None::<&str>).map_err(err)
 }
