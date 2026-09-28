@@ -522,15 +522,22 @@ pub fn friend_mute(app: AppHandle, handle: String, mute: bool) -> CmdResult<()> 
 pub async fn game_icons(
     app: AppHandle,
     ids: Vec<String>,
+    friends: Option<bool>,
 ) -> CmdResult<std::collections::HashMap<String, Option<String>>> {
     let ids: Vec<String> = ids
         .into_iter()
         .filter(|i| !i.is_empty() && i.len() <= 120)
         .take(60)
         .collect();
-    tauri::async_runtime::spawn_blocking(move || crate::icons::resolve(&app, &ids, true))
-        .await
-        .map_err(err)
+    tauri::async_runtime::spawn_blocking(move || {
+        if friends == Some(true) {
+            crate::icons::resolve_friends(&app, &ids)
+        } else {
+            crate::icons::resolve(&app, &ids, true)
+        }
+    })
+    .await
+    .map_err(err)
 }
 
 pub(crate) fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {

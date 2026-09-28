@@ -137,15 +137,27 @@
     return fallbackIcon(id);
   }
   async function loadIcons() {
-    const ids = [...iconWant].filter(id => ICONS[id] === undefined).slice(0, 60); iconWant.clear();
-    if (!ids.length || !FLB.gameIcons) return;
-    ids.forEach(id => { ICONS[id] = null; }); // don't ask twice while loading
-    try {
-      const got = await FLB.gameIcons(ids);
-      let changed = false;
-      for (const id of ids) { const u = got && got[id]; if (u) { ICONS[id] = u; changed = true; } }
-      if (changed) render();
-    } catch (e) { console.warn('icons', e); }
+    const want = [...iconWant].filter(id => ICONS[id] === undefined).slice(0, 60); iconWant.clear();
+    if (!want.length || !FLB.gameIcons) return;
+    want.forEach(id => { ICONS[id] = null; }); // don't ask twice while loading
+    // "f:<id>" = a friend's game: the server icon wins over the local one
+    const groups = [[want.filter(i => !i.startsWith('f:')), false], [want.filter(i => i.startsWith('f:')), true]];
+    let changed = false;
+    for (const [keys, fr] of groups) {
+      if (!keys.length) continue;
+      try {
+        const got = await FLB.gameIcons(keys.map(k => fr ? k.slice(2) : k), fr);
+        for (const k of keys) { const u = got && got[fr ? k.slice(2) : k]; if (u) { ICONS[k] = u; changed = true; } }
+      } catch (e) { console.warn('icons', e); }
+    }
+    if (changed) render();
+  }
+  function friendGameIcon(id) {
+    const g = GAMES[id]; if (!g || !g.real) return gameIcon(id);
+    const u = ICONS['f:' + id];
+    if (u) return `<img class="gi-img" src="${esc(u)}" alt="" draggable="false">`;
+    if (u === undefined) { iconWant.add('f:' + id); clearTimeout(iconTimer); iconTimer = setTimeout(loadIcons, 30); }
+    return ICONS[id] ? appIcon(id) : fallbackIcon(id);
   }
   function gameIcon(id) {
     const g = GAMES[id]; if (!g) return '';
@@ -264,7 +276,7 @@
     return 'Offline';
   }
   function row(f, cls = '') {
-    const icon = f.game && f.kind !== 'off' ? `<i class="gi">${gameIcon(f.game)}</i>` : '<i class="noicon"></i>';
+    const icon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
     return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}${esc(f.name)}</span><span class="c-status">${esc(statusText(f))}</span><span class="c-info">${esc(info)}</span></div>`;
   }
@@ -530,7 +542,7 @@
       let h = `<div class="sf-name">${esc(f.name)}</div><div class="sf-user">Username: ${H}</div><a data-action="friend-profile" data-handle="${H}">Profile</a><div class="sep"></div>`;
       if (f.kind === 'req') h += `<div>Wants to be your friend.</div><a data-action="friend-accept" data-handle="${H}">Accept</a> · <a data-action="friend-decline" data-handle="${H}">Decline</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
       else if (f.kind === 'out') h += `<div>Friend request sent. They'll show up here once they accept.</div><a data-action="friend-remove" data-handle="${H}">Cancel request</a>`;
-      else if (playing) h += `<div class="sf-lbl">Playing Game</div><div class="act"><i class="gi">${gameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b>${f.server ? '<br>' + esc(f.server) : ''}${!f.real && f.info ? `<br><span style="color:var(--cyan)">${esc(f.info)}</span>` : ''}</div></div>`;
+      else if (playing) h += `<div class="sf-lbl">Playing Game</div><div class="act"><i class="gi">${friendGameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b>${f.server ? '<br>' + esc(f.server) : ''}${!f.real && f.info ? `<br><span style="color:var(--cyan)">${esc(f.info)}</span>` : ''}</div></div>`;
       else h += `<div class="sf-lbl">Status</div><div>${esc(statusText(f))}${f.last ? ' · last online ' + esc(f.last) : ''}</div>`;
       if (f.kind === 'fof') { const m = mutualOf(f); h += `<div class="sep"></div><h4>Mutual Friends <small>(${m.length})</small></h4><ul class="games">${m.map(x => `<li><i class="noicon"></i><span>${esc(x)}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>`; }
       if (f.real && (f.kind === 'playing' || f.kind === 'online' || f.kind === 'off')) {
@@ -573,7 +585,7 @@
     $('#chat-title').textContent = f.name + ' - Instant Message';
     const playing = f.kind === 'playing' || f.kind === 'fof';
     $('#chat-info').innerHTML = `<div class="av" style="background:linear-gradient(135deg,${f.av},#0a1428)">${esc(f.name[0].toUpperCase())}</div>
-      <div class="who"><b>${esc(f.name)}</b>${playing ? `<div class="playing">is playing ${gameIcon(f.game)}<span>${esc(GAMES[f.game].name)}</span></div><div class="srv">${esc(f.server)} · ${esc(f.info)}</div>` : `<div class="playing" style="color:${f.kind === 'off' ? '#bdbfbf' : '#fff'}">${esc(statusText(f))}</div><div class="srv">${f.last ? 'Last online ' + esc(f.last) : 'Not in game'}</div>`}</div>
+      <div class="who"><b>${esc(f.name)}</b>${playing ? `<div class="playing">is playing ${friendGameIcon(f.game)}<span>${esc(GAMES[f.game].name)}</span></div><div class="srv">${esc(f.server)} · ${esc(f.info)}</div>` : `<div class="playing" style="color:${f.kind === 'off' ? '#bdbfbf' : '#fff'}">${esc(statusText(f))}</div><div class="srv">${f.last ? 'Last online ' + esc(f.last) : 'Not in game'}</div>`}</div>
       ${playing ? '<button class="hw" type="button" data-action="join">Join</button>' : ''}`;
     if (!state.logs[f.id]) {
       state.logs[f.id] = playing
@@ -610,7 +622,7 @@
   function toast(f, game) {
     if (LIVE.settings && LIVE.settings.settings && LIVE.settings.settings.toasts === '0') return;
     const t = $('#toast'); toastFriend = f.id;
-    $('#toast-body').innerHTML = `<i class="gi">${gameIcon(game)}</i><div><b>${esc(f.name)}</b> has started playing<br><span class="g">${esc(GAMES[game].name)}</span></div>`;
+    $('#toast-body').innerHTML = `<i class="gi">${friendGameIcon(game)}</i><div><b>${esc(f.name)}</b> has started playing<br><span class="g">${esc(GAMES[game].name)}</span></div>`;
     t.classList.remove('out'); t.hidden = false;
     clearTimeout(toastTimer);
     if (!params.get('toast')) toastTimer = setTimeout(hideToast, 7000);
@@ -1189,7 +1201,7 @@
     await refreshFriends();
     await refresh();
     loadCatalog();
-    FLB.on('fraglink://events', () => { for (const k in ICONS) if (ICONS[k] === null) delete ICONS[k]; refreshSoon(); }); // a newly detected game may now have an exe icon
+    FLB.on('fraglink://events', () => { for (const k in ICONS) if (ICONS[k] === null && !k.startsWith('f:')) delete ICONS[k]; refreshSoon(); }); // a newly detected game may now have an exe icon
     FLB.on('fraglink://friends', refreshFriends);
     FLB.on('fraglink://sync', refreshFriends);
     FLB.on('fraglink://logoff', () => actions['sign-out']());

@@ -40,7 +40,7 @@
       friendBlock: (handle, block) => inv('friend_block', { handle, block }),
       friendMute: (handle, mute) => inv('friend_mute', { handle, mute }),
       serverStats: () => inv('get_server_stats'),
-      gameIcons: (ids) => inv('game_icons', { ids }),
+      gameIcons: (ids, friends) => inv('game_icons', { ids, friends: !!friends }),
       on: (evt, cb) => T.event.listen(evt, e => cb(e.payload)),
       drag: () => T.window.getCurrentWindow().startDragging(),
       resize: (dir) => T.window.getCurrentWindow().startResizeDragging(dir),

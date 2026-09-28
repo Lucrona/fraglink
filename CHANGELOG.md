@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+- Server: optional Xfire icon fallback for games without a Steam icon (`FRAGLINK_XFIRE_ICONS=1`,
+  files served from `/icons/xfire/`). The extraction script is `scripts/xfire_icons.py`; the images are not in the repo.
+
+### Changed
+- Desktop: friends' games now use the server's icon (Steam, then Xfire). Your own installed games
+  still use the local exe icon. Ships with the next desktop release.
+
 ## [0.2.0-dev.6] - 2026-09-28
 
 Pre-release for private testing (builds report `0.2.0-6`).

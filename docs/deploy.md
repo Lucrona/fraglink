@@ -45,6 +45,25 @@ scripts/publish-update.sh <ci-run-id>   # copies the setup exe, .sig and latest.
 The private key's backup is outside the repo (`~/.secrets/fraglink-updater.key` + `.password` on the build box).
 Losing it means existing installs can't auto-update to builds signed with a new key.
 
+## Xfire game icons (optional, private testing)
+
+A removable fallback source of game icons, extracted from the 2013 Xfire client. The images are
+**not** in the git repo or the desktop installer; only `scripts/xfire_icons.py` is.
+
+- Generate: `python scripts/xfire_icons.py icons.dll xfire_games.ini out/` (needs `pefile` and
+  `Pillow`). It writes `<game>--<xfire short>-32.png` (plus `-16.png` when a native 16 px exists)
+  and `manifest.json`.
+- Install: copy `out/*` to `/var/lib/fraglink/icons/xfire/` (world readable). Caddy serves it at
+  `/icons/xfire/` (see `deploy/Caddyfile`).
+- Enable: `FRAGLINK_XFIRE_ICONS=1` in `/etc/fraglink/server.env` (the directory can be changed with
+  `FRAGLINK_XFIRE_ICONS_DIR`), then `sudo systemctl restart fraglink-server`. The log shows
+  `xfire icons: N games`.
+- Effect: `GET /api/v1/games/icons` adds `"icon_path": "/icons/xfire/<file>"` for games that have
+  no Steam icon. It matches the signature's exe names first (only exes unique to one Xfire game),
+  then the normalised game name, then a bare series name ("Halo" gives the oldest Xfire "Halo: ..." entry).
+- Remove: delete the flag line and restart, then optionally delete the directory and the
+  `/icons/xfire/*` block in the Caddyfile. Nothing else depends on it.
+
 ## Switch to the domain (once DNS is set)
 
 1. DNS: `A` records for `fraglink.gg` and `app.fraglink.gg` → `119.42.54.86`.

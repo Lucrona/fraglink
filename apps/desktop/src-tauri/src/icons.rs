@@ -95,15 +95,10 @@ pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String,
         return out;
     }
     let client = if remote { sync::client(app) } else { None };
-    match client.map(|c| c.game_icons(&missing)) {
+    match client.as_ref().map(|c| c.game_icons(&missing)) {
         Some(Ok(v)) => {
             for id in &missing {
-                let png = v
-                    .get(id)
-                    .and_then(|x| x.get("icon_url"))
-                    .and_then(|u| u.as_str())
-                    .and_then(|u| fraglink_sync::fetch_icon(u).ok())
-                    .and_then(|b| icons::normalize(&b));
+                let png = server_png(client.as_ref().unwrap(), v.get(id));
                 match png {
                     Some(p) => {
                         let _ = cache.put(id, &p);
@@ -133,6 +128,61 @@ pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String,
                 out.insert(id, None);
             }
         }
+    }
+    out
+}
+
+/// Steam CDN icon, else an icon hosted by the Fraglink server (the Xfire fallback).
+fn server_png(client: &fraglink_sync::Client, v: Option<&serde_json::Value>) -> Option<Vec<u8>> {
+    let v = v?;
+    v.get("icon_url")
+        .and_then(|u| u.as_str())
+        .and_then(|u| fraglink_sync::fetch_icon(u).ok())
+        .or_else(|| {
+            v.get("icon_path")
+                .and_then(|p| p.as_str())
+                .and_then(|p| client.fetch_server_icon(p).ok())
+        })
+        .and_then(|b| icons::normalize(&b))
+}
+
+/// Friends' games: the server's icon (Steam / Xfire) wins, cached separately; anything
+/// the server has no icon for falls back to `resolve` (local exe icon etc.).
+pub fn resolve_friends(app: &AppHandle, ids: &[String]) -> HashMap<String, Option<String>> {
+    let cache = cache(app);
+    let key = |id: &str| format!("srv~{id}");
+    let now = SystemTime::now();
+    let mut out = HashMap::new();
+    let mut ask = vec![];
+    for id in ids {
+        match cache.get(&key(id)) {
+            Some(png) => {
+                out.insert(id.clone(), Some(data_url(&png)));
+            }
+            None if cache.recent_miss(&key(id), now) => {}
+            None => ask.push(id.clone()),
+        }
+    }
+    if let (false, Some(client)) = (ask.is_empty(), sync::client(app)) {
+        if let Ok(v) = client.game_icons(&ask) {
+            for id in &ask {
+                match server_png(&client, v.get(id)) {
+                    Some(p) => {
+                        let _ = cache.put(&key(id), &p);
+                        out.insert(id.clone(), Some(data_url(&p)));
+                    }
+                    None => cache.put_miss(&key(id)),
+                }
+            }
+        }
+    }
+    let rest: Vec<String> = ids
+        .iter()
+        .filter(|i| !out.contains_key(*i))
+        .cloned()
+        .collect();
+    if !rest.is_empty() {
+        out.extend(resolve(app, &rest, true));
     }
     out
 }

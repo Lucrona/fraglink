@@ -307,6 +307,29 @@ impl Client {
         )
     }
 
+    /// Download an icon the server hosts itself (`/icons/xfire/...`, max 256 KB).
+    pub fn fetch_server_icon(&self, path: &str) -> Result<Vec<u8>, SyncError> {
+        if !path.starts_with("/icons/")
+            || path.contains("..")
+            || path.contains("//")
+            || path.contains('?')
+        {
+            return Err(SyncError::Decode("icon path not allowed".into()));
+        }
+        let resp = self
+            .agent
+            .get(&format!("{}{}", self.base, path))
+            .call()
+            .map_err(|e| SyncError::Network(e.to_string()))?;
+        let mut buf = Vec::new();
+        use std::io::Read;
+        resp.into_reader()
+            .take(256 * 1024)
+            .read_to_end(&mut buf)
+            .map_err(|e| SyncError::Network(e.to_string()))?;
+        Ok(buf)
+    }
+
     /// Open the live presence socket.
     pub fn presence(&self) -> Result<presence::PresenceSocket, SyncError> {
         let token = self.token.as_deref().ok_or(SyncError::Unauthorized)?;

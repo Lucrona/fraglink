@@ -13,6 +13,7 @@ pub mod hours;
 pub mod presence;
 pub mod steam;
 pub mod web;
+pub mod xfire_icons;
 
 use axum::Router;
 use sqlx::PgPool;
@@ -37,11 +38,27 @@ pub struct AppState {
     pub hub: Arc<presence::Hub>,
     /// Rate-limit hits per key (`signup:<ip>`, `login:<ip>`, `friendreq:<user>` ...).
     pub limits: Arc<Mutex<HashMap<String, Vec<Instant>>>>,
+    /// Fallback Xfire icons (FRAGLINK_XFIRE_ICONS=1), else None.
+    pub xfire: Arc<Option<xfire_icons::XfireIcons>>,
+    pub sigs: Arc<fraglink_core::signatures::SignatureDb>,
 }
 
 impl AppState {
     pub fn new(db: PgPool, cfg: Config) -> Self {
         let steam = steam::SteamClient::new(&cfg);
+        let xfire =
+            cfg.xfire_icons_dir
+                .as_ref()
+                .and_then(|d| match xfire_icons::XfireIcons::load(d) {
+                    Ok(x) => {
+                        tracing::info!("xfire icons: {} games from {}", x.len(), d.display());
+                        Some(x)
+                    }
+                    Err(e) => {
+                        tracing::warn!("xfire icons disabled: {e:#}");
+                        None
+                    }
+                });
         AppState {
             db,
             cfg: Arc::new(cfg),
@@ -50,6 +67,8 @@ impl AppState {
             export_log: Arc::new(Mutex::new(HashMap::new())),
             hub: Arc::new(presence::Hub::default()),
             limits: Arc::new(Mutex::new(HashMap::new())),
+            xfire: Arc::new(xfire),
+            sigs: Arc::new(fraglink_core::signatures::SignatureDb::builtin()),
         }
     }
 

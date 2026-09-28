@@ -1241,22 +1241,37 @@ async fn game_icons(
         .filter(|s| !s.is_empty() && s.len() <= 120)
         .take(50)
         .collect();
-    let rows: Vec<(String, Option<i32>, Option<String>)> =
-        sqlx::query_as("SELECT id, steam_appid, steam_icon_hash FROM games WHERE id = ANY($1)")
-            .bind(&ids)
-            .fetch_all(&st.db)
-            .await?;
+    let rows: Vec<(String, Option<i32>, Option<String>, String)> = sqlx::query_as(
+        "SELECT id, steam_appid, steam_icon_hash, name FROM games WHERE id = ANY($1)",
+    )
+    .bind(&ids)
+    .fetch_all(&st.db)
+    .await?;
     let mut out = serde_json::Map::new();
     for id in &ids {
         let row = rows.iter().find(|r| &r.0 == id);
         let appid = row
             .and_then(|r| r.1.map(|a| a as u32))
             .or_else(|| fraglink_core::icons::appid_from_game_id(id));
-        let Some(appid) = appid else { continue };
-        let url = row
-            .and_then(|r| r.2.as_deref())
-            .and_then(|h| fraglink_core::icons::steam_cdn_icon_url(appid, h));
-        out.insert(id.clone(), json!({ "steam_appid": appid, "icon_url": url }));
+        let url = appid.and_then(|appid| {
+            row.and_then(|r| r.2.as_deref())
+                .and_then(|h| fraglink_core::icons::steam_cdn_icon_url(appid, h))
+        });
+        // No Steam icon: the optional Xfire fallback (a path on this server).
+        let xfire = match (&url, st.xfire.as_ref()) {
+            (None, Some(x)) => x
+                .lookup(&st.sigs, id, row.map(|r| r.3.as_str()))
+                .map(|f| format!("/icons/xfire/{f}")),
+            _ => None,
+        };
+        if appid.is_none() && xfire.is_none() {
+            continue;
+        }
+        let mut v = json!({ "steam_appid": appid, "icon_url": url });
+        if let Some(p) = xfire {
+            v["icon_path"] = json!(p);
+        }
+        out.insert(id.clone(), v);
     }
     Ok(Json(Value::Object(out)))
 }

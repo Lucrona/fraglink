@@ -8,6 +8,12 @@
 		root * /var/www/fraglink-updates
 		file_server
 	}
+	# Xfire game icons (optional, see docs/deploy.md); remove this block to drop them
+	handle_path /icons/xfire/* {
+		root * /var/lib/fraglink/icons/xfire
+		header Cache-Control "public, max-age=604800"
+		file_server
+	}
 	reverse_proxy 127.0.0.1:8787
 }
 
@@ -21,6 +27,11 @@
 # 	encode gzip
 # 	handle_path /updates/* {
 # 		root * /var/www/fraglink-updates
+# 		file_server
+# 	}
+# 	handle_path /icons/xfire/* {
+# 		root * /var/lib/fraglink/icons/xfire
+# 		header Cache-Control "public, max-age=604800"
 # 		file_server
 # 	}
 # 	reverse_proxy 127.0.0.1:8787
