@@ -105,20 +105,47 @@ fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     Ok(w)
 }
 
-pub fn show_main(app: &AppHandle) {
-    let w = match app.get_webview_window("main") {
-        Some(w) => w,
-        None => match create_main(app) {
-            Ok(w) => w,
-            Err(e) => {
-                log::error!("could not create main window: {e}");
-                return;
-            }
-        },
-    };
+/// Build windows on a worker thread. On Windows, creating a WebView2 window on
+/// the main thread while it is busy (a synchronous `#[tauri::command]` runs
+/// there, and so do tray, menu and single-instance callbacks) deadlocks: the
+/// window stays blank white and the whole app hangs. From another thread the
+/// builder hands the work to the event loop and waits there, which is safe.
+fn off_main(app: &AppHandle, what: &'static str, f: impl FnOnce(&AppHandle) + Send + 'static) {
+    let app = app.clone();
+    if let Err(e) = std::thread::Builder::new()
+        .name(format!("create-{what}"))
+        .spawn(move || f(&app))
+    {
+        log::error!("could not start {what} window thread: {e}");
+    }
+}
+
+fn focus(w: &tauri::WebviewWindow) {
     let _ = w.unminimize();
     let _ = w.show();
     let _ = w.set_focus();
+}
+
+/// Show, restore and focus the main window, creating it if it was closed.
+pub fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        focus(&w);
+        return;
+    }
+    off_main(app, "main", |app| {
+        // a second request may have created it meanwhile
+        let w = match app.get_webview_window("main") {
+            Some(w) => w,
+            None => match create_main(app) {
+                Ok(w) => w,
+                Err(e) => {
+                    log::error!("could not create main window: {e}");
+                    return;
+                }
+            },
+        };
+        focus(&w);
+    });
 }
 
 /// Close (destroy) the main window; the app keeps running in the tray.
@@ -174,9 +201,7 @@ pub fn resize_main(app: &AppHandle, z: f64, side_open: bool) {
 pub fn show_options(app: &AppHandle, page: Option<String>) {
     let page = page.filter(|p| p.len() < 24 && p.chars().all(|c| c.is_ascii_lowercase()));
     if let Some(w) = app.get_webview_window("options") {
-        let _ = w.unminimize();
-        let _ = w.show();
-        let _ = w.set_focus();
+        focus(&w);
         if let Some(p) = page {
             let _ = app.emit_to("options", "fraglink://options-page", p);
         }
@@ -186,17 +211,22 @@ pub fn show_options(app: &AppHandle, page: Option<String>) {
         Some(p) => format!("options.html?page={p}"),
         None => "options.html".into(),
     };
-    let r = WebviewWindowBuilder::new(app, "options", WebviewUrl::App(url.into()))
-        .title("Fraglink Options")
-        .inner_size(640.0, 480.0)
-        .min_inner_size(520.0, 380.0)
-        .resizable(true)
-        .maximizable(true)
-        .center()
-        .build();
-    if let Err(e) = r {
-        log::warn!("options window failed: {e}");
-    }
+    off_main(app, "options", move |app| {
+        if app.get_webview_window("options").is_some() {
+            return;
+        }
+        let r = WebviewWindowBuilder::new(app, "options", WebviewUrl::App(url.into()))
+            .title("Fraglink Options")
+            .inner_size(640.0, 480.0)
+            .min_inner_size(520.0, 380.0)
+            .resizable(true)
+            .maximizable(true)
+            .center()
+            .build();
+        if let Err(e) = r {
+            log::warn!("options window failed: {e}");
+        }
+    });
 }
 
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
@@ -245,40 +275,47 @@ pub fn show_toast(app: &AppHandle, mut payload: ToastPayload) {
         let _ = app.emit_to("toast", TOAST_EVENT, payload);
         return;
     }
-    let z = zoom(app);
-    let (w, h) = (TOAST_W * z, TOAST_H * z);
-    let mut builder = WebviewWindowBuilder::new(app, "toast", WebviewUrl::App("toast.html".into()))
-        .title("Fraglink")
-        .inner_size(w, h)
-        .decorations(false)
-        .transparent(true)
-        .shadow(false)
-        .resizable(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .focused(false)
-        .visible(true);
-    if let Ok(Some(m)) = app.primary_monitor() {
-        let sf = m.scale_factor();
-        let wa = m.work_area();
-        let x = (wa.position.x as f64 + wa.size.width as f64) / sf - w - 8.0;
-        let y = (wa.position.y as f64 + wa.size.height as f64) / sf - h - 8.0;
-        builder = builder.position(x, y);
-    }
-    match builder.build() {
-        // Some desktops enforce a bigger minimum window size than requested; keep
-        // the whole toast inside the work area using the size we actually got.
-        Ok(win) => {
-            if let (Ok(Some(m)), Ok(sz)) = (app.primary_monitor(), win.outer_size()) {
-                let wa = m.work_area();
-                let pad = (8.0 * m.scale_factor()) as i32;
-                let x = wa.position.x + wa.size.width as i32 - sz.width as i32 - pad;
-                let y = wa.position.y + wa.size.height as i32 - sz.height as i32 - pad;
-                let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
-            }
+    // the toast page fetches the payload itself (`toast_payload`) once loaded
+    off_main(app, "toast", |app| {
+        if app.get_webview_window("toast").is_some() {
+            return;
         }
-        Err(e) => log::warn!("toast window failed: {e}"),
-    }
+        let z = zoom(app);
+        let (w, h) = (TOAST_W * z, TOAST_H * z);
+        let mut builder =
+            WebviewWindowBuilder::new(app, "toast", WebviewUrl::App("toast.html".into()))
+                .title("Fraglink")
+                .inner_size(w, h)
+                .decorations(false)
+                .transparent(true)
+                .shadow(false)
+                .resizable(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .focused(false)
+                .visible(true);
+        if let Ok(Some(m)) = app.primary_monitor() {
+            let sf = m.scale_factor();
+            let wa = m.work_area();
+            let x = (wa.position.x as f64 + wa.size.width as f64) / sf - w - 8.0;
+            let y = (wa.position.y as f64 + wa.size.height as f64) / sf - h - 8.0;
+            builder = builder.position(x, y);
+        }
+        match builder.build() {
+            // Some desktops enforce a bigger minimum window size than requested; keep
+            // the whole toast inside the work area using the size we actually got.
+            Ok(win) => {
+                if let (Ok(Some(m)), Ok(sz)) = (app.primary_monitor(), win.outer_size()) {
+                    let wa = m.work_area();
+                    let pad = (8.0 * m.scale_factor()) as i32;
+                    let x = wa.position.x + wa.size.width as i32 - sz.width as i32 - pad;
+                    let y = wa.position.y + wa.size.height as i32 - sz.height as i32 - pad;
+                    let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+                }
+            }
+            Err(e) => log::warn!("toast window failed: {e}"),
+        }
+    });
 }
 
 #[cfg(test)]

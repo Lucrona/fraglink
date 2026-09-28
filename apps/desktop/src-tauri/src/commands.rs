@@ -185,8 +185,10 @@ pub fn set_setting(
     Ok(())
 }
 
+// Commands that can create windows are async: sync commands run on the main
+// thread, and building a WebView2 window there deadlocks on Windows.
 #[tauri::command]
-pub fn open_options(app: AppHandle, page: Option<String>) {
+pub async fn open_options(app: AppHandle, page: Option<String>) {
     windows::show_options(&app, page);
 }
 
@@ -263,7 +265,7 @@ pub fn toast_payload(state: State<'_, AppState>) -> Option<ToastPayload> {
 }
 
 #[tauri::command]
-pub fn toast_clicked(app: AppHandle) {
+pub async fn toast_clicked(app: AppHandle) {
     windows::show_main(&app);
     let kind = app
         .state::<AppState>()

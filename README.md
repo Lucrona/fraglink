@@ -2,7 +2,7 @@
 
 <p align="center"><b>Track your gaming hours across every launcher and see what your friends are playing, from anywhere.</b></p>
 
-<p align="center"><i>Early development. Current pre-release: 0.2.0-dev.2 (M2 + first M3 checkpoint: accounts, Steam, trust tiers, friends, live presence, game icons; new dark resizable window); local development only. Private testing only.</i></p>
+<p align="center"><i>Early development. Current pre-release: 0.2.0-dev.3 (M2 + first M3 checkpoint: accounts, Steam, trust tiers, friends, live presence, game icons; new dark resizable window); local development only. Private testing only.</i></p>
 
 ---
 

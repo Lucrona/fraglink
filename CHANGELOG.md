@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.3] - 2026-09-28
+
+Pre-release for private testing (builds report `0.2.0-3`).
+
+### Fixed
+- Windows: opening Options showed a blank white window that couldn't be closed and hung the app. Cause: the window was created inside a synchronous Tauri command. Those run on the main thread, and building a WebView2 window there deadlocks. Windows (main, Options, toast) are now always created from a worker thread, and the commands that can open windows (`open_options`, `toast_clicked`) are async. This also covers reopening the main window from the tray, a toast click or a second launch.
+
 ## [0.2.0-dev.2] - 2026-09-28
 
 Pre-release for private testing (builds report `0.2.0-2`; MSI needs a numeric pre-release).
