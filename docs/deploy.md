@@ -13,7 +13,7 @@ Everything below is already set up; this page is for redeploys and recovery.
 | Backups | `/var/backups/fraglink/fraglink-YYYYMMDD-HHMMSS.dump` nightly at 03:30 (`fraglink-backup.timer`), 14 days kept |
 | Copies of the unit files, Caddyfile, backup script | `deploy/` in this repo |
 
-Access: SSH key only (`~/.ssh/fraglink_binarylane`) as `fraglink` (passwordless sudo) or `root`. Password login is off.
+Access: SSH key only (`~/.ssh/fraglink_binarylane`) as `fraglink` (passwordless sudo). Root and password logins are off.
 Firewall (ufw) allows 22, 80 and 443 only; fail2ban watches sshd; unattended-upgrades installs security updates.
 
 ## Redeploy
