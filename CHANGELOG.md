@@ -5,13 +5,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Added
-- Server: optional Xfire icon fallback for games without a Steam icon (`FRAGLINK_XFIRE_ICONS=1`,
-  files served from `/icons/xfire/`). The extraction script is `scripts/xfire_icons.py`; the images are not in the repo.
+## [0.2.0-dev.7] - 2026-09-28
+
+Pre-release for private testing (builds report `0.2.0-7`). Asked for as "0.2.0-dev.6.1", but
+Windows MSI versions only allow one numeric pre-release number, so it's dev.7 (sorts after dev.6
+for the updater).
 
 ### Changed
-- Desktop: friends' games now use the server's icon (Steam, then Xfire). Your own installed games
-  still use the local exe icon. Ships with the next desktop release.
+- **Classic Xfire game icons are the default everywhere.** Icon priority for every game, including
+  your own installed ones: 1) the matched Xfire icon from the server, 2) Steam's icon (server CDN
+  answer or Steam's local library cache), 3) the game's exe icon, 4) a generic icon. Friends' games
+  use the same order. Icons fetched from the server are cached on disk, so they work offline after
+  the first fetch.
+- **Updates, Discord style.** No more "Restart to update?" prompt. A new build downloads quietly in
+  the background and its signature is checked. Then a small green down arrow appears in the title
+  bar next to the window buttons ("Update ready: click to restart and update (version)"). One click
+  installs and restarts. The tray gets a **Restart to Update** item and a small green dot on its
+  icon. If you ignore it, the update is applied the next time Fraglink starts. dev.6 still shows
+  its old prompt once for this update.
+
+### Server
+- `GET /api/v1/games/icons` always includes the matched Xfire icon (`icon_path`), even when there's
+  a Steam icon, plus `"preferred": "xfire" | "steam" | "none"`.
+- Optional Xfire icon source (`FRAGLINK_XFIRE_ICONS=1`, files served from `/icons/xfire/`). The
+  extraction script is `scripts/xfire_icons.py`; the images are not in the repo or the installer.
 
 ## [0.2.0-dev.6] - 2026-09-28
 

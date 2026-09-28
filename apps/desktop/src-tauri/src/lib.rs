@@ -320,6 +320,14 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let sep = PredefinedMenuItem::separator(app)?;
     let logoff = MenuItem::with_id(app, "logoff", "Log Off...", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
+    if updater::ready_version(app).is_some() {
+        let upd = MenuItem::with_id(app, "update", "Restart to Update", true, None::<&str>)?;
+        let sep0 = PredefinedMenuItem::separator(app)?;
+        return Menu::with_items(
+            app,
+            &[&upd, &sep0, &launch, &skin, &status, &sep, &logoff, &exit],
+        );
+    }
     Menu::with_items(app, &[&launch, &skin, &status, &sep, &logoff, &exit])
 }
 
@@ -330,10 +338,44 @@ pub fn refresh_tray(app: &AppHandle) {
     }
 }
 
+const TRAY_PNG: &[u8] = include_bytes!("../icons/tray.png");
+
+/// The tray icon, with a small green dot in the corner while an update is ready.
+pub fn set_tray_update_dot(app: &AppHandle, on: bool) {
+    let Some(tray) = app.tray_by_id("main") else {
+        return;
+    };
+    let Ok(img) = image::load_from_memory(TRAY_PNG) else {
+        return;
+    };
+    let mut img = img.to_rgba8();
+    if on {
+        let (w, h) = img.dimensions();
+        let r = (w.min(h) as f32 * 0.19).max(3.0);
+        let (cx, cy) = (w as f32 - r - 0.5, h as f32 - r - 0.5);
+        for y in 0..h {
+            for x in 0..w {
+                let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+                if d <= r + 1.0 {
+                    // dark ring, then the green dot
+                    let px = if d <= r - 0.2 {
+                        [60, 200, 90, 255]
+                    } else {
+                        [10, 12, 14, 255]
+                    };
+                    img.put_pixel(x, y, image::Rgba(px));
+                }
+            }
+        }
+    }
+    let (w, h) = img.dimensions();
+    let _ = tray.set_icon(Some(tauri::image::Image::new_owned(img.into_raw(), w, h)));
+}
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = tray_menu(app)?;
     // The tray keeps the white-on-dark mark; the app/desktop icon is the silver tile.
-    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+    let icon = tauri::image::Image::from_bytes(TRAY_PNG)?;
     TrayIconBuilder::with_id("main")
         .icon(icon)
         .tooltip("Fraglink")
@@ -388,6 +430,7 @@ fn on_menu(app: &AppHandle, id: &str) {
     let app2 = app.clone();
     match id {
         "exit" => quit(app),
+        "update" => updater::install_from_tray(app),
         "logoff" => {
             windows::show_main(app);
             let _ = app.emit("fraglink://logoff", ());
@@ -576,11 +619,15 @@ pub fn run() {
                 friends: friends::FriendsShared::default(),
             });
             build_tray(&handle)?;
-            if !fl.sim {
-                updater::start(handle.clone());
-            }
             let start_min = windows::flag(&handle, "start_minimized");
-            if !fl.minimized && !start_min {
+            let show = !fl.minimized && !start_min;
+            // An update downloaded last time (and ignored) is applied now, before the
+            // window comes up; if that fails the window is shown as usual.
+            let apply_now = !fl.sim && updater::pending_on_start(&handle);
+            if !fl.sim {
+                updater::start(handle.clone(), apply_now, show);
+            }
+            if show && !apply_now {
                 windows::show_main(&handle);
             }
             sync::init(&handle);

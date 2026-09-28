@@ -152,13 +152,8 @@
     }
     if (changed) render();
   }
-  function friendGameIcon(id) {
-    const g = GAMES[id]; if (!g || !g.real) return gameIcon(id);
-    const u = ICONS['f:' + id];
-    if (u) return `<img class="gi-img" src="${esc(u)}" alt="" draggable="false">`;
-    if (u === undefined) { iconWant.add('f:' + id); clearTimeout(iconTimer); iconTimer = setTimeout(loadIcons, 30); }
-    return ICONS[id] ? appIcon(id) : fallbackIcon(id);
-  }
+  // Friends' games use the same icon priority as ours (Xfire, Steam, exe), see icons.rs.
+  const friendGameIcon = gameIcon;
   function gameIcon(id) {
     const g = GAMES[id]; if (!g) return '';
     if (g.real) return appIcon(id);
@@ -901,7 +896,7 @@
       try { const r = await FLB.friendAdd(h); m.innerHTML = r === 'accepted' ? `You and <b>${esc(h)}</b> are now friends.` : `Request sent. <b>${esc(h)}</b> shows under Friend Requests until they accept.`; refreshFriends(); }
       catch (e) { m.innerHTML = `<span class="bad">${esc(String(e && e.message || e))}</span>`; }
     },
-    'update-now': a => { a.disabled = true; a.textContent = 'Updating…'; FLB.installUpdate().catch(e => { a.disabled = false; a.textContent = 'Yes'; toastErr(e); }); },
+    'update-now': a => { a.disabled = true; a.style.opacity = '.5'; FLB.installUpdate().catch(e => { a.disabled = false; a.style.opacity = ''; toastErr(e); }); },
     'detect-skip': () => { state.detectRun = false; render(); },
     'web': a => { if (TAURI && FLB.openWebsite) FLB.openWebsite(a.dataset.page).catch(toastErr); else notice('Fraglink website', LATER); },
     'login-go': async () => {
@@ -1205,10 +1200,10 @@
     FLB.on('fraglink://friends', refreshFriends);
     FLB.on('fraglink://sync', refreshFriends);
     FLB.on('fraglink://logoff', () => actions['sign-out']());
-    // Auto-update: Rust checks quietly (startup + every 6 h); ask before restarting.
-    const askUpdate = v => { if (!v || state.updateAsked === v) return; state.updateAsked = v;
-      notice('Fraglink Update', `<p>An update is available (${esc(String(v).replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1-dev.$2'))}). Restart to update?</p>
-        <div class="af-btns"><button class="hw" type="button" data-action="notice-close">Later</button><button class="hw" type="button" data-action="update-now">Yes</button></div>`); };
+    // Auto-update: Rust downloads + verifies quietly (startup + every 6 h); then a green arrow
+    // in the title bar installs and restarts in one click. No prompt.
+    const askUpdate = v => { const b = $('#upd-ready'); if (!b || !v) return;
+      b.title = `Update ready: click to restart and update (${String(v).replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1-dev.$2')})`; b.hidden = false; };
     FLB.on('fraglink://update', askUpdate);
     if (FLB.updateAvailable) FLB.updateAvailable().then(askUpdate).catch(() => {});
     FLB.on('fraglink://catalog', loadCatalog);

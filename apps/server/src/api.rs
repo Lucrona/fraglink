@@ -1226,9 +1226,12 @@ struct IconsQ {
     ids: String,
 }
 
-/// Where a client can get a game's icon when it isn't installed locally:
-/// `{ "<game id>": { "steam_appid": 570, "icon_url": "https://cdn...jpg" | null } }`.
-/// Only public Steam data; unknown ids are left out.
+/// Where a client can get a game's icon:
+/// `{ "<game id>": { "steam_appid": 570 | null, "icon_url": "https://cdn...jpg" | null,
+///   "icon_path": "/icons/xfire/<file>" (when an Xfire icon matches),
+///   "preferred": "xfire" | "steam" | "none" } }`.
+/// Clients use the Xfire icon first, then Steam, then their local exe icon.
+/// Unknown ids are left out.
 async fn game_icons(
     State(st): State<AppState>,
     _a: AuthUser,
@@ -1257,17 +1260,23 @@ async fn game_icons(
             row.and_then(|r| r.2.as_deref())
                 .and_then(|h| fraglink_core::icons::steam_cdn_icon_url(appid, h))
         });
-        // No Steam icon: the optional Xfire fallback (a path on this server).
-        let xfire = match (&url, st.xfire.as_ref()) {
-            (None, Some(x)) => x
-                .lookup(&st.sigs, id, row.map(|r| r.3.as_str()))
-                .map(|f| format!("/icons/xfire/{f}")),
-            _ => None,
-        };
+        // The classic Xfire icon (a path on this server) whenever one matches, even
+        // if there's a Steam icon: Xfire is the preferred icon.
+        let xfire = st.xfire.as_ref().as_ref().and_then(|x| {
+            x.lookup(&st.sigs, id, row.map(|r| r.3.as_str()))
+                .map(|f| format!("/icons/xfire/{f}"))
+        });
         if appid.is_none() && xfire.is_none() {
             continue;
         }
-        let mut v = json!({ "steam_appid": appid, "icon_url": url });
+        let preferred = if xfire.is_some() {
+            "xfire"
+        } else if url.is_some() {
+            "steam"
+        } else {
+            "none"
+        };
+        let mut v = json!({ "steam_appid": appid, "icon_url": url, "preferred": preferred });
         if let Some(p) = xfire {
             v["icon_path"] = json!(p);
         }

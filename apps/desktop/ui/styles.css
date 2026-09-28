@@ -71,6 +71,15 @@ body.skin-stream .xf-winbtns.only-stream { display: flex !important; }
 .xf-min i::after { content: ""; position: absolute; left: 1px; right: 1px; top: 2px; height: 1px; background: #ddd; }
 .xf-min:active { filter: brightness(.8); }
 .xf-winbtns { display: none; }
+/* update ready: a small green arrow next to the window buttons (one click = restart + update) */
+.xf-upd { position: absolute; left: 235px; top: 32px; width: 15px; height: 15px; padding: 1px; border: 1px solid #111; border-radius: 4px; cursor: pointer; z-index: 5;
+  background: linear-gradient(#3a3d44, #15171a); box-shadow: inset 0 1px 0 rgba(255,255,255,.15); }
+.xf-upd[hidden] { display: none; }
+.xf-upd svg { display: block; width: 11px; height: 11px; filter: drop-shadow(0 0 2px rgba(63,207,106,.45)); }
+.xf-upd:hover { background: linear-gradient(#4a4e56, #1d2024); }
+.xf-upd:active { filter: brightness(.85); }
+body.skin-phoenix .xf-upd { left: auto; right: 62px; top: 18px; }
+body.skin-stream .xf-upd { left: auto; right: 45px; top: 10px; }
 
 /* ---------- screen (grey behind content) ---------- */
 .xf-screen { position: absolute; left: 28px; top: 58px; width: 228px; height: 250px; border-radius: 9px; background: #a9a6a6; }

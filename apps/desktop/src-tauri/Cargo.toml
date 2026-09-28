@@ -23,6 +23,7 @@ fraglink-core = { path = "../../../crates/fraglink-core" }
 fraglink-sync = { path = "../../../crates/fraglink-sync" }
 anyhow = "1"
 base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }

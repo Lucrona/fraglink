@@ -58,8 +58,9 @@ A removable fallback source of game icons, extracted from the 2013 Xfire client.
 - Enable: `FRAGLINK_XFIRE_ICONS=1` in `/etc/fraglink/server.env` (the directory can be changed with
   `FRAGLINK_XFIRE_ICONS_DIR`), then `sudo systemctl restart fraglink-server`. The log shows
   `xfire icons: N games`.
-- Effect: `GET /api/v1/games/icons` adds `"icon_path": "/icons/xfire/<file>"` for games that have
-  no Steam icon. It matches the signature's exe names first (only exes unique to one Xfire game),
+- Effect: `GET /api/v1/games/icons` adds `"icon_path": "/icons/xfire/<file>"` whenever an Xfire
+  icon matches (even if there is a Steam icon) and `"preferred": "xfire"`. Clients (0.2.0-dev.7+)
+  use it first, then Steam, then the local exe icon. It matches the signature's exe names first (only exes unique to one Xfire game),
   then the normalised game name, then a bare series name ("Halo" gives the oldest Xfire "Halo: ..." entry).
 - Remove: delete the flag line and restart, then optionally delete the directory and the
   `/icons/xfire/*` block in the Caddyfile. Nothing else depends on it.

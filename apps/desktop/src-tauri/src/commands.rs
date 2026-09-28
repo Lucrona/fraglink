@@ -529,15 +529,12 @@ pub async fn game_icons(
         .filter(|i| !i.is_empty() && i.len() <= 120)
         .take(60)
         .collect();
-    tauri::async_runtime::spawn_blocking(move || {
-        if friends == Some(true) {
-            crate::icons::resolve_friends(&app, &ids)
-        } else {
-            crate::icons::resolve(&app, &ids, true)
-        }
-    })
-    .await
-    .map_err(err)
+    // Same priority for friends' games and our own (Xfire, Steam, exe); `friends`
+    // is kept for older UI builds.
+    let _ = friends;
+    tauri::async_runtime::spawn_blocking(move || crate::icons::resolve(&app, &ids, true))
+        .await
+        .map_err(err)
 }
 
 pub(crate) fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {

@@ -1,7 +1,8 @@
 //! Small game icons for the Friends, Stats and Activity tabs and toasts.
-//! Order: icon cache → the detected game's exe (Windows) → Steam's library
-//! cache → (signed in only) Steam's public community icon, found via the
-//! Fraglink server → none (the UI draws a generic icon). See `fraglink_core::icons`.
+//! Order (every game): the classic Xfire icon matched by the Fraglink server →
+//! Steam's icon (server CDN answer or Steam's library cache) → the game's exe
+//! (Windows) → none (the UI draws a generic icon). Everything fetched is cached
+//! on disk so it works offline. See `fraglink_core::icons`.
 
 use crate::{sync, AppState};
 use base64::Engine as _;
@@ -54,12 +55,73 @@ fn sources(app: &AppHandle, ids: &[String]) -> HashMap<String, LocalSources> {
         .collect()
 }
 
-/// Resolve icons as `data:` URLs (None = use the generic icon).
-/// `remote` allows asking the server + Steam CDN for games not on this PC.
+const XF: &str = "xf~"; // cached Xfire icon from the server
+const ST: &str = "st~"; // cached Steam icon (server CDN answer or Steam's library cache)
+
+fn key(prefix: &str, id: &str) -> String {
+    format!("{prefix}{id}")
+}
+
+/// Resolve icons as `data:` URLs (None = use the generic icon). Priority for every
+/// game, installed or not: 1) the server's matched Xfire icon, 2) Steam's icon,
+/// 3) the local exe icon, 4) generic. Server answers are cached on disk, so icons
+/// keep working offline after the first fetch. `remote` allows asking the server.
 pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String, Option<String>> {
     let sim = app.state::<AppState>().sim;
     let cache = cache(app);
     let srcs = sources(app, ids);
+    let now = SystemTime::now();
+    let mut out: HashMap<String, Option<String>> = HashMap::new();
+    // 1) cached Xfire icons; ask the server for games it hasn't answered lately
+    let mut ask = vec![];
+    for id in ids {
+        if let Some(png) = cache.get(&key(XF, id)) {
+            out.insert(id.clone(), Some(data_url(&png)));
+        } else if !cache.recent_miss(&key(XF, id), now) {
+            ask.push(id.clone());
+        }
+    }
+    let client = if remote && !ask.is_empty() {
+        sync::client(app)
+    } else {
+        None
+    };
+    let mut answered: std::collections::HashSet<String> = Default::default();
+    if let Some(client) = &client {
+        match client.game_icons(&ask) {
+            Ok(v) => {
+                for id in &ask {
+                    answered.insert(id.clone());
+                    let e = v.get(id);
+                    let xf = e
+                        .and_then(|e| e.get("icon_path"))
+                        .and_then(|p| p.as_str())
+                        .and_then(|p| client.fetch_server_icon(p).ok())
+                        .and_then(|b| icons::normalize(&b));
+                    match xf {
+                        Some(p) => {
+                            let _ = cache.put(&key(XF, id), &p);
+                            out.insert(id.clone(), Some(data_url(&p)));
+                        }
+                        None => cache.put_miss(&key(XF, id)),
+                    }
+                    if out.contains_key(id) || cache.get(&key(ST, id)).is_some() {
+                        continue;
+                    }
+                    if let Some(p) = e
+                        .and_then(|e| e.get("icon_url"))
+                        .and_then(|u| u.as_str())
+                        .and_then(|u| fraglink_sync::fetch_icon(u).ok())
+                        .and_then(|b| icons::normalize(&b))
+                    {
+                        let _ = cache.put(&key(ST, id), &p);
+                    }
+                }
+            }
+            // offline: fall through to the cached/local icons, ask again next time
+            Err(e) => log::debug!("icons: server lookup failed: {e}"),
+        }
+    }
     let extract = move |p: &Path| {
         if sim {
             // Simulation: a placeholder stands in for the exe icon.
@@ -74,115 +136,41 @@ pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String,
             icons::extract_exe_icon(p)
         }
     };
-    let now = SystemTime::now();
-    let mut out = HashMap::new();
-    let mut missing = vec![];
     for id in ids {
-        // Cache (unless the game's exe changed since), then local sources: a game
-        // detected since the last miss gets its exe icon.
+        if out.contains_key(id) {
+            continue;
+        }
         let src = srcs.get(id).cloned().unwrap_or_default();
-        match icons::resolve_local(&cache, id, &src, &extract) {
-            Some((png, _)) => {
-                out.insert(id.clone(), Some(data_url(&png)));
-            }
-            None if cache.recent_miss(id, now) => {
-                out.insert(id.clone(), None);
-            }
-            None => missing.push(id.clone()),
+        // 2) Steam: the server's CDN icon (cached) or Steam's local library cache
+        let steam = cache.get(&key(ST, id)).or_else(|| {
+            let appid = src.steam_appid.or_else(|| icons::appid_from_game_id(id))?;
+            let p = icons::steam_library_icon(src.steam_root.as_deref()?, appid)?;
+            let png = std::fs::read(p).ok().and_then(|b| icons::normalize(&b))?;
+            let _ = cache.put(&key(ST, id), &png);
+            Some(png)
+        });
+        if let Some(png) = steam {
+            out.insert(id.clone(), Some(data_url(&png)));
+            continue;
         }
-    }
-    if missing.is_empty() {
-        return out;
-    }
-    let client = if remote { sync::client(app) } else { None };
-    match client.as_ref().map(|c| c.game_icons(&missing)) {
-        Some(Ok(v)) => {
-            for id in &missing {
-                let png = server_png(client.as_ref().unwrap(), v.get(id));
-                match png {
-                    Some(p) => {
-                        let _ = cache.put(id, &p);
-                        out.insert(id.clone(), Some(data_url(&p)));
-                    }
-                    None => {
-                        cache.put_miss(id);
-                        out.insert(id.clone(), None);
-                    }
-                }
-            }
-        }
-        Some(Err(e)) => {
-            // offline: try again next time, don't remember a miss
-            log::debug!("icons: server lookup failed: {e}");
-            for id in missing {
-                out.insert(id, None);
-            }
-        }
-        None => {
-            // signed out (or local-only request): only remember misses for games
-            // this PC knows about, so a later sign-in can still fetch friends' icons
-            for id in missing {
-                if !remote && srcs.get(&id).is_some_and(|s| s.exe_path.is_some()) {
-                    cache.put_miss(&id);
-                }
-                out.insert(id, None);
-            }
-        }
-    }
-    out
-}
-
-/// Steam CDN icon, else an icon hosted by the Fraglink server (the Xfire fallback).
-fn server_png(client: &fraglink_sync::Client, v: Option<&serde_json::Value>) -> Option<Vec<u8>> {
-    let v = v?;
-    v.get("icon_url")
-        .and_then(|u| u.as_str())
-        .and_then(|u| fraglink_sync::fetch_icon(u).ok())
-        .or_else(|| {
-            v.get("icon_path")
-                .and_then(|p| p.as_str())
-                .and_then(|p| client.fetch_server_icon(p).ok())
-        })
-        .and_then(|b| icons::normalize(&b))
-}
-
-/// Friends' games: the server's icon (Steam / Xfire) wins, cached separately; anything
-/// the server has no icon for falls back to `resolve` (local exe icon etc.).
-pub fn resolve_friends(app: &AppHandle, ids: &[String]) -> HashMap<String, Option<String>> {
-    let cache = cache(app);
-    let key = |id: &str| format!("srv~{id}");
-    let now = SystemTime::now();
-    let mut out = HashMap::new();
-    let mut ask = vec![];
-    for id in ids {
-        match cache.get(&key(id)) {
+        // 3) the local exe icon (cached unless the exe changed)
+        let local = if cache.recent_miss(id, now) && src.exe_path.is_none() {
+            None
+        } else {
+            icons::resolve_local(&cache, id, &src, &extract).map(|(png, _)| png)
+        };
+        match local {
             Some(png) => {
                 out.insert(id.clone(), Some(data_url(&png)));
             }
-            None if cache.recent_miss(&key(id), now) => {}
-            None => ask.push(id.clone()),
-        }
-    }
-    if let (false, Some(client)) = (ask.is_empty(), sync::client(app)) {
-        if let Ok(v) = client.game_icons(&ask) {
-            for id in &ask {
-                match server_png(&client, v.get(id)) {
-                    Some(p) => {
-                        let _ = cache.put(&key(id), &p);
-                        out.insert(id.clone(), Some(data_url(&p)));
-                    }
-                    None => cache.put_miss(&key(id)),
+            None => {
+                // remember a miss only once the server has answered too
+                if answered.contains(id) || src.exe_path.is_some() {
+                    cache.put_miss(id);
                 }
+                out.insert(id.clone(), None);
             }
         }
-    }
-    let rest: Vec<String> = ids
-        .iter()
-        .filter(|i| !out.contains_key(*i))
-        .cloned()
-        .collect();
-    if !rest.is_empty() {
-        out.extend(resolve(app, &rest, true));
     }
     out
 }
