@@ -116,8 +116,8 @@ pub fn show_main(app: &AppHandle) {
             }
         },
     };
-    let _ = w.show();
     let _ = w.unminimize();
+    let _ = w.show();
     let _ = w.set_focus();
 }
 
@@ -126,13 +126,6 @@ pub fn hide_main(app: &AppHandle) {
     persist_main_pos(app);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.close();
-    }
-}
-
-pub fn toggle_main(app: &AppHandle) {
-    match app.get_webview_window("main") {
-        Some(w) if w.is_visible().unwrap_or(false) => hide_main(app),
-        _ => show_main(app),
     }
 }
 

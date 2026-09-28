@@ -282,13 +282,21 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                windows::toggle_main(tray.app_handle());
+            // Single or double left click always brings the window up (created if
+            // it was closed to the tray, restored if minimised, then focused).
+            // It used to toggle, so the two clicks of a double-click opened and
+            // closed it again, and a minimised window counted as "visible".
+            match event {
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                }
+                | TrayIconEvent::DoubleClick {
+                    button: MouseButton::Left,
+                    ..
+                } => windows::show_main(tray.app_handle()),
+                _ => {}
             }
         })
         .build(app)?;
