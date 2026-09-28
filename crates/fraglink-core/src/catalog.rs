@@ -1,7 +1,7 @@
 //! The game list behind Options > Games and Tools > Launch: every known game,
 //! whether it looks installed on this PC, where, and how to start it.
 
-use crate::libraries::{Launcher, LibraryIndex};
+use crate::libraries::{InstalledGame, Launcher, LibraryIndex};
 use crate::signatures::SignatureDb;
 use crate::steam::SteamIndex;
 use crate::store::GameRow;
@@ -56,10 +56,9 @@ pub fn build(
     let mut seen_ids = std::collections::HashSet::new();
     for g in sigs.games() {
         let app = g.steam_appids.iter().find_map(|a| steam.get(*a));
-        let lib = libs
-            .games()
-            .iter()
-            .find(|l| l.name.eq_ignore_ascii_case(&g.name));
+        let lib = libs.games().iter().find(|l| {
+            l.sig_id.as_deref() == Some(g.id.as_str()) || l.name.eq_ignore_ascii_case(&g.name)
+        });
         let exe = set(EXE_KEY, &g.id);
         let (installed, source, path) = if let Some(a) = app {
             (true, "steam", Some(a.prefix.clone()))
@@ -105,6 +104,7 @@ pub fn build(
     for l in libs.games() {
         let id = l.fallback_id();
         if seen_ids.contains(&id)
+            || l.sig_id.is_some()
             || out
                 .iter()
                 .any(|e| e.installed && e.name.eq_ignore_ascii_case(&l.name))
@@ -169,6 +169,20 @@ fn split_args(s: &str) -> Vec<String> {
     s.split_whitespace().map(str::to_string).collect()
 }
 
+/// The launcher install behind a catalog entry (same launcher first).
+fn lib_for<'a>(e: &Entry, libs: &'a LibraryIndex) -> Option<&'a InstalledGame> {
+    let hit = |l: &&InstalledGame| {
+        l.sig_id.as_deref() == Some(e.id.as_str())
+            || l.fallback_id() == e.id
+            || l.name.eq_ignore_ascii_case(&e.name)
+    };
+    let all = libs.games();
+    all.iter()
+        .filter(hit)
+        .find(|l| l.store.as_str() == e.source)
+        .or_else(|| all.iter().find(hit))
+}
+
 /// How to launch an installed entry: Steam and Epic through their launchers,
 /// otherwise an .exe we know (picked by the user, seen running, or GOG's).
 pub fn launch_for(e: &Entry, libs: &LibraryIndex) -> Option<Launch> {
@@ -185,11 +199,15 @@ pub fn launch_for(e: &Entry, libs: &LibraryIndex) -> Option<Launch> {
     if let Some(a) = e.steam_appid.filter(|_| e.source == "steam") {
         return Some(Launch::Url(format!("steam://rungameid/{a}")));
     }
-    if let Some(l) = libs
-        .games()
-        .iter()
-        .find(|l| l.fallback_id() == e.id || l.name.eq_ignore_ascii_case(&e.name))
-    {
+    if let Some(l) = lib_for(e, libs) {
+        let args = split_args(&e.launch_args);
+        let exe_path = |x: &str| {
+            format!(
+                "{}\\{}",
+                l.install_dir.trim_end_matches(['\\', '/']),
+                x.replace('/', "\\")
+            )
+        };
         match l.store {
             Launcher::Epic => {
                 return Some(Launch::Url(format!(
@@ -197,12 +215,27 @@ pub fn launch_for(e: &Entry, libs: &LibraryIndex) -> Option<Launch> {
                     l.key
                 )))
             }
-            Launcher::Gog => {
+            Launcher::Battlenet => {
+                if let Some(code) = &l.launch_code {
+                    return Some(match &libs.battlenet_exe {
+                        Some(bnet) => Launch::Exe {
+                            path: bnet.clone(),
+                            args: vec![format!("--exec=launch {code}")],
+                        },
+                        None => Launch::Url(format!("battlenet://{code}")),
+                    });
+                }
+            }
+            Launcher::Ubisoft => {
+                if let Some(id) = &l.launch_code {
+                    return Some(Launch::Url(format!("uplay://launch/{id}/0")));
+                }
+            }
+            Launcher::Gog | Launcher::Ea | Launcher::Xbox | Launcher::Windows => {
                 if let Some(x) = &l.launch_exe {
-                    let p = format!("{}\\{}", l.install_dir.trim_end_matches(['\\', '/']), x);
                     return Some(Launch::Exe {
-                        path: p,
-                        args: split_args(&e.launch_args),
+                        path: exe_path(x),
+                        args,
                     });
                 }
             }
@@ -265,5 +298,35 @@ mod tests {
         let first_uninstalled = c.iter().position(|e| !e.installed).unwrap();
         assert!(c[..first_uninstalled].iter().all(|e| e.installed));
         assert!(c[first_uninstalled..].iter().all(|e| !e.installed));
+    }
+
+    #[test]
+    fn battlenet_games_launch_through_the_battlenet_app() {
+        let sigs = SignatureDb::builtin();
+        let mut libs = LibraryIndex::default();
+        libs.insert(
+            crate::installs::battlenet_game(
+                "wow_enus",
+                "World of Warcraft",
+                r"C:\Program Files (x86)\World of Warcraft",
+            )
+            .unwrap(),
+        );
+        let cat = build(&sigs, &SteamIndex::default(), &libs, &[], &BTreeMap::new());
+        let wow = cat.iter().find(|e| e.id == "wow").unwrap();
+        assert!(wow.installed && wow.can_launch);
+        assert_eq!(wow.source, "battlenet");
+        assert_eq!(
+            launch_for(wow, &libs),
+            Some(Launch::Url("battlenet://WoW".into()))
+        );
+        libs.battlenet_exe = Some(r"C:\BNet\Battle.net.exe".into());
+        assert_eq!(
+            launch_for(wow, &libs),
+            Some(Launch::Exe {
+                path: r"C:\BNet\Battle.net.exe".into(),
+                args: vec!["--exec=launch WoW".into()]
+            })
+        );
     }
 }

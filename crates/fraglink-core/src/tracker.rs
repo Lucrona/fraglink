@@ -354,6 +354,11 @@ impl Tracker {
             DetectSource::SteamLibrary | DetectSource::SteamRunning => "steam",
             DetectSource::EpicLibrary => "epic",
             DetectSource::GogLibrary => "gog",
+            DetectSource::BattlenetLibrary => "battlenet",
+            DetectSource::EaLibrary => "ea",
+            DetectSource::UbisoftLibrary => "ubisoft",
+            DetectSource::XboxLibrary => "xbox",
+            DetectSource::InstalledLibrary => "signature",
         };
         self.store
             .upsert_game(&d.game_id, &d.name, src, d.steam_appid, now)?;

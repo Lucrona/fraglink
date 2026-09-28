@@ -19,3 +19,11 @@
    - Exports: `Documents\Fraglink\`
 10. **Sending feedback/logs:** tray → *Open logs folder*, and send `fraglink.log`. Optionally also tray → *Export my data* and send the JSON/CSV. Mention which games weren't detected or were mis-detected, and what the tray showed. It also helps to note Fraglink's memory/CPU in Task Manager: include both "Fraglink" and the "Microsoft Edge WebView2" entries while the window is open, then again after hiding it to the tray.
 11. **Uninstall:** *Settings → Apps → Fraglink → Uninstall*. Your data folder is kept; delete `%APPDATA%\gg.fraglink.desktop` to remove it.
+
+## Installed games (0.2.0-dev.5)
+
+Open *Tools → Options → Games* and press **Detect Games**. Every game installed through Steam, Battle.net, Epic, GOG, EA app, Ubisoft Connect or the Xbox app (default `XboxGames` folder) should be under **Installed games**, with its launcher next to its name. Then:
+
+- Press **Launch** in the info panel (or *Tools → Launch*) for a Battle.net game: Battle.net should open and start it. Try one Steam, Epic, EA and Ubisoft game too.
+- If a game is missing, note its launcher and install folder, and send the log folder (*Options → General → Advanced* shows where it is; the `libraries:` line lists how many installs each launcher gave).
+

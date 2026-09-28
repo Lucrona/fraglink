@@ -5,6 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.5] - 2026-09-28
+
+Pre-release for private testing (builds report `0.2.0-5`).
+
+### Added
+- **Installed games from more launchers** (Options > Games, Tools > Launch, the info panel), each tagged with its launcher:
+  - **Battle.net:** the Blizzard entries in the Windows Uninstall list (HKLM and HKCU, 64- and 32-bit views; the product comes from `--uid=` in the uninstall command) and `%ProgramData%\Battle.net\Agent\product.db`. Products map to WoW (retail / Classic / Classic Era), Diablo II: Resurrected, III and IV, Overwatch 2, Hearthstone, StarCraft Remastered and II, Warcraft III, Heroes of the Storm and the Call of Duty titles. Launch runs `Battle.net.exe --exec="launch <code>"` (e.g. `WoW`, `Pro`, `Fen`), or opens `battlenet://<code>` if Battle.net.exe isn't found.
+  - **EA app:** Uninstall entries from Electronic Arts / EAInstaller; launched through the game's exe.
+  - **Ubisoft Connect:** `HKLM\SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs` and `Uplay Install <id>` entries; launched with `uplay://launch/<id>/0`.
+  - **Xbox / Microsoft Store:** folders under `<drive>:\XboxGames\<game>\Content` (the Xbox app's default); launched through a known game exe if one is found.
+  - **Any other installer:** an Uninstall entry counts when its name matches a game in the signature list, or one of that game's exes sits in its install folder (up to three folders deep).
+  - Epic and GOG were already covered; they now share the same launch rules.
+- A running game inside any of these folders is detected even if its exe isn't in the signature list (like Steam, Epic and GOG before).
+- Folded / unfolded groups in the friends list are remembered across restarts.
+
+### Changed
+- The info panel changes only when you click a row, the same for every group. A clicked friend of a friend shows their details plus a **Mutual Friends** section; hovering no longer changes the panel.
+- Friends list tooltips only appear when the text is cut off, and the "Right-click for options" tooltip on group headings is gone.
+- Options > Games shows the launcher name next to each game (Steam, Battle.net, EA app, Ubisoft Connect, Xbox, Epic, GOG).
+
 ## [0.2.0-dev.4] - 2026-09-28
 
 Pre-release for private testing (builds report `0.2.0-4`).

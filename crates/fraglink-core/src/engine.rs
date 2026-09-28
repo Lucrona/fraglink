@@ -118,12 +118,23 @@ impl Engine {
             }
             None => log::info!("steam: not installed / not found"),
         }
-        self.detector.libs = crate::libraries::LibraryIndex::load();
-        log::info!(
-            "libraries: {} Epic, {} GOG installs",
-            self.detector.libs.count(crate::libraries::Launcher::Epic),
-            self.detector.libs.count(crate::libraries::Launcher::Gog)
-        );
+        let mut libs = crate::libraries::LibraryIndex::load();
+        crate::installs::resolve(&mut libs, &self.detector.sigs);
+        self.detector.libs = libs;
+        {
+            use crate::libraries::Launcher::*;
+            let c = |l| self.detector.libs.count(l);
+            log::info!(
+                "libraries: {} Epic, {} GOG, {} Battle.net, {} EA, {} Ubisoft, {} Xbox, {} other installs",
+                c(Epic),
+                c(Gog),
+                c(Battlenet),
+                c(Ea),
+                c(Ubisoft),
+                c(Xbox),
+                c(Windows)
+            );
+        }
     }
 
     /// One poll of the environment. Call every [`DEFAULT_POLL_SECS`].

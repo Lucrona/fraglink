@@ -18,6 +18,12 @@ pub enum DetectSource {
     SteamRunning,
     EpicLibrary,
     GogLibrary,
+    BattlenetLibrary,
+    EaLibrary,
+    UbisoftLibrary,
+    XboxLibrary,
+    /// A folder from the Windows Uninstall list matched to a signature.
+    InstalledLibrary,
 }
 
 impl DetectSource {
@@ -29,6 +35,11 @@ impl DetectSource {
             DetectSource::SteamRunning => "steam_running",
             DetectSource::EpicLibrary => "epic_library",
             DetectSource::GogLibrary => "gog_library",
+            DetectSource::BattlenetLibrary => "battlenet_library",
+            DetectSource::EaLibrary => "ea_library",
+            DetectSource::UbisoftLibrary => "ubisoft_library",
+            DetectSource::XboxLibrary => "xbox_library",
+            DetectSource::InstalledLibrary => "installed_library",
         }
     }
 }
@@ -110,6 +121,9 @@ impl Detector {
 
     /// Signature id/name for an Epic/GOG install (via its launch exe), else `epic:<key>` / `gog:<key>`.
     fn library_identity(&self, g: &InstalledGame) -> (String, String) {
+        if let Some(sig) = g.sig_id.as_deref().and_then(|id| self.sigs.get(id)) {
+            return (sig.id.clone(), sig.name.clone());
+        }
         if let Some(exe) = &g.launch_exe {
             let full = format!("{}{}", g.prefix, exe.to_lowercase());
             if let Some(sig) = self.sigs.match_process(exe, Some(&full)) {
@@ -166,6 +180,11 @@ impl Detector {
                         source: match g.store {
                             Launcher::Epic => DetectSource::EpicLibrary,
                             Launcher::Gog => DetectSource::GogLibrary,
+                            Launcher::Battlenet => DetectSource::BattlenetLibrary,
+                            Launcher::Ea => DetectSource::EaLibrary,
+                            Launcher::Ubisoft => DetectSource::UbisoftLibrary,
+                            Launcher::Xbox => DetectSource::XboxLibrary,
+                            Launcher::Windows => DetectSource::InstalledLibrary,
                         },
                         exe: Some(p.name.clone()),
                         steam_appid: None,

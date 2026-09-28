@@ -1,0 +1,12 @@
+[
+  {"key": "Battle.net", "display_name": "Battle.net", "install_location": "C:\\Program Files (x86)\\Battle.net", "publisher": "Blizzard Entertainment", "uninstall_string": "\"C:\\Program Files (x86)\\Battle.net\\Battle.net Launcher.exe\" --uninstall"},
+  {"key": "Diablo IV", "display_name": "Diablo IV", "install_location": "C:\\Program Files (x86)\\Diablo IV", "publisher": "Blizzard Entertainment", "uninstall_string": "\"C:\\ProgramData\\Battle.net\\Agent\\Blizzard Uninstaller.exe\" --lang=enUS --uid=fenris --displayname=\"Diablo IV\""},
+  {"key": "Overwatch", "display_name": "Overwatch", "install_location": "D:\\Games\\Overwatch", "publisher": "Blizzard Entertainment", "uninstall_string": "\"C:\\ProgramData\\Battle.net\\Agent\\Blizzard Uninstaller.exe\" --lang=enUS --uid=prometheus --displayname=\"Overwatch\""},
+  {"key": "Uplay Install 635", "display_name": "Assassin's Creed Unity", "install_location": "C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\games\\Assassin's Creed Unity", "publisher": "Ubisoft", "uninstall_string": "\"C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\Uplay.exe\" uplay://uninstall/635"},
+  {"key": "{EA-APEX}", "display_name": "Apex Legends", "install_location": "C:\\Program Files\\EA Games\\Apex", "publisher": "Electronic Arts", "uninstall_string": "\"C:\\Program Files\\Common Files\\EAInstaller\\Apex\\Cleanup.exe\" uninstall_game"},
+  {"key": "{EA-APP}", "display_name": "EA app", "install_location": "C:\\Program Files\\Electronic Arts\\EA Desktop", "publisher": "Electronic Arts", "uninstall_string": "x"},
+  {"key": "RocketLeagueKey", "display_name": "Rocket League®", "install_location": "E:\\Stuff\\rocketleague", "publisher": "Psyonix", "uninstall_string": "x"},
+  {"key": "Discord", "display_name": "Discord", "install_location": "C:\\Users\\me\\AppData\\Local\\Discord", "publisher": "Discord Inc.", "uninstall_string": "x"},
+  {"key": "Steam App 730", "display_name": "Counter-Strike 2", "install_location": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive", "publisher": "Valve", "uninstall_string": "steam://uninstall/730"},
+  {"key": "BroadThing", "display_name": "Hades", "install_location": "C:\\Games", "publisher": "x", "uninstall_string": "x"}
+]

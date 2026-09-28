@@ -173,6 +173,7 @@ const ALLOWED: &[&str] = &[
     "custom_status",
     "custom_groups",
     "hidden_groups",
+    "collapsed_groups",
 ];
 
 /// Per-game settings from Options > Games (`game_path:<id>`, `launch_args:<id>`).
@@ -191,7 +192,7 @@ pub fn set_setting(
     value: String,
 ) -> CmdResult<()> {
     let per_game = per_game_key(&key);
-    let max = if per_game || key.starts_with("custom_") || key == "hidden_groups" {
+    let max = if per_game || key.starts_with("custom_") || key.ends_with("_groups") {
         512
     } else {
         64

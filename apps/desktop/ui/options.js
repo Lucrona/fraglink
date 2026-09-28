@@ -11,6 +11,7 @@
   const pending = new Map();
   let st = null, catalog = null, gsel = null, detecting = false;
   const fail = e => alert(String(e && e.message || e));
+  const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '' };
   const PAGES = { notifications: 'general', advanced: 'general' }; // old page names
 
   function show(page) {
@@ -89,7 +90,7 @@
     const t = $('#tree');
     if (!catalog) { t.innerHTML = ''; return; }
     const inst = catalog.filter(g => g.installed), not = catalog.filter(g => !g.installed);
-    const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}">${esc(g.name)}<small>${esc(g.source === 'signature' ? '' : g.source)}</small></div>`;
+    const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}">${esc(g.name)}<small>${esc(SOURCES[g.source] ?? g.source)}</small></div>`;
     const node = (k, label, arr) => `<div class="node" data-node="${k}"><span class="tw">${open[k] ? '−' : '+'}</span>${label} (${arr.length})</div>` + (open[k] ? arr.map(leaf).join('') : '');
     t.innerHTML = node('inst', 'Installed games', inst) + node('not', 'Not installed', not);
   }

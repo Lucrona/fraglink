@@ -10,6 +10,7 @@ pub mod engine;
 pub mod env;
 pub mod export;
 pub mod icons;
+pub mod installs;
 pub mod libraries;
 pub mod outbox;
 pub mod signatures;

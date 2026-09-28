@@ -1394,7 +1394,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-core"
-version = "0.2.0-4"
+version = "0.2.0-5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-desktop"
-version = "0.2.0-4"
+version = "0.2.0-5"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1433,7 +1433,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-server"
-version = "0.2.0-4"
+version = "0.2.0-5"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1464,7 +1464,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-sync"
-version = "0.2.0-4"
+version = "0.2.0-5"
 dependencies = [
  "base64 0.22.1",
  "fraglink-core",

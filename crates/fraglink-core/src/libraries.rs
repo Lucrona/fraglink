@@ -22,6 +22,12 @@ use std::path::{Path, PathBuf};
 pub enum Launcher {
     Epic,
     Gog,
+    Battlenet,
+    Ea,
+    Ubisoft,
+    Xbox,
+    /// Found through a Windows "Uninstall" entry that matches the signature list.
+    Windows,
 }
 
 impl Launcher {
@@ -29,6 +35,11 @@ impl Launcher {
         match self {
             Launcher::Epic => "epic",
             Launcher::Gog => "gog",
+            Launcher::Battlenet => "battlenet",
+            Launcher::Ea => "ea",
+            Launcher::Ubisoft => "ubisoft",
+            Launcher::Xbox => "xbox",
+            Launcher::Windows => "windows",
         }
     }
 }
@@ -44,6 +55,10 @@ pub struct InstalledGame {
     pub launch_exe: Option<String>,
     /// Normalized install dir with a trailing `/`.
     pub prefix: String,
+    /// Signature id, when the launcher data says which game this is.
+    pub sig_id: Option<String>,
+    /// Launcher-specific start code (Battle.net product code, Ubisoft id).
+    pub launch_code: Option<String>,
 }
 
 impl InstalledGame {
@@ -54,7 +69,7 @@ impl InstalledGame {
 }
 
 /// Install dirs that are too broad to attribute every process under them.
-fn prefix_is_safe(prefix: &str) -> bool {
+pub(crate) fn prefix_is_safe(prefix: &str) -> bool {
     let trimmed = prefix.trim_end_matches('/');
     let segs: Vec<&str> = trimmed.split('/').filter(|s| !s.is_empty()).collect();
     if segs.len() < 2 {
@@ -76,7 +91,7 @@ fn prefix_is_safe(prefix: &str) -> bool {
     !BROAD.contains(&segs[segs.len() - 1])
 }
 
-fn make_prefix(dir: &str) -> String {
+pub(crate) fn make_prefix(dir: &str) -> String {
     let mut p = normalize_path(dir.trim());
     while p.ends_with('/') {
         p.pop();
@@ -85,7 +100,7 @@ fn make_prefix(dir: &str) -> String {
     p
 }
 
-fn file_name(p: &str) -> Option<String> {
+pub(crate) fn file_name(p: &str) -> Option<String> {
     let n = p.replace('\\', "/");
     let last = n.rsplit('/').next()?.trim();
     (!last.is_empty()).then(|| last.to_string())
@@ -139,6 +154,8 @@ pub fn parse_epic_item(text: &str) -> Option<InstalledGame> {
         install_dir: it.install_location,
         launch_exe: file_name(&it.launch_executable),
         prefix,
+        sig_id: None,
+        launch_code: None,
     })
 }
 
@@ -166,12 +183,16 @@ pub fn parse_gog_values(key_name: &str, v: &HashMap<String, String>) -> Option<I
         install_dir: path.to_string(),
         launch_exe: get("exe").and_then(file_name),
         prefix,
+        sig_id: None,
+        launch_code: None,
     })
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct LibraryIndex {
     games: Vec<InstalledGame>,
+    /// Full path of `Battle.net.exe`, if found.
+    pub battlenet_exe: Option<String>,
 }
 
 impl LibraryIndex {
@@ -287,7 +308,21 @@ impl LibraryIndex {
         }
     }
 
-    /// Discover Epic + GOG installs on this machine.
+    /// Drop entries matching `keep == false`.
+    pub fn retain(&mut self, keep: impl FnMut(&InstalledGame) -> bool) {
+        self.games.retain(keep);
+    }
+    pub fn games_mut(&mut self) -> &mut [InstalledGame] {
+        &mut self.games
+    }
+    /// Is some other launcher's entry already using this folder?
+    pub fn has_prefix(&self, prefix: &str) -> bool {
+        self.games.iter().any(|g| g.prefix == prefix)
+    }
+
+    /// Discover installs on this machine: Epic, GOG, then Battle.net, EA app,
+    /// Ubisoft Connect, Xbox and signature matches from the Uninstall list
+    /// (see `installs.rs`). Call [`crate::installs::resolve`] afterwards.
     pub fn load() -> Self {
         let mut idx = LibraryIndex::default();
         if let Some(dir) = epic_manifest_dir() {
@@ -299,6 +334,7 @@ impl LibraryIndex {
             #[cfg(windows)]
             idx.add_gog_registry();
         }
+        crate::installs::load_into(&mut idx);
         idx
     }
 }

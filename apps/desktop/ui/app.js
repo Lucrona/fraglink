@@ -225,7 +225,7 @@
   const state = {
     skin: params.get('skin') || localStorage.getItem('fl-skin') || 'dark',
     tab: ({ hours: 'stats', profile: 'stats' })[params.get('tab')] || params.get('tab') || 'friends',
-    collapsed: { online: false, fof: false, off: false }, hover: null,
+    collapsed: { online: false, fof: false, off: false },
     sel: null, sort: { key: 'name', dir: 1 }, hoursSort: { key: 'week', dir: -1 },
     chatWith: null, logs: {},
   };
@@ -266,11 +266,11 @@
   function row(f, cls = '') {
     const icon = f.game && f.kind !== 'off' ? `<i class="gi">${gameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}" title="${esc(f.name)}"><span class="c-name">${icon}${esc(f.name)}</span><span class="c-status">${esc(statusText(f))}</span><span class="c-info">${esc(info)}</span></div>`;
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${esc(f.name)}</span><span class="c-status">${esc(statusText(f))}</span><span class="c-info">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
-    return `<div class="xf-sec ${cls} ${c ? 'collapsed' : ''} ${state.sel === 'g:' + key ? 'sel' : ''}" data-sec="${esc(key)}" title="Right-click for options"><i class="tri"></i>${label}${n != null ? ` <small>(${n})</small>` : ''}</div>`;
+    return `<div class="xf-sec ${cls} ${c ? 'collapsed' : ''} ${state.sel === 'g:' + key ? 'sel' : ''}" data-sec="${esc(key)}"><i class="tri"></i>${label}${n != null ? ` <small>(${n})</small>` : ''}</div>`;
   }
   /* Settings the main window follows (written by Options and the menus). */
   const SET = () => (LIVE.settings && LIVE.settings.settings) || {};
@@ -283,7 +283,7 @@
   const GROUP_NAMES = { online: 'Friends Online', fof: 'Friends of Friends Playing', req: 'Friend Requests', off: 'Friends Offline' };
   const GROUP_HELP = {
     online: 'Friends who are signed in to Fraglink right now. Friends in a game are listed first, with the game in the Status column.',
-    fof: 'Friends of your friends who are in a game right now. Hover over one to see which of your friends you have in common.',
+    fof: 'Friends of your friends who are in a game right now. Click one to see their game and the friends you have in common.',
     req: 'Friend requests you have sent or received. Select one to accept, decline or cancel it.',
     off: 'Friends who are not signed in. Turn this list off with Tools > Friends > Show Offline Friends.',
     custom: 'A group you made. Moving friends into custom groups comes in a later update; for now it is an empty heading.',
@@ -447,13 +447,6 @@
   /* ---------------- side panel ---------------- */
   function renderSide() {
     const el = SS.vp; requestAnimationFrame(SS.update);
-    const hv = state.hover && friendsNow().find(x => x.id === state.hover && x.kind === 'fof');
-    if (hv) {
-      const mutual = hv.mutual || ((hv.info || '').match(/via ([^·]+)/) || [])[1] || '';
-      el.innerHTML = `<h4>${esc(hv.name)}</h4><div class="act"><i class="gi">${gameIcon(hv.game)}</i><div><b>${esc(GAMES[hv.game].name)}</b><br>${esc(hv.server)}</div></div>
-        <div class="sep"></div><h4>Mutual Friends</h4><ul class="games">${mutual.split(',').filter(Boolean).map(m => `<li><i class="noicon"></i><span>${esc(m.trim())}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>`;
-      return;
-    }
     if (String(state.sel || '').startsWith('g:')) {
       const k = state.sel.slice(2), name = GROUP_NAMES[k] || k.replace(/^c:/, '');
       el.innerHTML = `<h4>${esc(name)}</h4><p class="side-help">${esc(GROUP_HELP[k] || GROUP_HELP.custom)}</p><div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
@@ -474,11 +467,13 @@
     }
     if (f) {
       const playing = f.kind === 'playing' || f.kind === 'fof';
+      const mutual = f.kind === 'fof' ? (f.mutual || ((f.info || '').match(/via ([^·]+)/) || [])[1] || '').split(',').map(x => x.trim()).filter(Boolean) : null;
+      const mutualHtml = mutual ? `<div class="sep"></div><h4>Mutual Friends <small>(${mutual.length})</small></h4><ul class="games">${mutual.map(m => `<li><i class="noicon"></i><span>${esc(m)}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>` : '';
       el.innerHTML = `<h4>${esc(f.name)}</h4>
         <div class="act">${playing ? `<i class="gi">${gameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b><br>${esc(f.server)}<br><span style="color:var(--cyan)">${esc(f.info)}</span></div>` : `<div>${esc(statusText(f))}${f.last ? ' · last online ' + esc(f.last) : ''}</div>`}</div>
         <a data-action="friend-profile">Profile</a>
         <div class="sep"></div>
-        <div><span style="color:#8ea3c8">Past 7 days:</span> <b>${fmtH(f.week)}</b><br><span style="color:#8ea3c8">Total logged:</span> <b>${f.total ? f.total + ' h' : 'hidden'}</b></div>
+        <div><span style="color:#8ea3c8">Past 7 days:</span> <b>${fmtH(f.week)}</b><br><span style="color:#8ea3c8">Total logged:</span> <b>${f.total ? f.total + ' h' : 'hidden'}</b></div>${mutualHtml}
         <div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
       return;
     }
@@ -875,16 +870,18 @@
   });
   $$('input[name=skin]').forEach(r => r.addEventListener('change', () => applySkin(r.value)));
   list.addEventListener('click', e => {
-    const s = e.target.closest('[data-sec]'); if (s) { const k = s.dataset.sec; if (e.target.closest('.tri') || state.sel === 'g:' + k) state.collapsed[k] = !state.collapsed[k]; state.sel = 'g:' + k; render(); return; }
+    const s = e.target.closest('[data-sec]'); if (s) { const k = s.dataset.sec; if (e.target.closest('.tri') || state.sel === 'g:' + k) { state.collapsed[k] = !state.collapsed[k]; saveSetting('collapsed_groups', JSON.stringify(Object.keys(state.collapsed).filter(x => state.collapsed[x]).slice(0, 30))); } state.sel = 'g:' + k; render(); return; }
     const so = e.target.closest('[data-sort]'); if (so) { const k = so.dataset.sort; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : 1 }; render(); return; }
     const hs = e.target.closest('[data-hsort]'); if (hs) { const k = hs.dataset.hsort; state.hoursSort = { key: k, dir: state.hoursSort.key === k ? -state.hoursSort.dir : -1 }; render(); return; }
     const w = e.target.closest('[data-web]'); if (w) { website(w.dataset.web); return; }
     const r = e.target.closest('[data-friend]'); if (r) { state.sel = r.dataset.friend; render(); }
   });
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); if (e.key === 'Enter' && e.target.id === 'custom-status') actions['custom-status-go'](); if (e.key === 'Escape') hideCtx(); });
-  // hovering a friend of a friend shows your mutual friends in the info panel
-  list.addEventListener('mouseover', e => { const r = e.target.closest('.xf-row.fof'); const id = r ? r.dataset.friend : null; if (id !== state.hover) { state.hover = id; renderSide(); } });
-  list.addEventListener('mouseleave', () => { if (state.hover) { state.hover = null; renderSide(); } });
+  // tooltips only for text that is cut off
+  list.addEventListener('mouseover', e => {
+    const c = e.target.closest('.xf-row > span'); if (!c) return;
+    if (c.scrollWidth > c.clientWidth + 1) c.title = c.textContent.trim(); else c.removeAttribute('title');
+  });
   /* group header right-click menu */
   const ctx = $('#ctx');
   function hideCtx() { ctx.hidden = true; }
@@ -991,6 +988,7 @@
     if (TAURI && saved.skin) state.skin = params.get('skin') || saved.skin;
     if (['online', 'away', 'invisible'].includes(saved.status)) myStatus = saved.status;
     applyTheme(saved.theme); syncMenus(); syncStatus();
+    for (const k of jsonList('collapsed_groups')) state.collapsed[k] = true;
     setZoom(params.get('zoom') || (TAURI ? (saved.zoom || '1.5') : (document.body.classList.contains('compare') ? 1 : 2)));
     applySkin(state.skin);
     clock();
