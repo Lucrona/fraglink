@@ -1,0 +1,18 @@
+# /etc/caddy/Caddyfile - Fraglink. The server itself listens on 127.0.0.1:8787.
+
+# Now: plain HTTP on the IP (no certificate possible for a bare IP).
+:80 {
+	encode gzip
+	reverse_proxy 127.0.0.1:8787
+}
+
+# When DNS A records for fraglink.gg and app.fraglink.gg point at 119.42.54.86:
+#  1. delete the ":80 { ... }" block above,
+#  2. uncomment the block below (Caddy gets Let's Encrypt certificates and redirects HTTP to HTTPS),
+#  3. set FRAGLINK_PUBLIC_URL=https://app.fraglink.gg in /etc/fraglink/server.env,
+#  4. sudo systemctl reload caddy && sudo systemctl restart fraglink-server
+#
+# app.fraglink.gg, fraglink.gg {
+# 	encode gzip
+# 	reverse_proxy 127.0.0.1:8787
+# }

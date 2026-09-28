@@ -1,0 +1,29 @@
+[Unit]
+Description=Fraglink server
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+User=fraglink-srv
+Group=fraglink-srv
+EnvironmentFile=/etc/fraglink/server.env
+ExecStart=/opt/fraglink/fraglink-server
+Restart=on-failure
+RestartSec=3
+# hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/fraglink
+MemoryMax=600M
+
+[Install]
+WantedBy=multi-user.target

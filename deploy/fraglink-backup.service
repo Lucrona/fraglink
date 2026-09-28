@@ -1,0 +1,7 @@
+[Unit]
+Description=Fraglink nightly database backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fraglink-backup
