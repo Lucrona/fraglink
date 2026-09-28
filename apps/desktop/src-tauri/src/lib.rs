@@ -425,6 +425,7 @@ pub fn run() {
             Some(vec!["--minimized"]),
         ))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let handle = app.handle().clone();
             let base = app.path().app_data_dir()?;
@@ -497,7 +498,8 @@ pub fn run() {
                 friends: friends::FriendsShared::default(),
             });
             build_tray(&handle)?;
-            if !fl.minimized {
+            let start_min = windows::flag(&handle, "start_minimized");
+            if !fl.minimized && !start_min {
                 windows::show_main(&handle);
             }
             sync::init(&handle);
@@ -521,6 +523,11 @@ pub fn run() {
             commands::hide_main,
             commands::set_window_scale,
             commands::open_options,
+            commands::games_catalog,
+            commands::detect_games,
+            commands::launch_game,
+            commands::pick_game_exe,
+            commands::open_website,
             commands::toast_payload,
             commands::toast_clicked,
             commands::set_status,

@@ -4,6 +4,7 @@
 //! documented files/registry values (Steam, Epic, GOG). It never reads game memory, injects
 //! code or installs hooks (anti-cheat safety). No network access.
 
+pub mod catalog;
 pub mod detector;
 pub mod engine;
 pub mod env;

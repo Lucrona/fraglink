@@ -1,6 +1,6 @@
-/* Fraglink Options window. Changes are staged and written on Apply / OK;
-   the Rust side broadcasts them so the main window follows (skin, zoom…).
-   Account (sync) buttons act straight away, like the old dialog. */
+/* Fraglink Options: a tabbed dialog. Changes are staged and written on OK;
+   the Rust side broadcasts them so the main window follows. Account, blocked
+   users and "Add game manually" act straight away. */
 (() => {
   'use strict';
   const FLB = window.FL;
@@ -9,34 +9,45 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const params = new URLSearchParams(location.search);
   const pending = new Map();
-  let st = null;
+  let st = null, catalog = null, gsel = null, detecting = false;
+  const fail = e => alert(String(e && e.message || e));
+  const PAGES = { notifications: 'general', advanced: 'general' }; // old page names
 
   function show(page) {
+    page = PAGES[page] || page;
     if (!$(`section[data-page="${page}"]`)) page = 'general';
-    $$('.op-cats button').forEach(b => b.classList.toggle('on', b.dataset.page === page));
+    $$('.op-tabs button').forEach(b => b.classList.toggle('on', b.dataset.page === page));
     $$('section[data-page]').forEach(s => { s.hidden = s.dataset.page !== page; });
     if (page === 'account') renderSync();
+    if (page === 'privacy') renderBlocked();
+    if (page === 'games' && !catalog && !detecting) detect();
   }
 
-  function value(el) { return el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value; }
+  const value = el => el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
+  const on = (s, k, def = '1') => (s[k] === '0' || s[k] === '1') ? s[k] : def;
   function load() {
     const s = st.settings || {};
     const cur = {
-      autostart: st.autostart ? '1' : '0',
-      idle_threshold_min: String(st.idle_threshold_min), min_session_min: String(st.min_session_min),
-      paused: s.paused === '1' ? '1' : '0',
-      toasts: s.toasts === '0' ? '0' : '1', friend_toasts: s.friend_toasts === '0' ? '0' : '1', friend_toasts_dnd: s.friend_toasts_dnd === '0' ? '0' : '1',
+      autostart: st.autostart ? '1' : '0', start_minimized: on(s, 'start_minimized', '0'), minimize_to_tray: on(s, 'minimize_to_tray', '0'),
+      show_offline: on(s, 'show_offline'), show_fof: on(s, 'show_fof'), nickname: s.nickname || '', language: s.language || 'en-AU',
+      toasts: on(s, 'toasts'), friend_toasts: on(s, 'friend_toasts'), friend_toasts_dnd: on(s, 'friend_toasts_dnd'),
+      share_game: on(s, 'share_game'), share_profile: on(s, 'share_profile'), share_fof: on(s, 'share_fof'),
+      sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
       skin: ['dark', 'classic'].includes(s.skin) ? s.skin : 'dark', zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
+      theme: s.theme || 'blue', always_on_top: on(s, 'always_on_top', '0'),
+      idle_threshold_min: String(st.idle_threshold_min), min_session_min: String(st.min_session_min), paused: on(s, 'paused', '0'),
     };
     $$('[data-key]').forEach(el => {
-      const v = cur[el.dataset.key];
+      const v = cur[el.dataset.key] ?? '';
       if (el.type === 'checkbox') el.checked = v === '1';
       else if (el.type === 'radio') el.checked = el.value === v;
       else el.value = v;
     });
+    const idle = parseInt(s.idle_status || '0', 10);
+    $('#idle-on').checked = idle > 0; $('#idle-min').value = idle > 0 ? idle : 10; $('#idle-min').disabled = !(idle > 0);
     scaleBox();
     $('#about').innerHTML = [
-      ['Version', `Fraglink ${esc(st.version)}${st.sim ? ' <span class="bad">(simulation mode: fake games)</span>' : ''}`],
+      ['Version', `Fraglink ${esc(st.version)}${st.sim ? ' <span class="bad">(simulation mode)</span>' : ''}`],
       ['Data folder', `<code>${esc(st.data_dir)}</code>`],
       ['Log folder', `<code>${esc(st.log_dir || '-')}</code>`],
       ['Known games', `${st.signatures} (list ${esc(st.signatures_version)})`],
@@ -44,25 +55,85 @@
     ].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('') + '<b></b><span><button type="button" data-do="open-data">Open data folder</button></span>';
   }
   function scaleBox() { const r = $('input[name=skin]:checked'); $('#scale-box').hidden = !r || r.value !== 'classic'; }
+  const idleValue = () => $('#idle-on').checked ? String(Math.max(1, Math.min(240, parseInt($('#idle-min').value, 10) || 10))) : '0';
 
   document.addEventListener('change', e => {
-    const el = e.target.closest('[data-key]'); if (!el) return;
-    pending.set(el.dataset.key, value(el));
-    $('#apply').disabled = false;
-    if (el.name === 'skin') scaleBox();
+    const t = e.target;
+    const el = t.closest('[data-key]');
+    if (el) { pending.set(el.dataset.key, value(el)); if (el.name === 'skin') scaleBox(); return; }
+    if (t.id === 'idle-on' || t.id === 'idle-min') { $('#idle-min').disabled = !$('#idle-on').checked; pending.set('idle_status', idleValue()); return; }
+    if (!gsel) return;
+    if (t.id === 'gd-path') pending.set('game_path:' + gsel, t.value.trim());
+    else if (t.id === 'gd-args') pending.set('launch_args:' + gsel, t.value.trim());
+    else if (t.id === 'gd-ex') { pending.set('exclude:' + gsel, t.checked ? '1' : '0'); renderTree(); }
   });
 
   async function apply() {
     for (const [k, v] of pending) {
       try {
         if (k === 'autostart') await FLB.autostart(v === '1');
+        else if (k.startsWith('exclude:')) await FLB.exclude(k.slice(8), v === '1');
         else await FLB.set(k, v);
       } catch (e) { alert(`Could not save ${k}: ${e}`); return false; }
     }
-    pending.clear(); $('#apply').disabled = true;
+    pending.clear();
     return true;
   }
   const close = () => FLB.closeWindow ? FLB.closeWindow() : window.close();
+
+  /* ---- Games tab ---- */
+  const staged = (id, key, orig) => pending.has(key + id) ? pending.get(key + id) : orig;
+  const isEx = g => staged(g.id, 'exclude:', g.excluded ? '1' : '0') === '1';
+  let open = { inst: true, not: false };
+  function renderTree() {
+    const t = $('#tree');
+    if (!catalog) { t.innerHTML = ''; return; }
+    const inst = catalog.filter(g => g.installed), not = catalog.filter(g => !g.installed);
+    const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}">${esc(g.name)}<small>${esc(g.source === 'signature' ? '' : g.source)}</small></div>`;
+    const node = (k, label, arr) => `<div class="node" data-node="${k}"><span class="tw">${open[k] ? '−' : '+'}</span>${label} (${arr.length})</div>` + (open[k] ? arr.map(leaf).join('') : '');
+    t.innerHTML = node('inst', 'Installed games', inst) + node('not', 'Not installed', not);
+  }
+  function renderDetail() {
+    const g = catalog && catalog.find(x => x.id === gsel);
+    $('#gd-name').textContent = g ? g.name : 'Select a game';
+    $$('#gd input, #gd button').forEach(x => { x.disabled = !g; });
+    $('#gd-path').value = g ? staged(g.id, 'game_path:', g.game_path || '') : '';
+    $('#gd-detect').value = g ? g.detect_path : '';
+    $('#gd-args').value = g ? staged(g.id, 'launch_args:', g.launch_args || '') : '';
+    $('#gd-ex').checked = !!g && isEx(g);
+  }
+  async function detect() {
+    if (detecting) return; detecting = true;
+    const bar = $('#det-bar'); let p = 0; bar.style.width = '0';
+    $('#det-msg').textContent = 'Detecting games…';
+    const tick = setInterval(() => { p = Math.min(90, p + 7); bar.style.width = p + '%'; }, 120);
+    try {
+      catalog = await FLB.detectGames();
+      const n = catalog.filter(g => g.installed).length;
+      $('#det-msg').textContent = `Found ${n} installed game${n === 1 ? '' : 's'} (${catalog.length} known).`;
+    } catch (e) { $('#det-msg').textContent = 'Detection failed: ' + e; catalog = catalog || []; }
+    clearInterval(tick); bar.style.width = '100%'; detecting = false;
+    renderTree(); renderDetail();
+  }
+  async function loadCands() {
+    try {
+      const c = await FLB.candidates();
+      $('#cands').innerHTML = c.length ? c.map(x => `<option value="${esc(x.exe)}" title="${esc(x.path)}">${esc(x.exe)}  (${esc(x.path)})</option>`).join('') : '<option disabled>Nothing unknown is running. Start the game, then Refresh.</option>';
+    } catch (e) { fail(e); }
+  }
+  const prettyExe = exe => exe.replace(/\.exe$/i, '').replace(/[-_]+(win64|shipping|x64|dx11|dx12)\b/ig, '').replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+
+  /* ---- Privacy: blocked users ---- */
+  async function renderBlocked() {
+    const lb = $('#blocked');
+    try {
+      const f = await FLB.friends();
+      if (!f.signed_in) { lb.innerHTML = ''; lb.disabled = true; $('#block-msg').textContent = 'Sign in (Account tab) to manage blocked users.'; $$('[data-do^=block]').forEach(b => { b.disabled = true; }); return; }
+      const list = (f.list && f.list.blocked) || [];
+      lb.disabled = false; $$('[data-do^=block]').forEach(b => { b.disabled = false; });
+      lb.innerHTML = list.map(h => { const n = typeof h === 'string' ? h : h.handle; return `<option value="${esc(n)}">${esc(n)}</option>`; }).join('');
+    } catch (e) { $('#block-msg').textContent = String(e); }
+  }
 
   /* ---- Account: optional sync ---- */
   async function renderSync() {
@@ -80,35 +151,49 @@
     } else {
       h = `Off: everything stays on this PC. Sign in to back up your sessions and see your friends.
         <input id="sync-server" maxlength="200" value="${esc(s.server)}" title="Server address" />
-        <div class="btns"><button type="button" data-do="sync-signin">Sign in to sync</button></div>`;
+        <div class="btns"><button type="button" data-do="sync-signin">Sign in</button></div>`;
     }
     if (err) h += `<div class="bad">${esc(err)}</div>`;
     $('#sync-box').innerHTML = h;
   }
-  const fail = e => alert(String(e));
+
   const acts = {
     ok: async () => { if (await apply()) close(); },
     cancel: close,
-    apply,
+    advanced: () => { $('#adv').hidden = !$('#adv').hidden; },
     export: async () => { try { const p = await FLB.exportData(); $('#export-msg').innerHTML = 'Saved: <code>' + p.map(esc).join('</code>, <code>') + '</code>'; } catch (e) { fail(e); } },
     'open-data': () => FLB.openData().catch(fail),
+    detect,
+    browse: async () => { if (!gsel) return; try { const p = await FLB.pickExe(); if (p) { $('#gd-path').value = p; pending.set('game_path:' + gsel, p); } } catch (e) { fail(e); } },
+    'add-manual': () => { $('#manual').hidden = !$('#manual').hidden; if (!$('#manual').hidden) loadCands(); },
+    'man-refresh': loadCands,
+    'man-add': async () => {
+      const exe = $('#cands').value, name = $('#man-name').value.trim();
+      if (!exe || !name) { alert('Pick a running program and type the game name.'); return; }
+      try { await FLB.tag(exe, name); $('#man-name').value = ''; $('#manual').hidden = true; catalog = null; await detect(); } catch (e) { fail(e); }
+    },
+    'block-add': async () => { const h = (prompt('Fraglink username to block:') || '').trim(); if (!h) return; try { await FLB.friendBlock(h, true); renderBlocked(); } catch (e) { fail(e); } },
+    'block-remove': async () => { const h = $('#blocked').value; if (!h) return; try { await FLB.friendBlock(h, false); renderBlocked(); } catch (e) { fail(e); } },
     'sync-signin': () => FLB.syncSignIn($('#sync-server').value.trim()).then(renderSync).catch(fail),
     'sync-cancel': () => FLB.syncCancel().then(renderSync).catch(fail),
     'sync-now': () => FLB.syncNow().then(() => setTimeout(renderSync, 3000)).catch(fail),
     'sync-signout': () => FLB.syncSignOut().then(renderSync).catch(fail),
   };
   document.addEventListener('click', e => {
-    const c = e.target.closest('.op-cats button'); if (c) { show(c.dataset.page); return; }
-    const g = e.target.closest('[data-go]'); if (g) { show(g.dataset.go); return; }
+    const c = e.target.closest('.op-tabs button'); if (c) { show(c.dataset.page); return; }
+    const n = e.target.closest('[data-node]'); if (n) { open[n.dataset.node] = !open[n.dataset.node]; renderTree(); return; }
+    const l = e.target.closest('[data-g]'); if (l) { gsel = l.dataset.g; renderTree(); renderDetail(); return; }
     const d = e.target.closest('[data-do]'); if (d && acts[d.dataset.do]) acts[d.dataset.do]();
   });
+  $('#cands').addEventListener('change', e => { if (!$('#man-name').value) $('#man-name').value = prettyExe(e.target.value); });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') close();
-    else if (e.key === 'Enter' && e.target.tagName !== 'INPUT') acts.ok();
+    else if (e.key === 'Enter' && !['INPUT', 'SELECT', 'BUTTON'].includes(e.target.tagName)) acts.ok();
   });
 
   (async () => {
     try { st = await FLB.settings(); load(); } catch (e) { fail(e); }
+    renderDetail();
     show(params.get('page') || 'general');
     if (FLB.on) {
       FLB.on('fraglink://sync', () => { if (!$('section[data-page=account]').hidden) renderSync(); });

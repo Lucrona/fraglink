@@ -5,6 +5,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.4] - 2026-09-28
+
+Pre-release for private testing (builds report `0.2.0-4`).
+
+### Added
+- **New logo, "Split Orbit"**: app icon in every Tauri size plus `icon.ico` (16/32 px hand-checked, flat white mark on a dark tile; chrome mark at larger sizes), tray icon, NSIS installer header/sidebar, the header lockup in the dark client (flat white, Saira Expanded Bold wordmark), the banner, toasts and the README. Brand files and the Saira OFL 1.1 note are in `assets/brand/`.
+- Menus laid out like the classic client. **Fraglink**: Always on Top, My Stats (opens the website address, a placeholder for now), Sign Out, Close (to the tray), Exit. **Tools**: Add Friend, Options, Launch (installed games), Skin, Theme (Cobalt, Crimson, Emerald, Graphite accents), Friends (show offline friends, show friends of friends, show hidden categories, info panel). **Help**: Contents, About.
+- Friends list has three columns (Name, Status, Game Info) and the groups **Friends Online**, **Friends of Friends Playing**, **Friends Offline** (plus Friend Requests when there are any), with counts. Right-click a group heading for **Add Custom Group** and **Hide Category**. Clicking a heading selects it; clicking its arrow folds it.
+- Status dropdown: shows **Playing <game>** automatically while you're in a game, then Online, Away, Invisible, your custom status line and **Set Custom Status…**.
+- Context-aware info panel. With nothing selected it lists the games installed on this PC with **Launch** links and a **Detect Games** button. A selected group heading shows a line of help, a selected friend shows their details, and hovering a friend of a friend shows your mutual friends. Recent activity stays hidden until the website hosts it.
+- Game launching: Steam games via `steam://rungameid`, Epic via the Epic launcher, GOG and other games via their .exe (the path you set, or the one Fraglink saw running), with optional extra arguments.
+- 15 original fallback icons by genre (shooter, RPG, MMO, strategy, survival, sandbox, action/platformer, battle royale, puzzle, MOBA, racing, horror, card, fighting, sports) for games without an icon of their own. Every game in the signature list now has a genre (list `2026.09.28.1`).
+
+### Changed
+- **Options is now a compact tabbed dialog** (470x560, Windows-style group boxes, OK / Cancel) replacing the window with a category list. Tabs: General, Privacy, Sounds, Games, Appearance, Tracking, Account.
+  - General: nickname, launch at startup, start minimised, minimise to tray, show offline friends, show friends of friends, notification alerts, language, Advanced (install info, data folder).
+  - Privacy: show my game to friends / on my profile / to friends of friends, Away after N idle minutes, blocked users with Add and Remove.
+  - Sounds: friend sign-in/out sounds, sound pack.
+  - Games: a detection progress bar, then a tree of installed and not-installed games. Selecting a game shows its game path (with Browse…), detect path, extra launch arguments and "Don't track this game". **Add game manually…** tags a running program as a game (replaces Fraglink > This is a game… / Manage games).
+  - Appearance: skin, theme accent, Classic Silver scale, always on top. Tracking: idle cut-off, minimum session, pause, export. Account: sign in / out.
+- The Chat button is gone from the bottom bar and the info panel (chat is out of scope).
+
+### Settings that are saved but not used yet
+- General: **Nickname**, **Language**.
+- Privacy: **Show the games I play on my profile**, **Show my game to friends of my friends**, **Show me as Away after N minutes** (the tracker still stops counting idle time using the Tracking setting; your status doesn't change automatically yet).
+- Sounds: **friend sign-in/out sounds** and **sound pack** (no sounds play yet).
+- **Custom status** shows only in your own window; friends don't see it yet (the presence protocol only carries Online/Away/Invisible and the game).
+- **Custom groups** are empty headings; moving friends into them comes later.
+- **Friends of Friends Playing** only has entries in the sample list; the server doesn't send friends of friends yet, so mutual friends on hover only work with sample data.
+- **My Stats** opens `https://fraglink.gg/u/<you>`, a placeholder address.
+
+Wired up: launch at startup, start minimised, minimise to tray, show offline friends / friends of friends, notification alerts, show my game to friends (off = friends see you online without a game), always on top, theme, skin, per-game path / launch arguments / don't track, blocked users, sign out, and the Tracking settings.
+
 ## [0.2.0-dev.3] - 2026-09-28
 
 Pre-release for private testing (builds report `0.2.0-3`).

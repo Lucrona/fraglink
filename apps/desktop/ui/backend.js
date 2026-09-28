@@ -44,6 +44,11 @@
       minimizeWindow: () => T.window.getCurrentWindow().minimize(),
       closeWindow: () => T.window.getCurrentWindow().close(),
       openOptions: (page) => inv('open_options', { page }),
+      catalog: () => inv('games_catalog'),
+      detectGames: () => inv('detect_games'),
+      launchGame: (id) => inv('launch_game', { id }),
+      pickExe: () => inv('pick_game_exe'),
+      openWebsite: (page) => inv('open_website', { page }),
     };
     return;
   }
@@ -123,7 +128,12 @@
     resize: () => ok(),
     minimizeWindow: () => ok(),
     closeWindow: () => { window.close(); return ok(); },
-    openOptions: (page) => { window.open('options.html' + (page ? '?page=' + page : ''), 'fl-options', 'width=640,height=480'); return ok(); },
+    openOptions: (page) => { window.open('options.html' + (page ? '?page=' + page : ''), 'fl-options', 'width=460,height=540'); return ok(); },
+    catalog: () => ok(catalog),
+    detectGames: () => new Promise(r => setTimeout(() => r(catalog), 900)),
+    launchGame: () => ok(),
+    pickExe: () => ok('C:\\Games\\MyIndie\\MyIndie.exe'),
+    openWebsite: () => ok(),
   };
   function placeholderIcon(id) {
     const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
@@ -133,6 +143,18 @@
     x.fillStyle = 'rgba(255,255,255,.3)'; x.fillRect(1, 1, 30, 12);
     return c.toDataURL('image/png');
   }
+  const cat = (id, name, genre, installed, source, extra = {}) => ({ id, name, genre, installed, source, steam_appid: null, game_path: null, detect_path: '', launch_args: '', excluded: false, can_launch: installed, ...extra });
+  const catalog = [
+    cat('wow', 'World of Warcraft', 'mmo', true, 'seen', { game_path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe', detect_path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe' }),
+    cat('cs2', 'Counter-Strike 2', 'fps', true, 'steam', { steam_appid: 730, game_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive', detect_path: 'cs2.exe' }),
+    cat('hl2', 'Half-Life 2', 'fps', true, 'steam', { steam_appid: 220, detect_path: 'hl2.exe' }),
+    cat('steam:1145350', 'Hades II', 'action', true, 'steam', { steam_appid: 1145350, detect_path: 'Hades2.exe' }),
+    cat('wc3', 'Warcraft III', 'strategy', true, 'tracked', { detect_path: 'war3.exe', can_launch: false }),
+    cat('rust', 'Rust', 'survival', false, 'signature', { detect_path: 'RustClient.exe' }),
+    cat('dota2', 'Dota 2', 'moba', false, 'signature', { detect_path: 'dota2.exe' }),
+    cat('minecraft', 'Minecraft', 'sandbox', false, 'signature', { detect_path: 'javaw.exe' }),
+    cat('rocketleague', 'Rocket League', 'sports', false, 'signature', { detect_path: 'RocketLeague.exe' }),
+  ];
   const iso = (s) => new Date((now() - s) * 1000).toISOString();
   const muted = [];
   const mockFriends = {

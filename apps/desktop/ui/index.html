@@ -4,7 +4,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Fraglink</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
 <link rel="stylesheet" href="styles.css" />
 <link rel="stylesheet" href="fraglink-app.css" />
@@ -114,6 +113,7 @@
         <div class="xf-logo" title="Fraglink">
           <svg class="xf-logo-mark" viewBox="0 0 32 22"><use href="#fl-mark" fill="url(#flBlue)"/></svg>
           <span class="xf-logo-word">FRAGLINK</span>
+          <img class="xf-logo-lock" src="brand/v28-lockup.svg" alt="Fraglink" draggable="false" />
         </div>
         <div class="xf-userfield"><span id="username">Lucrona</span></div>
         <button class="xf-min" type="button" title="Minimize" data-action="minimize"><i></i></button>
@@ -129,24 +129,44 @@
       <div class="xf-menubar" id="menubar">
         <div class="xf-menu" data-menu="fraglink"><span><u>F</u>raglink</span>
           <div class="xf-dropdown">
-            <button data-action="tag-game"><u>T</u>his is a game…</button>
-            <button data-action="manage-games"><u>M</u>anage games…</button>
-            <button data-action="pause-toggle" id="menu-pause"><u>P</u>ause tracking</button>
-            <button data-action="export"><u>E</u>xport my data (JSON + CSV)</button>
+            <button data-action="always-on-top" id="menu-ontop" class="chk">Always on <u>T</u>op</button>
             <hr />
-            <button data-action="add-friend"><u>A</u>dd Friend… <em>(later)</em></button>
-            <button data-action="my-profile">My Profile (fraglink.gg) <em>(later)</em></button>
+            <button data-action="my-stats">My <u>S</u>tats</button>
+            <button data-action="sign-out" id="menu-signout">Sign <u>O</u>ut</button>
             <hr />
-            <button data-action="minimize"><u>H</u>ide to tray</button>
-            <button data-action="quit" class="tauri-only">E<u>x</u>it Fraglink</button>
+            <button data-action="minimize"><u>C</u>lose</button>
+            <button data-action="quit">E<u>x</u>it</button>
           </div>
         </div>
         <div class="xf-menu" data-menu="tools"><span><u>T</u>ools</span>
           <div class="xf-dropdown">
-            <div class="has-sub"><span><u>S</u>kins</span><b>▸</b>
+            <button data-action="add-friend"><u>A</u>dd Friend…</button>
+            <button data-action="options"><u>O</u>ptions…</button>
+            <hr />
+            <div class="has-sub"><span><u>L</u>aunch</span><b>▸</b>
+              <div class="xf-dropdown sub" id="menu-launch"><button disabled>Detecting games…</button></div>
+            </div>
+            <div class="has-sub"><span>S<u>k</u>in</span><b>▸</b>
               <div class="xf-dropdown sub">
                 <button class="skin-opt" data-skin="dark">Dark (default)</button>
                 <button class="skin-opt" data-skin="classic">Classic Silver</button>
+              </div>
+            </div>
+            <div class="has-sub"><span>T<u>h</u>eme</span><b>▸</b>
+              <div class="xf-dropdown sub">
+                <button class="theme-opt" data-theme="blue">Cobalt (default)</button>
+                <button class="theme-opt" data-theme="crimson">Crimson</button>
+                <button class="theme-opt" data-theme="emerald">Emerald</button>
+                <button class="theme-opt" data-theme="graphite">Graphite</button>
+              </div>
+            </div>
+            <div class="has-sub"><span><u>F</u>riends</span><b>▸</b>
+              <div class="xf-dropdown sub">
+                <button data-action="toggle-offline" id="menu-offline" class="chk">Show Offline Friends</button>
+                <button data-action="toggle-fof" id="menu-fof" class="chk">Show Friends of Friends</button>
+                <button data-action="show-groups">Show Hidden Categories</button>
+                <hr />
+                <button data-action="toggle-side">Friend <u>I</u>nfo Panel</button>
               </div>
             </div>
             <div class="has-sub no-dark"><span>S<u>c</u>ale</span><b>▸</b>
@@ -156,15 +176,12 @@
                 <button class="zoom-opt" data-zoom="2">2×</button>
               </div>
             </div>
-            <button data-action="toggle-side">Friend <u>I</u>nfo Panel</button>
-            <hr />
-            <button data-action="options"><u>O</u>ptions…</button>
           </div>
         </div>
         <div class="xf-menu" data-menu="help"><span><u>H</u>elp</span>
           <div class="xf-dropdown">
-            <button data-action="privacy"><u>W</u>hat Fraglink reads…</button>
-            <button data-action="website">Fraglink Website <em>(later)</em></button>
+            <button data-action="help-contents"><u>C</u>ontents</button>
+            <hr />
             <button data-action="about"><u>A</u>bout Fraglink…</button>
           </div>
         </div>
@@ -178,8 +195,7 @@
         <div class="xf-banner-sides"></div>
         <svg class="xf-banner-mark" viewBox="0 0 32 22" preserveAspectRatio="none"><use href="#fl-mark" fill="url(#flNavy)"/><use href="#fl-mark" fill="url(#scan)"/></svg>
         <div class="xf-banner-ad only-phoenix only-stream only-dark">
-          <svg viewBox="0 0 32 22"><use href="#fl-mark" fill="#fff"/></svg>
-          <div><b>FRAGLINK</b><small>GAMING, TRACKED</small></div>
+          <div class="ban-lock"><img src="brand/v28-lockup-chrome.svg" alt="Fraglink" draggable="false" /><small>GAMING, TRACKED</small></div>
         </div>
       </div>
 
@@ -227,6 +243,7 @@
             <option value="online">Online</option>
             <option value="away">Away</option>
             <option value="invisible">Invisible</option>
+            <option value="custom">Set Custom Status…</option>
           </select>
           <i class="xf-status-arrow"></i>
         </div>
@@ -235,7 +252,6 @@
       <!-- Dark: bottom icon action bar + resize grip -->
       <div class="dk-bar only-dark">
         <button type="button" title="Add Friend" data-action="add-friend"><svg viewBox="0 0 12 12"><path d="M4.6 1h2.8v3.6H11v2.8H7.4V11H4.6V7.4H1V4.6h3.6z"/></svg></button>
-        <button type="button" title="Chat" data-action="chat"><svg viewBox="0 0 16 12"><path d="M2 1h12a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 14 9H7l-3.5 2.6V9H2A1.5 1.5 0 0 1 .5 7.5v-5A1.5 1.5 0 0 1 2 1z"/></svg></button>
         <button type="button" title="My Profile" data-action="my-profile"><svg viewBox="0 0 16 12"><rect x=".5" y="1" width="15" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="5" cy="5" r="1.8"/><path d="M2.3 9.6c.3-1.6 1.3-2.4 2.7-2.4s2.4.8 2.7 2.4z"/><rect x="9" y="3.5" width="5" height="1.3"/><rect x="9" y="6.5" width="4" height="1.3"/></svg></button>
         <button type="button" title="Join Game" data-action="join"><svg viewBox="0 0 20 12"><path d="M5 1.5h10c2.5 0 4 2 4 4.5s-1.5 4.5-3.5 4.5c-1.4 0-2.2-1-3-2H7.5c-.8 1-1.6 2-3 2C2.5 10.5 1 8.5 1 6s1.5-4.5 4-4.5z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="5.6" r="1"/><circle cx="10" cy="5.6" r="1"/><circle cx="12.5" cy="5.6" r="1"/></svg></button>
         <button type="button" title="Options" data-action="options"><svg viewBox="0 0 16 16"><path d="M6.6 1h2.8l.4 2 1.4.8 1.9-.8 1.4 2.4-1.5 1.4v1.6l1.5 1.4-1.4 2.4-1.9-.8-1.4.8-.4 2H6.6l-.4-2-1.4-.8-1.9.8L1.5 10l1.5-1.4V7L1.5 5.6l1.4-2.4 1.9.8 1.4-.8zM8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z"/></svg></button>
@@ -255,7 +271,7 @@
     <div class="dk-edges only-dark" aria-hidden="true"><i data-resize="North"></i><i data-resize="South"></i><i data-resize="West"></i><i data-resize="East"></i><i data-resize="NorthWest"></i><i data-resize="NorthEast"></i><i data-resize="SouthWest"></i><i data-resize="SouthEast"></i></div>
 
     <!-- Right nub (opens Activity Report / infoview) -->
-    <button class="xf-nub" id="nub" type="button" title="Show Activity Report" data-action="toggle-side">
+    <button class="xf-nub" id="nub" type="button" title="Show Info Panel" data-action="toggle-side">
       <svg viewBox="0 0 14 54"><path class="nub-body" d="M0 2 C7 2 13.5 7 13.5 15 L13.5 39 C13.5 47 7 52 0 52 Z"/><path class="nub-arrow" d="M5 22 L10 27 L5 32 Z"/></svg>
     </button>
 
@@ -362,6 +378,7 @@
   </div>
 </div>
 
+<div class="fl-ctx" id="ctx" hidden></div>
 <script src="backend.js"></script>
 <script src="app.js"></script>
 </body>

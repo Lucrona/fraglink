@@ -8,75 +8,113 @@
 </head>
 <body>
 <div class="op">
-  <nav class="op-cats" id="cats" role="tablist">
-    <button data-page="general" class="on">General</button>
-    <button data-page="account">Account</button>
-    <button data-page="tracking">Tracking</button>
-    <button data-page="notifications">Notifications</button>
-    <button data-page="privacy">Privacy</button>
-    <button data-page="appearance">Appearance</button>
-    <button data-page="advanced">Advanced</button>
+  <nav class="op-tabs" role="tablist">
+    <button data-page="general" class="on">General</button><button data-page="privacy">Privacy</button><button data-page="sounds">Sounds</button><button data-page="games">Games</button><button data-page="appearance">Appearance</button><button data-page="tracking">Tracking</button><button data-page="account">Account</button>
   </nav>
-  <main class="op-pages">
+  <main class="op-body">
     <section data-page="general">
-      <h2>General</h2>
+      <fieldset><legend>Profile</legend>
+        <label class="row">Nickname <input type="text" data-key="nickname" maxlength="32" placeholder="shown to friends (later)" /></label>
+      </fieldset>
       <fieldset><legend>Startup</legend>
-        <label><input type="checkbox" data-key="autostart" /> Start Fraglink when I sign in to Windows</label>
-        <p class="hint">Fraglink starts minimised to the notification area. Closing the main window keeps it running there; use <b>Exit Fraglink</b> in the tray menu to quit.</p>
+        <label><input type="checkbox" data-key="autostart" /> Launch Fraglink when Windows starts</label>
+        <label><input type="checkbox" data-key="start_minimized" /> Start minimised in the system tray</label>
+        <label><input type="checkbox" data-key="minimize_to_tray" /> Minimise to the system tray</label>
+      </fieldset>
+      <fieldset><legend>Friends list</legend>
+        <label><input type="checkbox" data-key="show_offline" /> Show offline friends</label>
+        <label><input type="checkbox" data-key="show_fof" /> Show friends of friends who are playing</label>
+      </fieldset>
+      <fieldset><legend>Notification alerts</legend>
+        <label><input type="checkbox" data-key="friend_toasts" /> When a friend starts playing a game</label>
+        <label class="sub"><input type="checkbox" data-key="friend_toasts_dnd" /> Not while I'm playing</label>
+        <label><input type="checkbox" data-key="toasts" /> When I start or stop playing a game</label>
+      </fieldset>
+      <div class="line"><label class="row">Language <select data-key="language"><option value="en-AU">English (Australia)</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option></select></label>
+        <button type="button" data-do="advanced" class="right">Advanced…</button></div>
+      <fieldset id="adv" hidden><legend>Advanced</legend><div id="about" class="kv"></div></fieldset>
+    </section>
+
+    <section data-page="privacy" hidden>
+      <fieldset><legend>Game status</legend>
+        <label><input type="checkbox" data-key="share_game" /> Show the game I'm playing to my friends</label>
+        <label><input type="checkbox" data-key="share_profile" /> Show the games I play on my profile</label>
+        <label><input type="checkbox" data-key="share_fof" /> Show my game to friends of my friends</label>
+      </fieldset>
+      <fieldset><legend>Idle</legend>
+        <label><input type="checkbox" id="idle-on" /> Show me as Away after <input type="number" id="idle-min" min="1" max="240" value="10" class="num" /> minutes without input</label>
+      </fieldset>
+      <fieldset><legend>Blocked users</legend>
+        <div class="split"><select id="blocked" size="5" class="lb"></select>
+          <div class="col"><button type="button" data-do="block-add">Add…</button><button type="button" data-do="block-remove">Remove</button></div></div>
+        <div id="block-msg" class="hint">Blocked users can't send you requests or see your status.</div>
+      </fieldset>
+      <p class="hint">Fraglink reads the list of running programs, launcher install lists and how long since you last used the mouse or keyboard. It never reads game memory or what you type. Nothing leaves this PC unless you sign in (Account tab).</p>
+    </section>
+
+    <section data-page="sounds" hidden>
+      <fieldset><legend>Friends</legend>
+        <label><input type="checkbox" data-key="sound_signin" /> Play a sound when a friend signs in</label>
+        <label><input type="checkbox" data-key="sound_signout" /> Play a sound when a friend signs out</label>
+      </fieldset>
+      <fieldset><legend>Sound pack</legend>
+        <label class="row">Pack <select data-key="sound_pack"><option value="default">Fraglink (default)</option><option value="soft">Soft</option><option value="none">No sounds</option></select></label>
+      </fieldset>
+      <p class="hint">Sounds are saved now and play in a later update.</p>
+    </section>
+
+    <section data-page="games" hidden>
+      <div class="detect"><div class="bar"><b id="det-bar"></b></div><span id="det-msg">Detecting games…</span><button type="button" data-do="detect">Detect Games</button></div>
+      <div class="tree" id="tree" tabindex="0"></div>
+      <fieldset id="gd" class="gd"><legend id="gd-name">Select a game</legend>
+        <label class="row">Game path <input type="text" id="gd-path" maxlength="500" /><button type="button" data-do="browse">Browse…</button></label>
+        <label class="row">Detect path <input type="text" id="gd-detect" readonly /></label>
+        <label class="row">Extra launch arguments <input type="text" id="gd-args" maxlength="500" /></label>
+        <label><input type="checkbox" id="gd-ex" /> Don't track this game</label>
+      </fieldset>
+      <div class="line"><button type="button" data-do="add-manual">Add game manually…</button><span class="hint">A running program you want tracked as a game.</span></div>
+      <fieldset id="manual" hidden><legend>Add game manually</legend>
+        <select id="cands" size="4" class="lb wide"></select>
+        <label class="row">Game name <input type="text" id="man-name" maxlength="80" /><button type="button" data-do="man-add">Add</button><button type="button" data-do="man-refresh">Refresh</button></label>
       </fieldset>
     </section>
-    <section data-page="account" hidden>
-      <h2>Account</h2>
-      <fieldset><legend>Sync (optional)</legend><div id="sync-box" class="sync">Loading…</div></fieldset>
-      <p class="hint">Friends and live status need a Fraglink account. Without one, everything stays on this PC.</p>
+
+    <section data-page="appearance" hidden>
+      <fieldset><legend>Skin</legend>
+        <label><input type="radio" name="skin" data-key="skin" value="dark" /> Dark (default, resizable)</label>
+        <label><input type="radio" name="skin" data-key="skin" value="classic" /> Classic Silver (fixed size)</label>
+      </fieldset>
+      <fieldset><legend>Theme</legend>
+        <label class="row">Accent colour <select data-key="theme"><option value="blue">Cobalt</option><option value="crimson">Crimson</option><option value="emerald">Emerald</option><option value="graphite">Graphite</option></select></label>
+      </fieldset>
+      <fieldset id="scale-box"><legend>Classic Silver size</legend>
+        <label class="row">Scale <select data-key="zoom"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+      </fieldset>
+      <fieldset><legend>Window</legend>
+        <label><input type="checkbox" data-key="always_on_top" /> Keep the main window on top</label>
+      </fieldset>
     </section>
+
     <section data-page="tracking" hidden>
-      <h2>Tracking</h2>
       <fieldset><legend>Sessions</legend>
-        <label>Count me as idle after <select data-key="idle_threshold_min"><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option><option>60</option></select> minutes without mouse or keyboard input</label>
-        <label>Ignore sessions shorter than <select data-key="min_session_min"><option>0</option><option>1</option><option>2</option><option>5</option></select> minutes</label>
+        <label class="row">Stop counting after <select data-key="idle_threshold_min"><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option><option>60</option></select> minutes without input</label>
+        <label class="row">Ignore sessions shorter than <select data-key="min_session_min"><option>0</option><option>1</option><option>2</option><option>5</option></select> minutes</label>
         <label><input type="checkbox" data-key="paused" /> Pause tracking</label>
       </fieldset>
-      <p class="hint">Missing a game? Start it, then use <b>Fraglink &gt; This is a game…</b> in the main window.</p>
-    </section>
-    <section data-page="notifications" hidden>
-      <h2>Notifications</h2>
-      <fieldset><legend>Pop-ups</legend>
-        <label><input type="checkbox" data-key="toasts" /> When I start or stop playing a game</label>
-        <label><input type="checkbox" data-key="friend_toasts" /> When a friend starts playing a game</label>
-        <label class="sub"><input type="checkbox" data-key="friend_toasts_dnd" /> …but not while I'm playing</label>
-      </fieldset>
-    </section>
-    <section data-page="privacy" hidden>
-      <h2>Privacy</h2>
-      <fieldset><legend>What Fraglink reads</legend>
-        <p>The list of running programs (to recognise games), launcher install lists (Steam, Epic, GOG) and how long since you last used the mouse or keyboard. It never reads game memory or what you type, so it is safe with anti-cheat.</p>
-        <p>Nothing leaves this PC unless you sign in under <a data-go="account">Account</a>. <b>Invisible</b> status shows you as offline to friends.</p>
-      </fieldset>
       <fieldset><legend>Your data</legend>
-        <div class="btns"><button type="button" data-do="export">Export my data…</button><button type="button" data-do="open-data">Open data folder</button></div>
+        <div class="line"><button type="button" data-do="export">Export my data…</button><button type="button" data-do="open-data">Open data folder</button></div>
         <div id="export-msg" class="hint"></div>
       </fieldset>
     </section>
-    <section data-page="appearance" hidden>
-      <h2>Appearance</h2>
-      <fieldset><legend>Skin</legend>
-        <label><input type="radio" name="skin" data-key="skin" value="dark" /> <span class="sw sw-dark"></span> Dark <em>(default, resizable)</em></label>
-        <label><input type="radio" name="skin" data-key="skin" value="classic" /> <span class="sw sw-classic"></span> Classic Silver <em>(fixed size)</em></label>
-      </fieldset>
-      <fieldset id="scale-box"><legend>Classic Silver size</legend>
-        <label>Scale <select data-key="zoom"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
-      </fieldset>
-    </section>
-    <section data-page="advanced" hidden>
-      <h2>Advanced</h2>
-      <fieldset><legend>About this install</legend><div id="about" class="kv"></div></fieldset>
+
+    <section data-page="account" hidden>
+      <fieldset><legend>Fraglink account (optional)</legend><div id="sync-box" class="sync">Loading…</div></fieldset>
+      <p class="hint">Friends and live status need a Fraglink account. Without one, everything stays on this PC.</p>
     </section>
   </main>
   <footer class="op-foot">
     <button type="button" data-do="ok" class="def">OK</button>
     <button type="button" data-do="cancel">Cancel</button>
-    <button type="button" data-do="apply" id="apply" disabled>Apply</button>
   </footer>
 </div>
 <script src="backend.js"></script>

@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "version": "2026.09.26.2",
+ "version": "2026.09.28.1",
  "note": "Fraglink seed signatures. Hand-curated exe names + Steam app ids only; uncertain=true means unverified. Not derived from Discord's detectable list.",
  "ignore_exes": [
   "Agent.exe",
@@ -188,7 +188,8 @@
    ],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "wow_classic",
@@ -205,7 +206,8 @@
    ],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "wow_classic_era",
@@ -221,7 +223,8 @@
    ],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "overwatch2",
@@ -235,7 +238,8 @@
     2357570
    ],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "diablo4",
@@ -249,7 +253,8 @@
     2344520
    ],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "diablo3",
@@ -262,7 +267,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "d2r",
@@ -274,7 +280,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "diablo2",
@@ -291,7 +298,8 @@
    "steam_appids": [],
    "platform": "standalone",
    "uncertain": false,
-   "note": "Classic D2 runs as Game.exe inside the 'Diablo II' folder"
+   "note": "Classic D2 runs as Game.exe inside the 'Diablo II' folder",
+   "genre": "rpg"
   },
   {
    "id": "hearthstone",
@@ -303,7 +311,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "card"
   },
   {
    "id": "sc2",
@@ -316,7 +325,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "starcraft",
@@ -328,7 +338,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "wc3",
@@ -342,7 +353,8 @@
    "steam_appids": [],
    "platform": "battlenet",
    "uncertain": false,
-   "note": "war3.exe = classic Reign of Chaos / Frozen Throne"
+   "note": "war3.exe = classic Reign of Chaos / Frozen Throne",
+   "genre": "strategy"
   },
   {
    "id": "hots",
@@ -355,7 +367,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "moba"
   },
   {
    "id": "cs2",
@@ -369,7 +382,8 @@
     730
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "cs16",
@@ -382,7 +396,8 @@
    ],
    "platform": "steam",
    "uncertain": false,
-   "note": "Runs as hl.exe (shared with Half-Life); detected via Steam RunningAppID"
+   "note": "Runs as hl.exe (shared with Half-Life); detected via Steam RunningAppID",
+   "genre": "fps"
   },
   {
    "id": "css",
@@ -401,7 +416,8 @@
     240
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "half_life",
@@ -416,7 +432,8 @@
    ],
    "platform": "steam",
    "uncertain": false,
-   "note": "hl.exe is shared by all GoldSrc games incl. CS 1.6; Steam RunningAppID disambiguates"
+   "note": "hl.exe is shared by all GoldSrc games incl. CS 1.6; Steam RunningAppID disambiguates",
+   "genre": "fps"
   },
   {
    "id": "hl2",
@@ -434,7 +451,8 @@
     220
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "hl2dm",
@@ -452,7 +470,8 @@
     320
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "tf2",
@@ -471,7 +490,8 @@
     440
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "portal",
@@ -487,7 +507,8 @@
     400
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "puzzle"
   },
   {
    "id": "portal2",
@@ -501,7 +522,8 @@
     620
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "puzzle"
   },
   {
    "id": "l4d2",
@@ -515,7 +537,8 @@
     550
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "gmod",
@@ -533,7 +556,8 @@
     4000
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "dota2",
@@ -547,7 +571,8 @@
     570
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "moba"
   },
   {
    "id": "deadlock",
@@ -562,7 +587,8 @@
     1422450
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "lol",
@@ -575,7 +601,8 @@
    "steam_appids": [],
    "platform": "riot",
    "uncertain": false,
-   "note": "Counts the in-match client only; the lobby (LeagueClientUx.exe) is ignored"
+   "note": "Counts the in-match client only; the lobby (LeagueClientUx.exe) is ignored",
+   "genre": "moba"
   },
   {
    "id": "valorant",
@@ -587,7 +614,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "riot",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "fortnite",
@@ -599,7 +627,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "epic",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "battleroyale"
   },
   {
    "id": "rocketleague",
@@ -613,7 +642,8 @@
     252950
    ],
    "platform": "epic",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sports"
   },
   {
    "id": "fallguys",
@@ -628,7 +658,8 @@
     1097150
    ],
    "platform": "epic",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "battleroyale"
   },
   {
    "id": "minecraft_java",
@@ -652,7 +683,8 @@
    "steam_appids": [],
    "platform": "standalone",
    "uncertain": false,
-   "note": "Java edition runs inside javaw.exe; counted when the Java runtime is Mojang's bundled runtime or lives in a launcher folder. A system-wide Java (e.g. Program Files\\Java) is not detected: tag it manually."
+   "note": "Java edition runs inside javaw.exe; counted when the Java runtime is Mojang's bundled runtime or lives in a launcher folder. A system-wide Java (e.g. Program Files\\Java) is not detected: tag it manually.",
+   "genre": "sandbox"
   },
   {
    "id": "minecraft_bedrock",
@@ -664,7 +696,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "msstore",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "halo_mcc",
@@ -679,7 +712,8 @@
     976730
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "halo_infinite",
@@ -693,7 +727,8 @@
     1240440
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "forza_h5",
@@ -707,7 +742,8 @@
     1551360
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "racing"
   },
   {
    "id": "forza_h4",
@@ -721,7 +757,8 @@
     1293830
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "racing"
   },
   {
    "id": "sea_of_thieves",
@@ -735,7 +772,8 @@
     1172620
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "aoe2de",
@@ -749,7 +787,8 @@
     813780
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "aoe2",
@@ -762,7 +801,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "standalone",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "aoe4",
@@ -776,7 +816,8 @@
     1466860
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "cod",
@@ -793,7 +834,8 @@
    ],
    "platform": "battlenet",
    "uncertain": false,
-   "note": "Call of Duty HQ runs cod.exe (Steam launches bootstrapper.exe first); some betas use codNN-cod.exe"
+   "note": "Call of Duty HQ runs cod.exe (Steam launches bootstrapper.exe first); some betas use codNN-cod.exe",
+   "genre": "fps"
   },
   {
    "id": "cod_mw2019",
@@ -805,7 +847,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "cod_bocw",
@@ -817,7 +860,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "battlenet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "cod4",
@@ -832,7 +876,8 @@
     7940
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "cod_mw2_2009",
@@ -848,7 +893,8 @@
     10190
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "cod_waw",
@@ -863,7 +909,8 @@
     10090
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "cod_bo1",
@@ -879,7 +926,8 @@
     42710
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "cod2",
@@ -894,7 +942,8 @@
     2630
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bf2042",
@@ -908,7 +957,8 @@
     1517290
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bf6",
@@ -922,7 +972,8 @@
     2807960
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bf1",
@@ -936,7 +987,8 @@
     1238840
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bfv",
@@ -950,7 +1002,8 @@
     1238810
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bf4",
@@ -964,7 +1017,8 @@
     1238860
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bf3",
@@ -978,7 +1032,8 @@
     1238820
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bfbc2",
@@ -992,7 +1047,8 @@
     24960
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bf2",
@@ -1004,7 +1060,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "standalone",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bf1942",
@@ -1016,7 +1073,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "standalone",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "bfvietnam",
@@ -1028,7 +1086,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "standalone",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "apex",
@@ -1043,7 +1102,8 @@
     1172470
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "battleroyale"
   },
   {
    "id": "titanfall2",
@@ -1057,7 +1117,8 @@
     1237970
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "sims4",
@@ -1071,7 +1132,8 @@
     1222670
    ],
    "platform": "ea",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "gta5",
@@ -1087,7 +1149,8 @@
     3240220
    ],
    "platform": "rockstar",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "rdr2",
@@ -1101,7 +1164,8 @@
     1174180
    ],
    "platform": "rockstar",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "cyberpunk",
@@ -1115,7 +1179,8 @@
     1091500
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "witcher3",
@@ -1129,7 +1194,8 @@
     292030
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "skyrim_se",
@@ -1143,7 +1209,8 @@
     489830
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "skyrim",
@@ -1157,7 +1224,8 @@
     72850
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "fallout4",
@@ -1171,7 +1239,8 @@
     377160
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "fallout76",
@@ -1185,7 +1254,8 @@
     1151340
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "falloutnv",
@@ -1199,7 +1269,8 @@
     22380
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "starfield",
@@ -1213,7 +1284,8 @@
     1716740
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "eso",
@@ -1227,7 +1299,8 @@
     306130
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "doom_eternal",
@@ -1241,7 +1314,8 @@
     782330
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "doom_tda",
@@ -1255,7 +1329,8 @@
     3017860
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "quake3",
@@ -1269,7 +1344,8 @@
     2200
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "quakelive",
@@ -1283,7 +1359,8 @@
     282440
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "eldenring",
@@ -1297,7 +1374,8 @@
     1245620
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "nightreign",
@@ -1311,7 +1389,8 @@
     2622380
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "ds3",
@@ -1325,7 +1404,8 @@
     374320
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "sekiro",
@@ -1339,7 +1419,8 @@
     814380
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "ffxiv",
@@ -1353,7 +1434,8 @@
     39210
    ],
    "platform": "square",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "gw2",
@@ -1368,7 +1450,8 @@
     1284210
    ],
    "platform": "arenanet",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "osrs",
@@ -1384,7 +1467,8 @@
    ],
    "platform": "jagex",
    "uncertain": false,
-   "note": "osclient.exe = official client (Steam launch config); RuneLite.exe = popular third-party client (PCGamingWiki)"
+   "note": "osclient.exe = official client (Steam launch config); RuneLite.exe = popular third-party client (PCGamingWiki)",
+   "genre": "mmo"
   },
   {
    "id": "rs3",
@@ -1398,7 +1482,8 @@
     1343400
    ],
    "platform": "jagex",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "lostark",
@@ -1412,7 +1497,8 @@
     1599340
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "newworld",
@@ -1426,7 +1512,8 @@
     1063730
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "swtor",
@@ -1440,7 +1527,8 @@
     1286830
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "eve",
@@ -1454,7 +1542,8 @@
     8500
    ],
    "platform": "ccp",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "albion",
@@ -1468,7 +1557,8 @@
     761890
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "bdo",
@@ -1482,7 +1572,8 @@
     582660
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "everquest",
@@ -1496,7 +1587,8 @@
     205710
    ],
    "platform": "daybreak",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "everquest2",
@@ -1510,7 +1602,8 @@
     201230
    ],
    "platform": "daybreak",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "mmo"
   },
   {
    "id": "warframe",
@@ -1524,7 +1617,8 @@
     230410
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "destiny2",
@@ -1538,7 +1632,8 @@
     1085660
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "poe",
@@ -1555,7 +1650,8 @@
     238960
    ],
    "platform": "ggg",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "poe2",
@@ -1574,7 +1670,8 @@
     2694490
    ],
    "platform": "ggg",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "lastepoch",
@@ -1588,7 +1685,8 @@
     899770
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "genshin",
@@ -1601,7 +1699,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "hoyoverse",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "hsr",
@@ -1613,7 +1712,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "hoyoverse",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "zzz",
@@ -1625,7 +1725,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "hoyoverse",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "pubg",
@@ -1639,7 +1740,8 @@
     578080
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "battleroyale"
   },
   {
    "id": "r6siege",
@@ -1655,7 +1757,8 @@
     359550
    ],
    "platform": "ubisoft",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "tarkov",
@@ -1667,7 +1770,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "bsg",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "marvel_rivals",
@@ -1682,7 +1786,8 @@
     2767030
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "thefinals",
@@ -1698,7 +1803,8 @@
     2073850
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "helldivers2",
@@ -1712,7 +1818,8 @@
     553850
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "hunt",
@@ -1726,7 +1833,8 @@
     594650
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "squad",
@@ -1740,7 +1848,8 @@
     393380
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "arma3",
@@ -1755,7 +1864,8 @@
     107410
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "arma_reforger",
@@ -1769,7 +1879,8 @@
     1874880
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "dayz",
@@ -1783,7 +1894,8 @@
     221100
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "rust",
@@ -1797,7 +1909,8 @@
     252490
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "dbd",
@@ -1811,7 +1924,8 @@
     381210
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "horror"
   },
   {
    "id": "chivalry2",
@@ -1825,7 +1939,8 @@
     1824220
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "warthunder",
@@ -1839,7 +1954,8 @@
     236390
    ],
    "platform": "gaijin",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "wot",
@@ -1851,7 +1967,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "wargaming",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "payday2",
@@ -1865,7 +1982,8 @@
     218620
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "ut2004",
@@ -1879,7 +1997,8 @@
     13230
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "tekken8",
@@ -1894,7 +2013,8 @@
     1778820
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fighting"
   },
   {
    "id": "sf6",
@@ -1908,7 +2028,8 @@
     1364780
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fighting"
   },
   {
    "id": "amongus",
@@ -1922,7 +2043,8 @@
     945360
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "puzzle"
   },
   {
    "id": "roblox",
@@ -1934,7 +2056,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "roblox",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "osu",
@@ -1946,7 +2069,8 @@
    "path_hints": [],
    "steam_appids": [],
    "platform": "standalone",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "puzzle"
   },
   {
    "id": "drg",
@@ -1960,7 +2084,8 @@
     548430
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "valheim",
@@ -1974,7 +2099,8 @@
     892970
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "terraria",
@@ -1988,7 +2114,8 @@
     105600
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "stardew",
@@ -2003,7 +2130,8 @@
     413150
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "palworld",
@@ -2017,7 +2145,8 @@
     1623730
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "lethal_company",
@@ -2031,7 +2160,8 @@
     1966720
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "horror"
   },
   {
    "id": "phasmophobia",
@@ -2045,7 +2175,8 @@
     739630
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "horror"
   },
   {
    "id": "sons_forest",
@@ -2059,7 +2190,8 @@
     1326470
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "7dtd",
@@ -2073,7 +2205,8 @@
     251570
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "zomboid",
@@ -2087,7 +2220,8 @@
     108600
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "enshrouded",
@@ -2101,7 +2235,8 @@
     1203620
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "vrising",
@@ -2115,7 +2250,8 @@
     1604030
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "ark_asa",
@@ -2129,7 +2265,8 @@
     2399830
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "ark_se",
@@ -2145,7 +2282,8 @@
     346110
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "subnautica",
@@ -2159,7 +2297,8 @@
     264710
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "dst",
@@ -2174,7 +2313,8 @@
     322330
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "nms",
@@ -2188,7 +2328,8 @@
     275850
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "survival"
   },
   {
    "id": "factorio",
@@ -2202,7 +2343,8 @@
     427520
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "satisfactory",
@@ -2218,7 +2360,8 @@
     526870
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "rimworld",
@@ -2232,7 +2375,8 @@
     294100
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "ets2",
@@ -2246,7 +2390,8 @@
     227300
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "racing"
   },
   {
    "id": "cities2",
@@ -2260,7 +2405,8 @@
     949230
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "cities",
@@ -2274,7 +2420,8 @@
     255710
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "sandbox"
   },
   {
    "id": "mh_wilds",
@@ -2288,7 +2435,8 @@
     2246340
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "mh_world",
@@ -2302,7 +2450,8 @@
     582010
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "mh_rise",
@@ -2316,7 +2465,8 @@
     1446780
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "bg3",
@@ -2331,7 +2481,8 @@
     1086940
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "wukong",
@@ -2350,7 +2501,8 @@
     2358720
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "stalker2",
@@ -2365,7 +2517,8 @@
     1643320
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "kcd2",
@@ -2379,7 +2532,8 @@
     1771300
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "rpg"
   },
   {
    "id": "borderlands3",
@@ -2393,7 +2547,8 @@
     397540
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "fps"
   },
   {
    "id": "hades2",
@@ -2407,7 +2562,8 @@
     1145350
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "hades",
@@ -2421,7 +2577,8 @@
     1145360
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "hollow_knight",
@@ -2435,7 +2592,8 @@
     367520
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "platformer"
   },
   {
    "id": "silksong",
@@ -2449,7 +2607,8 @@
     1030300
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "platformer"
   },
   {
    "id": "ror2",
@@ -2463,7 +2622,8 @@
     632360
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "vampire_survivors",
@@ -2477,7 +2637,8 @@
     1794680
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "balatro",
@@ -2491,7 +2652,8 @@
     2379780
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "card"
   },
   {
    "id": "bannerlord",
@@ -2505,7 +2667,8 @@
     261550
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "civ6",
@@ -2520,7 +2683,8 @@
     289070
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "civ7",
@@ -2536,7 +2700,8 @@
     1295660
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "tww3",
@@ -2550,7 +2715,8 @@
     1142710
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "stellaris",
@@ -2564,7 +2730,8 @@
     281990
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "ck3",
@@ -2578,7 +2745,8 @@
     1158310
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "hoi4",
@@ -2592,7 +2760,8 @@
     394360
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   },
   {
    "id": "eu4",
@@ -2606,7 +2775,8 @@
     236850
    ],
    "platform": "steam",
-   "uncertain": false
+   "uncertain": false,
+   "genre": "strategy"
   }
  ]
 }

@@ -33,6 +33,9 @@ pub struct GameSig {
     pub uncertain: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Broad genre, used for the fallback icon when there is no real one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub genre: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

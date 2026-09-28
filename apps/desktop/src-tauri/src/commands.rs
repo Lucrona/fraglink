@@ -1,6 +1,7 @@
 //! Tauri commands called from the webview (`window.__TAURI__.core.invoke`).
 
 use crate::{now, windows, AppState, ToastPayload};
+use fraglink_core::catalog;
 use fraglink_core::detector::Candidate;
 use fraglink_core::engine::keys;
 use fraglink_core::stats::Glance;
@@ -152,7 +153,35 @@ const ALLOWED: &[&str] = &[
     keys::STATUS,
     crate::friends::keys::FRIEND_TOASTS,
     crate::friends::keys::FRIEND_TOASTS_DND,
+    // 0.2.0-dev.4 Options / menus
+    "always_on_top",
+    "start_minimized",
+    "minimize_to_tray",
+    "show_offline",
+    "show_fof",
+    "share_game",
+    "theme",
+    // stored but not used yet (see CHANGELOG)
+    "nickname",
+    "language",
+    "share_profile",
+    "share_fof",
+    "idle_status",
+    "sound_signin",
+    "sound_signout",
+    "sound_pack",
+    "custom_status",
+    "custom_groups",
+    "hidden_groups",
 ];
+
+/// Per-game settings from Options > Games (`game_path:<id>`, `launch_args:<id>`).
+fn per_game_key(key: &str) -> bool {
+    [catalog::PATH_KEY, catalog::ARGS_KEY].iter().any(|p| {
+        key.strip_prefix(p)
+            .is_some_and(|id| !id.is_empty() && id.len() <= 80 && !id.contains(char::is_whitespace))
+    })
+}
 
 #[tauri::command]
 pub fn set_setting(
@@ -161,8 +190,19 @@ pub fn set_setting(
     key: String,
     value: String,
 ) -> CmdResult<()> {
-    if !ALLOWED.contains(&key.as_str()) || value.len() > 64 {
+    let per_game = per_game_key(&key);
+    let max = if per_game || key.starts_with("custom_") || key == "hidden_groups" {
+        512
+    } else {
+        64
+    };
+    if !(ALLOWED.contains(&key.as_str()) || per_game) || value.len() > max {
         return Err(format!("unknown setting {key}"));
+    }
+    if key == "always_on_top" {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.set_always_on_top(value == "1");
+        }
     }
     match key.as_str() {
         k if k == keys::PAUSED => {
@@ -420,4 +460,93 @@ pub async fn game_icons(
     tauri::async_runtime::spawn_blocking(move || crate::icons::resolve(&app, &ids, true))
         .await
         .map_err(err)
+}
+
+fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {
+    let e = state.engine.lock().unwrap();
+    let games = e.tracker.store.list_games().unwrap_or_default();
+    let settings = e.tracker.store.all_settings().unwrap_or_default();
+    catalog::build(
+        &e.detector.sigs,
+        &e.detector.steam,
+        &e.detector.libs,
+        &games,
+        &settings,
+    )
+}
+
+/// Options > Games and Tools > Launch: known games, installed first.
+#[tauri::command]
+pub fn games_catalog(state: State<'_, AppState>) -> Vec<catalog::Entry> {
+    catalog_now(&state)
+}
+
+/// "Detect Games": re-read the Steam / Epic / GOG install lists.
+#[tauri::command]
+pub async fn detect_games(app: AppHandle) -> Vec<catalog::Entry> {
+    let state = app.state::<AppState>();
+    if !state.sim {
+        state.engine.lock().unwrap().refresh_steam(now());
+    }
+    catalog_now(&state)
+}
+
+/// Start an installed game (Steam/Epic via their launchers, else its exe).
+#[tauri::command]
+pub async fn launch_game(app: AppHandle, id: String) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    let entries = catalog_now(&state);
+    let entry = entries.iter().find(|e| e.id == id).ok_or("unknown game")?;
+    let how = {
+        let e = state.engine.lock().unwrap();
+        catalog::launch_for(entry, &e.detector.libs)
+    };
+    match how.ok_or(
+        "Fraglink doesn't know how to start this game yet. Set its path in Options > Games.",
+    )? {
+        catalog::Launch::Url(u) => tauri_plugin_opener::open_url(u, None::<&str>).map_err(err),
+        catalog::Launch::Exe { path, args } => {
+            let p = std::path::Path::new(&path);
+            let mut c = std::process::Command::new(p);
+            c.args(&args);
+            if let Some(dir) = p.parent() {
+                c.current_dir(dir);
+            }
+            c.spawn()
+                .map(|_| ())
+                .map_err(|e| format!("could not start {path}: {e}"))
+        }
+    }
+}
+
+/// Options > Games "Browse…": pick the game's .exe (async, so the dialog runs
+/// off the main thread).
+#[tauri::command]
+pub async fn pick_game_exe(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("Choose the game's program")
+        .add_filter("Programs", &["exe"])
+        .blocking_pick_file()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string())
+}
+
+/// Placeholder address of the Fraglink website (Fraglink > My Stats).
+pub const WEBSITE: &str = "https://fraglink.gg";
+
+/// Open a page of the website in the default browser.
+#[tauri::command]
+pub async fn open_website(page: String) -> CmdResult<()> {
+    let page: String = page
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_'))
+        .take(100)
+        .collect();
+    tauri_plugin_opener::open_url(
+        format!("{WEBSITE}/{}", page.trim_start_matches('/')),
+        None::<&str>,
+    )
+    .map_err(err)
 }

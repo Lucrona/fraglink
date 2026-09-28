@@ -106,11 +106,35 @@
   const ICONS = {}; // game id -> data URL | null (none) ; undefined = not asked yet
   const iconWant = new Set(); let iconTimer = null;
   const GENERIC_ICON = '<svg class="gi-gen" viewBox="0 0 16 16"><rect x=".5" y=".5" width="15" height="15" rx="2" fill="#39414f" stroke="#15191f"/><path d="M4.2 6h7.6c1.3 0 2.2 1 2.2 2.3l-.4 2.4c-.2 1-1.4 1.3-2.1.6L10.3 10H5.7l-1.2 1.3c-.7.7-1.9.4-2.1-.6L2 8.3C2 7 2.9 6 4.2 6z" fill="#aab4c4"/><path d="M4 7.3v2M3 8.3h2" stroke="#39414f" stroke-width=".9"/><circle cx="11" cy="7.8" r=".6" fill="#39414f"/><circle cx="12" cy="8.9" r=".6" fill="#39414f"/></svg>';
+  /* Fallback icons by genre (original 16x16 drawings) for games without an icon of their own. */
+  const GENRE = {}; // game id -> genre, from the signature list (games_catalog)
+  let CATALOG = null;
+  const gtile = (bg, body) => `<svg class="gi-gen" viewBox="0 0 16 16"><rect x=".5" y=".5" width="15" height="15" rx="2" fill="${bg}" stroke="#0d1117"/>${body}</svg>`;
+  const L = '#dde6f3';
+  const GENRE_ICONS = {
+    fps: gtile('#3a2a2a', `<circle cx="8" cy="8" r="4.3" fill="none" stroke="${L}" stroke-width="1.3"/><path d="M8 1.8v4M8 10.2v4M1.8 8h4M10.2 8h4" stroke="${L}" stroke-width="1.3"/><circle cx="8" cy="8" r=".9" fill="#ff5a4a"/>`),
+    rpg: gtile('#2c2a44', `<path d="M13.2 2.2l.6.6-6.6 7.4-1.4-1.4z" fill="${L}"/><path d="M4.2 8.6l3.2 3.2" stroke="#e3b34a" stroke-width="1.5" stroke-linecap="round"/><path d="M5.4 10.6l-2.4 2.4" stroke="#9a6a3a" stroke-width="1.6" stroke-linecap="round"/>`),
+    mmo: gtile('#1f3a4a', `<circle cx="8" cy="8" r="5.3" fill="#2f7fb8" stroke="${L}" stroke-width="1"/><path d="M2.8 8h10.4M8 2.7c-2.6 2.4-2.6 8.2 0 10.6M8 2.7c2.6 2.4 2.6 8.2 0 10.6" stroke="${L}" stroke-width=".8" fill="none"/>`),
+    strategy: gtile('#3a3424', `<path d="M4.5 3h1.6v1.6h1.1V3h1.6v1.6h1.1V3h1.6v3l-1.2 1.2v4.3h1.4V13H4.3v-1.5h1.4V7.2L4.5 6z" fill="${L}"/>`),
+    survival: gtile('#2e2a22', `<path d="M3 13l10-3M3 10l10 3" stroke="#9a6a3a" stroke-width="1.6" stroke-linecap="round"/><path d="M8 2.5c.4 2 2.6 3 2.6 5.5A2.6 2.6 0 0 1 8 10.6 2.6 2.6 0 0 1 5.4 8c0-1.3.7-2 1.2-2.7.2 1 .6 1.4 1 1.5C7.4 5.4 7.4 4 8 2.5z" fill="#ff8a2a"/><path d="M8 6.6c.3 1 1.2 1.3 1.2 2.2a1.2 1.2 0 0 1-2.4 0c0-.6.4-.9.6-1.2z" fill="#ffd34a"/>`),
+    sandbox: gtile('#22301f', `<path d="M8 2.5l5 2.7L8 8 3 5.2z" fill="#7cc35a"/><path d="M3 5.2L8 8v5.5l-5-2.7z" fill="#8a5a32"/><path d="M13 5.2L8 8v5.5l5-2.7z" fill="#6a4426"/>`),
+    action: gtile('#3a3020', `<path d="M9.6 1.8L4 9h3.4l-1.2 5.2L12 6.8H8.5z" fill="#ffd43a" stroke="#7a5a10" stroke-width=".5"/>`),
+    battleroyale: gtile('#23303a', `<path d="M2.5 7.2C3 3.8 5.3 2.3 8 2.3s5 1.5 5.5 4.9C12 6.3 10.2 6.2 8 6.2s-4 .1-5.5 1z" fill="#e2573a"/><path d="M3 7l4.3 5M13 7l-4.3 5M8 6.2V12" stroke="${L}" stroke-width=".6"/><rect x="6.9" y="11.6" width="2.2" height="2.6" rx=".8" fill="${L}"/>`),
+    puzzle: gtile('#2a2640', `<path d="M3 5h2.6a1.5 1.5 0 1 1 3 0H11v2.4a1.5 1.5 0 1 1 0 3V13H8.6a1.5 1.5 0 1 0-3 0H3v-2.6a1.5 1.5 0 1 0 0-3z" fill="#b48cff"/>`),
+    moba: gtile('#1f2e24', `<rect x="3" y="3" width="10" height="10" fill="#2f5a3a"/><path d="M3.8 12.2L12.2 3.8M3.8 12.2V3.8h8.4M3.8 12.2h8.4V3.8" stroke="#e0cc92" stroke-width="1.1" fill="none"/><circle cx="3.8" cy="12.2" r="1.2" fill="#4aa0ff"/><circle cx="12.2" cy="3.8" r="1.2" fill="#ff5a4a"/>`),
+    racing: gtile('#2a2a2a', `<path d="M4 2.5v11" stroke="${L}" stroke-width="1.2"/><path d="M4.6 3h8.4v6H4.6z" fill="#fff"/><path d="M4.6 3h2.1v1.5H4.6zM8.8 3h2.1v1.5H8.8zM6.7 4.5h2.1V6H6.7zM10.9 4.5H13V6h-2.1zM4.6 6h2.1v1.5H4.6zM8.8 6h2.1v1.5H8.8zM6.7 7.5h2.1V9H6.7zM10.9 7.5H13V9h-2.1z" fill="#111"/>`),
+    horror: gtile('#2a1c22', `<path d="M8 2.3c3 0 5 2 5 4.7 0 1.6-.8 2.6-1.8 3.2v2.3H4.8v-2.3C3.8 9.6 3 8.6 3 7c0-2.7 2-4.7 5-4.7z" fill="${L}"/><circle cx="6" cy="7.2" r="1.3" fill="#2a1c22"/><circle cx="10" cy="7.2" r="1.3" fill="#2a1c22"/><path d="M7.3 10.2L8 9l.7 1.2zM6.4 11.2v1.3M8 11.2v1.3M9.6 11.2v1.3" stroke="#2a1c22" stroke-width=".7" fill="#2a1c22"/>`),
+    card: gtile('#1f3326', `<rect x="2.8" y="3.6" width="6.4" height="9" rx="1" fill="#f4f1e8" stroke="#555" stroke-width=".5" transform="rotate(-12 6 8)"/><rect x="6.6" y="3.2" width="6.4" height="9" rx="1" fill="#fff" stroke="#555" stroke-width=".5" transform="rotate(10 9.8 7.7)"/><path d="M9.9 6.2c.8-.9 2 .1 1.3 1L9.9 8.6 8.6 7.2c-.7-.9.5-1.9 1.3-1z" fill="#d22"/>`),
+    fighting: gtile('#3a2320', `<path d="M8 1.8l1.3 3.4 3.5-1.2-1.6 3.3 3.2 1.7-3.6.8.8 3.6-3.1-2-2 3.1-.9-3.6-3.6.7 2.1-3-3.1-1.9 3.6-.6-1-3.5 3.2 1.8z" fill="#ff8a3d"/><path d="M8 5.3l.7 1.8 1.9-.3-1.1 1.6 1.4 1.3-1.9.2-.2 1.9L8 10.6 6.7 11.8l-.2-1.9-1.9-.2 1.4-1.3-1.1-1.6 1.9.3z" fill="#ffe14a"/>`),
+    sports: gtile('#1e3322', `<circle cx="8" cy="8" r="5.4" fill="#fff" stroke="#222" stroke-width=".6"/><path d="M8 5.6l2.2 1.6-.8 2.6H6.6l-.8-2.6z" fill="#222"/><path d="M8 5.6V2.7M10.2 7.2l2.8-.9M9.4 9.8l1.7 2.4M6.6 9.8l-1.7 2.4M5.8 7.2L3 6.3" stroke="#222" stroke-width=".7"/>`),
+  };
+  GENRE_ICONS.platformer = GENRE_ICONS.action; GENRE_ICONS.battle_royale = GENRE_ICONS.battleroyale;
+  const fallbackIcon = id => GENRE_ICONS[GENRE[id]] || GENERIC_ICON;
   function appIcon(id) {
     const u = ICONS[id];
     if (u) return `<img class="gi-img" src="${esc(u)}" alt="" draggable="false">`;
     if (u === undefined && id) { iconWant.add(id); clearTimeout(iconTimer); iconTimer = setTimeout(loadIcons, 30); }
-    return GENERIC_ICON;
+    return fallbackIcon(id);
   }
   async function loadIcons() {
     const ids = [...iconWant].filter(id => ICONS[id] === undefined).slice(0, 60); iconWant.clear();
@@ -201,7 +225,7 @@
   const state = {
     skin: params.get('skin') || localStorage.getItem('fl-skin') || 'dark',
     tab: ({ hours: 'stats', profile: 'stats' })[params.get('tab')] || params.get('tab') || 'friends',
-    collapsed: { online: false, fof: false, off: false },
+    collapsed: { online: false, fof: false, off: false }, hover: null,
     sel: null, sort: { key: 'name', dir: 1 }, hoursSort: { key: 'week', dir: -1 },
     chatWith: null, logs: {},
   };
@@ -244,9 +268,42 @@
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
     return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}" title="${esc(f.name)}"><span class="c-name">${icon}${esc(f.name)}</span><span class="c-status">${esc(statusText(f))}</span><span class="c-info">${esc(info)}</span></div>`;
   }
-  function sec(key, label, cls) {
+  function sec(key, label, cls, n) {
     const c = state.collapsed[key];
-    return `<div class="xf-sec ${cls} ${c ? 'collapsed' : ''}" data-sec="${key}"><i class="tri"></i>${label}</div>`;
+    return `<div class="xf-sec ${cls} ${c ? 'collapsed' : ''} ${state.sel === 'g:' + key ? 'sel' : ''}" data-sec="${esc(key)}" title="Right-click for options"><i class="tri"></i>${label}${n != null ? ` <small>(${n})</small>` : ''}</div>`;
+  }
+  /* Settings the main window follows (written by Options and the menus). */
+  const SET = () => (LIVE.settings && LIVE.settings.settings) || {};
+  const setOn = (k, def = true) => { const v = SET()[k]; return v == null ? def : v === '1'; };
+  const jsonList = k => { try { const v = JSON.parse(SET()[k] || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch (e) { return []; } };
+  async function saveSetting(k, v) {
+    if (LIVE.settings) (LIVE.settings.settings = LIVE.settings.settings || {})[k] = String(v);
+    try { await FLB.set(k, v); } catch (e) { toastErr(e); }
+  }
+  const GROUP_NAMES = { online: 'Friends Online', fof: 'Friends of Friends Playing', req: 'Friend Requests', off: 'Friends Offline' };
+  const GROUP_HELP = {
+    online: 'Friends who are signed in to Fraglink right now. Friends in a game are listed first, with the game in the Status column.',
+    fof: 'Friends of your friends who are in a game right now. Hover over one to see which of your friends you have in common.',
+    req: 'Friend requests you have sent or received. Select one to accept, decline or cancel it.',
+    off: 'Friends who are not signed in. Turn this list off with Tools > Friends > Show Offline Friends.',
+    custom: 'A group you made. Moving friends into custom groups comes in a later update; for now it is an empty heading.',
+  };
+  // The grouped list shared by sample and real friends.
+  function groupsHtml(F, note) {
+    const hidden = jsonList('hidden_groups');
+    const on = sorted(F.filter(f => f.kind === 'playing')).concat(sorted(F.filter(f => f.kind === 'online')));
+    const fof = sorted(F.filter(f => f.kind === 'fof')), reqs = F.filter(f => f.kind === 'req' || f.kind === 'out'), off = sorted(F.filter(f => f.kind === 'off'));
+    const block = (key, label, cls, rows, rowCls = '') => {
+      if (hidden.includes(key)) return '';
+      return sec(key, label, cls, rows.length) + (state.collapsed[key] ? '' : rows.map(f => row(f, rowCls)).join(''));
+    };
+    let h = note || '';
+    h += block('online', GROUP_NAMES.online, 's-on', on);
+    if (setOn('show_fof')) h += block('fof', 'Friends of Friends Playing', 's-fof', fof, 'fof');
+    if (reqs.length) h += block('req', GROUP_NAMES.req, 's-fof', reqs, 'req');
+    for (const g of jsonList('custom_groups')) h += block('c:' + g, esc(g), 's-cus', []);
+    if (setOn('show_offline')) h += block('off', GROUP_NAMES.off, 's-off', off, 'off');
+    return h;
   }
   function sorted(arr) {
     const { key, dir } = state.sort;
@@ -278,34 +335,15 @@
     let h = `<div class="xf-grid"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name</span><span class="c-status" data-sort="status">Status</span><span class="c-info">Game Info</span></div>`;
     if (realMode()) {
       const F = realFriends(), fs = LIVE.friends;
-      const playing = sorted(F.filter(f => f.kind === 'playing')), online = sorted(F.filter(f => f.kind === 'online'));
-      const reqs = F.filter(f => f.kind === 'req' || f.kind === 'out'), off = sorted(F.filter(f => f.kind === 'off'));
-      if (!fs.list) h += `<div class="fl-mock">${fs.connected ? 'Loading friends…' : 'Connecting to your Fraglink server…'}</div>`;
-      else if (!fs.connected) h += `<div class="fl-mock">Offline: friends' status may be out of date. Reconnecting…</div>`;
-      h += playing.map(f => row(f)).join('') + online.map(f => row(f)).join('');
-      if (reqs.length) {
-        h += sec('req', `Friend Requests (${reqs.length})`, 's-fof');
-        if (!state.collapsed.req) h += reqs.map(f => row(f, 'req')).join('');
-      }
-      h += sec('off', `Friends Offline`, 's-off');
-      if (!state.collapsed.off) h += off.map(f => row(f, 'off')).join('');
-      if (fs.list && !(fs.list.friends || []).length && !reqs.length) h += `<div class="fl-empty">No friends yet. <a data-action="add-friend">Add a friend</a> by their Fraglink username.</div>`;
-      h += '</div>';
-      list.innerHTML = h;
-      return;
+      let note = '';
+      if (!fs.list) note = `<div class="fl-mock">${fs.connected ? 'Loading friends…' : 'Connecting to your Fraglink server…'}</div>`;
+      else if (!fs.connected) note = `<div class="fl-mock">Offline: friends' status may be out of date. Reconnecting…</div>`;
+      h += groupsHtml(F, note);
+      if (fs.list && !(fs.list.friends || []).length && !F.some(f => f.kind === 'req' || f.kind === 'out')) h += `<div class="fl-empty">No friends yet. <a data-action="add-friend">Add a friend</a> by their Fraglink username.</div>`;
+    } else {
+      h += groupsHtml(FRIENDS, `<div class="fl-mock">Sample friends. <a data-action="options" data-page="account">Sign in</a> (Options &gt; Account) to see your real friends.</div>`);
     }
-    const playing = sorted(FRIENDS.filter(f => f.kind === 'playing'));
-    const online = sorted(FRIENDS.filter(f => f.kind === 'online'));
-    const fof = sorted(FRIENDS.filter(f => f.kind === 'fof'));
-    const off = sorted(FRIENDS.filter(f => f.kind === 'off'));
-    h += `<div class="fl-mock">Sample friends. <a data-action="options" data-page="account">Sign in to sync</a> (Options) to see your real friends.</div>`;
-    h += playing.map(f => row(f)).join('') + online.map(f => row(f)).join('');
-    h += sec('fof', 'Friends of&nbsp;<u>Friends Playing</u>', 's-fof');
-    if (!state.collapsed.fof) h += fof.map(f => row(f, 'fof')).join('');
-    h += sec('off', `Friends Offline`, 's-off');
-    if (!state.collapsed.off) h += off.map(f => row(f, 'off')).join('');
-    h += '</div>';
-    list.innerHTML = h;
+    list.innerHTML = h + '</div>';
   }
   const hrs = sec => sec / 3600;
   function fmtHrs(sec) { const h = hrs(sec); return h >= 100 ? nf(h) : h.toFixed(1); }
@@ -409,6 +447,18 @@
   /* ---------------- side panel ---------------- */
   function renderSide() {
     const el = SS.vp; requestAnimationFrame(SS.update);
+    const hv = state.hover && friendsNow().find(x => x.id === state.hover && x.kind === 'fof');
+    if (hv) {
+      const mutual = hv.mutual || ((hv.info || '').match(/via ([^·]+)/) || [])[1] || '';
+      el.innerHTML = `<h4>${esc(hv.name)}</h4><div class="act"><i class="gi">${gameIcon(hv.game)}</i><div><b>${esc(GAMES[hv.game].name)}</b><br>${esc(hv.server)}</div></div>
+        <div class="sep"></div><h4>Mutual Friends</h4><ul class="games">${mutual.split(',').filter(Boolean).map(m => `<li><i class="noicon"></i><span>${esc(m.trim())}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>`;
+      return;
+    }
+    if (String(state.sel || '').startsWith('g:')) {
+      const k = state.sel.slice(2), name = GROUP_NAMES[k] || k.replace(/^c:/, '');
+      el.innerHTML = `<h4>${esc(name)}</h4><p class="side-help">${esc(GROUP_HELP[k] || GROUP_HELP.custom)}</p><div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
+      return;
+    }
     const f = friendsNow().find(x => x.id === state.sel);
     if (f && f.real) {
       const muted = (LIVE.friends.muted || []).includes(f.handle.toLowerCase()), H = esc(f.handle);
@@ -416,33 +466,36 @@
       if (f.kind === 'req') body = `<div>Wants to be your friend.</div><a data-action="friend-accept" data-handle="${H}">Accept</a> · <a data-action="friend-decline" data-handle="${H}">Decline</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
       else if (f.kind === 'out') body = `<div>Friend request sent. They'll show up here once they accept.</div><a data-action="friend-remove" data-handle="${H}">Cancel request</a>`;
       else body = `<div class="act">${f.kind === 'playing' ? `<i class="gi">${gameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b><br>${esc(f.server)}</div>` : `<div>${esc(statusText(f))}</div>`}</div>
-        <a data-action="chat">Send Message</a> · <a data-action="friend-mute" data-handle="${H}" data-mute="${muted ? 0 : 1}">${muted ? 'Unmute' : 'Mute'} toasts</a>
+        <a data-action="friend-mute" data-handle="${H}" data-mute="${muted ? 0 : 1}">${muted ? 'Unmute' : 'Mute'} toasts</a>
         <div class="sep"></div><div><span style="color:#8ea3c8">Friends since:</span> <b>${f.since ? esc(new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })) : '?'}</b></div>
         <div class="sep"></div><a data-action="friend-remove" data-handle="${H}" data-confirm="1">Remove friend</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
-      el.innerHTML = `<h4>${esc(f.name)}</h4><div style="color:#8ea3c8">@${H}</div>${body}<div class="sep"></div><a data-action="clear-sel">« Activity Report</a>`;
+      el.innerHTML = `<h4>${esc(f.name)}</h4><div style="color:#8ea3c8">@${H}</div>${body}<div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
       return;
     }
     if (f) {
       const playing = f.kind === 'playing' || f.kind === 'fof';
       el.innerHTML = `<h4>${esc(f.name)}</h4>
         <div class="act">${playing ? `<i class="gi">${gameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b><br>${esc(f.server)}<br><span style="color:var(--cyan)">${esc(f.info)}</span></div>` : `<div>${esc(statusText(f))}${f.last ? ' · last online ' + esc(f.last) : ''}</div>`}</div>
-        ${playing ? '<a data-action="join">Join Game</a> · ' : ''}<a data-action="chat">Send Message</a> · <a data-action="friend-profile">Profile</a>
+        <a data-action="friend-profile">Profile</a>
         <div class="sep"></div>
         <div><span style="color:#8ea3c8">Past 7 days:</span> <b>${fmtH(f.week)}</b><br><span style="color:#8ea3c8">Total logged:</span> <b>${f.total ? f.total + ' h' : 'hidden'}</b></div>
-        <div class="sep"></div><a data-action="clear-sel">« Activity Report</a>`;
+        <div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
       return;
     }
-    const act = friendsNow().filter(x => x.kind === 'playing').map(x => `<div class="act"><i class="gi">${gameIcon(x.game)}</i><div><b>${esc(x.name)}</b> is playing <span style="color:var(--cyan)">${esc(GAMES[x.game].name)}</span></div></div>`).join('');
-    el.innerHTML = `<h4>Activity Report</h4>${act}
-      <div class="sep"></div><h4>My Games</h4>
-      <ul class="games">${((LIVE.glance && LIVE.glance.top) || []).map(r => { const id = ensureGame(r.game_id, r.name); return `<li><i class="gi">${gameIcon(id)}</i><span>${esc(r.name.replace(/:.*/, ''))}</span><em>${fmtHrs(r.total_seconds)}h</em></li>`; }).join('') || '<li><span>No games tracked yet</span></li>'}</ul>`;
+    // Nothing selected: the games on this PC with Launch links. (Friends'
+    // recent activity stays hidden until the website hosts it.)
+    const inst = (CATALOG || []).filter(g => g.installed && !g.excluded);
+    const games = CATALOG === null ? '<li><span>Looking for games…</span></li>'
+      : inst.map(g => { const id = ensureGame(g.id, g.name); return `<li title="${esc(g.game_path || g.detect_path || '')}"><i class="gi">${gameIcon(id)}</i><span>${esc(g.name)}</span>${g.can_launch ? `<a data-action="launch" data-game="${esc(g.id)}">Launch</a>` : ''}</li>`; }).join('') || '<li><span>No games found on this PC yet.</span></li>';
+    el.innerHTML = `<h4>My Games <small>(${inst.length})</small></h4><ul class="games launch">${games}</ul>
+      <div class="side-act"><button type="button" class="dk-btn" data-action="detect-games">Detect Games</button></div>`;
   }
   function toggleSide(force) {
     const app = $('#app');
     const open = force ?? !app.classList.contains('side-open');
     app.classList.toggle('side-open', open); requestAnimationFrame(SS.update);
     if (TAURI) FLB.scale(currentZoom(), open);
-    $('#nub').title = open ? 'Hide Activity Report' : 'Show Activity Report';
+    $('#nub').title = open ? 'Hide Info Panel' : 'Show Info Panel';
     placeChat();
   }
 
@@ -685,8 +738,8 @@
     try {
       const [g, a] = await Promise.all([FLB.glance(), FLB.activity(50)]);
       LIVE.glance = g; LIVE.activity = a; LIVE.fetchedAt = Date.now();
-      $('#menu-pause').innerHTML = g.paused ? '<u>R</u>esume tracking' : '<u>P</u>ause tracking';
       if (state.tab !== 'friends') render(); else renderSide();
+      syncStatus();
     } catch (e) { console.error('refresh failed', e); }
   }
   function refreshSoon() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 250); }
@@ -696,7 +749,7 @@
       const [f, sv] = await Promise.all([FLB.friends(), FLB.serverStats()]);
       LIVE.friends = f; LIVE.server = sv;
       if (state.sel && !friendsNow().some(x => x.id === state.sel)) state.sel = null;
-      render();
+      render(); syncMenus(); syncStatus();
     } catch (e) { console.error('friends refresh failed', e); }
   }
 
@@ -707,6 +760,10 @@
   }
   // Options (another window) changed a setting: follow it here.
   FLB.on && FLB.on('fraglink://settings', ([k, v]) => {
+    if (LIVE.settings) (LIVE.settings.settings = LIVE.settings.settings || {})[k] = v;
+    if (k === 'theme') applyTheme(v);
+    if (['show_offline', 'show_fof', 'always_on_top', 'share_game', 'custom_status', 'hidden_groups', 'custom_groups'].includes(k)) { syncMenus(); syncStatus(); render(); }
+    if (k.startsWith('game_path:') || k.startsWith('launch_args:')) loadCatalog();
     if (k === 'skin' && v !== state.skin) applySkin(v, false);
     else if (k === 'zoom' && state.skin !== 'dark') setZoom(v);
     else if (k === 'paused') refreshSoon();
@@ -769,28 +826,82 @@
     'friend-mute': a => FLB.friendMute(a.dataset.handle, a.dataset.mute === '1').then(refreshFriends).catch(toastErr),
     'my-profile': () => notice('My Profile', LATER), 'friend-profile': () => notice('Profile', LATER),
     'my-stats': () => notice('Full stats', LATER), 'website': () => notice('fraglink.gg', LATER), 'estimate': () => notice('Estimate my history', LATER),
-    'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${st.version}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {} notice('About Fraglink', `<b>Fraglink ${esc(v)}</b><br>Local hours tracker (M1) with optional account sync (M2 preview).<br>© 2026 Lucrona. All rights reserved.<br><br>Classic look inspired by 2005-era gaming IM clients; original Fraglink mark. Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).`); },
+    'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${st.version}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {} notice('About Fraglink', `<b>Fraglink ${esc(v)}</b><br>Local hours tracker (M1) with optional account sync (M2 preview).<br>© 2026 Lucrona. All rights reserved.<br><br>Look inspired by the classic gaming IM clients; original Fraglink art. Logo: <i>Split Orbit</i>, wordmark set in Saira Expanded Bold (SIL OFL 1.1). Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).`); },
     'chat': () => { const f = friendsNow().find(x => x.id === state.sel); if (f && f.real) { notice('Chat', 'Fraglink has no built-in chat. Linking Discord so this opens a DM arrives in a later update.'); return; } openChat(state.sel); },
     'join': () => notice('Join Game', 'Joining friends arrives with friends in a later update.'),
     'clear-sel': () => { state.sel = null; render(); },
     'download': () => notice('Download', 'You are already running Fraglink.'),
+    'always-on-top': () => { const v = !setOn('always_on_top', false); saveSetting('always_on_top', v ? '1' : '0'); syncMenus(); },
+    'sign-out': async () => { if (!realMode()) { openOptions('account'); return; } if (!confirm('Sign out of your Fraglink account on this PC? Tracking keeps running; friends disappear until you sign in again.')) return; try { await FLB.syncSignOut(); } catch (e) { toastErr(e); } refreshFriends(); },
+    'toggle-offline': () => { saveSetting('show_offline', setOn('show_offline') ? '0' : '1'); syncMenus(); render(); },
+    'toggle-fof': () => { saveSetting('show_fof', setOn('show_fof') ? '0' : '1'); syncMenus(); render(); },
+    'show-groups': () => { saveSetting('hidden_groups', '[]'); render(); },
+    'help-contents': () => notice('Fraglink Help', '<ul class="fl-ul"><li><b>Friends list</b>: click a group heading to select it, click its arrow to fold it, right-click it to add a custom group or hide the category (Tools &gt; Friends &gt; Show Hidden Categories brings it back).</li><li><b>Info panel</b>: the arrow on the right edge. It shows your games with <b>Launch</b> links, or details for the friend or group you selected.</li><li><b>Status</b>: the box under the banner. While you play, it shows the game automatically.</li><li><b>Games</b>: Options &gt; Games lists what Fraglink found; set paths and launch options there, or add a game by hand.</li><li><b>Privacy</b>: see Options &gt; Privacy for what friends can see.</li></ul>'),
+    'my-stats': () => { const u = realMode() && LIVE.friends.me; if (TAURI && FLB.openWebsite) FLB.openWebsite(u ? 'u/' + u : '').catch(toastErr); else notice('My Stats', LATER); },
+    'custom-status-go': () => { const v = ($('#custom-status').value || '').trim(); saveSetting('custom_status', v); saveSetting('custom_on', v ? '1' : '0'); if (v) myStatus = 'online'; $('#notice').hidden = true; syncStatus(); },
+    'add-group-go': () => { const v = ($('#group-name').value || '').trim().slice(0, 30); if (v) saveSetting('custom_groups', JSON.stringify([...new Set([...jsonList('custom_groups'), v])])); $('#notice').hidden = true; render(); },
+    'launch': async a => { try { await FLB.launchGame(a.dataset.game); } catch (e) { notice('Launch', esc(String(e && e.message || e))); } },
+    'detect-games': async a => { if (a) { a.disabled = true; a.textContent = 'Detecting…'; } try { setCatalog(await FLB.detectGames()); } catch (e) { toastErr(e); } },
   };
+  /* games on this PC (Options > Games, Tools > Launch, the info panel) */
+  function setCatalog(c) {
+    CATALOG = c || [];
+    for (const g of CATALOG) if (g.genre) { GENRE[g.id] = g.genre; if (g.steam_appid) GENRE['steam:' + g.steam_appid] = g.genre; }
+    const inst = CATALOG.filter(g => g.installed && g.can_launch && !g.excluded);
+    $('#menu-launch').innerHTML = inst.map(g => `<button data-action="launch" data-game="${esc(g.id)}">${esc(g.name)}</button>`).join('') || '<button disabled>No games found</button>';
+    render();
+  }
+  const loadCatalog = () => FLB.catalog ? FLB.catalog().then(setCatalog).catch(e => console.warn('catalog', e)) : null;
+  const THEMES = { blue: ['#4b82d6', '#1f4f9e', '#173d7c'], crimson: ['#d65b5b', '#9e1f2a', '#7c1720'], emerald: ['#4bb87a', '#1f7e4a', '#175f38'], graphite: ['#8a9099', '#4f555e', '#3a3f46'] };
+  function applyTheme(t) {
+    if (!THEMES[t]) t = 'blue';
+    const [a, b, c] = THEMES[t], r = document.documentElement.style;
+    r.setProperty('--dk-blue1', a); r.setProperty('--dk-blue2', b); r.setProperty('--dk-blue3', c);
+    $$('.theme-opt').forEach(x => x.classList.toggle('checked', x.dataset.theme === t));
+  }
+  function syncMenus() {
+    $('#menu-ontop').classList.toggle('checked', setOn('always_on_top', false));
+    $('#menu-offline').classList.toggle('checked', setOn('show_offline'));
+    $('#menu-fof').classList.toggle('checked', setOn('show_fof'));
+    $('#menu-signout').disabled = !realMode();
+  }
   document.addEventListener('click', e => {
     const skin = e.target.closest('.skin-opt'); if (skin) { applySkin(skin.dataset.skin); closeMenus(); return; }
     const zo = e.target.closest('.zoom-opt'); if (zo) { setZoom(zo.dataset.zoom); closeMenus(); return; }
+    const th = e.target.closest('.theme-opt'); if (th) { applyTheme(th.dataset.theme); saveSetting('theme', th.dataset.theme); closeMenus(); return; }
     const a = e.target.closest('[data-action]');
     if (a && !a.closest('#toast')) { closeMenus(); const fn = actions[a.dataset.action]; if (fn) { e.preventDefault(); fn(a); } return; }
     const t = e.target.closest('[data-tab]'); if (t) { state.tab = tabOn(t.dataset.tab) ? t.dataset.tab : 'friends'; render(); return; }
   });
   $$('input[name=skin]').forEach(r => r.addEventListener('change', () => applySkin(r.value)));
   list.addEventListener('click', e => {
-    const s = e.target.closest('[data-sec]'); if (s) { state.collapsed[s.dataset.sec] = !state.collapsed[s.dataset.sec]; render(); return; }
+    const s = e.target.closest('[data-sec]'); if (s) { const k = s.dataset.sec; if (e.target.closest('.tri') || state.sel === 'g:' + k) state.collapsed[k] = !state.collapsed[k]; state.sel = 'g:' + k; render(); return; }
     const so = e.target.closest('[data-sort]'); if (so) { const k = so.dataset.sort; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : 1 }; render(); return; }
     const hs = e.target.closest('[data-hsort]'); if (hs) { const k = hs.dataset.hsort; state.hoursSort = { key: k, dir: state.hoursSort.key === k ? -state.hoursSort.dir : -1 }; render(); return; }
     const w = e.target.closest('[data-web]'); if (w) { website(w.dataset.web); return; }
     const r = e.target.closest('[data-friend]'); if (r) { state.sel = r.dataset.friend; render(); }
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); });
+  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); if (e.key === 'Enter' && e.target.id === 'custom-status') actions['custom-status-go'](); if (e.key === 'Escape') hideCtx(); });
+  // hovering a friend of a friend shows your mutual friends in the info panel
+  list.addEventListener('mouseover', e => { const r = e.target.closest('.xf-row.fof'); const id = r ? r.dataset.friend : null; if (id !== state.hover) { state.hover = id; renderSide(); } });
+  list.addEventListener('mouseleave', () => { if (state.hover) { state.hover = null; renderSide(); } });
+  /* group header right-click menu */
+  const ctx = $('#ctx');
+  function hideCtx() { ctx.hidden = true; }
+  list.addEventListener('contextmenu', e => {
+    const s = e.target.closest('[data-sec]'); if (!s) return;
+    e.preventDefault(); const k = s.dataset.sec;
+    ctx.innerHTML = `<button data-ctx="add-group">Add Custom Group…</button><button data-ctx="hide" data-key="${esc(k)}">Hide Category</button>${k.startsWith('c:') ? `<button data-ctx="del-group" data-key="${esc(k)}">Delete Group</button>` : ''}`;
+    ctx.hidden = false; ctx.style.left = Math.min(e.clientX, innerWidth - 150) + 'px'; ctx.style.top = Math.min(e.clientY, innerHeight - 70) + 'px';
+  });
+  document.addEventListener('mousedown', e => { if (!e.target.closest('#ctx')) hideCtx(); });
+  ctx.addEventListener('click', e => {
+    const b = e.target.closest('[data-ctx]'); if (!b) return; hideCtx();
+    const k = b.dataset.key;
+    if (b.dataset.ctx === 'add-group') { notice('Add Custom Group', `Group name:<br><input id="group-name" maxlength="30" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="add-group-go">Add</button></div>`); setTimeout(() => $('#group-name') && $('#group-name').focus(), 0); }
+    else if (b.dataset.ctx === 'hide') { saveSetting('hidden_groups', JSON.stringify([...new Set([...jsonList('hidden_groups'), k])])); if (state.sel === 'g:' + k) state.sel = null; render(); }
+    else if (b.dataset.ctx === 'del-group') { saveSetting('custom_groups', JSON.stringify(jsonList('custom_groups').filter(g => 'c:' + g !== k))); render(); }
+  });
   list.addEventListener('dblclick', e => { const r = e.target.closest('[data-friend]'); if (r) openChat(r.dataset.friend); });
   // prototype: single click also opened chat; the app only selects (friends are sample data until M3)
   $('#list').addEventListener('keydown', e => {
@@ -800,9 +911,30 @@
     else if (e.key === 'Enter' && state.sel) { openChat(state.sel); return; } else return;
     e.preventDefault(); state.sel = rows[i].dataset.friend; render();
   });
+  /* Status: the game I'm in shows automatically (it is "Online, playing X"),
+     then Online / Away / Invisible, a custom line, and Set Custom Status. */
+  let myStatus = 'online';
+  function statusLabel() { return myStatus === 'online' ? '' : ' (' + ({ away: 'Away', invisible: 'Invisible' })[myStatus] + ')'; }
+  function syncStatus() {
+    const sel = $('#status'), np = LIVE.glance && LIVE.glance.now_playing, custom = SET().custom_status || '';
+    let g = sel.querySelector('option[value=game]');
+    if (np && setOn('share_game')) { if (!g) { g = document.createElement('option'); g.value = 'game'; sel.prepend(g); } g.textContent = 'Playing ' + np.name; } else if (g) g.remove();
+    let c = sel.querySelector('option[value=customtext]');
+    if (custom) { if (!c) { c = document.createElement('option'); c.value = 'customtext'; sel.querySelector('option[value=custom]').before(c); } c.textContent = custom; } else if (c) c.remove();
+    sel.value = myStatus === 'online' ? (g ? 'game' : c && SET().custom_on === '1' ? 'customtext' : 'online') : myStatus;
+    $('#username').textContent = (realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name) + statusLabel();
+  }
   $('#status').addEventListener('change', e => {
-    $('#username').textContent = ME.name + (e.target.value === 'online' ? '' : ' (' + e.target.selectedOptions[0].text + ')');
-    FLB.set('status', e.target.value).catch(() => {});
+    const v = e.target.value;
+    if (v === 'custom') {
+      notice('Set Custom Status', `Shown under your name in this window. <em>(Friends see it in a later update.)</em><br><input id="custom-status" maxlength="60" value="${esc(SET().custom_status || '')}" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="custom-status-go">OK</button></div>`);
+      setTimeout(() => $('#custom-status') && $('#custom-status').focus(), 0);
+      syncStatus(); return;
+    }
+    const st = v === 'game' || v === 'customtext' ? 'online' : v;
+    saveSetting('custom_on', v === 'customtext' ? '1' : '0');
+    if (st !== myStatus) { myStatus = st; FLB.set('status', st).catch(() => {}); }
+    syncStatus();
   });
 
   /* drag: the app window is moved by the OS (Tauri); dialogs move inside it */
@@ -857,7 +989,8 @@
     try { st = await FLB.settings(); LIVE.settings = st; } catch (e) {}
     const saved = st && st.settings || {};
     if (TAURI && saved.skin) state.skin = params.get('skin') || saved.skin;
-    if (saved.status) { $('#status').value = saved.status; $('#status').dispatchEvent(new Event('change')); }
+    if (['online', 'away', 'invisible'].includes(saved.status)) myStatus = saved.status;
+    applyTheme(saved.theme); syncMenus(); syncStatus();
     setZoom(params.get('zoom') || (TAURI ? (saved.zoom || '1.5') : (document.body.classList.contains('compare') ? 1 : 2)));
     applySkin(state.skin);
     clock();
@@ -866,13 +999,14 @@
     if (params.get('add') === '1') setTimeout(() => actions['add-friend'](), 300);
     await refreshFriends();
     await refresh();
+    loadCatalog();
     FLB.on('fraglink://events', () => { for (const k in ICONS) if (ICONS[k] === null) delete ICONS[k]; refreshSoon(); }); // a newly detected game may now have an exe icon
     FLB.on('fraglink://friends', refreshFriends);
     FLB.on('fraglink://sync', refreshFriends);
     FLB.on('fraglink://show-friend', h => { state.tab = 'friends'; state.sel = 'u:' + h; refreshFriends(); });
     setInterval(() => { if (realMode() && state.tab === 'friends') render(); }, 60000);
     FLB.on('fraglink://paused', refreshSoon);
-    FLB.on('fraglink://status', v => { $('#status').value = v; $('#username').textContent = ME.name + (v === 'online' ? '' : ' (' + $('#status').selectedOptions[0].text + ')'); });
+    FLB.on('fraglink://status', v => { myStatus = v; syncStatus(); });
     setInterval(refresh, 30000);
     if (!TAURI && params.get('toast') === '1') { const f = FRIENDS.find(x => x.id === 'rift'); Object.assign(f, { kind: 'playing', game: 'bf2', server: SERVERS[1], info: 'Karkand · 32/64' }); render(); toast(f, 'bf2'); }
     if (params.get('modal') === 'options') openOptions();

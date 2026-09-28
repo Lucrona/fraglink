@@ -10,7 +10,7 @@
 
    Within about 5–10 s a bottom-right pop-up should say you started playing, and the **Stats** tab should show *Now Playing* with a running timer. Quit the game. After about 10 s a "stopped" pop-up appears. Sessions under 2 minutes are not kept.
 5. **Check the numbers:** Stats shows Today / This week / Streak and your top games. The **Activity** tab lists your started/stopped events. Leave a game running and walk away for more than 15 min. That idle time should not count.
-6. **Unknown game?** Use *Fraglink → This is a game…* while it runs, pick the program, and it counts from then on. *Tools → Manage games* lets you exclude a game or undo a tag.
+6. **Unknown game?** While it runs, open *Tools → Options → Games → Add game manually…*, pick the program, name it, and it counts from then on. Select any game in that tree to set its path or launch arguments, or tick *Don't track this game*.
 7. **Crash safety (optional):** while a game runs for a few minutes, end Fraglink in Task Manager and start it again. The session should be recovered, up to the last minute.
 8. **Autostart:** off by default. Turn it on under *Tools → Options* if you want it to start with Windows (it starts hidden in the tray).
 9. **Where the data lives:**

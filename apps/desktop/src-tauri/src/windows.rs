@@ -42,6 +42,13 @@ pub fn is_dark(app: &AppHandle) -> bool {
     skin.is_none_or(|s| s == "dark")
 }
 
+/// A "1"/"0" checkbox setting from Options.
+pub fn flag(app: &AppHandle, key: &str) -> bool {
+    let state = app.state::<AppState>();
+    let e = state.engine.lock().unwrap();
+    e.tracker.store.get_setting(key).ok().flatten().as_deref() == Some("1")
+}
+
 /// Saved dark-window size (logical px, without the info panel).
 pub fn parse_size(s: &str) -> Option<(f64, f64)> {
     let (w, h) = s.split_once(',')?;
@@ -96,6 +103,9 @@ fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
             .resizable(false)
             .build()?
     };
+    if flag(app, "always_on_top") {
+        let _ = w.set_always_on_top(true);
+    }
     let pos = *app.state::<AppState>().main_pos.lock().unwrap();
     if let Some((x, y)) = pos {
         if on_some_monitor(app, x, y) {
@@ -217,8 +227,8 @@ pub fn show_options(app: &AppHandle, page: Option<String>) {
         }
         let r = WebviewWindowBuilder::new(app, "options", WebviewUrl::App(url.into()))
             .title("Fraglink Options")
-            .inner_size(640.0, 480.0)
-            .min_inner_size(520.0, 380.0)
+            .inner_size(470.0, 560.0)
+            .min_inner_size(430.0, 480.0)
             .resizable(true)
             .maximizable(true)
             .center()
@@ -247,6 +257,13 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         }
         WindowEvent::Resized(sz) => {
             let app = window.app_handle();
+            if window.is_minimized().unwrap_or(false) {
+                // Options > General: "Minimise to the system tray"
+                if flag(app, "minimize_to_tray") {
+                    let _ = window.hide();
+                }
+                return;
+            }
             let sf = window.scale_factor().unwrap_or(1.0);
             let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
             // ignore minimised (0x0) and chassis-skin sizes

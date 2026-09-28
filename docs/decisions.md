@@ -156,3 +156,13 @@ the entries say what changing them would cost.
 - Stats and Activity stay hidden behind the `FEATURES` flag; the vertical tab strip shows only Friends.
 - A true one-click installer isn't available with Tauri's NSIS options without replacing the whole template, so the wizard stays (per user, no admin, "Run Fraglink" on the finish page) with Fraglink branding images.
 
+## D30. "Split Orbit" logo and a closer copy of the classic dark client layout
+
+**Date:** 2026-09-28 (0.2.0-dev.4)
+
+- **Logo:** concept 28 "Split Orbit" (an italic blade F inside a split orbit ring) replaces the chain-link F. Flat white at 16/32 px and in the dark header; chrome for larger icons, the banner and the installer. Sources and the icon generator live in `assets/brand/`. The wordmark is Saira Expanded Bold converted to outlines (SIL OFL 1.1), so no font file ships.
+- **Layout:** menus, the three-column friends list, group names, the status dropdown (current game shown automatically) and the context-aware right panel follow the 2013 dark client's structure, drawn with Fraglink's own CSS and wording (no Xfire art or strings).
+- **Options** is a small tabbed dialog with plain Windows-style controls rather than a themed window: it is where people expect settings, and it stays readable at any DPI.
+- **Scope:** chat, voice, video, broadcasting, file transfer, screenshots, chat rooms, the in-game overlay and the server browser are left out. Settings for features that don't exist yet (sounds, nickname, language, some privacy switches, custom status and groups) are saved so the dialog is complete, and are listed in the changelog as inert.
+- **Launching** only uses data Fraglink found itself or the user typed into Options (Steam/Epic launcher URLs, a known .exe); the UI passes a game id, never a command line.
+

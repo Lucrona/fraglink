@@ -146,7 +146,14 @@ impl Engine {
                     .and_then(|p| p.path.clone())
             });
             let e = self.seen.entry(d.game_id.clone()).or_default();
-            if path.is_some() {
+            if path.is_some() && e.exe_path != path {
+                // remembered for Launch and the Options > Games paths
+                if let Some(p) = &path {
+                    let _ = self
+                        .tracker
+                        .store
+                        .set_setting(&format!("{}{}", crate::catalog::EXE_KEY, d.game_id), p);
+                }
                 e.exe_path = path;
             }
             if d.steam_appid.is_some() {

@@ -66,7 +66,16 @@ pub fn my_presence(app: &AppHandle) -> MyPresence {
         .flatten()
         .filter(|s| ["online", "away", "invisible"].contains(&s.as_str()))
         .unwrap_or_else(|| "online".into());
-    let game = e.tracker.now_playing().map(|n| GameRef {
+    // Options > Privacy: "Show my game to my friends"
+    let share = e
+        .tracker
+        .store
+        .get_setting("share_game")
+        .ok()
+        .flatten()
+        .as_deref()
+        != Some("0");
+    let game = e.tracker.now_playing().filter(|_| share).map(|n| GameRef {
         id: n.game_id,
         name: n.name,
         started_at: Some(n.started_at),
