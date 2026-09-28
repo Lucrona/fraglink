@@ -5,7 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.2] - 2026-09-28
+
+Pre-release for private testing (builds report `0.2.0-2`; MSI needs a numeric pre-release).
+
 ### Changed
+- **New default look: a dark, resizable main window** laid out like the 2013-era gaming IM clients: black header with the Fraglink logo, minimise and close; Fraglink/Tools/Help menu; banner; a status row with your name and an Online/Away/Invisible dropdown; vertical icon tabs down the left; a blue section header over the list; a bottom icon action bar (Add Friend, Chat, Profile, Join, Options); and the info panel docked on the right. All Fraglink's own CSS and art.
+- The main window can be resized from its edges and the bottom-right grip. The list stretches with it. The minimum (and default) size is 333x555 (+12 px for the info-panel nub), and the size and position are remembered. Opening the info panel widens the window by 180 px.
+- The Classic Silver skin stays available (Options > Appearance or Tools > Skins) at its fixed size, with the Scale setting. Existing installs switch to Dark once.
+- **Options is now its own window** (resizable, 640x480 by default) with a category list on the left: General, Account, Tracking, Notifications, Privacy, Appearance, Advanced, and OK / Cancel / Apply buttons. Changes are applied on OK or Apply, and the main window follows them straight away. The old overlay inside the main window is gone.
+- Game icons taken from a game's exe are extracted again when the exe changes (its modified time or size), so a game update that changes its icon is picked up.
+- Windows installer: Fraglink-branded NSIS header and sidebar images, installer icon and a "Fraglink" Start menu folder. It still installs per user without admin rights and offers "Run Fraglink" on the last page.
 - Tray client: the Stats and Activity tabs are hidden for now, so only Friends shows. Their buttons are removed, so no empty tab slots are left. The code is kept behind a feature flag (`FEATURES` in `apps/desktop/ui/app.js`). To turn them back on, set the flag to `true`, or for testing use `?features=stats,activity` or localStorage `fl-features`. Friend toasts ("has started playing") are unchanged.
 
 ## [0.2.0-dev] - 2026-09-28

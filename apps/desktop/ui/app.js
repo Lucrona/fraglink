@@ -9,6 +9,8 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const FLB = window.FL; const TAURI = !!(FLB && FLB.tauri);
   document.body.classList.add('app-mode'); if (TAURI) document.body.classList.add('tauri');
+  // `win`: the page IS the window (Tauri, or ?win=1 for browser previews/screenshots)
+  if (TAURI || new URLSearchParams(location.search).get('win') === '1') document.body.classList.add('win');
   // live local data from the tracker
   const LIVE = { glance: null, activity: [], fetchedAt: 0, settings: null, friends: null, server: null };
 
@@ -197,7 +199,7 @@
 
   /* ---------------- state ---------------- */
   const state = {
-    skin: params.get('skin') || localStorage.getItem('fl-skin') || 'classic',
+    skin: params.get('skin') || localStorage.getItem('fl-skin') || 'dark',
     tab: ({ hours: 'stats', profile: 'stats' })[params.get('tab')] || params.get('tab') || 'friends',
     collapsed: { online: false, fof: false, off: false },
     sel: null, sort: { key: 'name', dir: 1 }, hoursSort: { key: 'week', dir: -1 },
@@ -209,13 +211,18 @@
   $$('[data-tab]').forEach(b => { if (!tabOn(b.dataset.tab)) b.remove(); });
 
   /* ---------------- skins ---------------- */
-  function applySkin(s) {
-    if (!['classic', 'phoenix', 'stream'].includes(s)) s = 'classic';
+  // Dark (the 2013-style resizable window) is the default; Classic Silver is a
+  // fixed-size alternative. Phoenix/StreamEngine CSS is kept but not offered.
+  const SKINS = ['dark', 'classic', 'phoenix', 'stream'];
+  function applySkin(s, persist = true) {
+    if (!SKINS.includes(s)) s = 'dark';
+    const changed = s !== state.skin;
     state.skin = s;
-    document.body.classList.remove('skin-classic', 'skin-phoenix', 'skin-stream');
+    document.body.classList.remove(...SKINS.map(k => 'skin-' + k));
     document.body.classList.add('skin-' + s);
     try { localStorage.setItem('fl-skin', s); } catch (e) {}
-    if (TAURI) FLB.set('skin', s).catch(() => {});
+    // the OS window switches between resizable (dark) and fixed (chassis skins)
+    if (TAURI) (persist ? FLB.set('skin', s) : Promise.resolve()).then(() => { if (changed || persist) FLB.scale(currentZoom(), $('#app').classList.contains('side-open')); }).catch(() => {});
     $$('.skin-opt').forEach(b => b.classList.toggle('checked', b.dataset.skin === s));
     $$('input[name=skin]').forEach(r => { r.checked = r.value === s; });
     render();
@@ -291,7 +298,7 @@
     const online = sorted(FRIENDS.filter(f => f.kind === 'online'));
     const fof = sorted(FRIENDS.filter(f => f.kind === 'fof'));
     const off = sorted(FRIENDS.filter(f => f.kind === 'off'));
-    h += `<div class="fl-mock">Sample friends. <a data-action="options">Sign in to sync</a> (Options) to see your real friends.</div>`;
+    h += `<div class="fl-mock">Sample friends. <a data-action="options" data-page="account">Sign in to sync</a> (Options) to see your real friends.</div>`;
     h += playing.map(f => row(f)).join('') + online.map(f => row(f)).join('');
     h += sec('fof', 'Friends of&nbsp;<u>Friends Playing</u>', 's-fof');
     if (!state.collapsed.fof) h += fof.map(f => row(f, 'fof')).join('');
@@ -390,7 +397,8 @@
     list.innerHTML = h;
   }
   function render() {
-    $$('.xf-tab, .xf-icontabs [data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
+    $$('.xf-tab, .xf-icontabs [data-tab], .dk-vtabs [data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
+    $('#sechead').textContent = ({ friends: 'Friends', stats: 'Stats', activity: 'Activity' })[state.tab] || '';
     $('#list').classList.toggle('nohbar', state.tab !== 'friends');
     const sl = list.scrollLeft, st = list.scrollTop;
     if (state.tab === 'stats') renderStats(); else if (state.tab === 'activity') renderActivity(); else renderFriends();
@@ -490,7 +498,7 @@
   /* ---------------- toast ---------------- */
   let toastTimer = null, toastFriend = null;
   function toast(f, game) {
-    if (!$('#opt-toast').checked) return;
+    if (LIVE.settings && LIVE.settings.settings && LIVE.settings.settings.toasts === '0') return;
     const t = $('#toast'); toastFriend = f.id;
     $('#toast-body').innerHTML = `<i class="gi">${gameIcon(game)}</i><div><b>${esc(f.name)}</b> has started playing<br><span class="g">${esc(GAMES[game].name)}</span></div>`;
     t.classList.remove('out'); t.hidden = false;
@@ -692,48 +700,17 @@
     } catch (e) { console.error('friends refresh failed', e); }
   }
 
-  /* ---- options dialog ---- */
-  async function openOptions() {
-    $('#options').hidden = false;
-    try {
-      const st = await FLB.settings(); LIVE.settings = st;
-      $('#opt-idle').value = String(st.idle_threshold_min); $('#opt-min').value = String(st.min_session_min);
-      $('#opt-pause').checked = st.settings.paused === '1'; $('#opt-toast').checked = st.settings.toasts !== '0';
-      $('#opt-ftoast').checked = st.settings.friend_toasts !== '0'; $('#opt-fdnd').checked = st.settings.friend_toasts_dnd !== '0';
-      $('#opt-autostart').checked = !!st.autostart;
-      renderSync();
-      $('#opt-info').innerHTML = `Saved on this PC:<br><code>${esc(st.data_dir)}</code><br>Fraglink ${esc(st.version)} · ${st.signatures} known games · ${st.steam_apps} Steam, ${st.epic_apps || 0} Epic, ${st.gog_apps || 0} GOG games found${st.sim ? '<br><b class="bad">Simulation mode: fake games</b>' : ''}`;
-    } catch (e) { toastErr(e); }
+  /* ---- options: its own window (options.html) ---- */
+  function openOptions(page) {
+    if (TAURI) { FLB.openOptions(page || null).catch(toastErr); return; }
+    window.open('options.html' + (page ? '?page=' + page : ''), 'fl-options', 'width=640,height=480');
   }
-  /* ---- optional account sync (Options → Sync) ---- */
-  async function renderSync() {
-    if ($('#options').hidden || !FLB.syncStatus) return;
-    let s; try { s = await FLB.syncStatus(); } catch (e) { $('#sync-box').textContent = String(e); return; }
-    const when = t => t ? new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'not yet';
-    const err = s.pairing_error || s.last_error;
-    let h;
-    if (s.signed_in) {
-      h = `Signed in as <b>${esc(s.user || '?')}</b> on <code>${esc(s.server)}</code><br>${s.pending} session(s) waiting · last sync ${esc(when(s.last_ok))}
-        <div class="opt-btns"><button class="hw" type="button" data-action="sync-now">Sync now</button><button class="hw" type="button" data-action="sync-signout">Sign out</button></div>`;
-    } else if (s.pairing) {
-      h = `In your browser, check the code and approve:<div class="sync-code">${esc(s.pairing.user_code)}</div><small>Browser didn't open? Go to <code>${esc(s.pairing.verification_uri)}</code></small>
-        <div class="opt-btns"><button class="hw" type="button" data-action="sync-cancel">Cancel</button></div>`;
-    } else {
-      h = `Off: everything stays on this PC. Sign in to back up your sessions to a Fraglink server.
-        <input id="sync-server" maxlength="200" value="${esc(s.server)}" title="Server address" />
-        <div class="opt-btns"><button class="hw" type="button" data-action="sync-signin">Sign in to sync</button></div>`;
-    }
-    if (err) h += `<div class="bad">${esc(err)}</div>`;
-    $('#sync-box').innerHTML = h;
-  }
-  FLB.on && FLB.on('fraglink://sync', () => renderSync());
-  $('#opt-idle').addEventListener('change', e => FLB.set('idle_threshold_min', e.target.value).catch(toastErr));
-  $('#opt-min').addEventListener('change', e => FLB.set('min_session_min', e.target.value).catch(toastErr));
-  $('#opt-pause').addEventListener('change', e => FLB.set('paused', e.target.checked ? '1' : '0').then(refreshSoon).catch(toastErr));
-  $('#opt-toast').addEventListener('change', e => FLB.set('toasts', e.target.checked ? '1' : '0').catch(toastErr));
-  $('#opt-ftoast').addEventListener('change', e => FLB.set('friend_toasts', e.target.checked ? '1' : '0').catch(toastErr));
-  $('#opt-fdnd').addEventListener('change', e => FLB.set('friend_toasts_dnd', e.target.checked ? '1' : '0').catch(toastErr));
-  $('#opt-autostart').addEventListener('change', e => FLB.autostart(e.target.checked).then(v => { e.target.checked = !!v; }).catch(err => { e.target.checked = !e.target.checked; toastErr(err); }));
+  // Options (another window) changed a setting: follow it here.
+  FLB.on && FLB.on('fraglink://settings', ([k, v]) => {
+    if (k === 'skin' && v !== state.skin) applySkin(v, false);
+    else if (k === 'zoom' && state.skin !== 'dark') setZoom(v);
+    else if (k === 'paused') refreshSoon();
+  });
 
   /* ---- games dialog: "this is a game" + exclusions ---- */
   let candSel = null;
@@ -759,12 +736,8 @@
     'minimize': minimize, 'restore': restore,
     'quit': () => FLB.quit(),
     'toggle-side': () => toggleSide(),
-    'options': openOptions,
-    'options-close': () => { $('#options').hidden = true; },
-    'sync-signin': () => FLB.syncSignIn($('#sync-server').value.trim()).then(renderSync).catch(toastErr),
-    'sync-cancel': () => FLB.syncCancel().then(renderSync).catch(toastErr),
-    'sync-now': () => FLB.syncNow().then(() => setTimeout(renderSync, 3000)).catch(toastErr),
-    'sync-signout': () => FLB.syncSignOut().then(renderSync).catch(toastErr),
+    'options': el => openOptions(el && el.dataset && el.dataset.page),
+    'win-min': () => { if (TAURI) FLB.minimizeWindow(); else minimize(); },
     'notice-close': () => { $('#notice').hidden = true; },
     'games-close': () => { $('#games-dlg').hidden = true; },
     'games-refresh': () => openGames($('#games-title').textContent !== 'Manage games'),
@@ -780,7 +753,7 @@
     'open-data': () => FLB.openData().catch(toastErr),
     'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li><li>How long since you last <b>touched the mouse or keyboard</b> (a single Windows number, not what you typed), so idle time isn\'t counted.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options. Then your game sessions (game, start, end, active time) are uploaded, and while the app runs your friends see your status and the game you\'re playing now. <b>Invisible</b> shows you as offline. Program names and paths are never sent.'),
     'add-friend': () => {
-      if (!realMode()) { notice('Add Friend', 'Sign in to sync first (<a data-action="options">Options</a> → Sync). Friends need a Fraglink account.'); return; }
+      if (!realMode()) { notice('Add Friend', 'Sign in to sync first (<a data-action="options" data-page="account">Options → Account</a>). Friends need a Fraglink account.'); return; }
       notice('Add Friend', `Their Fraglink username:<br><input id="add-handle" maxlength="40" placeholder="username" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="add-friend-go">Send request</button></div><div id="add-msg"></div>`);
       setTimeout(() => $('#add-handle') && $('#add-handle').focus(), 0);
     },
@@ -833,7 +806,13 @@
   });
 
   /* drag: the app window is moved by the OS (Tauri); dialogs move inside it */
-  const dragTargets = { app: '#app', chat: '#chat', options: '#options', web: '#web', 'games-dlg': '#games-dlg' };
+  const dragTargets = { app: '#app', chat: '#chat', web: '#web', 'games-dlg': '#games-dlg' };
+  // frameless dark window: edges and the bottom-right grip resize the OS window
+  document.addEventListener('mousedown', e => {
+    const r = e.target.closest('[data-resize]');
+    if (r && TAURI && e.button === 0 && state.skin === 'dark') { e.preventDefault(); e.stopPropagation(); FLB.resize(r.dataset.resize); }
+  }, true);
+  window.addEventListener('resize', () => { LS.update(); SS.update(); });
   document.addEventListener('mousedown', e => {
     const h = e.target.closest('[data-drag]'); if (!h || e.target.closest('button,select,input,textarea,a')) return;
     if (TAURI && h.dataset.drag === 'app') { e.preventDefault(); FLB.drag(); return; }

@@ -78,11 +78,8 @@ pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String,
     let mut out = HashMap::new();
     let mut missing = vec![];
     for id in ids {
-        if let Some(b) = cache.get(id) {
-            out.insert(id.clone(), Some(data_url(&b)));
-            continue;
-        }
-        // Local sources first: a game detected since the last miss gets its exe icon.
+        // Cache (unless the game's exe changed since), then local sources: a game
+        // detected since the last miss gets its exe icon.
         let src = srcs.get(id).cloned().unwrap_or_default();
         match icons::resolve_local(&cache, id, &src, &extract) {
             Some((png, _)) => {

@@ -90,11 +90,47 @@ impl IconCache {
             .is_some_and(|age| age < MISS_TTL)
     }
 
+    fn stamp_path(&self, game_id: &str) -> PathBuf {
+        self.dir.join(format!("{}.exe", cache_key(game_id)))
+    }
+
+    /// Remember which exe build (mtime + size) a cached icon came from.
+    pub fn put_exe_stamp(&self, game_id: &str, exe: &Path) {
+        if let Some(st) = exe_stamp(exe) {
+            let _ = std::fs::write(self.stamp_path(game_id), st);
+        }
+    }
+
+    /// True when the cached icon was extracted from `exe` and the exe has since
+    /// changed (a game update can change its icon). Icons from other sources,
+    /// or an exe we can't stat, are never stale.
+    pub fn exe_changed(&self, game_id: &str, exe: &Path) -> bool {
+        match (
+            std::fs::read_to_string(self.stamp_path(game_id)),
+            exe_stamp(exe),
+        ) {
+            (Ok(old), Some(now)) => old != now,
+            _ => false,
+        }
+    }
+
     pub fn put_miss(&self, game_id: &str) {
         if std::fs::create_dir_all(&self.dir).is_ok() {
             let _ = std::fs::write(self.miss_path(game_id), b"");
         }
     }
+}
+
+/// "mtime_secs:size" of a file, used to notice a changed exe.
+fn exe_stamp(exe: &Path) -> Option<String> {
+    let m = std::fs::metadata(exe).ok()?;
+    let t = m
+        .modified()
+        .ok()?
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some(format!("{t}:{}", m.len()))
 }
 
 /// Decode any supported image (PNG, JPEG, ICO, BMP), scale it to
@@ -194,13 +230,20 @@ pub fn resolve_local(
     src: &LocalSources,
     extract: &dyn Fn(&Path) -> Option<RgbaImage>,
 ) -> Option<(Vec<u8>, Found)> {
-    if let Some(b) = cache.get(game_id) {
-        return Some((b, Found::Cache));
+    let exe_changed = src
+        .exe_path
+        .as_deref()
+        .is_some_and(|e| cache.exe_changed(game_id, e));
+    if !exe_changed {
+        if let Some(b) = cache.get(game_id) {
+            return Some((b, Found::Cache));
+        }
     }
     if let Some(exe) = &src.exe_path {
         if let Some(img) = extract(exe) {
             let png = normalize_rgba(img);
             let _ = cache.put(game_id, &png);
+            cache.put_exe_stamp(game_id, exe);
             return Some((png, Found::Exe));
         }
     }
@@ -474,6 +517,38 @@ mod tests {
             Found::SteamLibrary
         );
         assert!(cache.png_path("steam:570").is_file());
+    }
+
+    #[test]
+    fn changed_exe_re_extracts_icon() {
+        let d = tempfile::tempdir().unwrap();
+        let cache = IconCache::new(d.path().join("icons"));
+        let exe = d.path().join("game.exe");
+        std::fs::write(&exe, b"v1").unwrap();
+        let src = LocalSources {
+            exe_path: Some(exe.clone()),
+            ..Default::default()
+        };
+        let calls = std::cell::Cell::new(0);
+        let ex = |p: &Path| {
+            calls.set(calls.get() + 1);
+            Some(placeholder(&p.to_string_lossy()))
+        };
+        assert_eq!(resolve_local(&cache, "g", &src, &ex).unwrap().1, Found::Exe);
+        assert!(!cache.exe_changed("g", &exe));
+        assert_eq!(
+            resolve_local(&cache, "g", &src, &ex).unwrap().1,
+            Found::Cache
+        );
+        assert_eq!(calls.get(), 1);
+        // a game update changes the exe size -> extracted again
+        std::fs::write(&exe, b"version two").unwrap();
+        assert!(cache.exe_changed("g", &exe));
+        assert_eq!(resolve_local(&cache, "g", &src, &ex).unwrap().1, Found::Exe);
+        assert_eq!(calls.get(), 2);
+        assert!(!cache.exe_changed("g", &exe));
+        // icons from other sources have no stamp and are never stale
+        assert!(!cache.exe_changed("other", &exe));
     }
 
     #[test]

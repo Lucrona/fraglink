@@ -1,0 +1,127 @@
+/* =====================================================================
+   DARK skin (default): a resizable dark window in the spirit of the
+   2013-era gaming IM clients. Fraglink's own art and CSS only.
+   Layout: header + menu + banner + status row, vertical icon tabs on the
+   left, a blue section header over the list, and a bottom action bar.
+   The list stretches with the window; min size 333x555 (set by the app).
+   ===================================================================== */
+:root { --dk-bg: #1d1f24; --dk-edge: #000; --dk-hi: #3b3f47; --dk-panel: #14161a; --dk-list: #0a1326;
+  --dk-blue1: #4b82d6; --dk-blue2: #1f4f9e; --dk-blue3: #173d7c; --dk-txt: #e6e9ee; --dk-dim: #8d939c; }
+.only-dark { display: none !important; }
+body.skin-dark .only-dark { display: block !important; }
+body.skin-dark .xf-winbtns.only-dark, body.skin-dark .dk-bar.only-dark, body.skin-dark .xf-banner-ad.only-dark { display: flex !important; }
+body.skin-dark .dk-vtabs.only-dark { display: flex !important; }
+body.skin-dark .no-dark { display: none !important; }
+
+/* things the chassis skins draw that the dark window doesn't use */
+body.skin-dark .chassis, body.skin-dark .xf-screen, body.skin-dark .xf-userfield, body.skin-dark .xf-min,
+body.skin-dark .xf-tabs, body.skin-dark .xf-icontabs, body.skin-dark .xf-hw, body.skin-dark .xf-strip,
+body.skin-dark .xf-banner-sides, body.skin-dark .xf-banner-mark { display: none !important; }
+
+/* ---- window geometry ---- */
+body.skin-dark .xf-app { zoom: 1; width: 345px; height: 555px; }
+body.skin-dark .xf-app.side-open { width: 525px; }
+body.win.skin-dark .xf-app { position: fixed; inset: 0; width: auto; height: auto; }
+body.skin-dark .xf-win {
+  inset: 0 12px 0 0; width: auto; height: auto; border-radius: 7px; overflow: hidden;
+  background: linear-gradient(#2a2d33, var(--dk-bg) 90px); border: 1px solid var(--dk-edge);
+  box-shadow: inset 0 0 0 1px var(--dk-hi);
+}
+body.skin-dark .xf-app.side-open .xf-win { right: 192px; }
+
+/* ---- header (drag region) ---- */
+body.skin-dark .xf-titlebar { left: 0; right: 0; top: 0; width: auto; height: 24px; background: linear-gradient(#34373e, #0c0d10); border-bottom: 1px solid #000; }
+body.skin-dark .xf-logo { left: 9px; top: 5px; height: 14px; gap: 3px; }
+body.skin-dark .xf-logo-mark { width: 20px; height: 14px; filter: none; }
+body.skin-dark .xf-logo-word { color: #f2f4f7; font-size: 11px; font-style: italic; text-shadow: 0 1px 0 #000; }
+body.skin-dark .xf-winbtns { right: 6px; top: 5px; gap: 3px; }
+body.skin-dark .xf-winbtns button { width: 17px; height: 14px; border: 1px solid #000; border-radius: 3px; background: linear-gradient(#5a5e67, #25272c 55%, #1a1b1f); color: #eee; font: bold 10px/10px var(--font); box-shadow: inset 0 1px 0 rgba(255,255,255,.2); }
+body.skin-dark .xf-winbtns button:hover { background: linear-gradient(#6e737d, #33363c); }
+
+/* ---- menu ---- */
+body.skin-dark .xf-menubar { left: 1px; right: 1px; top: 25px; width: auto; height: 17px; padding-left: 6px; border-radius: 0; background: #1b1d22; border-bottom: 1px solid #000; align-items: center; }
+body.skin-dark .xf-menu { color: var(--dk-txt); font-size: 11px; line-height: 15px; padding: 0 5px; }
+body.skin-dark .xf-menu > span { color: var(--dk-txt) !important; }
+body.skin-dark .xf-menu.open { background: var(--dk-blue2); }
+body.skin-dark .xf-dropdown { top: 16px; }
+
+/* ---- banner ---- */
+body.skin-dark .xf-banner { left: 6px; right: 6px; top: 47px; width: auto; height: 56px; border: 1px solid #000; border-radius: 2px;
+  background: radial-gradient(ellipse 60% 120% at 50% 0%, #2d67c2 0%, #173d7c 55%, #0b1f45 100%); }
+body.skin-dark .xf-banner-ad { position: absolute; inset: 0; justify-content: center; align-items: center; gap: 8px; color: #fff; border: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px); }
+body.skin-dark .xf-banner-ad svg { width: 44px; height: 30px; }
+body.skin-dark .xf-banner-ad b { font-size: 20px; }
+body.skin-dark .xf-banner-ad small { font-size: 7px; letter-spacing: 2px; }
+
+/* ---- status row: name left, status dropdown right ---- */
+body.skin-dark .xf-identity { position: absolute; left: 6px; right: 6px; top: 107px; height: 20px; padding: 3px 0 0 6px; background: var(--dk-panel); border: 1px solid #000; color: #fff; font-weight: bold; overflow: hidden; white-space: nowrap; }
+body.skin-dark .xf-identity .px-alert { display: none; }
+body.skin-dark .xf-status { left: auto; right: 7px; top: 108px; width: 118px; height: 18px; border: 0; border-radius: 0; background: none; box-shadow: none; z-index: 3; }
+body.skin-dark .xf-status-field { left: 0; top: 0; width: 100%; height: 18px; background: none; border: 0; box-shadow: none; }
+body.skin-dark .xf-status select { text-align: right; text-align-last: right; color: #dfe6f2; font: 11px/18px var(--font); padding: 0 20px 0 4px; }
+body.skin-dark .xf-status-arrow { right: 2px; top: 2px; width: 14px; height: 13px; background: linear-gradient(#5a5e67, #1e2024); border: 1px solid #000; border-radius: 2px; }
+body.skin-dark .xf-status-arrow::after { left: 3px; top: 4px; }
+
+/* ---- vertical tabs + section header + list ---- */
+body.skin-dark .dk-vtabs { position: absolute; left: 6px; top: 131px; bottom: 44px; width: 30px; flex-direction: column; gap: 2px; padding: 2px; background: var(--dk-panel); border: 1px solid #000; }
+.dk-vtabs button { width: 24px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 3px; background: none; color: #c9ced6; cursor: pointer; }
+.dk-vtabs button svg { width: 18px; height: 15px; fill: currentColor; display: block; margin: 0 auto; }
+.dk-vtabs button:hover { background: #262a31; }
+.dk-vtabs button.active { color: #fff; background: linear-gradient(90deg, var(--dk-blue1), var(--dk-blue2)); border-color: #0b2553; box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
+body.skin-dark .dk-sechead { position: absolute; left: 38px; right: 6px; top: 131px; height: 18px; padding-left: 6px; line-height: 17px; color: #fff; font-weight: bold;
+  background: linear-gradient(var(--dk-blue1), var(--dk-blue2) 60%, var(--dk-blue3)); border: 1px solid #000; border-bottom: 0; text-shadow: 0 1px 0 rgba(0,0,0,.5); }
+body.skin-dark .xf-list { left: 38px; right: 6px; top: 149px; bottom: 44px; width: auto; height: auto; background: var(--dk-list); border: 1px solid #000; color: #fff; }
+body.skin-dark .xf-grid { min-width: 0; width: 100%; }
+body.skin-dark .xf-head { background: linear-gradient(#2a2e36, #1b1e24); border-bottom: 1px solid #000; color: #dfe3ea; text-shadow: none; }
+body.skin-dark .xf-head span + span { border-left: 1px solid #3a3e46; box-shadow: none; }
+body.skin-dark .xf-grid .c-name { width: 44%; } body.skin-dark .xf-grid .c-status { width: 56%; } body.skin-dark .xf-grid .c-info { display: none; }
+body.skin-dark .xf-row:hover { background: #13254a; }
+body.skin-dark .xf-row.sel { background: var(--dk-blue2); }
+body.skin-dark .xf-list .gs-h, body.skin-dark .xf-list .gs-c { display: none; }
+body.skin-dark .xf-list .gs-vp { bottom: 0; }
+body.skin-dark .fl-mock { max-width: none; }
+/* dark scrollbars */
+body.skin-dark .gs-v, body.skin-dark .gs-h, body.skin-dark .gs-c { background: #11141a; }
+body.skin-dark .gs-a { background: #22262d !important; }
+body.skin-dark .gs-v .up::after { border-bottom-color: #8a8e96; transform: scale(.6); } body.skin-dark .gs-v .dn::after { border-top-color: #8a8e96; transform: scale(.6); }
+body.skin-dark .gs-th { background: #3b414c !important; border-color: #0b0c0f; box-shadow: none !important; border-radius: 2px; }
+body.skin-dark .gs-th::after { display: none; }
+
+/* ---- bottom action bar + resize grip ---- */
+body.skin-dark .dk-bar { position: absolute; left: 6px; right: 6px; bottom: 8px; height: 30px; gap: 4px; padding: 3px 4px; align-items: center; background: linear-gradient(#26292f, #111216); border: 1px solid #000; border-radius: 3px; }
+.dk-bar button { width: 36px; height: 22px; padding: 0; border: 1px solid #000; border-radius: 4px; cursor: pointer; color: #e8eaee;
+  background: linear-gradient(#5b5f68, #2b2e34 50%, #191a1e 51%, #2a2c31); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
+.dk-bar button:hover { background: linear-gradient(#6c717b, #363a41 50%, #22242a 51%, #33363c); }
+.dk-bar button:active { background: #15161a; box-shadow: inset 0 1px 3px #000; }
+.dk-bar button svg { width: 15px; height: 12px; fill: currentColor; display: block; margin: 0 auto; }
+.dk-bar button[data-action="options"] { margin-left: auto; }
+.dk-bar button[data-action="options"] svg { height: 14px; }
+body.skin-dark .dk-grip { position: absolute; right: 1px; bottom: 1px; width: 12px; height: 12px; cursor: nwse-resize; z-index: 6;
+  background: linear-gradient(135deg, transparent 0 55%, #6b707a 55% 62%, transparent 62% 72%, #6b707a 72% 79%, transparent 79% 89%, #6b707a 89%); }
+body:not(.win) .dk-grip, body:not(.win) .dk-edges { pointer-events: none; }
+body.skin-dark .dk-edges { position: absolute; inset: 0; pointer-events: none; z-index: 50; }
+.dk-edges i { position: absolute; pointer-events: auto; }
+.dk-edges [data-resize=North] { top: 0; left: 8px; right: 8px; height: 3px; cursor: ns-resize; }
+.dk-edges [data-resize=South] { bottom: 0; left: 8px; right: 8px; height: 3px; cursor: ns-resize; }
+.dk-edges [data-resize=West] { left: 0; top: 8px; bottom: 8px; width: 3px; cursor: ew-resize; }
+.dk-edges [data-resize=East] { right: 0; top: 8px; bottom: 8px; width: 3px; cursor: ew-resize; }
+.dk-edges [data-resize=NorthWest] { left: 0; top: 0; width: 8px; height: 8px; cursor: nwse-resize; }
+.dk-edges [data-resize=SouthEast] { right: 0; bottom: 0; width: 8px; height: 8px; cursor: nwse-resize; }
+.dk-edges [data-resize=NorthEast] { right: 0; top: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+.dk-edges [data-resize=SouthWest] { left: 0; bottom: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+
+/* ---- right nub + info panel (docks to the right; the window grows by 180px) ---- */
+body.skin-dark .xf-nub { left: auto; right: 0; top: calc(50% - 27px); width: 12px; }
+body.skin-dark .xf-app.side-open .xf-nub { left: auto; right: 180px; }
+body.skin-dark .xf-nub svg { width: 12px; }
+body.skin-dark .xf-nub .nub-body { fill: #2a2d33; stroke: #000; }
+body.skin-dark .xf-nub .nub-arrow { fill: #b8bec8; }
+body.skin-dark .xf-side { left: auto; right: 0; top: 24px; bottom: 24px; width: 180px; height: auto; z-index: 0; }
+body.skin-dark .xf-side-inner { border-radius: 0 6px 6px 0; padding: 0; background: #1b1e24; border: 1px solid #000; box-shadow: inset 0 0 0 1px #33373f; }
+body.skin-dark .side-scroll { left: 4px; right: 4px; top: 4px; bottom: 30px; border: 1px solid #000; border-radius: 0; background: var(--dk-list); }
+body.skin-dark .side-scroll a { color: #5aa2f2; }
+body.skin-dark .side-btns .hw { background: linear-gradient(#5b5f68, #2b2e34 50%, #191a1e 51%, #2a2c31); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); border-radius: 4px; }
+
+/* ---- in-window dialogs (games, notices) sit centred at 1x ---- */
+body.skin-dark .xf-dialog { zoom: 1; }
+body.win.skin-dark .xf-dialog { left: 50% !important; top: 56px !important; transform: translateX(-50%); max-height: calc(100% - 70px); }

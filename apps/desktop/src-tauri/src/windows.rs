@@ -3,14 +3,20 @@
 use crate::{AppState, ToastPayload, TOAST_EVENT};
 use fraglink_core::engine::keys;
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder,
-    Window, WindowEvent,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Size, WebviewUrl,
+    WebviewWindowBuilder, Window, WindowEvent,
 };
 
 /// Classic chassis size in CSS px (the prototype's 290x381), and with the side panel open.
 pub const BASE_W: f64 = 290.0;
 pub const SIDE_W: f64 = 468.0;
 pub const BASE_H: f64 = 381.0;
+/// Dark skin: resizable window. Minimum = default = 333x555, like the 2013-era
+/// client this layout follows; +12 px for the info-panel nub on the right.
+pub const DARK_MIN_W: f64 = 345.0;
+pub const DARK_MIN_H: f64 = 555.0;
+/// The docked info panel adds this much width while it is open.
+pub const DARK_SIDE_W: f64 = 180.0;
 const TOAST_W: f64 = 226.0;
 const TOAST_H: f64 = 78.0;
 
@@ -25,6 +31,31 @@ pub fn zoom(app: &AppHandle) -> f64 {
         .and_then(|z| z.parse::<f64>().ok())
         .unwrap_or(1.5)
         .clamp(1.0, 2.0)
+}
+
+/// Current skin ("dark" by default). Only "dark" gets a resizable window;
+/// the chassis skins are drawn at a fixed size.
+pub fn is_dark(app: &AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    let e = state.engine.lock().unwrap();
+    let skin = e.tracker.store.get_setting(keys::SKIN).ok().flatten();
+    skin.is_none_or(|s| s == "dark")
+}
+
+/// Saved dark-window size (logical px, without the info panel).
+pub fn parse_size(s: &str) -> Option<(f64, f64)> {
+    let (w, h) = s.split_once(',')?;
+    let (w, h): (f64, f64) = (w.trim().parse().ok()?, h.trim().parse().ok()?);
+    (w.is_finite() && h.is_finite())
+        .then_some((w.clamp(DARK_MIN_W, 4000.0), h.clamp(DARK_MIN_H, 3000.0)))
+}
+
+fn dark_base(app: &AppHandle) -> (f64, f64) {
+    app.state::<AppState>()
+        .main_size
+        .lock()
+        .unwrap()
+        .unwrap_or((DARK_MIN_W, DARK_MIN_H))
 }
 
 fn on_some_monitor(app: &AppHandle, x: i32, y: i32) -> bool {
@@ -51,10 +82,20 @@ fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
         .find(|w| w.label == "main")
         .cloned()
         .expect("main window config");
-    let z = zoom(app);
-    let w = WebviewWindowBuilder::from_config(app, &cfg)?
-        .inner_size(BASE_W * z, BASE_H * z)
-        .build()?;
+    let b = WebviewWindowBuilder::from_config(app, &cfg)?;
+    *app.state::<AppState>().side_open.lock().unwrap() = false;
+    let w = if is_dark(app) {
+        let (bw, bh) = dark_base(app);
+        b.inner_size(bw, bh)
+            .min_inner_size(DARK_MIN_W, DARK_MIN_H)
+            .resizable(true)
+            .build()?
+    } else {
+        let z = zoom(app);
+        b.inner_size(BASE_W * z, BASE_H * z)
+            .resizable(false)
+            .build()?
+    };
     let pos = *app.state::<AppState>().main_pos.lock().unwrap();
     if let Some((x, y)) = pos {
         if on_some_monitor(app, x, y) {
@@ -98,16 +139,70 @@ pub fn toggle_main(app: &AppHandle) {
 pub fn persist_main_pos(app: &AppHandle) {
     let state = app.state::<AppState>();
     let pos = *state.main_pos.lock().unwrap();
+    let size = *state.main_size.lock().unwrap();
+    let e = state.engine.lock().unwrap();
     if let Some((x, y)) = pos {
-        let e = state.engine.lock().unwrap();
         let _ = e.tracker.store.set_setting("main_pos", &format!("{x},{y}"));
+    }
+    if let Some((w, h)) = size {
+        let _ = e
+            .tracker
+            .store
+            .set_setting("main_size", &format!("{w:.0},{h:.0}"));
     }
 }
 
+/// Fit the main window to the skin: dark = resizable (remembered size, the info
+/// panel adds width); chassis skins = fixed size scaled by `z`.
 pub fn resize_main(app: &AppHandle, z: f64, side_open: bool) {
-    if let Some(w) = app.get_webview_window("main") {
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    *app.state::<AppState>().side_open.lock().unwrap() = side_open;
+    if is_dark(app) {
+        let side = if side_open { DARK_SIDE_W } else { 0.0 };
+        let (bw, bh) = dark_base(app);
+        let _ = w.set_resizable(true);
+        let _ = w.set_min_size(Some(Size::Logical(LogicalSize::new(
+            DARK_MIN_W + side,
+            DARK_MIN_H,
+        ))));
+        let _ = w.set_size(LogicalSize::new(bw + side, bh));
+    } else {
         let width = if side_open { SIDE_W } else { BASE_W };
+        let _ = w.set_min_size(None::<Size>);
+        let _ = w.set_resizable(false);
         let _ = w.set_size(LogicalSize::new(width * z, BASE_H * z));
+    }
+}
+
+/// Open (or focus) the Options window: its own resizable window with native
+/// decorations, like a normal settings dialog.
+pub fn show_options(app: &AppHandle, page: Option<String>) {
+    let page = page.filter(|p| p.len() < 24 && p.chars().all(|c| c.is_ascii_lowercase()));
+    if let Some(w) = app.get_webview_window("options") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+        if let Some(p) = page {
+            let _ = app.emit_to("options", "fraglink://options-page", p);
+        }
+        return;
+    }
+    let url = match &page {
+        Some(p) => format!("options.html?page={p}"),
+        None => "options.html".into(),
+    };
+    let r = WebviewWindowBuilder::new(app, "options", WebviewUrl::App(url.into()))
+        .title("Fraglink Options")
+        .inner_size(640.0, 480.0)
+        .min_inner_size(520.0, 380.0)
+        .resizable(true)
+        .maximizable(true)
+        .center()
+        .build();
+    if let Err(e) = r {
+        log::warn!("options window failed: {e}");
     }
 }
 
@@ -125,6 +220,21 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                     .main_pos
                     .lock()
                     .unwrap() = Some((p.x, p.y));
+            }
+        }
+        WindowEvent::Resized(sz) => {
+            let app = window.app_handle();
+            let sf = window.scale_factor().unwrap_or(1.0);
+            let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
+            // ignore minimised (0x0) and chassis-skin sizes
+            if w >= DARK_MIN_W - 1.0 && h >= DARK_MIN_H - 1.0 && is_dark(app) {
+                let st = app.state::<AppState>();
+                let side = if *st.side_open.lock().unwrap() {
+                    DARK_SIDE_W
+                } else {
+                    0.0
+                };
+                *st.main_size.lock().unwrap() = Some(((w - side).max(DARK_MIN_W), h));
             }
         }
         WindowEvent::Destroyed => persist_main_pos(window.app_handle()),
@@ -175,5 +285,18 @@ pub fn show_toast(app: &AppHandle, mut payload: ToastPayload) {
             }
         }
         Err(e) => log::warn!("toast window failed: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn saved_size_is_clamped_to_the_minimum() {
+        assert_eq!(parse_size("520,700"), Some((520.0, 700.0)));
+        assert_eq!(parse_size("100, 100"), Some((DARK_MIN_W, DARK_MIN_H)));
+        assert_eq!(parse_size("NaN,700"), None);
+        assert_eq!(parse_size("junk"), None);
     }
 }

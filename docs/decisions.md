@@ -147,3 +147,12 @@ the entries say what changing them would cost.
 5. **Grace period** for account deletion (D11) and whether excluded games should also be deleted server-side (D9).
 6. **Privacy policy:** `docs/privacy-policy.md` is a DRAFT. It needs an operator name, contact, hosting location, a minimum age and legal review before any public launch.
 7. **Presence scaling (D21):** fine for a single server. Pick Postgres LISTEN/NOTIFY or Redis when hosting is decided.
+
+## D29. Dark resizable main window by default; Options in its own window
+*28 Sep 2026.* After testing 0.2.0-dev on Windows, the user asked for the 2013-era dark client look instead of the silver chassis, a resizable window, and a real Options window.
+- The dark skin is a fluid layout (plain CSS, absolute anchors), not a fixed chassis image, so it can stretch. The minimum and default size is 333x555 CSS px, taken from that client's main-window definition in the reference material (only the numbers were used, not any art or text). The chassis skins keep their fixed size.
+- The window stays frameless with a custom drag region. Resizing uses Tauri's `startResizeDragging` from thin edge strips and a corner grip; Windows can also resize frameless windows from the edge natively.
+- Options uses the native title bar, like a normal Windows settings dialog, so resizing and moving need no custom code. Settings are staged and written on OK or Apply. `set_setting` broadcasts `fraglink://settings` so the main window picks up skin changes.
+- Stats and Activity stay hidden behind the `FEATURES` flag; the vertical tab strip shows only Friends.
+- A true one-click installer isn't available with Tauri's NSIS options without replacing the whole template, so the wizard stays (per user, no admin, "Run Fraglink" on the finish page) with Fraglink branding images.
+

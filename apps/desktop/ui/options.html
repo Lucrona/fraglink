@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Fraglink Options</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+<link rel="stylesheet" href="options.css" />
+</head>
+<body>
+<div class="op">
+  <nav class="op-cats" id="cats" role="tablist">
+    <button data-page="general" class="on">General</button>
+    <button data-page="account">Account</button>
+    <button data-page="tracking">Tracking</button>
+    <button data-page="notifications">Notifications</button>
+    <button data-page="privacy">Privacy</button>
+    <button data-page="appearance">Appearance</button>
+    <button data-page="advanced">Advanced</button>
+  </nav>
+  <main class="op-pages">
+    <section data-page="general">
+      <h2>General</h2>
+      <fieldset><legend>Startup</legend>
+        <label><input type="checkbox" data-key="autostart" /> Start Fraglink when I sign in to Windows</label>
+        <p class="hint">Fraglink starts minimised to the notification area. Closing the main window keeps it running there; use <b>Exit Fraglink</b> in the tray menu to quit.</p>
+      </fieldset>
+    </section>
+    <section data-page="account" hidden>
+      <h2>Account</h2>
+      <fieldset><legend>Sync (optional)</legend><div id="sync-box" class="sync">Loading…</div></fieldset>
+      <p class="hint">Friends and live status need a Fraglink account. Without one, everything stays on this PC.</p>
+    </section>
+    <section data-page="tracking" hidden>
+      <h2>Tracking</h2>
+      <fieldset><legend>Sessions</legend>
+        <label>Count me as idle after <select data-key="idle_threshold_min"><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option><option>60</option></select> minutes without mouse or keyboard input</label>
+        <label>Ignore sessions shorter than <select data-key="min_session_min"><option>0</option><option>1</option><option>2</option><option>5</option></select> minutes</label>
+        <label><input type="checkbox" data-key="paused" /> Pause tracking</label>
+      </fieldset>
+      <p class="hint">Missing a game? Start it, then use <b>Fraglink &gt; This is a game…</b> in the main window.</p>
+    </section>
+    <section data-page="notifications" hidden>
+      <h2>Notifications</h2>
+      <fieldset><legend>Pop-ups</legend>
+        <label><input type="checkbox" data-key="toasts" /> When I start or stop playing a game</label>
+        <label><input type="checkbox" data-key="friend_toasts" /> When a friend starts playing a game</label>
+        <label class="sub"><input type="checkbox" data-key="friend_toasts_dnd" /> …but not while I'm playing</label>
+      </fieldset>
+    </section>
+    <section data-page="privacy" hidden>
+      <h2>Privacy</h2>
+      <fieldset><legend>What Fraglink reads</legend>
+        <p>The list of running programs (to recognise games), launcher install lists (Steam, Epic, GOG) and how long since you last used the mouse or keyboard. It never reads game memory or what you type, so it is safe with anti-cheat.</p>
+        <p>Nothing leaves this PC unless you sign in under <a data-go="account">Account</a>. <b>Invisible</b> status shows you as offline to friends.</p>
+      </fieldset>
+      <fieldset><legend>Your data</legend>
+        <div class="btns"><button type="button" data-do="export">Export my data…</button><button type="button" data-do="open-data">Open data folder</button></div>
+        <div id="export-msg" class="hint"></div>
+      </fieldset>
+    </section>
+    <section data-page="appearance" hidden>
+      <h2>Appearance</h2>
+      <fieldset><legend>Skin</legend>
+        <label><input type="radio" name="skin" data-key="skin" value="dark" /> <span class="sw sw-dark"></span> Dark <em>(default, resizable)</em></label>
+        <label><input type="radio" name="skin" data-key="skin" value="classic" /> <span class="sw sw-classic"></span> Classic Silver <em>(fixed size)</em></label>
+      </fieldset>
+      <fieldset id="scale-box"><legend>Classic Silver size</legend>
+        <label>Scale <select data-key="zoom"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+      </fieldset>
+    </section>
+    <section data-page="advanced" hidden>
+      <h2>Advanced</h2>
+      <fieldset><legend>About this install</legend><div id="about" class="kv"></div></fieldset>
+    </section>
+  </main>
+  <footer class="op-foot">
+    <button type="button" data-do="ok" class="def">OK</button>
+    <button type="button" data-do="cancel">Cancel</button>
+    <button type="button" data-do="apply" id="apply" disabled>Apply</button>
+  </footer>
+</div>
+<script src="backend.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

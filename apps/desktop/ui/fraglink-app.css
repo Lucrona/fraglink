@@ -2,14 +2,14 @@
    body.tauri = running inside the Tauri window (the window IS the chassis). */
 
 /* ---- window = chassis: transparent page, no fake desktop/taskbar ---- */
-body.tauri, body.tauri #desktop { background: transparent; }
-body.tauri #desktop { inset: 0; }
-body.tauri #taskbar, body.tauri #web, body.tauri #chat, body.tauri #toast { display: none !important; }
-body.tauri .xf-app { left: 0 !important; top: 0 !important; }
+body.win, body.win #desktop { background: transparent; }
+body.win #desktop { inset: 0; }
+body.win #taskbar, body.win #web, body.win #chat, body.win #toast { display: none !important; }
+body.win .xf-app { left: 0 !important; top: 0 !important; }
 .tauri-only { display: none; }
 body.tauri .tauri-only { display: block; }
 /* dialogs sit inside the 290x381 window */
-body.tauri .xf-dialog { left: 20px; top: 34px; max-height: 330px; overflow: auto; z-index: 20; }
+body.win .xf-dialog { left: 20px; top: 34px; max-height: 330px; overflow: auto; z-index: 20; }
 body.app-mode .xf-dialog { z-index: 20; }
 body.app-mode #notice { z-index: 30; }
 .xf-dropdown em, .dlg-body em { color: #777; font-style: normal; font-size: 9px; }

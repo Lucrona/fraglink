@@ -48,6 +48,9 @@ pub struct AppState {
     pub sim: bool,
     pub pending_toast: Mutex<Option<ToastPayload>>,
     pub main_pos: Mutex<Option<(i32, i32)>>,
+    /// Dark-skin window size (logical px, without the info panel).
+    pub main_size: Mutex<Option<(f64, f64)>>,
+    pub side_open: Mutex<bool>,
     pub tray: Mutex<Option<TrayItems>>,
     pub sync: sync::SyncShared,
     pub friends: friends::FriendsShared,
@@ -450,12 +453,37 @@ pub fn run() {
                     let (x, y) = s.split_once(',')?;
                     Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
                 });
+            // 0.2.0-dev.2: the dark resizable window becomes the default skin once
+            // (earlier builds saved "classic" on every start).
+            if engine
+                .tracker
+                .store
+                .get_setting("ui_rev")
+                .ok()
+                .flatten()
+                .is_none()
+            {
+                let _ = engine
+                    .tracker
+                    .store
+                    .set_setting(fraglink_core::engine::keys::SKIN, "dark");
+                let _ = engine.tracker.store.set_setting("ui_rev", "2");
+            }
+            let main_size = engine
+                .tracker
+                .store
+                .get_setting("main_size")
+                .ok()
+                .flatten()
+                .and_then(|s| windows::parse_size(&s));
             app.manage(AppState {
                 engine: Mutex::new(engine),
                 data_dir,
                 sim: fl.sim,
                 pending_toast: Mutex::new(None),
                 main_pos: Mutex::new(main_pos),
+                main_size: Mutex::new(main_size),
+                side_open: Mutex::new(false),
                 tray: Mutex::new(None),
                 sync: sync::SyncShared::default(),
                 friends: friends::FriendsShared::default(),
@@ -484,6 +512,7 @@ pub fn run() {
             commands::open_data_dir,
             commands::hide_main,
             commands::set_window_scale,
+            commands::open_options,
             commands::toast_payload,
             commands::toast_clicked,
             commands::set_status,

@@ -40,6 +40,10 @@
       gameIcons: (ids) => inv('game_icons', { ids }),
       on: (evt, cb) => T.event.listen(evt, e => cb(e.payload)),
       drag: () => T.window.getCurrentWindow().startDragging(),
+      resize: (dir) => T.window.getCurrentWindow().startResizeDragging(dir),
+      minimizeWindow: () => T.window.getCurrentWindow().minimize(),
+      closeWindow: () => T.window.getCurrentWindow().close(),
+      openOptions: (page) => inv('open_options', { page }),
     };
     return;
   }
@@ -64,7 +68,7 @@
     { id: 2, ts: now() - 3 * 86400, kind: 'tagged', game_id: 'manual:myindie', game_name: 'My Indie', payload: { exe_name: 'MyIndie.exe' } },
     { id: 1, ts: now() - 12 * 86400, kind: 'stopped', game_id: 'cs2', game_name: 'Counter-Strike 2', payload: { active_seconds: 7300 } },
   ];
-  const settings = { skin: localStorage.getItem('fl-skin') || 'classic', zoom: '2', toasts: '1', idle_threshold_min: '15', min_session_min: '2', status: 'online' };
+  const settings = { skin: localStorage.getItem('fl-skin') || 'dark', friend_toasts: '1', friend_toasts_dnd: '1', zoom: '2', toasts: '1', idle_threshold_min: '15', min_session_min: '2', status: 'online' };
   let paused = false;
   const ok = v => Promise.resolve(v);
   window.FL = {
@@ -116,6 +120,10 @@
     gameIcons: (ids) => ok(Object.fromEntries(ids.map(id => [id, /^(wc3|manual:)/.test(id) ? null : placeholderIcon(id)]))),
     on: () => ok(() => {}),
     drag: () => ok(),
+    resize: () => ok(),
+    minimizeWindow: () => ok(),
+    closeWindow: () => { window.close(); return ok(); },
+    openOptions: (page) => { window.open('options.html' + (page ? '?page=' + page : ''), 'fl-options', 'width=640,height=480'); return ok(); },
   };
   function placeholderIcon(id) {
     const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');

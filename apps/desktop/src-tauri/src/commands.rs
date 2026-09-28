@@ -8,7 +8,7 @@ use fraglink_core::store::{ActivityRow, GameRow};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 
 type CmdResult<T> = Result<T, String>;
@@ -175,9 +175,19 @@ pub fn set_setting(
         }
         _ => {}
     }
-    let mut e = state.engine.lock().unwrap();
-    e.tracker.store.set_setting(&key, &value).map_err(err)?;
-    e.apply_settings().map_err(err)
+    {
+        let mut e = state.engine.lock().unwrap();
+        e.tracker.store.set_setting(&key, &value).map_err(err)?;
+        e.apply_settings().map_err(err)?;
+    }
+    // let the other windows (main <-> Options) follow the change
+    let _ = app.emit("fraglink://settings", (&key, &value));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_options(app: AppHandle, page: Option<String>) {
+    windows::show_options(&app, page);
 }
 
 #[tauri::command]
