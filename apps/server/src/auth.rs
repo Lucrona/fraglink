@@ -231,13 +231,14 @@ pub async fn issue_token(
 pub fn validate_signup(email: &str, password: &str, handle: &str) -> Result<(), AppError> {
     let email = email.trim();
     let at = email.find('@');
-    if email.len() > 254
-        || at.is_none_or(|i| i == 0 || i == email.len() - 1)
-        || email.contains(char::is_whitespace)
+    if !email.is_empty()
+        && (email.len() > 254
+            || at.is_none_or(|i| i == 0 || i == email.len() - 1)
+            || email.contains(char::is_whitespace))
     {
         return Err(AppError::bad_request(
             "invalid_email",
-            "Enter a valid email address.",
+            "Enter a valid email address (or leave it empty).",
         ));
     }
     let n = password.chars().count();
@@ -313,7 +314,7 @@ fn record_failure(state: &AppState, key: &str) {
         .push(Instant::now());
 }
 
-/// Email + password check with a per-email failure limit (10 per 15 min).
+/// Email-or-username + password check with a per-account failure limit (10 per 15 min).
 pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiResult<User> {
     let key = email.trim().to_lowercase();
     if too_many_failures(state, &key) {
@@ -325,7 +326,8 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
     }
     let row: Option<(Uuid, String, String, String, String)> = sqlx::query_as(
         "SELECT id, email, handle, display_name, password_hash FROM users
-         WHERE lower(email) = $1 AND deleted_at IS NULL",
+         WHERE ((lower(email) = $1 AND email <> '') OR lower(handle) = $1) AND deleted_at IS NULL
+         ORDER BY (lower(handle) = $1) DESC LIMIT 1",
     )
     .bind(&key)
     .fetch_optional(&state.db)
@@ -354,7 +356,7 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
             Err(AppError::new(
                 StatusCode::UNAUTHORIZED,
                 "bad_credentials",
-                "Wrong email or password.",
+                "Wrong username or password.",
             ))
         }
     }

@@ -1,73 +1,110 @@
 #!/usr/bin/env python3
-"""Build the Fraglink app icons from the "Split Orbit" mark (concept 28).
-Needs rsvg-convert and Pillow. Writes into apps/desktop/src-tauri/icons/ and installer/."""
+"""Fraglink app icon v2 (Xfire-style): light silver tile, thin darker edge, charcoal Split Orbit mark.
+16 px is hand-drawn pixel art, 24-48 px use crisp 1x tiles and a thickened mark, 64 px and up are
+rendered from the SVG. Needs rsvg-convert and Pillow. Writes apps/desktop/src-tauri/icons/ (not tray.png:
+the tray keeps the white-on-dark icon)."""
 import subprocess, io, os
 from PIL import Image, ImageDraw, ImageFilter
 HERE = os.path.dirname(os.path.abspath(__file__))
+B = HERE
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 ICONS = os.path.join(ROOT, 'apps/desktop/src-tauri/icons')
-INST = os.path.join(ROOT, 'apps/desktop/src-tauri/installer')
-
-def svg(name, w):
-    png = subprocess.run(['rsvg-convert', '-w', str(w), os.path.join(HERE, name)], check=True, capture_output=True).stdout
-    return Image.open(io.BytesIO(png)).convert('RGBA')
-
-def tile(n):
-    """Dark rounded square with a faint blue glow: readable on light and dark taskbars."""
-    s = n * 4
-    im = Image.new('RGBA', (s, s), (0, 0, 0, 0))
-    bg = Image.new('RGBA', (s, s))
-    d = ImageDraw.Draw(bg)
+INK = (38, 41, 46)
+def mark_png(w, color='#26292E'):
+    s = open(f'{B}/v28-split-orbit-mark.svg').read().replace('#FFFFFF', color)
+    png = subprocess.run(['rsvg-convert', '-w', str(w)], input=s.encode(), check=True, capture_output=True).stdout
+    im = Image.open(io.BytesIO(png)).convert('RGBA')
+    return im.crop(im.getchannel('A').getbbox())
+def big_tile(n, ss=8):
+    s = n * ss
+    bg = Image.new('RGBA', (s, s)); d = ImageDraw.Draw(bg)
     for y in range(s):
         t = y / (s - 1)
-        d.line([(0, y), (s, y)], fill=(int(40 - 26 * t), int(46 - 30 * t), int(58 - 36 * t), 255))
-    glow = Image.new('RGBA', (s, s), (0, 0, 0, 0))
-    ImageDraw.Draw(glow).ellipse([s * .1, s * .25, s * .9, s * 1.1], fill=(40, 100, 210, 110))
-    bg = Image.alpha_composite(bg, glow.filter(ImageFilter.GaussianBlur(s * .12)))
-    mask = Image.new('L', (s, s), 0)
-    r = s * (.2 if n >= 48 else .14)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, s - 1, s - 1], r, fill=255)
-    im.paste(bg, (0, 0), mask)
-    return im.resize((n, n), Image.LANCZOS)
-
-def icon(n):
+        # bright silver top, a soft metallic dip at 55%, lighter again at the bottom
+        k = 247 - 38 * t + (12 * max(0, t - .55) / .45 if t > .55 else 0)
+        d.line([(0, y), (s, y)], fill=(int(k), int(k + 1), int(k + 4), 255))
+    hl = Image.new('RGBA', (s, s), (0, 0, 0, 0))
+    ImageDraw.Draw(hl).ellipse([-s * .3, -s * .75, s * 1.3, s * .42], fill=(255, 255, 255, 90))
+    bg = Image.alpha_composite(bg, hl.filter(ImageFilter.GaussianBlur(s * .04)))
+    r = s * (.18 if n >= 48 else .16)
+    mask = Image.new('L', (s, s), 0); ImageDraw.Draw(mask).rounded_rectangle([0, 0, s - 1, s - 1], r, fill=255)
+    edge = Image.new('RGBA', (s, s), (0, 0, 0, 0))
+    ew = max(ss, round(s / 64 * 1.2))  # ~1px at small sizes
+    ImageDraw.Draw(edge).rounded_rectangle([ew / 2, ew / 2, s - 1 - ew / 2, s - 1 - ew / 2], r - ew / 2, outline=(112, 118, 128, 255), width=ew)
+    bg = Image.alpha_composite(bg, edge)
+    out = Image.new('RGBA', (s, s), (0, 0, 0, 0)); out.paste(bg, (0, 0), mask)
+    return out.resize((n, n), Image.LANCZOS)
+def icon(n, frac, dy=0, harden=1.0):
     base = tile(n)
-    # small sizes: flat white mark, bigger share of the tile, for crisp pixels
-    flat = n <= 32
-    frac = 1.0 if n <= 16 else .9 if n <= 32 else .78
     mw = round(n * frac)
-    big = svg('v28-split-orbit-mark.svg' if flat else 'v28-split-orbit-mark-chrome.svg', 1024)
-    big = big.crop(big.getchannel('A').getbbox())  # tight to the artwork
-    m = big.resize((mw, round(mw * big.height / big.width)), Image.LANCZOS)
-    if flat:  # harden the anti-aliasing a little so the F reads at 16 px
-        a = m.getchannel('A').point(lambda v: 0 if v < 40 else min(255, int(v * 1.35)))
+    big = mark_png(2048)
+    m = big.resize((mw * 4, round(mw * 4 * big.height / big.width)), Image.LANCZOS).resize((mw, round(mw * big.height / big.width)), Image.LANCZOS)
+    if harden != 1.0:
+        a = m.getchannel('A').point(lambda v: 0 if v < 50 else min(255, int(v * harden)))
         m.putalpha(a)
-    base.alpha_composite(m, ((n - m.width) // 2, (n - m.height) // 2 + (1 if n <= 16 else 0)))
+    base.alpha_composite(m, ((n - m.width) // 2, (n - m.height) // 2 + dy))
     return base
+def mark_thick(w, sw):
+    s = open(f'{B}/v28-split-orbit-mark.svg').read()
+    s = s.replace('fill="#FFFFFF" fill-rule="evenodd"/>', f'fill="#26292E" fill-rule="evenodd" stroke="#26292E" stroke-width="{sw}" stroke-linejoin="round"/>').replace('#FFFFFF', '#26292E')
+    png = subprocess.run(['rsvg-convert', '-w', str(w)], input=s.encode(), check=True, capture_output=True).stdout
+    im = Image.open(io.BytesIO(png)).convert('RGBA'); return im.crop(im.getchannel('A').getbbox())
+def icon2(n, frac, sw, harden, dy=0, dx=0):
+    base = tile(n); mw = round(n * frac); big = mark_thick(2048, sw)
+    m = big.resize((mw, round(mw * big.height / big.width)), Image.LANCZOS)
+    a = m.getchannel('A').point(lambda v: 0 if v < 60 else min(255, int(v * harden))); m.putalpha(a)
+    base.alpha_composite(m, ((n - m.width) // 2 + dx, (n - m.height) // 2 + dy)); return base
+P16 = [
+"................",
+"................",
+"......########..",
+".....########...",
+".....#######....",
+".....###........",
+"...o.######.o...",
+"...o.#####..o...",
+"..o.###.....o...",
+"..o.###....o....",
+"..o.###...o.....",
+"...###..oo......",
+"...###ooo.......",
+"...###..........",
+"................",
+"................"]
+def icon16():
+    base = tile(16); px = base.load()
+    for y, row in enumerate(P16):
+        for x, c in enumerate(row):
+            if c == '#': px[x, y] = INK + (255,)
+            elif c == 'o': px[x, y] = (62, 66, 73, 255)
+    return base
+def small_tile(n):
+    im = Image.new('RGBA', (n, n), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    r = 2 if n <= 16 else 4 if n <= 32 else 6
+    fill = Image.new('RGBA', (n, n)); fd = ImageDraw.Draw(fill)
+    for y in range(n):
+        t = y / (n - 1); k = 248 - 44 * t + (14 * (t - .6) / .4 if t > .6 else 0)
+        fd.line([(0, y), (n, y)], fill=(int(k), int(k + 1), int(k + 4), 255))
+    mask = Image.new('L', (n, n), 0); ImageDraw.Draw(mask).rounded_rectangle([0, 0, n - 1, n - 1], r, fill=255)
+    im.paste(fill, (0, 0), mask)
+    d.rounded_rectangle([0, 0, n - 1, n - 1], r, outline=(108, 114, 124, 255), width=1)
+    d.line([(r, 1), (n - 1 - r, 1)], fill=(255, 255, 255, 255))  # top inner highlight
+    return im
+def _unused():
+    imgs = {16: mk2.icon16(), 32: mk2.icon2(32, .84, 5, 1.6), 48: mk2.icon2(48, .8, 3.5, 1.3), 256: icon(256, .76)}
+    return imgs
+
+def tile(n, ss=8):
+    return small_tile(n) if n <= 48 else big_tile(n, ss)
+
+def build():
+    return {16: icon16(), 24: icon2(24, .9, 6, 1.6), 32: icon2(32, .84, 5, 1.6), 48: icon2(48, .8, 3.5, 1.3),
+            64: icon(64, .78), 128: icon(128, .76), 256: icon(256, .76), 512: icon(512, .76)}
 
 if __name__ == '__main__':
-    sizes = {16: None, 24: None, 32: '32x32.png', 48: None, 64: '64x64.png', 128: '128x128.png', 256: '128x128@2x.png', 512: 'icon.png'}
-    imgs = {n: icon(n) for n in sizes}
-    for n, f in sizes.items():
-        if f:
-            imgs[n].save(os.path.join(ICONS, f))
-    imgs[256].save(os.path.join(ICONS, 'icon.ico'), sizes=[(n, n) for n in (16, 24, 32, 48, 64, 128, 256)],
-                   append_images=[imgs[n] for n in (16, 24, 32, 48, 64, 128)])
-    # hand-check sheet (not shipped)
-    sheet = Image.new('RGBA', (16 * 8 + 32 * 8 + 24, 256), (230, 230, 230, 255))
-    sheet.paste(imgs[16].resize((128, 128), Image.NEAREST), (0, 0))
-    sheet.paste(imgs[32].resize((256, 256), Image.NEAREST), (140, 0))
-    sheet.save('/tmp/icon-check.png')
-    # NSIS branding (24-bit BMP): sidebar 164x314, header 150x57
-    def grad(w, h):
-        g = Image.new('RGB', (w, h)); d = ImageDraw.Draw(g)
-        for y in range(h):
-            t = y / (h - 1); d.line([(0, y), (w, y)], fill=(int(30 - 18 * t), int(34 - 20 * t), int(44 - 26 * t)))
-        return g
-    sb = grad(164, 314)
-    m = svg('v28-split-orbit-mark-chrome.svg', 120); sb.paste(m, (22, 70), m)
-    lk = svg('v28-split-orbit-lockup.svg', 148); sb.paste(lk, (8, 200), lk)
-    sb.save(os.path.join(INST, 'sidebar.bmp'))
-    hd = grad(150, 57); m = svg('v28-split-orbit-mark-chrome.svg', 56); hd.paste(m, (88, 5), m)
-    hd.save(os.path.join(INST, 'header.bmp'))
+    imgs = build()
+    for n, f in {32: '32x32.png', 64: '64x64.png', 128: '128x128.png', 256: '128x128@2x.png', 512: 'icon.png'}.items():
+        imgs[n].save(os.path.join(ICONS, f))
+    order = (16, 24, 32, 48, 64, 128, 256)
+    imgs[256].save(os.path.join(ICONS, 'icon.ico'), sizes=[(n, n) for n in order], append_images=[imgs[n] for n in order[:-1]])
     print('icons written')

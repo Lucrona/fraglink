@@ -26,6 +26,9 @@
       scale: (zoom, sideOpen) => inv('set_window_scale', { zoom: Number(zoom), sideOpen: !!sideOpen }),
       syncStatus: () => inv('sync_status'),
       syncSignIn: (server) => inv('sync_sign_in', { server }),
+      syncLogin: (server, username, password) => inv('sync_login', { server, username, password }),
+      syncSignup: (server, username, password, email) => inv('sync_signup', { server, username, password, email }),
+      friendSearch: (query) => inv('friend_search', { query }),
       syncCancel: () => inv('sync_cancel'),
       syncNow: () => inv('sync_now'),
       syncSignOut: () => inv('sync_sign_out'),
@@ -49,6 +52,8 @@
       launchGame: (id) => inv('launch_game', { id }),
       pickExe: () => inv('pick_game_exe'),
       openWebsite: (page) => inv('open_website', { page }),
+      updateAvailable: () => inv('update_available'),
+      installUpdate: () => inv('install_update'),
       joinGame: (address) => inv('join_game', { address }),
     };
     return;
@@ -111,6 +116,9 @@
     syncSignOut: () => { sync.signed_in = false; sync.user = null; return ok(); },
     friends: () => ok(sync.signed_in ? { signed_in: true, connected: true, me: sync.user, list: mockFriends, muted } : { signed_in: false, connected: false, me: null, list: null, muted: [] }),
     friendsRefresh: () => ok(),
+    syncLogin: () => ok(),
+    syncSignup: () => ok(),
+    friendSearch: (q) => ok({ users: [{ handle: q.replace(/@.*/, ''), display_name: q.replace(/@.*/, '') }, { handle: q + '_2', display_name: 'Another ' + q }] }),
     friendAdd: (h) => { mockFriends.outgoing.push({ handle: h, display_name: h, created_at: new Date().toISOString() }); return ok('pending'); },
     friendRespond: (h, a) => { const r = mockFriends.incoming.find(x => x.handle === h); mockFriends.incoming = mockFriends.incoming.filter(x => x !== r); if (a && r) mockFriends.friends.push({ handle: h, display_name: r.display_name, since: new Date().toISOString(), presence: { status: 'online' } }); return ok(); },
     friendRemove: (h) => { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.outgoing = mockFriends.outgoing.filter(f => f.handle !== h); return ok(); },
@@ -170,5 +178,5 @@
     outgoing: [{ handle: 'zed', display_name: 'Zed', created_at: iso(7200) }],
     blocked: [],
   };
-  const sync = { signed_in: /[?&]signed=1/.test(location.search), user: /[?&]signed=1/.test(location.search) ? 'Lucrona' : null, server: 'http://localhost:8787', last_ok: null, last_error: null, pairing: null, pairing_error: null };
+  const sync = { signed_in: /[?&]signed=1/.test(location.search), user: /[?&]signed=1/.test(location.search) ? 'Lucrona' : null, server: 'http://119.42.54.86', last_ok: null, last_error: null, pairing: null, pairing_error: null };
 })();

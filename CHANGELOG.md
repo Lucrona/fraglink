@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.6] - 2026-09-28
+
+Pre-release for private testing (builds report `0.2.0-6`).
+
+### Added
+- **Accounts inside the client.** The Login screen takes your username (or email) and password; **Create Account** makes an account right there (username + password, email optional). "Sign in with your browser instead" keeps the old pairing flow.
+- **Add Friend works for real:** search Fraglink users by username or display name (or exact email), pick one and send a request. They get it under Friend Requests and Accept or Decline in the info panel; once accepted you see each other with live status and game. (The Personal Message isn't sent yet.)
+- **Server:** `POST /api/v1/device/signup` and `/device/login` (device tokens for the client), `GET /api/v1/users/search`, login by username as well as email, email optional (migration 0004), and rate limits: 5 sign-ups per IP per hour, 30 sign-in attempts per IP per 15 minutes (plus 10 failures per account), 30 friend requests per hour and 60 searches per minute per user.
+- **Auto-update.** Fraglink checks quietly at startup and every 6 hours. When a newer build is out it asks "An update is available. Restart to update?"; Yes downloads it, checks its signature, installs and restarts. Updates come from `http://119.42.54.86/updates/latest.json` and are signed, so a tampered file is refused. dev.5 has no updater, so install dev.6 by hand once.
+
+### Changed
+- **Installer:** dark, understated sidebar and header art (charcoal gradient, silver mark and wordmark); still a per-user install with no admin prompt.
+- **New app icon:** a light silver tile with a charcoal Split Orbit "F", hand-tuned at 16, 24, 32 and 48 px so it stays crisp on the desktop, Start menu, taskbar and installer. The tray icon is unchanged.
+- **The client now uses the Fraglink server** at `http://119.42.54.86` by default (it was a server on your own PC). You can still change it in Options > Account or under Login. A saved `http://localhost:8787` from an older build switches to the new default unless this PC is signed in to it.
+
 ## [0.2.0-dev.5] - 2026-09-28
 
 Pre-release for private testing (builds report `0.2.0-5`).

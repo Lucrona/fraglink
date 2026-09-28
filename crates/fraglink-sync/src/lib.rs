@@ -10,7 +10,10 @@ use fraglink_core::outbox::UploadBatch;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-pub const DEFAULT_SERVER: &str = "http://localhost:8787";
+/// The production server (HTTP on the IP until the domain is set up).
+pub const DEFAULT_SERVER: &str = "http://119.42.54.86";
+/// The default before 0.2.0-dev.6. A saved copy of it only counts when signed in (a local dev server).
+pub const LEGACY_DEFAULT_SERVER: &str = "http://localhost:8787";
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
@@ -197,6 +200,43 @@ impl Client {
         }
     }
 
+    /// Username (or email) + password sign-in for this PC. Returns a device token.
+    pub fn password_login(
+        &self,
+        login: &str,
+        password: &str,
+        device_name: &str,
+    ) -> Result<(String, RemoteUser), SyncError> {
+        let v: serde_json::Value = self.call(
+            "POST",
+            "/api/v1/device/login",
+            Some(serde_json::json!({ "login": login, "password": password, "device_name": device_name })),
+        )?;
+        token_and_user(v)
+    }
+
+    /// Create an account (email optional) and sign this PC in.
+    pub fn password_signup(
+        &self,
+        handle: &str,
+        password: &str,
+        email: &str,
+        device_name: &str,
+    ) -> Result<(String, RemoteUser), SyncError> {
+        let v: serde_json::Value = self.call(
+            "POST",
+            "/api/v1/device/signup",
+            Some(serde_json::json!({ "handle": handle, "password": password, "email": email, "device_name": device_name })),
+        )?;
+        token_and_user(v)
+    }
+
+    /// Add Friend search: `{"users": [{"handle", "display_name"}]}`.
+    pub fn search_users(&self, q: &str) -> Result<serde_json::Value, SyncError> {
+        let path = format!("/api/v1/users/search?q={}", url_encode(q));
+        self.call("GET", &path, None)
+    }
+
     pub fn me(&self) -> Result<RemoteUser, SyncError> {
         let v: serde_json::Value = self.call("GET", "/api/v1/me", None)?;
         serde_json::from_value(v["user"].clone()).map_err(|e| SyncError::Decode(e.to_string()))
@@ -286,6 +326,27 @@ fn enc(s: &str) -> String {
 }
 
 /// Validate a user-entered server URL (http/https only, no path tricks).
+fn token_and_user(v: serde_json::Value) -> Result<(String, RemoteUser), SyncError> {
+    let token = v["token"]
+        .as_str()
+        .ok_or_else(|| SyncError::Decode("missing token".into()))?
+        .to_string();
+    let user =
+        serde_json::from_value(v["user"].clone()).map_err(|e| SyncError::Decode(e.to_string()))?;
+    Ok((token, user))
+}
+
+fn url_encode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
 pub fn normalize_server_url(input: &str) -> Option<String> {
     let s = input.trim().trim_end_matches('/');
     let rest = s

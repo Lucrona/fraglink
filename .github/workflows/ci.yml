@@ -72,15 +72,34 @@ jobs:
       - name: npm ci
         working-directory: apps/desktop
         run: npm ci
-      - name: Build installers (unsigned)
+      - name: Build installers (unsigned; update files signed with the updater key)
         working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build --ci
+      - name: Write latest.json (updater manifest, served from http://119.42.54.86/updates/)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $sig = Get-Content "$($exe.FullName).sig" -Raw
+          $ver = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $m = [ordered]@{
+            version = $ver
+            notes = "Fraglink $ver"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{ "windows-x86_64" = [ordered]@{ signature = $sig.Trim(); url = "http://119.42.54.86/updates/$($exe.Name)" } }
+          }
+          $m | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM target/release/bundle/nsis/latest.json
+          Get-Content target/release/bundle/nsis/latest.json
       - name: Upload installers
         uses: actions/upload-artifact@v5
         with:
           name: fraglink-windows-installers-${{ github.sha }}
           path: |
             target/release/bundle/nsis/*.exe
+            target/release/bundle/nsis/*.exe.sig
+            target/release/bundle/nsis/latest.json
             target/release/bundle/msi/*.msi
           if-no-files-found: error
       - name: Upload portable exe

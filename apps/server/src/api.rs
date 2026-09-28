@@ -29,6 +29,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).delete(delete_me))
         .route("/api/v1/device/start", post(device_start))
+        .route("/api/v1/device/signup", post(device_signup))
+        .route("/api/v1/device/login", post(device_login))
+        .route("/api/v1/users/search", get(user_search))
         .route("/api/v1/device/poll", post(device_poll))
         .route("/api/v1/device/approve", post(device_approve))
         .route("/api/v1/devices", get(devices))
@@ -103,8 +106,10 @@ pub struct TokenResp {
 
 async fn signup(
     State(st): State<AppState>,
+    headers: HeaderMap,
     Json(r): Json<SignupReq>,
 ) -> ApiResult<(StatusCode, Json<TokenResp>)> {
+    signup_limit(&st, &headers)?;
     let user = auth::create_user(&st, &r.email, &r.password, &r.handle).await?;
     let token = auth::issue_token(&st, user.id, "web", None).await?;
     Ok((StatusCode::CREATED, Json(TokenResp { token, user })))
@@ -112,14 +117,134 @@ async fn signup(
 
 #[derive(Deserialize)]
 pub struct LoginReq {
+    /// Email or username.
+    #[serde(alias = "login", alias = "username", alias = "handle")]
     pub email: String,
     pub password: String,
 }
 
-async fn login(State(st): State<AppState>, Json(r): Json<LoginReq>) -> ApiResult<Json<TokenResp>> {
+async fn login(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Json(r): Json<LoginReq>,
+) -> ApiResult<Json<TokenResp>> {
+    login_limit(&st, &headers)?;
     let user = auth::check_login(&st, &r.email, &r.password).await?;
     let token = auth::issue_token(&st, user.id, "web", None).await?;
     Ok(Json(TokenResp { token, user }))
+}
+
+const MINUTE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// 5 new accounts per IP per hour.
+pub fn signup_limit(st: &AppState, headers: &HeaderMap) -> ApiResult<()> {
+    let ip = crate::client_ip(headers);
+    if ip == "local" {
+        return Ok(()); // direct localhost calls (tests, admin); public traffic comes via Caddy
+    }
+    st.rate_limit(format!("signup:{ip}"), 5, 60 * MINUTE)
+}
+
+/// 30 sign-in attempts per IP per 15 minutes (on top of the per-account failure limit).
+pub fn login_limit(st: &AppState, headers: &HeaderMap) -> ApiResult<()> {
+    let ip = crate::client_ip(headers);
+    if ip == "local" {
+        return Ok(()); // direct localhost calls (tests, admin); public traffic comes via Caddy
+    }
+    st.rate_limit(format!("login:{ip}"), 30, 15 * MINUTE)
+}
+
+fn device_name(n: Option<String>) -> String {
+    let n: String = n.unwrap_or_default().trim().chars().take(64).collect();
+    if n.is_empty() {
+        "Fraglink desktop".into()
+    } else {
+        n
+    }
+}
+
+#[derive(Deserialize)]
+struct DeviceSignupReq {
+    handle: String,
+    password: String,
+    #[serde(default)]
+    email: String,
+    device_name: Option<String>,
+}
+
+/// Desktop client "Create Account": makes the account and returns a device token.
+async fn device_signup(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Json(r): Json<DeviceSignupReq>,
+) -> ApiResult<(StatusCode, Json<TokenResp>)> {
+    signup_limit(&st, &headers)?;
+    let user = auth::create_user(&st, &r.email, &r.password, &r.handle).await?;
+    let token =
+        auth::issue_token(&st, user.id, "device", Some(&device_name(r.device_name))).await?;
+    Ok((StatusCode::CREATED, Json(TokenResp { token, user })))
+}
+
+#[derive(Deserialize)]
+struct DeviceLoginReq {
+    #[serde(alias = "username", alias = "handle", alias = "email")]
+    login: String,
+    password: String,
+    device_name: Option<String>,
+}
+
+/// Desktop client sign-in with username (or email) and password; returns a device token.
+async fn device_login(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Json(r): Json<DeviceLoginReq>,
+) -> ApiResult<Json<TokenResp>> {
+    login_limit(&st, &headers)?;
+    let user = auth::check_login(&st, &r.login, &r.password).await?;
+    let token =
+        auth::issue_token(&st, user.id, "device", Some(&device_name(r.device_name))).await?;
+    Ok(Json(TokenResp { token, user }))
+}
+
+#[derive(Deserialize)]
+struct SearchQ {
+    q: String,
+}
+
+/// Add Friend search: usernames that start with (or equal) the text, up to 20.
+async fn user_search(
+    State(st): State<AppState>,
+    a: AuthUser,
+    Query(q): Query<SearchQ>,
+) -> ApiResult<Json<Value>> {
+    st.rate_limit(format!("search:{}", a.user.id), 60, MINUTE)?;
+    let q = q.q.trim().to_lowercase();
+    if q.is_empty() || q.len() > 64 {
+        return Ok(Json(json!({ "users": [] })));
+    }
+    let like = format!(
+        "{}%",
+        q.replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT u.handle, u.display_name FROM users u
+         WHERE u.deleted_at IS NULL AND u.id <> $1
+           AND (lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2 OR (u.email <> '' AND lower(u.email) = $3))
+           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker = u.id AND b.blocked = $1) OR (b.blocker = $1 AND b.blocked = u.id))
+         ORDER BY (lower(u.handle) = $3) DESC, lower(u.handle) LIMIT 20",
+    )
+    .bind(a.user.id)
+    .bind(&like)
+    .bind(&q)
+    .fetch_all(&st.db)
+    .await?;
+    let users: Vec<Value> = rows
+        .into_iter()
+        .map(|(h, d)| json!({ "handle": h, "display_name": d }))
+        .collect();
+    Ok(Json(json!({ "users": users })))
 }
 
 async fn logout(
@@ -162,7 +287,7 @@ async fn delete_me(
     Json(r): Json<DeleteMeReq>,
 ) -> ApiResult<StatusCode> {
     check_origin(&a, &headers, &st)?;
-    auth::check_login(&st, &a.user.email, &r.password).await?;
+    auth::check_login(&st, &a.user.handle, &r.password).await?;
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(a.user.id)
         .execute(&st.db)
@@ -1045,6 +1170,7 @@ async fn friend_request(
     Json(r): Json<HandleReq>,
 ) -> ApiResult<Json<Value>> {
     check_origin(&a, &headers, &st)?;
+    st.rate_limit(format!("friendreq:{}", a.user.id), 30, 60 * MINUTE)?;
     let outcome = friends::request(&st, &person(&a), &r.handle).await?;
     Ok(Json(json!({ "status": outcome })))
 }

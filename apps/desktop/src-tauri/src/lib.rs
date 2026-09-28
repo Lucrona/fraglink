@@ -7,6 +7,7 @@ mod commands;
 mod friends;
 mod icons;
 mod sync;
+mod updater;
 mod windows;
 
 use fraglink_core::engine::{keys, Engine, DEFAULT_POLL_SECS};
@@ -331,7 +332,8 @@ pub fn refresh_tray(app: &AppHandle) {
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = tray_menu(app)?;
-    let icon = app.default_window_icon().cloned().expect("bundle icon");
+    // The tray keeps the white-on-dark mark; the app/desktop icon is the silver tile.
+    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
     TrayIconBuilder::with_id("main")
         .icon(icon)
         .tooltip("Fraglink")
@@ -431,6 +433,15 @@ fn on_menu(app: &AppHandle, id: &str) {
     }
 }
 
+/// Close sessions cleanly before an update replaces the app.
+pub fn stop_for_update(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if let Ok(mut e) = state.engine.lock() {
+        let _ = e.tracker.stop();
+    }
+    windows::persist_main_pos(app);
+}
+
 pub fn quit(app: &AppHandle) {
     let state = app.state::<AppState>();
     if let Ok(mut e) = state.engine.lock() {
@@ -492,6 +503,8 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::UpdateState::default())
         .setup(move |app| {
             let handle = app.handle().clone();
             let base = app.path().app_data_dir()?;
@@ -563,6 +576,9 @@ pub fn run() {
                 friends: friends::FriendsShared::default(),
             });
             build_tray(&handle)?;
+            if !fl.sim {
+                updater::start(handle.clone());
+            }
             let start_min = windows::flag(&handle, "start_minimized");
             if !fl.minimized && !start_min {
                 windows::show_main(&handle);
@@ -597,6 +613,11 @@ pub fn run() {
             commands::toast_payload,
             commands::toast_clicked,
             commands::set_status,
+            commands::sync_login,
+            commands::sync_signup,
+            commands::friend_search,
+            updater::update_available,
+            updater::install_update,
             commands::quit_app,
             commands::sync_status,
             commands::sync_sign_in,

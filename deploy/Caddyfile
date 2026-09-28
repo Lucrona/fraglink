@@ -3,6 +3,11 @@
 # Now: plain HTTP on the IP (no certificate possible for a bare IP).
 :80 {
 	encode gzip
+	# desktop auto-update files (latest.json + signed installers), put there by scripts/publish-update.sh
+	handle_path /updates/* {
+		root * /var/www/fraglink-updates
+		file_server
+	}
 	reverse_proxy 127.0.0.1:8787
 }
 
@@ -14,5 +19,10 @@
 #
 # app.fraglink.gg, fraglink.gg {
 # 	encode gzip
+# 	handle_path /updates/* {
+# 		root * /var/www/fraglink-updates
+# 		file_server
+# 	}
 # 	reverse_proxy 127.0.0.1:8787
 # }
+# (keep serving /updates/ on http://119.42.54.86 too: installed clients have that URL baked in)

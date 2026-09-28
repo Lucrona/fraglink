@@ -340,6 +340,7 @@
   /* Signed out: the login form sits in the main window (like the classic client). Fraglink signs
      in through the browser (device pairing), so there's no password box here. */
   const signedOut = () => params.get('login') === '1' || (TAURI && !!LIVE.friends && !LIVE.friends.signed_in);
+  const srvVal = () => ($('#lg-server') && $('#lg-server').value.trim()) || (LIVE.sync && LIVE.sync.server) || '';
   function loginHtml() {
     const sy = LIVE.sync || {}, p = sy.pairing, err = sy.pairing_error || sy.last_error;
     const used = jsonList('login_history'), last = SET().login_last || used[0] || '';
@@ -351,17 +352,27 @@
         <p>Code: <span class="lg-code">${esc(p.user_code)}</span></p><p class="lg-dim">Browser didn't open? Go to<br>${esc(p.verification_uri)}</p>
         <button class="hw" type="button" data-action="login-cancel">Cancel</button></div>`;
     }
-    else {
+    else if (state.loginMode === 'create') {
+      h += `<b class="lg-lbl">Create Account</b>
+        <label class="lg-lbl" for="lg-nuser">Username</label><input id="lg-nuser" maxlength="20" autocomplete="off" placeholder="3-20 letters, digits, _ or -" />
+        <label class="lg-lbl" for="lg-npass">Password</label><input id="lg-npass" type="password" maxlength="128" placeholder="at least 10 characters" />
+        <label class="lg-lbl" for="lg-npass2">Confirm Password</label><input id="lg-npass2" type="password" maxlength="128" />
+        <label class="lg-lbl" for="lg-email">Email <span class="lg-opt">(optional)</span></label><input id="lg-email" maxlength="254" autocomplete="off" />
+        <div class="af-btns"><button class="hw" type="button" data-action="login-back">Cancel</button><button class="hw" type="button" data-action="signup-go">Create Account</button></div>`;
+    } else {
       h += `<label class="lg-lbl" for="lg-user">Username</label>
-        <select id="lg-user">${used.map(u => `<option${u === last ? ' selected' : ''}>${esc(u)}</option>`).join('')}<option value="">&lt;New User&gt;</option></select>
-        <a class="lg-a" data-action="register">New User Registration</a>
-        <label class="lg-lbl">Password</label>
-        <div class="lg-row"><input disabled placeholder="in your browser" title="Fraglink confirms your password in your browser, so it never sees it." /><button class="hw" type="button" data-action="login-go">Login</button></div>
+        <input id="lg-user" list="lg-users" maxlength="254" autocomplete="off" value="${esc(last)}" placeholder="&lt;New User&gt;" /><datalist id="lg-users">${used.map(u => `<option value="${esc(u)}">`).join('')}</datalist>
+        <a class="lg-a" data-action="register">Create Account</a>
+        <label class="lg-lbl" for="lg-pass">Password</label>
+        <div class="lg-row"><input id="lg-pass" type="password" maxlength="128" /><button class="hw" type="button" data-action="login-go">Login</button></div>
         <a class="lg-a" data-action="forgot">Forgot Password</a>
         <label class="lg-tick"><input type="checkbox" id="lg-save" ${setOn('save_password') ? 'checked' : ''} /> Save Password</label>
         <label class="lg-tick"><input type="checkbox" id="lg-auto" ${setOn('auto_login') ? 'checked' : ''} /> Auto-Login</label>
-        <details class="lg-srv"><summary>Server</summary><input id="lg-server" maxlength="200" value="${esc(sy.server || '')}" /></details>`;
+        <a class="lg-a lg-alt" data-action="login-browser">Sign in with your browser instead</a>`;
     }
+    if (!p) h += `<details class="lg-srv"><summary>Server</summary><input id="lg-server" maxlength="200" value="${esc(sy.server || '')}" /></details>`;
+    if (state.loginBusy) h += `<div class="lg-status">${esc(state.loginBusy)}</div>`;
+    if (state.loginErr) h += `<div class="bad">${esc(state.loginErr)}</div>`;
     if (err) h += `<div class="bad">${esc(err)}</div>`;
     return h + `</div></div>`;
   }
@@ -377,12 +388,13 @@
       <div class="af-ex">(Example: Jo, Jo Doe, or jo@doe.com)</div>
       <div class="af-btns"><button class="hw" type="button" data-action="add-cancel">Cancel</button><button class="hw" type="button" id="add-search" data-action="add-friend-go"${A.q ? '' : ' disabled'}>Search</button></div>
       <a class="lg-a" data-action="invite">Invite friends to join Fraglink</a></div></div>`;
-    // No directory search yet: the server matches the exact username when the request is sent.
-    return `<div class="lg-wrap af-wrap"><div class="lg af-in af-res"><div class="af-h"><span>Search Results (select one):</span><span>1 User Found</span></div>
-      <table class="af-t"><tr><th>Username</th><th>Display Name</th></tr><tr class="sel"><td>${esc(A.u)}</td><td>${esc(A.u)}</td></tr></table>
-      <div class="af-ex">Fraglink matches the exact username when you send the request.</div>
+    const us = A.users, sel = A.sel || '';
+    const rows = us == null ? '<tr><td colspan="2">Searching…</td></tr>' : us.length ? us.map(u => `<tr class="${u.handle === sel ? 'sel' : ''}" data-action="add-pick" data-handle="${esc(u.handle)}"><td>${esc(u.handle)}</td><td>${esc(u.display_name || u.handle)}</td></tr>`).join('') : `<tr><td colspan="2">${esc(A.err || 'No users found. Check the spelling, or invite them to join.')}</td></tr>`;
+    const n = us ? us.length : 0;
+    return `<div class="lg-wrap af-wrap"><div class="lg af-in af-res"><div class="af-h"><span>Search Results (select one):</span><span>${us == null ? '' : `${n} User${n === 1 ? '' : 's'} Found`}</span></div>
+      <table class="af-t"><tr><th>Username</th><th>Display Name</th></tr>${rows}</table>
       <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">Add me to your friends list</textarea>
-      <div class="af-btns"><button class="hw" type="button" data-action="add-back">Back</button><button class="hw" type="button" data-action="friend-profile" data-handle="${esc(A.u)}">View Profile</button><button class="hw" type="button" data-action="add-friend-send" data-handle="${esc(A.u)}">Add Friend</button></div>
+      <div class="af-btns"><button class="hw" type="button" data-action="add-back">Back</button><button class="hw" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="hw" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>Add Friend</button></div>
       <div id="add-msg"></div><a class="lg-a" data-action="add-cancel">Back to friends list</a></div></div>`;
   }
   function renderFriends() {
@@ -862,21 +874,45 @@
       setTimeout(() => $('#add-handle') && $('#add-handle').focus(), 0);
     },
     'add-cancel': () => { state.addFriend = null; render(); },
-    'add-friend-go': () => {
+    'add-friend-go': async () => {
       const h = (($('#add-handle') || {}).value || '').trim(); if (!h) return;
-      state.addFriend = { step: 'results', q: h, u: h.replace(/@.*/, '') }; render();
+      state.addFriend = { step: 'results', q: h, users: null }; render();
+      try { const r = await FLB.friendSearch(h); state.addFriend.users = (r && r.users) || []; }
+      catch (e) { state.addFriend.users = []; state.addFriend.err = String(e && e.message || e); }
+      state.addFriend.sel = state.addFriend.users[0] ? state.addFriend.users[0].handle : null;
+      if (state.addFriend.step === 'results') render();
     },
+    'add-pick': a => { state.addFriend.sel = a.dataset.handle; render(); },
     'add-back': () => { state.addFriend = { step: 'search', q: state.addFriend.q }; render(); },
     'add-friend-send': async a => {
       const h = a.dataset.handle, m = $('#add-msg');
       try { const r = await FLB.friendAdd(h); m.innerHTML = r === 'accepted' ? `You and <b>${esc(h)}</b> are now friends.` : `Request sent. <b>${esc(h)}</b> shows under Friend Requests until they accept.`; refreshFriends(); }
       catch (e) { m.innerHTML = `<span class="bad">${esc(String(e && e.message || e))}</span>`; }
     },
+    'update-now': a => { a.disabled = true; a.textContent = 'Updating…'; FLB.installUpdate().catch(e => { a.disabled = false; a.textContent = 'Yes'; toastErr(e); }); },
     'detect-skip': () => { state.detectRun = false; render(); },
     'web': a => { if (TAURI && FLB.openWebsite) FLB.openWebsite(a.dataset.page).catch(toastErr); else notice('Fraglink website', LATER); },
-    'login-go': () => { saveSetting('save_password', $('#lg-save').checked ? '1' : '0'); saveSetting('auto_login', $('#lg-auto').checked ? '1' : '0'); FLB.syncSignIn(($('#lg-server') && $('#lg-server').value.trim()) || (LIVE.sync && LIVE.sync.server) || '').then(refreshFriends).catch(toastErr); },
+    'login-go': async () => {
+      const u = ($('#lg-user').value || '').trim(), pw = $('#lg-pass').value || '';
+      if (!u || !pw) { state.loginErr = 'Enter your username and password.'; render(); return; }
+      saveSetting('save_password', $('#lg-save').checked ? '1' : '0'); saveSetting('auto_login', $('#lg-auto').checked ? '1' : '0');
+      state.loginErr = ''; state.loginBusy = 'Logging in…'; render();
+      try { await FLB.syncLogin(srvVal(), u, pw); state.loginMode = null; } catch (e) { state.loginErr = String(e && e.message || e); }
+      state.loginBusy = ''; refreshFriends();
+    },
+    'signup-go': async () => {
+      const u = ($('#lg-nuser').value || '').trim(), pw = $('#lg-npass').value || '', pw2 = $('#lg-npass2').value || '', em = ($('#lg-email').value || '').trim();
+      if (!/^[A-Za-z0-9_-]{3,20}$/.test(u)) { state.loginErr = 'Usernames are 3-20 characters: letters, digits, _ or -.'; render(); return; }
+      if (pw.length < 10) { state.loginErr = 'Use a password of at least 10 characters.'; render(); return; }
+      if (pw !== pw2) { state.loginErr = "The passwords don't match."; render(); return; }
+      state.loginErr = ''; state.loginBusy = 'Creating your account…'; render();
+      try { await FLB.syncSignup(srvVal(), u, pw, em); state.loginMode = null; } catch (e) { state.loginErr = String(e && e.message || e); }
+      state.loginBusy = ''; refreshFriends();
+    },
+    'login-back': () => { state.loginMode = null; state.loginErr = ''; render(); },
+    'login-browser': () => { state.loginErr = ''; FLB.syncSignIn(srvVal()).then(refreshFriends).catch(toastErr); },
     'login-cancel': () => FLB.syncCancel().then(refreshFriends).catch(toastErr),
-    'register': () => { if (TAURI && FLB.openWebsite) FLB.openWebsite('register').catch(toastErr); else notice('New User Registration', LATER); },
+    'register': () => { state.tab = 'friends'; state.loginMode = 'create'; state.loginErr = ''; render(); setTimeout(() => $('#lg-nuser') && $('#lg-nuser').focus(), 0); },
     'forgot': () => { if (TAURI && FLB.openWebsite) FLB.openWebsite('forgot').catch(toastErr); else notice('Forgot Password', LATER); },
     'invite': () => notice('Invite via Email', 'Inviting friends by email arrives with the Fraglink website. For now, send them the download link and your username.'),
     'friend-accept': a => FLB.friendRespond(a.dataset.handle, true).then(refreshFriends).catch(toastErr),
@@ -1123,7 +1159,7 @@
   }
   setInterval(clock, 1000);
   document.addEventListener('input', e => { if (e.target.id === 'add-handle') { state.addFriend.q = e.target.value; $('#add-search').disabled = !e.target.value.trim(); } });
-  document.addEventListener('keydown', e => { if (e.target.id === 'add-handle' && e.key === 'Enter') actions['add-friend-go'](); });
+  document.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.id === 'add-handle') actions['add-friend-go'](); else if (e.target.id === 'lg-pass') actions['login-go'](); else if (e.target.id === 'lg-npass2' || e.target.id === 'lg-email') actions['signup-go'](); });
   setInterval(() => { const t = $('#lg-tmo'); if (t) t.textContent = `Time out in ${Math.max(0, Math.round(+t.dataset.exp - Date.now() / 1000))} secs`; }, 1000);
 
   /* ---------------- boot ---------------- */
@@ -1157,6 +1193,12 @@
     FLB.on('fraglink://friends', refreshFriends);
     FLB.on('fraglink://sync', refreshFriends);
     FLB.on('fraglink://logoff', () => actions['sign-out']());
+    // Auto-update: Rust checks quietly (startup + every 6 h); ask before restarting.
+    const askUpdate = v => { if (!v || state.updateAsked === v) return; state.updateAsked = v;
+      notice('Fraglink Update', `<p>An update is available (${esc(String(v).replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1-dev.$2'))}). Restart to update?</p>
+        <div class="af-btns"><button class="hw" type="button" data-action="notice-close">Later</button><button class="hw" type="button" data-action="update-now">Yes</button></div>`); };
+    FLB.on('fraglink://update', askUpdate);
+    if (FLB.updateAvailable) FLB.updateAvailable().then(askUpdate).catch(() => {});
     FLB.on('fraglink://catalog', loadCatalog);
     FLB.on('fraglink://show-friend', h => { state.tab = 'friends'; state.sel = 'u:' + h; refreshFriends(); });
     setInterval(() => { if (realMode() && state.tab === 'friends') render(); }, 60000);

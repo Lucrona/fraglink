@@ -29,6 +29,22 @@ a release with a new migration should stay backward compatible or be rolled forw
 Check it: `curl http://119.42.54.86/api/v1/health` → `{"ok":true,"version":"…"}`.
 Logs: `sudo journalctl -u fraglink-server -f`.
 
+## Desktop auto-updates
+
+Installed clients check `http://119.42.54.86/updates/latest.json` (startup and every 6 hours). Caddy serves
+`/updates/` from `/var/www/fraglink-updates` (owned by `fraglink`). The repo is private, so GitHub release URLs
+aren't reachable by clients; that's why the files live here.
+
+Release flow: push the tag, let CI build (it signs the update files with the `TAURI_SIGNING_PRIVATE_KEY` /
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets and writes `latest.json`), create the GitHub release, then
+
+```sh
+scripts/publish-update.sh <ci-run-id>   # copies the setup exe, .sig and latest.json to the server
+```
+
+The private key's backup is outside the repo (`~/.secrets/fraglink-updater.key` + `.password` on the build box).
+Losing it means existing installs can't auto-update to builds signed with a new key.
+
 ## Switch to the domain (once DNS is set)
 
 1. DNS: `A` records for `fraglink.gg` and `app.fraglink.gg` → `119.42.54.86`.

@@ -4,7 +4,7 @@
 //! later when the server can't be reached.
 
 use crate::{now, AppState};
-use fraglink_sync::{secret, Client, PollResult, SyncError, DEFAULT_SERVER};
+use fraglink_sync::{secret, Client, PollResult, SyncError, DEFAULT_SERVER, LEGACY_DEFAULT_SERVER};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
@@ -112,7 +112,19 @@ pub fn server_stats(app: &AppHandle) -> Option<serde_json::Value> {
 }
 
 pub fn server(app: &AppHandle) -> String {
-    setting(app, keys::SERVER).unwrap_or_else(|| DEFAULT_SERVER.to_string())
+    pick_server(setting(app, keys::SERVER), signed_in(app))
+}
+
+/// The saved server, except that the old localhost default (saved by every sign-in before
+/// dev.6) moves to the production server unless this PC is signed in to it.
+fn pick_server(saved: Option<String>, signed_in: bool) -> String {
+    match saved {
+        Some(s) if s.trim_end_matches('/') == LEGACY_DEFAULT_SERVER && !signed_in => {
+            DEFAULT_SERVER.to_string()
+        }
+        Some(s) => s,
+        None => DEFAULT_SERVER.to_string(),
+    }
 }
 
 fn emit(app: &AppHandle) {
@@ -272,6 +284,56 @@ fn clear_local(app: &AppHandle, reason: &str) {
     }
 }
 
+fn device_label() -> String {
+    let name = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_default();
+    format!(
+        "Fraglink on {}",
+        if name.is_empty() { "this PC" } else { &name }
+    )
+}
+
+fn finish_sign_in(app: &AppHandle, token: &str, handle: &str) {
+    let st = app.state::<AppState>();
+    set(app, keys::TOKEN, &secret::protect(token));
+    set(app, keys::USER, handle);
+    set(app, keys::LAST_ERROR, "");
+    *st.sync.pairing.lock().unwrap() = None;
+    *st.sync.pairing_error.lock().unwrap() = None;
+    log::info!("sync: signed in as {handle}");
+    start_worker(app.clone());
+    crate::friends::start(app);
+    emit(app);
+}
+
+/// Username + password sign-in (or account creation when `create`). Blocking: call off the UI thread.
+pub fn password_sign_in(
+    app: &AppHandle,
+    server_url: &str,
+    login: &str,
+    password: &str,
+    create: Option<&str>,
+) -> Result<(), String> {
+    let base = fraglink_sync::normalize_server_url(server_url)
+        .ok_or_else(|| "Enter a server address starting with http:// or https://".to_string())?;
+    cancel_pairing(app);
+    let client = Client::new(&base, None);
+    let res = match create {
+        Some(email) => client.password_signup(login, password, email, &device_label()),
+        None => client.password_login(login, password, &device_label()),
+    };
+    let (token, user) = res.map_err(|e| match e {
+        SyncError::Unauthorized => "Wrong username or password.".to_string(),
+        SyncError::Server { message, .. } if !message.is_empty() => message,
+        SyncError::Network(_) => format!("Can't reach {base}. Check your connection."),
+        e => e.to_string(),
+    })?;
+    set(app, keys::SERVER, &base);
+    finish_sign_in(app, &token, &user.handle);
+    Ok(())
+}
+
 /// Start device pairing against `server_url`. Runs in the background: opens the
 /// browser on the approval page and polls until approved, expired or cancelled.
 pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
@@ -295,13 +357,7 @@ pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
                 }
             };
             let client = Client::new(&base, None);
-            let name = std::env::var("COMPUTERNAME")
-                .or_else(|_| std::env::var("HOSTNAME"))
-                .unwrap_or_default();
-            let start = match client.start_pairing(&format!(
-                "Fraglink on {}",
-                if name.is_empty() { "this PC" } else { &name }
-            )) {
+            let start = match client.start_pairing(&device_label()) {
                 Ok(s) => s,
                 Err(e) => return fail(format!("Couldn't start sign-in: {e}")),
             };
@@ -333,14 +389,7 @@ pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
                         return fail("The code expired. Press Sign in to try again.".into())
                     }
                     Ok(PollResult::Approved { token, user }) => {
-                        set(&app, keys::TOKEN, &secret::protect(&token));
-                        set(&app, keys::USER, &user.handle);
-                        set(&app, keys::LAST_ERROR, "");
-                        *st.sync.pairing.lock().unwrap() = None;
-                        log::info!("sync: signed in as {}", user.handle);
-                        start_worker(app.clone());
-                        crate::friends::start(&app);
-                        emit(&app);
+                        finish_sign_in(&app, &token, &user.handle);
                         return;
                     }
                     Err(e) if e.is_transient() && now() < deadline => continue,
@@ -374,5 +423,26 @@ pub fn sign_out(app: &AppHandle) {
                 log::warn!("sync: server sign-out failed ({e}); the token stays valid until revoked on the website");
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod server_default_tests {
+    use super::*;
+    #[test]
+    fn legacy_localhost_migrates_unless_signed_in() {
+        assert_eq!(pick_server(None, false), DEFAULT_SERVER);
+        assert_eq!(
+            pick_server(Some("http://localhost:8787".into()), false),
+            DEFAULT_SERVER
+        );
+        assert_eq!(
+            pick_server(Some("http://localhost:8787".into()), true),
+            "http://localhost:8787"
+        );
+        assert_eq!(
+            pick_server(Some("https://my.example".into()), false),
+            "https://my.example"
+        );
     }
 }

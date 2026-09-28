@@ -13,7 +13,7 @@
 
 **Sends:** nothing by default. The app makes no network connections and has no telemetry until you choose **Options → Sync (optional) → Sign in to sync** (M2 preview).
 
-**After you sign in to sync**, the app uploads to the server you chose (default: a server on your own PC, `http://localhost:8787`):
+**After you sign in to sync**, the app uploads to the server you chose (default: the Fraglink server at `http://119.42.54.86`, changeable in Options > Account):
 - closed game sessions: a random session id, game id and name, Steam app id if known, start and end time, active seconds, idle-trimmed seconds, and the app version.
 - **Never:** program names, install paths, the list of running programs, idle timestamps or anything about other apps.
 

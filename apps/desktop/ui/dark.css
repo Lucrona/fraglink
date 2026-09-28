@@ -215,3 +215,9 @@ body.skin-dark .xf-sec.sel { background: var(--dk-blue2); }
 @keyframes lgslide { from { margin-left: -35%; } to { margin-left: 100%; } }
 .lg .det-track { overflow: hidden; }
 .hw:disabled { opacity: .5; cursor: default; }
+.lg input:not([type=checkbox]) { width: 100%; box-sizing: border-box; font: 11px Tahoma, Verdana, sans-serif; background: #fff; color: #000; border: 1px solid #7a8aa6; height: 19px; }
+.lg .lg-row input { background: #fff; }
+.lg .lg-opt { font-weight: normal; color: #aab4c4; }
+.lg .lg-alt { margin-top: 10px; font-weight: normal; font-size: 10px; }
+.lg .lg-status { margin-top: 8px; }
+.af-t tr[data-action] { cursor: pointer; }

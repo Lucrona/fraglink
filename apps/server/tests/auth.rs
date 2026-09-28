@@ -250,3 +250,52 @@ async fn export_contains_own_data_only(pool: PgPool) {
     );
     assert!(!r.text.contains("token_hash"));
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn desktop_signup_login_search(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    // no email needed; two accounts without email don't clash
+    for h in ["zed_one", "zed_two"] {
+        let r = api(
+            &app,
+            "POST",
+            "/api/v1/device/signup",
+            None,
+            Some(json!({"handle": h, "password": "a long enough pass", "device_name": "PC"})),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::CREATED, "{}", r.text);
+    }
+    let kind: String = sqlx::query_scalar("SELECT kind FROM auth_tokens LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(kind, "device");
+    // login by username, case-insensitive
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/device/login",
+        None,
+        Some(json!({"login": "ZED_ONE", "password": "a long enough pass"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let tok = r.json()["token"].as_str().unwrap().to_string();
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/device/login",
+        None,
+        Some(json!({"login": "zed_one", "password": "wrong password!"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+    // search finds the other user, not yourself
+    let r = api(&app, "GET", "/api/v1/users/search?q=zed", Some(&tok), None).await;
+    assert_eq!(r.status, StatusCode::OK);
+    let body = r.json();
+    let users = body["users"].as_array().unwrap();
+    assert_eq!(users.len(), 1, "{}", r.text);
+    assert_eq!(users[0]["handle"], "zed_two");
+}

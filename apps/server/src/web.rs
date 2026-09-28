@@ -361,7 +361,7 @@ async fn web_delete_account(
     if f.confirm != "yes" {
         return back_err(AppError::bad_request("confirm", "Tick the box to confirm."));
     }
-    if let Err(e) = auth::check_login(&st, &a.user.email, &f.password).await {
+    if let Err(e) = auth::check_login(&st, &a.user.handle, &f.password).await {
         return back_err(e);
     }
     if let Err(e) = sqlx::query("DELETE FROM users WHERE id = $1")
@@ -454,6 +454,7 @@ async fn signup_post(
         return e.into_response();
     }
     let res = async {
+        crate::api::signup_limit(&st, &headers)?;
         let u = auth::create_user(
             &st,
             &f.email,
@@ -485,6 +486,7 @@ async fn login_post(
         return e.into_response();
     }
     let res = async {
+        crate::api::login_limit(&st, &headers)?;
         let u = auth::check_login(&st, &f.email, &f.password).await?;
         auth::issue_token(&st, u.id, "web", None).await
     }

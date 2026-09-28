@@ -373,6 +373,48 @@ pub fn sync_sign_in(app: AppHandle, server: String) -> CmdResult<()> {
     crate::sync::start_pairing(&app, &server)
 }
 
+/// Login screen: username (or email) + password.
+#[tauri::command]
+pub async fn sync_login(
+    app: AppHandle,
+    server: String,
+    username: String,
+    password: String,
+) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::sync::password_sign_in(&app, &server, username.trim(), &password, None)
+    })
+    .await
+    .map_err(err)?
+}
+
+/// Create Account: username, password, optional email; signs this PC in.
+#[tauri::command]
+pub async fn sync_signup(
+    app: AppHandle,
+    server: String,
+    username: String,
+    password: String,
+    email: String,
+) -> CmdResult<()> {
+    let h = clean_handle(&username)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::sync::password_sign_in(&app, &server, &h, &password, Some(email.trim()))
+    })
+    .await
+    .map_err(err)?
+}
+
+/// Add Friend search by username / display name / exact email.
+#[tauri::command]
+pub async fn friend_search(app: AppHandle, query: String) -> CmdResult<serde_json::Value> {
+    let q: String = query.trim().chars().take(64).collect();
+    let client = crate::sync::client(&app).ok_or("Log in first.")?;
+    tauri::async_runtime::spawn_blocking(move || client.search_users(&q).map_err(|e| e.to_string()))
+        .await
+        .map_err(err)?
+}
+
 #[tauri::command]
 pub fn sync_cancel(app: AppHandle) {
     crate::sync::cancel_pairing(&app);
