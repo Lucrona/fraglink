@@ -222,3 +222,43 @@ body.skin-dark .xf-sec.sel { background: var(--dk-blue2); }
 .lg .lg-alt { margin-top: 10px; font-weight: normal; font-size: 10px; }
 .lg .lg-status { margin-top: 8px; }
 .af-t tr[data-action] { cursor: pointer; }
+
+/* ---- 0.2.0-dev.8: in-window dialogs (About, notices, Games) in the dark 2013 style ---- */
+:is(body.skin-dark, body.skin-phoenix) .xf-dialog { border-radius: 7px; padding: 0 6px 6px; width: 270px; zoom: 1;
+  background: linear-gradient(#34373e, #1d1f24 26px, #1a1c21); border: 1px solid #000;
+  box-shadow: inset 0 0 0 1px #3b3f47, 0 6px 18px rgba(0,0,0,.6); color: var(--dk-txt); }
+:is(body.skin-dark, body.skin-phoenix) .dlg-title { height: 24px; color: #e6e9ee; text-shadow: 0 1px 0 #000; font-size: 11px; padding-left: 3px; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-title .xf-logo-mark { width: 16px; height: 11px; filter: none; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-title .xf-close { top: 5px; right: 3px; width: 17px; height: 14px; border: 1px solid #000; border-radius: 3px;
+  background: linear-gradient(#5a5e67, #25272c 55%, #1a1b1f); box-shadow: inset 0 1px 0 rgba(255,255,255,.2); }
+:is(body.skin-dark, body.skin-phoenix) .dlg-title .xf-close i { left: 4px; top: 2px; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-title .xf-close:hover { background: linear-gradient(#6e737d, #33363c); }
+:is(body.skin-dark, body.skin-phoenix) .dlg-body { background: var(--dk-list); border: 1px solid #000; border-radius: 0; box-shadow: inset 0 0 0 1px #1c2a45; color: var(--dk-txt); padding: 6px 8px; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-body b { color: #fff; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-body a { color: #5aa2f2; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-body em, :is(body.skin-dark, body.skin-phoenix) .g-hint { color: var(--dk-dim); }
+:is(body.skin-dark, body.skin-phoenix) .dlg-body fieldset { border: 1px solid #25385e; background: rgba(19,33,60,.35); }
+:is(body.skin-dark, body.skin-phoenix) .dlg-body legend { color: #9fc3ff; font-weight: bold; }
+:is(body.skin-dark, body.skin-phoenix) .g-list { background: #070d1a; border: 1px solid #000; box-shadow: inset 0 0 0 1px #1c2a45; }
+:is(body.skin-dark, body.skin-phoenix) .g-row { border-bottom: 1px solid #16213a; }
+:is(body.skin-dark, body.skin-phoenix) .g-row small { color: var(--dk-dim); }
+:is(body.skin-dark, body.skin-phoenix) .g-row.cand.sel { background: var(--dk-blue2); }
+:is(body.skin-dark, body.skin-phoenix) .g-row.known.ex b { color: #5d636c; }
+:is(body.skin-dark, body.skin-phoenix) .g-tag input { background: #0d1424; color: var(--dk-txt); border: 1px solid #000; box-shadow: inset 0 0 0 1px #25385e; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-foot { margin-top: 6px; }
+:is(body.skin-dark, body.skin-phoenix) .xf-dialog .hw { border: 1px solid #000; border-radius: 3px; color: #eee;
+  background: linear-gradient(#5b5f68, #2b2e34 50%, #191a1e 51%, #2a2c31); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
+:is(body.skin-dark, body.skin-phoenix) .xf-dialog .hw:hover { background: linear-gradient(#6b7079, #33363c 50%, #202226 51%, #33353b); }
+:is(body.skin-dark, body.skin-phoenix) .xf-dialog .hw:active { background: linear-gradient(#1a1b1f, #2b2e34); box-shadow: inset 0 1px 3px #000; }
+/* About */
+.about-box { text-align: center; padding: 4px 2px 2px; }
+.about-box p { margin: 5px 0; }
+.about-lock { display: block; height: 26px; width: auto; margin: 4px auto 8px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+.about-ver { font-size: 12px; }
+.about-c { color: var(--dk-dim, #555); }
+.about-credits { font-size: 9px; line-height: 1.35; color: var(--dk-dim, #666); border-top: 1px solid rgba(128,140,160,.25); padding-top: 6px; margin-top: 8px !important; }
+body:not(.skin-dark):not(.skin-phoenix) .about-lock { filter: invert(.85); }
+:is(body.skin-dark, body.skin-phoenix) .dlg-title .xf-close { display: block !important; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-title .xf-logo-mark { display: none; }
+:is(body.skin-dark, body.skin-phoenix) .dlg-title::before { content: ""; width: 16px; height: 11px; margin-right: 2px; flex: none;
+  background: url(brand/v28-mark.svg) center / contain no-repeat; }

@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-core"
-version = "0.2.0-7"
+version = "0.2.0-8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1452,7 +1452,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-desktop"
-version = "0.2.0-7"
+version = "0.2.0-8"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1471,11 +1471,12 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
 name = "fraglink-server"
-version = "0.2.0-7"
+version = "0.2.0-8"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1506,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-sync"
-version = "0.2.0-7"
+version = "0.2.0-8"
 dependencies = [
  "base64 0.22.1",
  "fraglink-core",

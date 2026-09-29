@@ -9,3 +9,4 @@ Thumbs.db
 /tmp/
 *.log
 .env
+__pycache__/

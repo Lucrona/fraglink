@@ -20,7 +20,7 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 <br><sub>The main window with the friends list, and with the info panel open on a friend. Browser preview of the dev.6 UI with sample data.</sub>
 </p>
 
-## What works today (0.2.0-dev.7)
+## What works today (0.2.0-dev.8)
 
 - **Game detection on every launcher:** installed Steam, Epic, GOG, Battle.net, EA app, Ubisoft Connect and Xbox games, 170 curated signatures, and "This is a game…" for anything else. Read-only: no injection, no memory reading.
 - **Honest hours:** idle time is trimmed, very short sessions are dropped, and sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.

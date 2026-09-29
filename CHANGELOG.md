@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.8] - 2026-09-29
+
+Small test update (builds report `0.2.0-8`), mainly to try the new quiet auto-update from dev.7.
+
+### Changed
+- **Tray icon** now uses the silver app-icon design instead of the old dark-blue badge. It's drawn
+  for each size Windows uses (16/20/24/32 px for 100-200 % scaling), and the update-ready green dot
+  is drawn crisply at each size. The app icon (`icon.ico`) gains a 20 px frame, and the old badge
+  favicon and unused old logo files are gone.
+- **About box** restyled to the dark theme with new text: version, "Track your game hours and see
+  what friends are playing.", © 2026 Lucrona, and the same logo/font credits.
+- **Dialogs** (notices, the Games dialog) use the dark 2013 style in the Dark and Phoenix skins.
+  Classic and Stream keep their silver look.
+
 ## [0.2.0-dev.7] - 2026-09-28
 
 Pre-release for private testing (builds report `0.2.0-7`). Asked for as "0.2.0-dev.6.1", but

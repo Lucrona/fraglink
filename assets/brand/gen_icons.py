@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Fraglink app icon v2 (Xfire-style): light silver tile, thin darker edge, charcoal Split Orbit mark.
 16 px is hand-drawn pixel art, 24-48 px use crisp 1x tiles and a thickened mark, 64 px and up are
-rendered from the SVG. Needs rsvg-convert and Pillow. Writes apps/desktop/src-tauri/icons/ (not tray.png:
-the tray keeps the white-on-dark icon)."""
+rendered from the SVG. Needs rsvg-convert and Pillow. Writes apps/desktop/src-tauri/icons/, including
+the tray icons tray-16/20/24/32.png (same silver design; the app picks the size Windows asks for) and
+the ui favicon."""
 import subprocess, io, os
 from PIL import Image, ImageDraw, ImageFilter
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -98,13 +99,16 @@ def tile(n, ss=8):
     return small_tile(n) if n <= 48 else big_tile(n, ss)
 
 def build():
-    return {16: icon16(), 24: icon2(24, .9, 6, 1.6), 32: icon2(32, .84, 5, 1.6), 48: icon2(48, .8, 3.5, 1.3),
+    return {16: icon16(), 20: icon2(20, .9, 6.5, 1.7), 24: icon2(24, .9, 6, 1.6), 32: icon2(32, .84, 5, 1.6), 48: icon2(48, .8, 3.5, 1.3),
             64: icon(64, .78), 128: icon(128, .76), 256: icon(256, .76), 512: icon(512, .76)}
 
 if __name__ == '__main__':
     imgs = build()
     for n, f in {32: '32x32.png', 64: '64x64.png', 128: '128x128.png', 256: '128x128@2x.png', 512: 'icon.png'}.items():
         imgs[n].save(os.path.join(ICONS, f))
-    order = (16, 24, 32, 48, 64, 128, 256)
+    for n in (16, 20, 24, 32):
+        imgs[n].save(os.path.join(ICONS, f'tray-{n}.png'))
+    imgs[32].save(os.path.join(ROOT, 'apps/desktop/ui/favicon-32.png'))
+    order = (16, 20, 24, 32, 48, 64, 128, 256)
     imgs[256].save(os.path.join(ICONS, 'icon.ico'), sizes=[(n, n) for n in order], append_images=[imgs[n] for n in order[:-1]])
     print('icons written')

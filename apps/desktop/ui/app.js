@@ -788,6 +788,8 @@
   });
 
   /* ---------------- dialogs / misc ---------------- */
+  // "0.2.0-8" (the MSI-safe build version) reads as "0.2.0-dev.8"
+  const devVer = v => String(v || '').replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1-dev.$2');
   function notice(title, html) {
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false;
   }
@@ -930,7 +932,10 @@
     'my-profile': () => notice('My Profile', LATER),
     'friend-profile': a => { const h = a && a.dataset && a.dataset.handle || a && a.dataset && a.dataset.key; if (TAURI && FLB.openWebsite && h) FLB.openWebsite('u/' + h).catch(toastErr); else notice('Profile', LATER); },
     'my-stats': () => notice('Full stats', LATER), 'website': () => notice('fraglink.gg', LATER), 'estimate': () => notice('Estimate my history', LATER),
-    'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${st.version}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {} notice('About Fraglink', `<b>Fraglink ${esc(v)}</b><br>Local hours tracker (M1) with optional account sync (M2 preview).<br>© 2026 Lucrona. All rights reserved.<br><br>Look inspired by the classic gaming IM clients; original Fraglink art. Logo: <i>Split Orbit</i>, wordmark set in Saira Expanded Bold (SIL OFL 1.1). Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).`); },
+    'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${devVer(st.version)}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {}
+      notice('About Fraglink', `<div class="about-box"><img class="about-lock" src="brand/v28-lockup.svg" alt="Fraglink" draggable="false"><b class="about-ver">Fraglink ${esc(v)}</b>
+        <p>Track your game hours and see what friends are playing.</p><p class="about-c">\u00a9 2026 Lucrona. All rights reserved.</p>
+        <p class="about-credits">Look inspired by the classic gaming IM clients; original Fraglink art. Logo: <i>Split Orbit</i>, wordmark set in Saira Expanded Bold (SIL OFL 1.1). Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).</p></div>`); },
     'chat': () => { const f = friendsNow().find(x => x.id === state.sel); if (f && f.real) { notice('Chat', 'Fraglink has no built-in chat. Linking Discord so this opens a DM arrives in a later update.'); return; } openChat(state.sel); },
     'join': () => notice('Join Game', 'Joining friends arrives with friends in a later update.'),
     'clear-sel': () => { state.sel = null; render(); },
@@ -1203,7 +1208,7 @@
     // Auto-update: Rust downloads + verifies quietly (startup + every 6 h); then a green arrow
     // in the title bar installs and restarts in one click. No prompt.
     const askUpdate = v => { const b = $('#upd-ready'); if (!b || !v) return;
-      b.title = `Update ready: click to restart and update (${String(v).replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1-dev.$2')})`; b.hidden = false; };
+      b.title = `Update ready: click to restart and update (${devVer(v)})`; b.hidden = false; };
     FLB.on('fraglink://update', askUpdate);
     if (FLB.updateAvailable) FLB.updateAvailable().then(askUpdate).catch(() => {});
     FLB.on('fraglink://catalog', loadCatalog);

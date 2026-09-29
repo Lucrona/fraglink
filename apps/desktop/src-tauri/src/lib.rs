@@ -338,47 +338,88 @@ pub fn refresh_tray(app: &AppHandle) {
     }
 }
 
-const TRAY_PNG: &[u8] = include_bytes!("../icons/tray.png");
+/// Tray icons: the silver app-icon design, drawn for each size Windows uses for the
+/// notification area (16 px at 100 %, 20 at 125 %, 24 at 150 %, 32 at 200 % scaling).
+const TRAY_PNGS: [(u32, &[u8]); 4] = [
+    (16, include_bytes!("../icons/tray-16.png")),
+    (20, include_bytes!("../icons/tray-20.png")),
+    (24, include_bytes!("../icons/tray-24.png")),
+    (32, include_bytes!("../icons/tray-32.png")),
+];
 
-/// The tray icon, with a small green dot in the corner while an update is ready.
-pub fn set_tray_update_dot(app: &AppHandle, on: bool) {
-    let Some(tray) = app.tray_by_id("main") else {
-        return;
-    };
-    let Ok(img) = image::load_from_memory(TRAY_PNG) else {
-        return;
-    };
-    let mut img = img.to_rgba8();
-    if on {
+/// The small-icon size of the primary display (what the tray draws at).
+fn tray_size() -> u32 {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSMICON};
+        let n = unsafe { GetSystemMetrics(SM_CXSMICON) };
+        if n > 0 {
+            return n as u32;
+        }
+    }
+    32
+}
+
+/// The tray image for the current display scale, with a small green dot in the
+/// bottom-right corner while an update is ready.
+fn tray_image(update_ready: bool) -> Option<tauri::image::Image<'static>> {
+    let want = tray_size();
+    // exact size, else the next bigger one (Windows scales down more cleanly than up)
+    let (_, bytes) = TRAY_PNGS
+        .iter()
+        .find(|(n, _)| *n >= want)
+        .unwrap_or(&TRAY_PNGS[3]);
+    let mut img = image::load_from_memory(bytes).ok()?.to_rgba8();
+    if update_ready {
         let (w, h) = img.dimensions();
-        let r = (w.min(h) as f32 * 0.19).max(3.0);
-        let (cx, cy) = (w as f32 - r - 0.5, h as f32 - r - 0.5);
+        let n = w.min(h) as f32;
+        let r = (n * 0.2).max(3.0); // 3.2 px at 16, 6.4 at 32
+        let ring = (n / 16.0).max(1.0);
+        let (cx, cy) = (w as f32 - r - ring, h as f32 - r - ring);
         for y in 0..h {
             for x in 0..w {
                 let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
-                if d <= r + 1.0 {
-                    // dark ring, then the green dot
-                    let px = if d <= r - 0.2 {
-                        [60, 200, 90, 255]
-                    } else {
-                        [10, 12, 14, 255]
-                    };
-                    img.put_pixel(x, y, image::Rgba(px));
+                // anti-aliased: green inside, a dark ring so it reads on light and dark taskbars
+                let cov = |edge: f32| (edge - d + 0.5).clamp(0.0, 1.0);
+                let (outer, inner) = (cov(r + ring), cov(r));
+                if outer <= 0.0 {
+                    continue;
                 }
+                let top = y as f32 + 0.5 < cy - r * 0.2; // lighter top half, like the title-bar arrow
+                let g: [f32; 3] = if top {
+                    [96.0, 226.0, 124.0]
+                } else {
+                    [52.0, 196.0, 88.0]
+                };
+                let dark = [12.0, 30.0, 18.0];
+                let p = img.get_pixel_mut(x, y);
+                for ((ch, d), gc) in p.0.iter_mut().take(3).zip(dark).zip(g) {
+                    let c = d * (1.0 - inner) + gc * inner;
+                    *ch = (*ch as f32 * (1.0 - outer) + c * outer).round() as u8;
+                }
+                p.0[3] = (p.0[3] as f32 + (255.0 - p.0[3] as f32) * outer).round() as u8;
             }
         }
     }
     let (w, h) = img.dimensions();
-    let _ = tray.set_icon(Some(tauri::image::Image::new_owned(img.into_raw(), w, h)));
+    Some(tauri::image::Image::new_owned(img.into_raw(), w, h))
+}
+
+/// Switch the tray icon's update dot on or off.
+pub fn set_tray_update_dot(app: &AppHandle, on: bool) {
+    if let (Some(tray), Some(img)) = (app.tray_by_id("main"), tray_image(on)) {
+        let _ = tray.set_icon(Some(img));
+    }
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = tray_menu(app)?;
-    // The tray keeps the white-on-dark mark; the app/desktop icon is the silver tile.
-    let icon = tauri::image::Image::from_bytes(TRAY_PNG)?;
-    TrayIconBuilder::with_id("main")
-        .icon(icon)
-        .tooltip("Fraglink")
+    // Same silver design as the app icon, at the size the taskbar wants.
+    let mut tb = TrayIconBuilder::with_id("main");
+    if let Some(icon) = tray_image(updater::ready_version(app).is_some()) {
+        tb = tb.icon(icon);
+    }
+    tb.tooltip("Fraglink")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
