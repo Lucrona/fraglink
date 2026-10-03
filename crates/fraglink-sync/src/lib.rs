@@ -242,6 +242,34 @@ impl Client {
         serde_json::from_value(v["user"].clone()).map_err(|e| SyncError::Decode(e.to_string()))
     }
 
+    /// The raw `GET /api/v1/me` answer (`user` includes `email_verified`).
+    pub fn me_raw(&self) -> Result<serde_json::Value, SyncError> {
+        self.call("GET", "/api/v1/me", None)
+    }
+
+    /// Change the password (needs the current one). The server signs out every other
+    /// session of the account; this PC's token stays valid.
+    pub fn change_password(
+        &self,
+        current: &str,
+        new: &str,
+    ) -> Result<serde_json::Value, SyncError> {
+        self.call(
+            "POST",
+            "/api/v1/me/password",
+            Some(serde_json::json!({ "current_password": current, "new_password": new })),
+        )
+    }
+
+    /// Change the email (needs the current password). Stored unverified for now.
+    pub fn change_email(&self, current: &str, email: &str) -> Result<serde_json::Value, SyncError> {
+        self.call(
+            "POST",
+            "/api/v1/me/email",
+            Some(serde_json::json!({ "current_password": current, "new_email": email })),
+        )
+    }
+
     pub fn upload(&self, batch: &UploadBatch) -> Result<UploadResult, SyncError> {
         let body = serde_json::to_value(batch).map_err(|e| SyncError::Decode(e.to_string()))?;
         self.call("POST", "/api/v1/sessions/upload", Some(body))

@@ -16,8 +16,20 @@ Small test update (builds report `0.2.0-8`), mainly to try the new quiet auto-up
   favicon and unused old logo files are gone.
 - **About box** restyled to the dark theme with new text: version, "Track your game hours and see
   what friends are playing.", © 2026 Lucrona, and the same logo/font credits.
-- **Dialogs** (notices, the Games dialog) use the dark 2013 style in the Dark and Phoenix skins.
-  Classic and Stream keep their silver look.
+- **Dialogs** (notices, the Games dialog) and the **Options window** use the dark 2013 style in the
+  Dark and Phoenix skins. Classic and Stream keep their silver/system look.
+
+### Added
+- **Account management** in Options > Account (when signed in):
+  - **Change Password:** current password, new password and confirm. At least 10 characters, with
+    clear messages. Every other sign-in of the account (other PCs, browser sessions) is signed out;
+    this PC stays signed in.
+  - **Change Email:** shows the current email; needs the new email and your current password. The
+    address must be valid and not used by another account. It's stored as not verified until
+    Fraglink has a mail service.
+- **Server:** `POST /api/v1/me/password` and `POST /api/v1/me/email`. Both need the current password
+  and are rate limited (5 attempts per 15 minutes per account). `GET /api/v1/me` now reports
+  `email_verified` (migration 0005).
 
 ## [0.2.0-dev.7] - 2026-09-28
 

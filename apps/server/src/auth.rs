@@ -228,18 +228,31 @@ pub async fn issue_token(
     Ok(token)
 }
 
-pub fn validate_signup(email: &str, password: &str, handle: &str) -> Result<(), AppError> {
+/// Basic email shape check: something@something, no spaces, at most 254 characters.
+pub fn validate_email(email: &str) -> Result<(), AppError> {
     let email = email.trim();
     let at = email.find('@');
-    if !email.is_empty()
-        && (email.len() > 254
-            || at.is_none_or(|i| i == 0 || i == email.len() - 1)
-            || email.contains(char::is_whitespace))
+    let domain_ok = at.is_some_and(|i| {
+        let d = &email[i + 1..];
+        !d.is_empty() && !d.contains('@') && !d.starts_with('.') && !d.ends_with('.')
+    });
+    if email.len() > 254
+        || at.is_none_or(|i| i == 0 || i == email.len() - 1)
+        || !domain_ok
+        || email.contains(char::is_whitespace)
     {
         return Err(AppError::bad_request(
             "invalid_email",
             "Enter a valid email address (or leave it empty).",
         ));
+    }
+    Ok(())
+}
+
+pub fn validate_signup(email: &str, password: &str, handle: &str) -> Result<(), AppError> {
+    let email = email.trim();
+    if !email.is_empty() {
+        validate_email(email)?;
     }
     let n = password.chars().count();
     if !(10..=128).contains(&n) {

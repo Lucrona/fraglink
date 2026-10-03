@@ -113,6 +113,19 @@
 
     <section data-page="account" hidden>
       <fieldset><legend>Fraglink account (optional)</legend><div id="sync-box" class="sync">Loading…</div></fieldset>
+      <fieldset id="acct-pw" class="acct" hidden><legend>Change password</legend>
+        <label class="row"><span>Current password</span><input type="password" id="pw-cur" autocomplete="current-password" maxlength="128" /></label>
+        <label class="row"><span>New password</span><input type="password" id="pw-new" autocomplete="new-password" maxlength="128" placeholder="at least 10 characters" /></label>
+        <label class="row"><span>Confirm new</span><input type="password" id="pw-new2" autocomplete="new-password" maxlength="128" /></label>
+        <div class="acct-foot"><span id="pw-msg" class="msg"></span><button type="button" data-do="pw-change">Change Password</button></div>
+      </fieldset>
+      <fieldset id="acct-email" class="acct" hidden><legend>Change email</legend>
+        <label class="row"><span>Current email</span><input type="text" id="em-cur" readonly /></label>
+        <label class="row"><span>New email</span><input type="text" id="em-new" autocomplete="email" maxlength="254" /></label>
+        <label class="row"><span>Current password</span><input type="password" id="em-pw" autocomplete="current-password" maxlength="128" /></label>
+        <div class="acct-foot"><span id="em-msg" class="msg"></span><button type="button" data-do="em-change">Change Email</button></div>
+        <p class="hint">Not verified yet: Fraglink can't send email until a mail service is set up.</p>
+      </fieldset>
       <p class="hint">Friends and live status need a Fraglink account. Without one, everything stays on this PC.</p>
     </section>
   </main>

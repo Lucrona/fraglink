@@ -14,6 +14,9 @@
   const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '' };
   const PAGES = { notifications: 'general', advanced: 'general' }; // old page names
 
+  // Dark and Phoenix skins get the dark 2013 look; Classic and Stream keep the plain system look.
+  const applyTheme = skin => document.body.classList.toggle('dark', skin === 'dark' || skin === 'phoenix');
+
   function show(page) {
     page = PAGES[page] || page;
     if (!$(`section[data-page="${page}"]`)) page = 'general';
@@ -160,6 +163,47 @@
     }
     if (err) h += `<div class="bad">${esc(err)}</div>`;
     $('#sync-box').innerHTML = h;
+    renderAccount(!!s.signed_in);
+  }
+
+  /* ---- Account: change password / email (signed in only) ---- */
+  async function renderAccount(signedIn) {
+    $('#acct-pw').hidden = $('#acct-email').hidden = !signedIn;
+    if (!signedIn || !FLB.accountInfo) return;
+    try {
+      const a = await FLB.accountInfo();
+      $('#em-cur').value = a.email ? a.email + (a.email_verified ? '' : ' (not verified)') : '(none)';
+    } catch (e) { $('#em-cur').value = ''; say('em', String(e), true); }
+  }
+  const say = (k, text, bad) => { const m = $(`#${k}-msg`); m.textContent = text; m.className = 'msg ' + (bad ? 'bad' : 'good'); };
+  const errText = e => String(e && e.message || e);
+  async function changePassword() {
+    const cur = $('#pw-cur').value, n1 = $('#pw-new').value, n2 = $('#pw-new2').value;
+    if (!cur) return say('pw', 'Enter your current password.', true);
+    if (n1.length < 10) return say('pw', 'The new password needs at least 10 characters.', true);
+    if (n1 !== n2) return say('pw', "The new passwords don't match.", true);
+    if (n1 === cur) return say('pw', 'The new password is the same as the current one.', true);
+    const b = $('[data-do=pw-change]'); b.disabled = true; say('pw', 'Changing…');
+    try {
+      const r = await FLB.changePassword(cur, n1);
+      ['#pw-cur', '#pw-new', '#pw-new2'].forEach(s => { $(s).value = ''; });
+      const n = r && r.signed_out_other_sessions || 0;
+      say('pw', `Password changed.${n ? ` Signed out ${n} other session${n > 1 ? 's' : ''}.` : ''}`);
+    } catch (e) { say('pw', errText(e), true); }
+    b.disabled = false;
+  }
+  async function changeEmail() {
+    const email = $('#em-new').value.trim(), cur = $('#em-pw').value;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return say('em', 'Enter a valid email address.', true);
+    if (!cur) return say('em', 'Enter your current password.', true);
+    const b = $('[data-do=em-change]'); b.disabled = true; say('em', 'Changing…');
+    try {
+      const r = await FLB.changeEmail(cur, email);
+      $('#em-new').value = ''; $('#em-pw').value = '';
+      $('#em-cur').value = (r && r.email || email) + ' (not verified)';
+      say('em', 'Email changed.');
+    } catch (e) { say('em', errText(e), true); }
+    b.disabled = false;
   }
 
   const acts = {
@@ -180,6 +224,8 @@
     },
     'block-add': async () => { const h = (prompt('Fraglink username to block:') || '').trim(); if (!h) return; try { await FLB.friendBlock(h, true); renderBlocked(); } catch (e) { fail(e); } },
     'block-remove': async () => { const h = $('#blocked').value; if (!h) return; try { await FLB.friendBlock(h, false); renderBlocked(); } catch (e) { fail(e); } },
+    'pw-change': changePassword,
+    'em-change': changeEmail,
     'sync-signin': () => FLB.syncSignIn($('#sync-server').value.trim()).then(renderSync).catch(fail),
     'sync-cancel': () => FLB.syncCancel().then(renderSync).catch(fail),
     'sync-now': () => FLB.syncNow().then(() => setTimeout(renderSync, 3000)).catch(fail),
@@ -199,11 +245,13 @@
 
   (async () => {
     try { st = await FLB.settings(); load(); } catch (e) { fail(e); }
+    applyTheme((st && st.settings && st.settings.skin) || params.get('skin') || 'dark');
     renderDetail();
     show(params.get('page') || 'general');
     if (FLB.on) {
       FLB.on('fraglink://sync', () => { if (!$('section[data-page=account]').hidden) renderSync(); });
       FLB.on('fraglink://options-page', p => show(p));
+      FLB.on('fraglink://settings', ([k, v]) => { if (k === 'skin') applyTheme(v); });
     }
   })();
 })();

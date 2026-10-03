@@ -720,6 +720,9 @@ pub fn run() {
             commands::friend_respond,
             commands::friend_remove,
             commands::friend_block,
+            commands::account_info,
+            commands::account_change_password,
+            commands::account_change_email,
             commands::friend_mute,
         ])
         .build(tauri::generate_context!())

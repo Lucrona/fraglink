@@ -481,6 +481,57 @@ async fn friend_call<T: Send + 'static>(
     .map_err(err)?
 }
 
+/// Account calls: the server's own message on a refusal ("Your current password isn't
+/// right.") rather than "server error 403: ...".
+async fn account_call<T: Send + 'static>(
+    app: AppHandle,
+    f: impl FnOnce(&fraglink_sync::Client) -> Result<T, fraglink_sync::SyncError> + Send + 'static,
+) -> CmdResult<T> {
+    let client = crate::sync::client(&app).ok_or("Sign in first.")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        f(&client).map_err(|e| match e {
+            fraglink_sync::SyncError::Server { message, .. } if !message.is_empty() => message,
+            e => e.to_string(),
+        })
+    })
+    .await
+    .map_err(err)?
+}
+
+/// Options > Account: `{handle, email, email_verified}` from the server.
+#[tauri::command]
+pub async fn account_info(app: AppHandle) -> CmdResult<serde_json::Value> {
+    account_call(app, |c| {
+        let v = c.me_raw()?;
+        let u = &v["user"];
+        Ok(serde_json::json!({
+            "handle": u["handle"], "email": u["email"], "email_verified": u["email_verified"],
+        }))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn account_change_password(
+    app: AppHandle,
+    current: String,
+    new: String,
+) -> CmdResult<serde_json::Value> {
+    if new.chars().count() < 10 {
+        return Err("Use a new password of at least 10 characters.".into());
+    }
+    account_call(app, move |c| c.change_password(&current, &new)).await
+}
+
+#[tauri::command]
+pub async fn account_change_email(
+    app: AppHandle,
+    current: String,
+    email: String,
+) -> CmdResult<serde_json::Value> {
+    account_call(app, move |c| c.change_email(&current, email.trim())).await
+}
+
 #[tauri::command]
 pub async fn friend_add(app: AppHandle, handle: String) -> CmdResult<String> {
     let h = clean_handle(&handle)?;

@@ -28,6 +28,8 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).delete(delete_me))
+        .route("/api/v1/me/password", post(change_password))
+        .route("/api/v1/me/email", post(change_email))
         .route("/api/v1/device/start", post(device_start))
         .route("/api/v1/device/signup", post(device_signup))
         .route("/api/v1/device/login", post(device_login))
@@ -269,8 +271,14 @@ async fn me(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
     .bind(a.user.id)
     .fetch_one(&st.db)
     .await?;
+    let verified: bool = sqlx::query_scalar("SELECT email_verified FROM users WHERE id = $1")
+        .bind(a.user.id)
+        .fetch_one(&st.db)
+        .await?;
+    let mut user = json!(a.user);
+    user["email_verified"] = json!(verified);
     Ok(Json(
-        json!({ "user": a.user, "token_kind": a.kind, "linked_accounts": linked }),
+        json!({ "user": user, "token_kind": a.kind, "linked_accounts": linked }),
     ))
 }
 
@@ -293,6 +301,137 @@ async fn delete_me(
         .execute(&st.db)
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ------------------------------------------------------------------ account management
+
+/// The caller's current password, checked against the stored Argon2id hash.
+async fn check_current_password(st: &AppState, user_id: Uuid, password: &str) -> ApiResult<()> {
+    let hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&st.db)
+        .await?;
+    let pw = password.to_string();
+    let ok = tokio::task::spawn_blocking(move || auth::verify_password(&pw, &hash))
+        .await
+        .unwrap_or(false);
+    if ok {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            StatusCode::FORBIDDEN,
+            "wrong_password",
+            "Your current password isn't right.",
+        ))
+    }
+}
+
+#[derive(Deserialize)]
+struct ChangePasswordReq {
+    current_password: String,
+    new_password: String,
+}
+
+/// Change the password (needs the current one). Every other sign-in (other PCs, browser
+/// sessions) is signed out; the token making this call stays valid.
+async fn change_password(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<ChangePasswordReq>,
+) -> ApiResult<Json<Value>> {
+    check_origin(&a, &headers, &st)?;
+    st.rate_limit(format!("pwchange:{}", a.user.id), 5, 15 * MINUTE)?;
+    check_current_password(&st, a.user.id, &r.current_password).await?;
+    let n = r.new_password.chars().count();
+    if !(10..=128).contains(&n) {
+        return Err(AppError::bad_request(
+            "weak_password",
+            "Use a new password of at least 10 characters.",
+        ));
+    }
+    if r.new_password == r.current_password {
+        return Err(AppError::bad_request(
+            "same_password",
+            "The new password is the same as the current one.",
+        ));
+    }
+    let pw = r.new_password.clone();
+    let hash = tokio::task::spawn_blocking(move || auth::hash_password(&pw))
+        .await
+        .map_err(|e| anyhow::anyhow!("hash task: {e}"))??;
+    let mut tx = st.db.begin().await?;
+    sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
+        .bind(hash)
+        .bind(a.user.id)
+        .execute(&mut *tx)
+        .await?;
+    let revoked = sqlx::query(
+        "UPDATE auth_tokens SET revoked_at = now()
+         WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL",
+    )
+    .bind(a.user.id)
+    .bind(a.token_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    tx.commit().await?;
+    tracing::info!(user = %a.user.id, revoked, "password changed");
+    Ok(Json(
+        json!({ "ok": true, "signed_out_other_sessions": revoked }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct ChangeEmailReq {
+    current_password: String,
+    new_email: String,
+}
+
+/// Change the email (needs the current password). Stored unverified: there's no email
+/// provider yet to send a confirmation link.
+async fn change_email(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<ChangeEmailReq>,
+) -> ApiResult<Json<Value>> {
+    check_origin(&a, &headers, &st)?;
+    st.rate_limit(format!("emailchange:{}", a.user.id), 5, 15 * MINUTE)?;
+    check_current_password(&st, a.user.id, &r.current_password).await?;
+    let email = r.new_email.trim().to_string();
+    if email.is_empty() || auth::validate_email(&email).is_err() {
+        return Err(AppError::bad_request(
+            "invalid_email",
+            "Enter a valid email address.",
+        ));
+    }
+    if email == a.user.email {
+        return Err(AppError::bad_request(
+            "same_email",
+            "That's already your email address.",
+        ));
+    }
+    let res = sqlx::query("UPDATE users SET email = $1, email_verified = false WHERE id = $2")
+        .bind(&email)
+        .bind(a.user.id)
+        .execute(&st.db)
+        .await;
+    match res {
+        Ok(_) => {}
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+            return Err(AppError::new(
+                StatusCode::CONFLICT,
+                "taken",
+                "That email is already used by another account.",
+            ))
+        }
+        Err(e) => return Err(e.into()),
+    }
+    tracing::info!(user = %a.user.id, "email changed");
+    Ok(Json(
+        json!({ "ok": true, "email": email, "email_verified": false }),
+    ))
 }
 
 // ------------------------------------------------------------------ device pairing

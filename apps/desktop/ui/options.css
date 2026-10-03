@@ -53,3 +53,40 @@ code { font: 10px Consolas, monospace; word-break: break-all; }
 .sync .code { font: bold 20px Consolas, monospace; letter-spacing: 3px; margin: 6px 0; }
 .sync input { width: 100%; margin: 6px 0; }
 .sync .btns { display: flex; gap: 6px; margin-top: 6px; }
+/* Account: change password / email */
+.acct label.row > span:first-child { width: 98px; flex: none; }
+.acct input[type=password], .acct input[type=text] { flex: 1; min-width: 0; font: inherit; border: 1px solid #abadb3; padding: 2px 3px; }
+.acct-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.acct-foot .msg { flex: 1; min-width: 0; }
+.acct-foot button { min-width: 112px; }
+.msg.good { color: #176c1e; }
+.msg.bad { color: #b00; }
+
+/* ---- Dark 2013 look (Dark and Phoenix skins) ---- */
+body.dark { background: #1d1f24; color: #e6e9ee; }
+body.dark .op-tabs button { border-color: #000; background: linear-gradient(#3a3d44, #22252a); color: #c9ced6; }
+body.dark .op-tabs button:hover { background: linear-gradient(#474b53, #2a2d33); color: #fff; }
+body.dark .op-tabs button.on { background: #14161a; border-bottom-color: #14161a; color: #fff; }
+body.dark .op-body { background: #14161a; border-color: #000; box-shadow: inset 0 0 0 1px #2c3038; }
+body.dark fieldset { border-color: #25385e; background: rgba(19, 33, 60, .3); }
+body.dark legend { color: #9fc3ff; font-weight: bold; }
+body.dark .hint, body.dark .kv b, body.dark .detect span { color: #8d939c; }
+body.dark a { color: #5aa2f2; }
+body.dark input[type=text], body.dark input[type=number], body.dark input[type=password], body.dark select, body.dark .acct input {
+  background: #0d1424; color: #e6e9ee; border: 1px solid #000; box-shadow: inset 0 0 0 1px #25385e; }
+body.dark input[readonly] { background: #161b26; color: #aab2bf; }
+body.dark select option { background: #0d1424; }
+body.dark button { border: 1px solid #000; color: #eee; background: linear-gradient(#5b5f68, #2b2e34 50%, #191a1e 51%, #2a2c31); box-shadow: inset 0 1px 0 rgba(255,255,255,.2); }
+body.dark button:hover { background: linear-gradient(#6b7079, #33363c 50%, #202226 51%, #33353b); }
+body.dark button:disabled { color: #6d727a; background: #24272c; box-shadow: none; }
+body.dark button.def { box-shadow: inset 0 0 0 1px #4b82d6; }
+body.dark .tree, body.dark .lb { background: #0a1326; color: #e6e9ee; border-color: #000; }
+body.dark .tree .node .tw { background: #1b2233; border-color: #4a5468; color: #cfd6e0; }
+body.dark .tree .leaf.sel { background: #1f4f9e; }
+body.dark .tree .leaf small, body.dark .tree .leaf.ex { color: #7d8590; }
+body.dark .detect .bar { background: #0d1424; border-color: #000; }
+body.dark .bad, body.dark .msg.bad { color: #ff7a6e; }
+body.dark .msg.good { color: #5fd27a; }
+body.dark code { color: #cfd8e8; }
+body.dark ::-webkit-scrollbar { width: 12px; height: 12px; background: #14161a; }
+body.dark ::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #4a4e57, #2b2e34); border: 1px solid #000; border-radius: 3px; }
