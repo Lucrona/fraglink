@@ -7,9 +7,14 @@
 <link rel="stylesheet" href="options.css" />
 </head>
 <body>
+<header class="op-title" id="op-title">
+  <img class="op-logo" src="brand/v28-lockup.svg" alt="Fraglink" draggable="false" /><span class="op-name">Options</span>
+  <div class="op-winbtns"><button type="button" data-do="win-min" title="Minimise">_</button><button type="button" data-do="cancel" title="Close">×</button></div>
+</header>
+<div class="op-edges" aria-hidden="true"><i data-resize="South"></i><i data-resize="West"></i><i data-resize="East"></i><i data-resize="SouthWest"></i><i data-resize="SouthEast"></i><i data-resize="North"></i></div>
 <div class="op">
   <nav class="op-tabs" role="tablist">
-    <button data-page="general" class="on">General</button><button data-page="privacy">Privacy</button><button data-page="sounds">Sounds</button><button data-page="games">Games</button><button data-page="appearance">Appearance</button><button data-page="tracking">Tracking</button><button data-page="account">Account</button>
+    <button data-page="general" class="on">General</button><button data-page="privacy">Privacy</button><button data-page="sounds">Sounds</button><button data-page="games">Games</button><button data-page="appearance">Appearance</button><button data-page="connections">Connections</button><button data-page="account">Account</button>
   </nav>
   <main class="op-body">
     <section data-page="general">
@@ -42,16 +47,18 @@
         <label><input type="checkbox" data-key="share_game" /> Show the game I'm playing to my friends</label>
         <label><input type="checkbox" data-key="share_profile" /> Show the games I play on my profile</label>
         <label><input type="checkbox" data-key="share_fof" /> Show my game to friends of my friends</label>
+        <label><input type="checkbox" id="share-activity" /> Show my recent games and hours this week to friends <span class="hint">(Activity Report)</span></label>
+        <div id="share-msg" class="hint"></div>
       </fieldset>
       <fieldset><legend>Idle</legend>
-        <label><input type="checkbox" id="idle-on" /> Show me as Away after <input type="number" id="idle-min" min="1" max="240" value="10" class="num" /> minutes without input</label>
+        <label><input type="checkbox" id="idle-on" /> Show me as Away after <input type="number" id="idle-min" min="1" max="240" value="10" class="num" /> minutes without input <span class="hint">(later)</span></label>
       </fieldset>
       <fieldset><legend>Blocked users</legend>
         <div class="split"><select id="blocked" size="5" class="lb"></select>
           <div class="col"><button type="button" data-do="block-add">Add…</button><button type="button" data-do="block-remove">Remove</button></div></div>
         <div id="block-msg" class="hint">Blocked users can't send you requests or see your status.</div>
       </fieldset>
-      <p class="hint">Fraglink reads the list of running programs, launcher install lists and how long since you last used the mouse or keyboard. It never reads game memory or what you type. Nothing leaves this PC unless you sign in (Account tab).</p>
+      <p class="hint">Fraglink reads the list of running programs and the launchers' install lists. It never reads game memory or what you type. Nothing leaves this PC unless you sign in (Account tab).</p>
     </section>
 
     <section data-page="sounds" hidden>
@@ -67,17 +74,23 @@
 
     <section data-page="games" hidden>
       <div class="detect"><div class="bar"><b id="det-bar"></b></div><span id="det-msg">Detecting games…</span><button type="button" data-do="detect">Detect Games</button></div>
-      <div class="tree" id="tree" tabindex="0"></div>
-      <fieldset id="gd" class="gd"><legend id="gd-name">Select a game</legend>
-        <label><input type="radio" name="gd-mode" id="gd-auto" value="auto" /> Automatically Detect</label>
-        <label><input type="radio" name="gd-mode" id="gd-manual" value="manual" /> Manual Detect</label>
-        <label class="row">Game path <input type="text" id="gd-path" maxlength="500" /><button type="button" data-do="browse">Browse…</button></label>
-        <label class="row">Detect path <input type="text" id="gd-detect" readonly /></label>
-        <label class="row">Extra launch arguments <input type="text" id="gd-args" maxlength="500" /></label>
-        <label><input type="checkbox" id="gd-ex" /> Don't track this game</label>
-      </fieldset>
-      <div class="line"><button type="button" data-do="add-manual">Add game manually…</button><span class="hint">A running program you want tracked as a game.</span></div>
+      <div class="games-split">
+        <div class="tree" id="tree" tabindex="0"></div>
+        <div class="gd-col">
+          <fieldset id="gd" class="gd"><legend id="gd-name">Select Game</legend>
+            <div class="gd-head"><i class="gd-icon" id="gd-icon"></i><div><b id="gd-title">Select a game on the left</b><small id="gd-src"></small></div></div>
+            <label><input type="radio" name="gd-mode" id="gd-auto" value="auto" /> Automatically Detect</label>
+            <label><input type="radio" name="gd-mode" id="gd-manual" value="manual" /> Manual Detect</label>
+            <label class="stack">Game path<span class="pathrow"><input type="text" id="gd-path" maxlength="500" /><button type="button" data-do="browse">Browse…</button></span></label>
+            <label class="stack">Detect path <input type="text" id="gd-detect" readonly /></label>
+            <label class="stack">Extra launch arguments <input type="text" id="gd-args" maxlength="500" /></label>
+            <label><input type="checkbox" id="gd-ex" /> Don't track this game</label>
+          </fieldset>
+          <div class="line"><button type="button" data-do="add-manual">Add game manually…</button></div>
+        </div>
+      </div>
       <fieldset id="manual" hidden><legend>Add game manually</legend>
+        <span class="hint">A running program you want tracked as a game.</span>
         <select id="cands" size="4" class="lb wide"></select>
         <label class="row">Game name <input type="text" id="man-name" maxlength="80" /><button type="button" data-do="man-add">Add</button><button type="button" data-do="man-refresh">Refresh</button></label>
       </fieldset>
@@ -94,20 +107,28 @@
       <fieldset id="scale-box"><legend>Classic Silver size</legend>
         <label class="row">Scale <select data-key="zoom"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
       </fieldset>
+      <fieldset><legend>Text size</legend>
+        <label class="row">Text size <select data-key="text_size"><option value="normal">Normal</option><option value="large">Large</option><option value="larger">Larger</option></select></label>
+        <span class="hint">Scales the whole main window (Dark skin).</span>
+      </fieldset>
       <fieldset><legend>Window</legend>
         <label><input type="checkbox" data-key="always_on_top" /> Keep the main window on top</label>
       </fieldset>
     </section>
 
-    <section data-page="tracking" hidden>
-      <fieldset><legend>Sessions</legend>
-        <label class="row">Stop counting after <select data-key="idle_threshold_min"><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option><option>60</option></select> minutes without input</label>
+    <section data-page="connections" hidden>
+      <fieldset><legend>Connections</legend>
+        <div class="conn"><i class="conn-ic" style="--c:#1b2838">S</i><div class="conn-tx"><b>Steam</b><small>Import your Steam hours and show Steam games</small></div><button type="button" disabled title="Coming soon">Connect</button><span class="soon">coming soon</span></div>
+        <div class="conn"><i class="conn-ic" style="--c:#148eff">B</i><div class="conn-tx"><b>Battle.net</b><small>World of Warcraft characters and /played time</small></div><button type="button" disabled title="Coming soon">Connect</button><span class="soon">coming soon</span></div>
+        <div class="conn"><i class="conn-ic" style="--c:#1db954">&#9835;</i><div class="conn-tx"><b>Spotify</b><small>Music Status: show what you are listening to</small></div><button type="button" disabled title="Coming soon">Connect</button><span class="soon">coming soon</span></div>
+        <div class="conn"><i class="conn-ic" style="--c:#5865f2">D</i><div class="conn-tx"><b>Discord</b><small>Open a Discord DM from a friend's chat button</small></div><button type="button" disabled title="Coming soon">Connect</button><span class="soon">coming soon</span></div>
+      </fieldset>
+      <fieldset><legend>Tracking</legend>
         <label class="row">Ignore sessions shorter than <select data-key="min_session_min"><option>0</option><option>1</option><option>2</option><option>5</option></select> minutes</label>
         <label><input type="checkbox" data-key="paused" /> Pause tracking</label>
-      </fieldset>
-      <fieldset><legend>Your data</legend>
         <div class="line"><button type="button" data-do="export">Export my data…</button><button type="button" data-do="open-data">Open data folder</button></div>
         <div id="export-msg" class="hint"></div>
+        <span class="hint">Hours count all the time a game is running, like Steam.</span>
       </fieldset>
     </section>
 

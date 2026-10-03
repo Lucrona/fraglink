@@ -5,6 +5,48 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.9] - 2026-10-03
+
+Test update (builds report `0.2.0-9`) with the feedback from testing dev.8.
+
+### Changed
+- **Slogan** is now "PLAY. CONNECT. TRACK." (banner, About box, installer sidebar, README, social preview).
+- **Title bar:** bigger embossed grey Fraglink logo (like the classic client's), chunkier minimise
+  and close buttons, and a slightly taller bar.
+- **Update ready** is now a clear green "Update ready - Restart" pill in the title bar (glows briefly
+  when it appears). The tray dot and the tray "Restart to Update" item stay.
+- **Tray:** the tooltip is just "Fraglink"; "Open Fraglink" is the first menu item; Launch entries show
+  the game icons. The tray Status submenu uses the same items as the main window.
+- **Status menu** and the **friend right-click menu** are real Windows menus. Status: Online, Away,
+  Invisible, Looking to Play, Music Status (disabled until Spotify), then Set Custom Status... and
+  Reset Status (recent custom statuses sit in a submenu). Group headings' right-click menu too.
+- **Group headings:** clicking one shows a grey selection bar and no longer folds the group or swaps
+  the info panel to a help text. Fold with the arrow.
+- **Info panel:** default content is an **Activity Report** (friends' recent games: "X started
+  playing Y", "X played Y for 2h 14m", with View More) and then **N Installed Games** with Detect
+  Games and right-pinned Launch links. Drag the panel's outer edge to make it wider (180-560 px,
+  remembered); game names wrap to two lines when narrow. Selecting a friend shows their game,
+  "Playing for 2h 14m" and their hours this week.
+- **Bottom bar:** the duplicate buttons under the info panel are gone; the main bar is Add Friend,
+  Profile, Games, and Options on the right.
+- **Dialogs** (About, notices, Games) can be dragged by their title bar.
+- **Options window** has the same custom dark title bar as the main window (drag, minimise, close).
+  Games tab uses the classic layout: the game list with icons (Installed / Not installed) on the left
+  and the Select Game settings on the right.
+- **Tracking tab is now Connections:** Steam, Battle.net, Spotify and Discord rows (Connect buttons
+  disabled, "coming soon") and a small Tracking section (ignore short sessions, Pause tracking,
+  Export my data, Open data folder).
+- **No idle cutoff:** hours count all the time a game runs, like Steam. The "Stop counting after N
+  minutes without input" option is gone and Fraglink no longer reads keyboard/mouse idle time.
+
+### Added
+- **Text size** in Options > Appearance (Normal, Large, Larger) scales the whole main window.
+- **Privacy:** "Show my recent games and hours this week to friends" (on by default; friends only).
+- **Server:** `GET /api/v1/friends/activity` (friends' live games + sessions from the last 7 days),
+  `GET /api/v1/friends/{handle}/summary` (presence, hours this week / last 7 days, top game; friends
+  only) and `POST /api/v1/me/privacy` (`share_activity`, migration 0006). `GET /api/v1/me` reports
+  `share_activity`.
+
 ## [0.2.0-dev.8] - 2026-09-29
 
 Small test update (builds report `0.2.0-8`), mainly to try the new quiet auto-update from dev.7.

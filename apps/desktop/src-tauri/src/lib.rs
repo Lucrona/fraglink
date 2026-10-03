@@ -19,7 +19,7 @@ use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, IconMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -165,25 +165,33 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
     update_tray_tooltip(app);
 }
 
+/// The tray tooltip is just "Fraglink" (0.2.0-dev.9: the playing / paused detail
+/// lives in the main window; a simulation build is still labelled).
 pub fn update_tray_tooltip(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let (np, paused) = {
-        let e = state.engine.lock().unwrap();
-        (e.tracker.now_playing(), e.tracker.is_paused())
-    };
-    let sim = if state.sim { " [simulation]" } else { "" };
-    let tip = match (np, paused) {
-        (_, true) => format!("Fraglink: tracking paused{sim}"),
-        (Some(n), _) => format!(
-            "Fraglink: playing {}{}{sim}",
-            n.name,
-            if n.idle { " (idle)" } else { "" }
-        ),
-        (None, _) => format!("Fraglink: watching for games{sim}"),
+    let tip = if app.state::<AppState>().sim {
+        "Fraglink [simulation]"
+    } else {
+        "Fraglink"
     };
     if let Some(tray) = app.tray_by_id("main") {
-        let _ = tray.set_tooltip(Some(&tip));
+        let _ = tray.set_tooltip(Some(tip));
     }
+}
+
+/// A 16 px menu icon from a cached game icon (`data:image/png;base64,...`).
+pub fn menu_icon(data_url: &str) -> Option<tauri::image::Image<'static>> {
+    use base64::Engine as _;
+    let b64 = data_url.strip_prefix("data:image/png;base64,")?;
+    let png = base64::engine::general_purpose::STANDARD.decode(b64).ok()?;
+    let img = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
+        .ok()?
+        .into_rgba8();
+    let img = if img.width() == 16 && img.height() == 16 {
+        img
+    } else {
+        image::imageops::resize(&img, 16, 16, image::imageops::FilterType::Triangle)
+    };
+    Some(tauri::image::Image::new_owned(img.into_raw(), 16, 16))
 }
 
 fn get_setting(app: &AppHandle, k: &str) -> Option<String> {
@@ -202,6 +210,9 @@ fn put_setting(app: &AppHandle, k: &str, v: &str) {
     }
     let _ = app.emit("fraglink://settings", (k, v));
 }
+
+/// "Looking to Play" is a preset custom status (shown with the Online status).
+pub const LOOKING: &str = "Looking to Play";
 
 const TRAY_SKINS: &[(&str, &str)] = &[("dark", "Dark"), ("classic", "Classic Silver")];
 
@@ -228,12 +239,17 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             None::<&str>,
         )?));
     }
+    // Game icons next to the entries (cached icons only: never blocks on the network).
+    let ids: Vec<String> = games.iter().take(40).map(|g| g.1.clone()).collect();
+    let icons = icons::resolve(app, &ids, false);
     for (name, id) in games.iter().take(40) {
-        launch.push(Box::new(MenuItem::with_id(
+        let icon = icons.get(id).cloned().flatten().and_then(|u| menu_icon(&u));
+        launch.push(Box::new(IconMenuItem::with_id(
             app,
             format!("launch:{id}"),
             name,
             true,
+            icon,
             None::<&str>,
         )?));
     }
@@ -276,11 +292,12 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .and_then(|v| serde_json::from_str(&v).ok())
         .unwrap_or_default();
     let online = status == "online";
+    let looking = online && custom_on && custom == LOOKING;
     let mut st: Vec<Item> = vec![
         Box::new(CheckMenuItem::with_id(
             app,
             "st:reset",
-            "Reset Status",
+            "Online",
             true,
             online && !custom_on,
             None::<&str>,
@@ -288,7 +305,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         Box::new(CheckMenuItem::with_id(
             app,
             "st:away",
-            "Away From Keyboard",
+            "Away",
             true,
             status == "away",
             None::<&str>,
@@ -301,16 +318,32 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             status == "invisible",
             None::<&str>,
         )?),
+        Box::new(CheckMenuItem::with_id(
+            app,
+            "st:looking",
+            LOOKING,
+            true,
+            looking,
+            None::<&str>,
+        )?),
+        Box::new(MenuItem::with_id(
+            app,
+            "st:music",
+            "Music Status (coming soon)",
+            false,
+            None::<&str>,
+        )?),
     ];
+    let hist: Vec<&String> = hist.iter().filter(|h| h.as_str() != LOOKING).collect();
     if !hist.is_empty() {
         st.push(Box::new(PredefinedMenuItem::separator(app)?));
     }
     for (i, h) in hist.iter().take(5).enumerate() {
-        let on = online && custom_on && *h == custom;
+        let on = online && custom_on && **h == custom;
         st.push(Box::new(CheckMenuItem::with_id(
             app,
             format!("st:h:{i}"),
-            h,
+            *h,
             true,
             on,
             None::<&str>,
@@ -320,15 +353,21 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let sep = PredefinedMenuItem::separator(app)?;
     let logoff = MenuItem::with_id(app, "logoff", "Log Off...", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open Fraglink", true, None::<&str>)?;
+    let sep0 = PredefinedMenuItem::separator(app)?;
     if updater::ready_version(app).is_some() {
         let upd = MenuItem::with_id(app, "update", "Restart to Update", true, None::<&str>)?;
-        let sep0 = PredefinedMenuItem::separator(app)?;
         return Menu::with_items(
             app,
-            &[&upd, &sep0, &launch, &skin, &status, &sep, &logoff, &exit],
+            &[
+                &open, &upd, &sep0, &launch, &skin, &status, &sep, &logoff, &exit,
+            ],
         );
     }
-    Menu::with_items(app, &[&launch, &skin, &status, &sep, &logoff, &exit])
+    Menu::with_items(
+        app,
+        &[&open, &sep0, &launch, &skin, &status, &sep, &logoff, &exit],
+    )
 }
 
 /// Rebuild the tray menu (games, skin or statuses changed).
@@ -471,6 +510,17 @@ fn on_menu(app: &AppHandle, id: &str) {
     let app2 = app.clone();
     match id {
         "exit" => quit(app),
+        "open" => windows::show_main(app),
+        "st:looking" => {
+            put_setting(app, "custom_status", LOOKING);
+            put_setting(app, "custom_on", "1");
+            set_status(app, "online");
+            refresh_tray(app);
+        }
+        // native popup menus from the main window (friend right-click, status)
+        s if s.starts_with("pm:") => {
+            let _ = app.emit("fraglink://menu-pick", &s[3..]);
+        }
         "update" => updater::install_from_tray(app),
         "logoff" => {
             windows::show_main(app);
@@ -701,6 +751,11 @@ pub fn run() {
             commands::toast_payload,
             commands::toast_clicked,
             commands::set_status,
+            commands::set_side_width,
+            commands::popup_menu,
+            commands::friends_activity,
+            commands::friend_summary,
+            commands::set_share_activity,
             commands::sync_login,
             commands::sync_signup,
             commands::friend_search,

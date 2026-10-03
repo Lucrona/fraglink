@@ -58,6 +58,12 @@
       updateAvailable: () => inv('update_available'),
       installUpdate: () => inv('install_update'),
       joinGame: (address) => inv('join_game', { address }),
+      // 0.2.0-dev.9
+      popup: (items, x, y) => inv('popup_menu', { items, x: x == null ? null : Number(x), y: y == null ? null : Number(y) }),
+      sideWidth: (width) => inv('set_side_width', { width: Number(width) }),
+      friendsActivity: () => inv('friends_activity'),
+      friendSummary: (handle) => inv('friend_summary', { handle }),
+      setShareActivity: (on) => inv('set_share_activity', { on: !!on }),
     };
     return;
   }
@@ -82,7 +88,7 @@
     { id: 2, ts: now() - 3 * 86400, kind: 'tagged', game_id: 'manual:myindie', game_name: 'My Indie', payload: { exe_name: 'MyIndie.exe' } },
     { id: 1, ts: now() - 12 * 86400, kind: 'stopped', game_id: 'cs2', game_name: 'Counter-Strike 2', payload: { active_seconds: 7300 } },
   ];
-  const settings = { skin: localStorage.getItem('fl-skin') || 'dark', friend_toasts: '1', friend_toasts_dnd: '1', zoom: '2', toasts: '1', idle_threshold_min: '15', min_session_min: '2', status: 'online' };
+  const settings = { skin: localStorage.getItem('fl-skin') || 'dark', friend_toasts: '1', friend_toasts_dnd: '1', zoom: '2', toasts: '1', min_session_min: '2', status: 'online' };
   let paused = false;
   const ok = v => Promise.resolve(v);
   window.FL = {
@@ -104,7 +110,7 @@
     tag: (exe, name) => { games.push({ id: 'manual:' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, source: 'manual', excluded: false, total_seconds: 0, sessions: 0 }); return ok('manual:x'); },
     untag: () => ok(),
     exclude: (id, ex) => { const g = games.find(x => x.id === id); if (g) g.excluded = ex; return ok(); },
-    settings: () => ok({ settings, autostart: false, sim: false, data_dir: '(browser preview: no data is stored)', log_dir: '', version: 'preview', signatures: 170, signatures_version: 'preview', steam_apps: 0, idle_threshold_min: 15, min_session_min: 2 }),
+    settings: () => ok({ settings, autostart: false, sim: false, data_dir: '(browser preview: no data is stored)', log_dir: '', version: 'preview', signatures: 170, signatures_version: 'preview', steam_apps: 0, min_session_min: 2 }),
     set: (k, v) => { settings[k] = String(v); if (k === 'paused') paused = v === '1' || v === true; return ok(); },
     autostart: (e) => ok(e),
     exportData: () => ok(['(preview) fraglink-export-20260926-200000.zip']),
@@ -125,7 +131,7 @@
     friendAdd: (h) => { mockFriends.outgoing.push({ handle: h, display_name: h, created_at: new Date().toISOString() }); return ok('pending'); },
     friendRespond: (h, a) => { const r = mockFriends.incoming.find(x => x.handle === h); mockFriends.incoming = mockFriends.incoming.filter(x => x !== r); if (a && r) mockFriends.friends.push({ handle: h, display_name: r.display_name, since: new Date().toISOString(), presence: { status: 'online' } }); return ok(); },
     friendRemove: (h) => { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.outgoing = mockFriends.outgoing.filter(f => f.handle !== h); return ok(); },
-    accountInfo: () => ok({ handle: 'Lucrona', email: 'lucrona@example.com', email_verified: false }),
+    accountInfo: () => ok({ handle: 'Lucrona', email: 'lucrona@example.com', email_verified: false, share_activity: settings.share_activity_mock !== '0' }),
     changePassword: (c, n) => c === 'wrong' ? Promise.reject("Your current password isn't right.") : ok({ ok: true, signed_out_other_sessions: 1 }),
     changeEmail: (c, e) => c === 'wrong' ? Promise.reject("Your current password isn't right.") : ok({ ok: true, email: e, email_verified: false }),
     friendBlock: (h, b) => { if (b) { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.blocked.push(h); } else mockFriends.blocked = mockFriends.blocked.filter(x => x !== h); return ok(); },
@@ -150,6 +156,17 @@
     pickExe: () => ok('C:\\Games\\MyIndie\\MyIndie.exe'),
     openWebsite: () => ok(),
     joinGame: () => ok(),
+    popup: null, // the page draws its own menu in the preview
+    sideWidth: () => ok(),
+    // sample data (browser preview only)
+    friendsActivity: () => ok({ days: 7, items: [
+      { kind: 'playing', handle: 'curmudgeon', display_name: 'curmudgeon', game_id: 'cs16', game_name: 'Counter-Strike', at: iso(52 * 60) },
+      { kind: 'played', handle: 'sharpe_', display_name: 'sharpe_', game_id: 'coh', game_name: 'City of Heroes', at: iso(95 * 60), duration_s: 2 * 3600 + 14 * 60 },
+      { kind: 'played', handle: 'Krakatoa', display_name: 'Krakatoa', game_id: 'wow', game_name: 'World of Warcraft', at: iso(5 * 3600), duration_s: 3 * 3600 + 40 * 60 },
+      { kind: 'played', handle: 'nyx0', display_name: 'nyx0', game_id: 'hl2', game_name: 'Half-Life 2', at: iso(26 * 3600), duration_s: 48 * 60 },
+    ] }),
+    friendSummary: (h) => ok({ handle: h, shares_activity: true, week_seconds: (h.length * 7919 % 20 + 3) * 3600 + 1260, last_7d_seconds: (h.length * 7919 % 20 + 5) * 3600, top_game_7d: null }),
+    setShareActivity: (on) => { settings.share_activity_mock = on ? '1' : '0'; return ok({ share_activity: on }); },
   };
   function placeholderIcon(id) {
     const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');

@@ -30,6 +30,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/me", get(me).delete(delete_me))
         .route("/api/v1/me/password", post(change_password))
         .route("/api/v1/me/email", post(change_email))
+        .route("/api/v1/me/privacy", post(set_privacy))
         .route("/api/v1/device/start", post(device_start))
         .route("/api/v1/device/signup", post(device_signup))
         .route("/api/v1/device/login", post(device_login))
@@ -51,7 +52,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/friends", get(friends_list))
         .route("/api/v1/friends/request", post(friend_request))
         .route("/api/v1/friends/respond", post(friend_respond))
+        .route("/api/v1/friends/activity", get(friends_activity))
         .route("/api/v1/friends/{handle}", delete(friend_remove))
+        .route("/api/v1/friends/{handle}/summary", get(friend_summary))
         .route("/api/v1/blocks", post(block_user))
         .route("/api/v1/blocks/{handle}", delete(unblock_user))
         .route("/api/v1/ws", get(crate::presence::ws_handler))
@@ -271,12 +274,14 @@ async fn me(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
     .bind(a.user.id)
     .fetch_one(&st.db)
     .await?;
-    let verified: bool = sqlx::query_scalar("SELECT email_verified FROM users WHERE id = $1")
-        .bind(a.user.id)
-        .fetch_one(&st.db)
-        .await?;
+    let (verified, share): (bool, bool) =
+        sqlx::query_as("SELECT email_verified, share_activity FROM users WHERE id = $1")
+            .bind(a.user.id)
+            .fetch_one(&st.db)
+            .await?;
     let mut user = json!(a.user);
     user["email_verified"] = json!(verified);
+    user["share_activity"] = json!(share);
     Ok(Json(
         json!({ "user": user, "token_kind": a.kind, "linked_accounts": linked }),
     ))
@@ -1323,6 +1328,47 @@ async fn friend_respond(
     check_origin(&a, &headers, &st)?;
     friends::respond(&st, &person(&a), &r.handle, r.accept).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn friends_activity(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
+    st.rate_limit(format!("activity:{}", a.user.id), 120, 10 * MINUTE)?;
+    let items = crate::activity::recent(&st, a.user.id).await?;
+    Ok(Json(
+        json!({ "items": items, "days": crate::activity::ACTIVITY_DAYS }),
+    ))
+}
+
+async fn friend_summary(
+    State(st): State<AppState>,
+    a: AuthUser,
+    Path(handle): Path<String>,
+) -> ApiResult<Json<crate::activity::FriendSummary>> {
+    st.rate_limit(format!("summary:{}", a.user.id), 240, 10 * MINUTE)?;
+    Ok(Json(
+        crate::activity::summary(&st, a.user.id, &handle).await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct PrivacyReq {
+    share_activity: bool,
+}
+
+/// Whether friends can see your recent play history and weekly hours.
+async fn set_privacy(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<PrivacyReq>,
+) -> ApiResult<Json<Value>> {
+    check_origin(&a, &headers, &st)?;
+    st.rate_limit(format!("privacy:{}", a.user.id), 30, 15 * MINUTE)?;
+    sqlx::query("UPDATE users SET share_activity = $2 WHERE id = $1")
+        .bind(a.user.id)
+        .bind(r.share_activity)
+        .execute(&st.db)
+        .await?;
+    Ok(Json(json!({ "share_activity": r.share_activity })))
 }
 
 async fn friend_remove(

@@ -85,9 +85,9 @@ impl Engine {
 
     /// Re-read tracker-related settings from the store.
     pub fn apply_settings(&mut self) -> Result<()> {
-        let idle = self.setting_i64(keys::IDLE_THRESHOLD_MIN, 15).clamp(1, 240);
         let min = self.setting_i64(keys::MIN_SESSION_MIN, 2).clamp(0, 60);
-        self.tracker.cfg.idle_threshold_s = idle * 60;
+        // Since 0.2.0-dev.9 there's no idle cutoff: hours count all the time a game runs
+        // (like Steam). The old idle_threshold_min setting is ignored.
         self.tracker.cfg.min_session_s = min * 60;
         let paused = self.tracker.store.get_setting(keys::PAUSED)?.as_deref() == Some("1");
         if paused != self.tracker.is_paused() {
@@ -146,7 +146,8 @@ impl Engine {
             self.refresh_steam(now);
         }
         let procs = self.env.processes();
-        let idle = self.env.idle_seconds();
+        // Idle time counts the same as active time, so input idleness is never read.
+        let idle = 0;
         let appid = self.env.steam_running_appid();
         let dets = self.detector.detect(&procs, appid);
         for d in &dets {
@@ -326,10 +327,14 @@ mod tests {
             .collect();
         assert_eq!(started, vec!["cs2", "dota2", "manual:my-indie", "wow"]);
         let g = e.glance(t0 + 2530).unwrap();
-        // WoW ran 25 min with no input at all: the whole idle stretch is trimmed,
-        // leaving 0 s, so the session is dropped.
-        assert!(g.top.iter().all(|t| t.game_id != "wow"));
-        assert!(events.iter().any(|ev| matches!(ev, TrackerEvent::Stopped { game_id, kept: false, .. } if game_id == "wow")));
+        // WoW ran 25 min with no input at all: idle time counts like Steam, so all of it is kept.
+        assert!(g
+            .top
+            .iter()
+            .any(|t| t.game_id == "wow" && t.total_seconds >= 1490));
+        assert!(events.iter().any(
+            |ev| matches!(ev, TrackerEvent::Stopped { game_id, kept: true, .. } if game_id == "wow")
+        ));
         assert!(g
             .top
             .iter()

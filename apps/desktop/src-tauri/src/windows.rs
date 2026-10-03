@@ -17,6 +17,46 @@ pub const DARK_MIN_W: f64 = 345.0;
 pub const DARK_MIN_H: f64 = 555.0;
 /// The docked info panel adds this much width while it is open.
 pub const DARK_SIDE_W: f64 = 168.0; // the 180px panel takes over the 12px nub strip
+/// The info panel can be dragged wider (0.2.0-dev.9); its width is remembered.
+pub const SIDE_PANEL_MIN: f64 = 180.0;
+pub const SIDE_PANEL_MAX: f64 = 560.0;
+
+/// Options > Appearance > Text size: the dark window's content is zoomed by this.
+pub fn text_zoom(app: &AppHandle) -> f64 {
+    let state = app.state::<AppState>();
+    let e = state.engine.lock().unwrap();
+    match e
+        .tracker
+        .store
+        .get_setting("text_size")
+        .ok()
+        .flatten()
+        .as_deref()
+    {
+        Some("large") => 1.15,
+        Some("larger") => 1.3,
+        _ => 1.0,
+    }
+}
+
+/// Extra window width for the open info panel (panel width minus the nub strip),
+/// in window pixels (so scaled by the text size).
+pub fn side_extra(app: &AppHandle) -> f64 {
+    let tz = text_zoom(app);
+    let state = app.state::<AppState>();
+    let e = state.engine.lock().unwrap();
+    let w = e
+        .tracker
+        .store
+        .get_setting("side_w")
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|v| v.is_finite())
+        .unwrap_or(SIDE_PANEL_MIN)
+        .clamp(SIDE_PANEL_MIN, SIDE_PANEL_MAX);
+    (DARK_SIDE_W + (w - SIDE_PANEL_MIN)) * tz
+}
 const TOAST_W: f64 = 226.0;
 const TOAST_H: f64 = 78.0;
 
@@ -93,8 +133,9 @@ fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     *app.state::<AppState>().side_open.lock().unwrap() = false;
     let w = if is_dark(app) {
         let (bw, bh) = dark_base(app);
-        b.inner_size(bw, bh)
-            .min_inner_size(DARK_MIN_W, DARK_MIN_H)
+        let tz = text_zoom(app);
+        b.inner_size(bw.max(DARK_MIN_W * tz), bh.max(DARK_MIN_H * tz))
+            .min_inner_size(DARK_MIN_W * tz, DARK_MIN_H * tz)
             .resizable(true)
             .build()?
     } else {
@@ -190,12 +231,14 @@ pub fn resize_main(app: &AppHandle, z: f64, side_open: bool) {
     };
     *app.state::<AppState>().side_open.lock().unwrap() = side_open;
     if is_dark(app) {
-        let side = if side_open { DARK_SIDE_W } else { 0.0 };
+        let side = if side_open { side_extra(app) } else { 0.0 };
+        let tz = text_zoom(app);
         let (bw, bh) = dark_base(app);
+        let (bw, bh) = (bw.max(DARK_MIN_W * tz), bh.max(DARK_MIN_H * tz));
         let _ = w.set_resizable(true);
         let _ = w.set_min_size(Some(Size::Logical(LogicalSize::new(
-            DARK_MIN_W + side,
-            DARK_MIN_H,
+            DARK_MIN_W * tz + side,
+            DARK_MIN_H * tz,
         ))));
         let _ = w.set_size(LogicalSize::new(bw + side, bh));
     } else {
@@ -206,8 +249,8 @@ pub fn resize_main(app: &AppHandle, z: f64, side_open: bool) {
     }
 }
 
-/// Open (or focus) the Options window: its own resizable window with native
-/// decorations, like a normal settings dialog.
+/// Open (or focus) the Options window: its own resizable window with the same
+/// custom dark title bar as the main window (0.2.0-dev.9; drawn by options.html).
 pub fn show_options(app: &AppHandle, page: Option<String>) {
     let page = page.filter(|p| p.len() < 24 && p.chars().all(|c| c.is_ascii_lowercase()));
     if let Some(w) = app.get_webview_window("options") {
@@ -227,8 +270,9 @@ pub fn show_options(app: &AppHandle, page: Option<String>) {
         }
         let r = WebviewWindowBuilder::new(app, "options", WebviewUrl::App(url.into()))
             .title("Fraglink Options")
-            .inner_size(470.0, 560.0)
-            .min_inner_size(430.0, 480.0)
+            .decorations(false)
+            .inner_size(600.0, 580.0)
+            .min_inner_size(520.0, 480.0)
             .resizable(true)
             .maximizable(true)
             .center()
@@ -268,12 +312,9 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
             // ignore minimised (0x0) and chassis-skin sizes
             if w >= DARK_MIN_W - 1.0 && h >= DARK_MIN_H - 1.0 && is_dark(app) {
+                let open = *app.state::<AppState>().side_open.lock().unwrap();
+                let side = if open { side_extra(app) } else { 0.0 };
                 let st = app.state::<AppState>();
-                let side = if *st.side_open.lock().unwrap() {
-                    DARK_SIDE_W
-                } else {
-                    0.0
-                };
                 *st.main_size.lock().unwrap() = Some(((w - side).max(DARK_MIN_W), h));
             }
         }

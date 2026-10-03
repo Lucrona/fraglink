@@ -24,15 +24,15 @@ Last updated: 26 September 2026 · Operator: **TBD** (who runs the public server
 - The list of running programs (name, full path, process id), which it compares against a list of known games.
 - Steam's current game id and library files, Epic Games install manifests and GOG Galaxy's install
   list. It uses these only to recognise games you installed through them.
-- How long it's been since you last touched the keyboard or mouse. That's one number from Windows.
-  It never records which keys you press or where you click. Idle time isn't counted as playtime.
+- Nothing about your keyboard or mouse. Since version 0.2.0-dev.9 playtime counts all the time a
+  game is running, like Steam, so the app no longer reads even your idle time.
 
 **What it never does:** read or change game memory, inject code into games, hook input, take
 screenshots, read chat or window contents, or log keystrokes. That's also why it's safe to use
 alongside anti-cheat software.
 
 **What it stores on your PC** (a SQLite file in `%APPDATA%\gg.fraglink.desktop\`): games it has
-seen, play sessions (start, end, active time, idle time removed), daily totals, games you tagged or
+seen, play sessions (start, end, active time), daily totals, games you tagged or
 excluded, a local activity list and your settings. If you sign in, it also stores your username,
 the server address and a sign-in token that Windows DPAPI encrypts.
 
@@ -47,8 +47,9 @@ Signing in is optional. You start it in **Options → Sync** and approve a pairi
 
 | Data | Why |
 |---|---|
-| Finished game sessions: a random session id, the game's id and name, its Steam app id if known, start and end time, active seconds, idle seconds removed, app version | So your hours work across PCs and appear on your profile and stats |
+| Finished game sessions: a random session id, the game's id and name, its Steam app id if known, start and end time, active seconds, an idle field that is always 0 since dev.9, app version | So your hours work across PCs and appear on your profile and stats |
 | While the app is running: your status (online, away or invisible) and the game you're playing right now (id, name, start time), plus a keep-alive message every minute | So your friends can see you're online and what you're playing |
+| Your recently played games (last 7 days) and hours this week, worked out from the sessions above | Shown only to your friends in their Activity Report and friend details. Turn it off in **Options → Privacy** |
 
 **Never uploaded:** program names or paths, your list of running programs, idle timestamps,
 anything about non-game apps, or sessions for games you excluded.

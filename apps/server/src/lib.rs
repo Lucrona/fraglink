@@ -4,6 +4,7 @@
 // sqlx row tuples are long but clearer inline than named aliases.
 #![allow(clippy::type_complexity)]
 
+pub mod activity;
 pub mod api;
 pub mod auth;
 pub mod config;

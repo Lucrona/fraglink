@@ -55,7 +55,7 @@ pub fn export_json(store: &Store, now: i64) -> Result<serde_json::Value> {
         "app": "Fraglink",
         "app_version": env!("CARGO_PKG_VERSION"),
         "generated_at": iso_utc(now),
-        "notes": "All times UTC (RFC 3339). active_seconds excludes idle time. tier 'tracked' = logged by Fraglink on this PC.",
+        "notes": "All times UTC (RFC 3339). active_seconds is the time the game ran (sessions before 0.2.0-dev.9 may have idle time trimmed). tier 'tracked' = logged by Fraglink on this PC.",
         "games": store.list_games()?,
         "sessions": sessions,
         "session_days": store.all_session_days()?,

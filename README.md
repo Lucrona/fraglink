@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
-<p align="center">A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
-<sub>Early development · current pre-release <b>0.2.0-dev.6</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
+<p align="center"><b>PLAY. CONNECT. TRACK.</b><br>A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
+<sub>Early development · current pre-release <b>0.2.0-dev.9</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 
@@ -14,21 +14,23 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 **How it fits with Discord:** Fraglink doesn't do chat, voice or overlays. Discord already does that well. Fraglink adds the part Discord doesn't have: your hours across every launcher and a "who's playing what" list. Discord sign-in and "Message on Discord" are on the roadmap.
 
 <p align="center">
-<img src="docs/images/client-friends.png" alt="Main window: friends list" width="300">
+<img src="docs/images/client-main.png" alt="Main window with the side panel: Activity Report and installed games, update notice in the title bar" width="400">
 &nbsp;
-<img src="docs/images/client-info-panel.png" alt="Main window with the info panel open on a friend" width="446">
-<br><sub>The main window with the friends list, and with the info panel open on a friend. Browser preview of the dev.6 UI with sample data.</sub>
+<img src="docs/images/client-friend.png" alt="Main window with a friend selected: playing time and hours this week" width="400">
+<br><sub>The main window with the side panel (Activity Report and installed games, green "Update ready" notice in the title bar), and with a friend selected. Browser preview of the dev.9 UI with sample data.</sub>
 </p>
 
-## What works today (0.2.0-dev.8)
+## What works today (0.2.0-dev.9)
 
 - **Game detection on every launcher:** installed Steam, Epic, GOG, Battle.net, EA app, Ubisoft Connect and Xbox games, 170 curated signatures, and "This is a game…" for anything else. Read-only: no injection, no memory reading.
-- **Honest hours:** idle time is trimmed, very short sessions are dropped, and sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.
-- **Accounts in the client:** log in with username (or email) and password, or **Create Account** right in the main window. Browser pairing is still there as an option.
-- **Friends:** search users and send requests, accept or decline, remove or block. Live status (Online / Away / Invisible) and the game each friend is playing. Friend tooltips, right-click menu, sign-on toasts.
-- **Info panel:** your installed games with **Launch** links, or details of the friend you click.
-- **Classic tray menu:** Launch (installed games), Skin, Status, Log Off, Exit.
-- **Signed auto-update:** checks at startup and every 6 hours. Updates are signature-checked before they install.
+- **Honest hours:** hours count all the time a game is running, like Steam (no idle trimming since dev.9). Very short sessions are dropped and sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.
+- **Accounts in the client:** log in with username (or email) and password, or **Create Account** right in the main window. Change your email, password or display name, or delete your account, from Options › Account.
+- **Friends:** search users and send requests, accept or decline, remove or block. Live status (Online / Away / Invisible) and the game each friend is playing, how long they've been playing and their hours this week. Friend tooltips, native right-click menus, sign-on toasts.
+- **Side panel:** an **Activity Report** of what your friends played recently, your installed games with **Launch** links, or details of the friend you click. Drag its edge to make it wider. Friends can turn off sharing their hours in Options › Privacy.
+- **Update notice:** updates download quietly in the background. A green **Update ready – Restart** notice in the title bar (and a dot on the tray icon) installs them when you choose. Updates are signature-checked before they install.
+- **Status menu:** Online, Away, Invisible, custom status and recent statuses. **Looking to Play** and **Music Status** are in the menu as early placeholders.
+- **Options:** a dark Options window with a two-column Games tab, a **Connections** tab (Steam, Battle.net, Spotify and Discord, shown as "coming soon" for now), and a **Text size** setting.
+- **Classic tray menu:** Open Fraglink, Launch (installed games, with their icons), Skin, Status, Log Off, Exit.
 - **Export everything** (JSON + CSV) from Options at any time.
 
 Stats and Activity views exist in the code but are hidden for now. They return with the website's stats.
@@ -38,6 +40,18 @@ Stats and Activity views exist in the code but are hidden for now. They return w
 &nbsp;
 <img src="docs/images/client-create-account.png" alt="Create Account screen" width="260">
 <br><sub>Signed out: Login and Create Account, inside the main window.</sub>
+</p>
+
+<p align="center">
+<img src="docs/images/client-status-menu.png" alt="Status menu with Looking to Play and Music Status" width="400">
+<br><sub>The status menu (a native Windows menu in the app; drawn here by the browser preview, sample data).</sub>
+</p>
+
+<p align="center">
+<img src="docs/images/options-games.png" alt="Options, Games tab" width="390">
+&nbsp;
+<img src="docs/images/options-connections.png" alt="Options, Connections tab with coming-soon services" width="390">
+<br><sub>Options: the Games tab and the Connections tab (the Connect buttons are placeholders for now). Browser preview, sample data.</sub>
 </p>
 
 <p align="center">
@@ -52,10 +66,15 @@ Stats and Activity views exist in the code but are hidden for now. They return w
 | | Planned | Status |
 |---|---|---|
 | **Hours with trust tiers** | Every number labelled **● Tracked** (seen by the client), **◆ Imported** (e.g. Steam) or **~ Estimated** (self-reported history). Leaderboards count Tracked only. | Server side done; client views return with the website |
-| **Friends and presence** | Requests, live status and game, friend toasts | ✅ In dev.6. Still to come: friends' activity feed, Steam friends presence |
+| **Friends and presence** | Requests, live status and game, friend toasts, playing time and hours this week | ✅ Done |
+| **Activity Report** | What your friends played recently, in the side panel ("View More" for the full list) | ✅ First version in dev.9; full history comes with the website |
+| **Looking to Play** | Tell friends you're up for a game | In the status menu since dev.9 (local only); sharing it with friends is next |
+| **Steam hour import** | Connect Steam to import your existing hours as **◆ Imported** | Server side done; Connect button in Options › Connections coming soon |
+| **Battle.net / WoW characters** | Verified WoW characters via Battle.net, exact `/played` import | Planned (placeholder in Connections) |
+| **Spotify (Music Status)** | Show what you're listening to as your status | Planned (placeholder in Connections and the status menu) |
 | **Discord** | Sign in with Discord; "Message on Discord" from a friend's menu (Fraglink has no chat of its own) | Planned |
 | **Website (fraglink.gg)** | Auto-filled profiles, gaming history, stats, signature images, game pages | Planned |
-| **WoW character cards** | Verified characters via Battle.net, exact `/played` import | Planned |
+| **Web installer** | Small download from the website that fetches the latest version | Once the domain is live |
 | **Beta** | Code-signed installers, download page, closed beta | Planned (auto-update is already in) |
 
 **Not planned:** chat, voice, clans or in-game overlays. Discord and Steam already cover those, and overlays and injection risk anti-cheat bans. Details in the [roadmap](docs/ROADMAP.md).
@@ -68,14 +87,14 @@ Stats and Activity views exist in the code but are hidden for now. They return w
 <img src="docs/images/app-icon.png" alt="Fraglink app icon" width="128">
 &nbsp;&nbsp;
 <img src="docs/images/installer.png" alt="Installer sidebar and header art" width="420">
-<br><sub>The silver app icon and the dark installer art. The logo is "Split Orbit": an original italic F with a split orbit ring (sources in <a href="assets/brand/">assets/brand/</a>).</sub>
+<br><sub>The silver app icon and the dark installer art (sidebar with the "PLAY. CONNECT. TRACK." slogan, and the header). The logo is "Split Orbit": an original italic F with a split orbit ring (sources in <a href="assets/brand/">assets/brand/</a>).</sub>
 </p>
 
 ## Privacy stance
 
 - **No game memory reading, no injection, no overlays, no packet sniffing.** Fraglink only lists running processes and reads documented launcher files, so it is safe alongside anti-cheat (VAC, EAC, BattlEye, Vanguard, Ricochet).
-- **No keyboard or mouse hooks.** Idle detection uses Windows' `GetLastInputInfo`, which only gives the time since your last input, never what you typed.
-- **No telemetry.** Signed out, the only network request is the update check. Signed in, the client uploads game sessions (game, start, end, active time) and your presence, never program names or paths.
+- **No keyboard or mouse hooks.** Fraglink doesn't watch your input at all; hours count while a game is running.
+- **No telemetry.** Signed out, the only network request is the update check. Signed in, the client uploads game sessions (game, start, end, active time) and your presence, never program names or paths. Friends see your recent games and weekly hours unless you turn that off in Options › Privacy.
 - **Export-everything pledge.** All your data is exportable, free, at any time. If Fraglink ever shuts down, you'll get plenty of notice and a full export.
 
 Details: [`docs/privacy.md`](docs/privacy.md).
@@ -108,9 +127,9 @@ Every 5 s Fraglink takes a process snapshot (Windows Toolhelp, plus `QueryFullPr
 5. **Other launchers' install folders.** Battle.net, EA app, Ubisoft Connect and Xbox (`XboxGames`) installs, plus any Windows Uninstall entry that matches a known game.
 6. **Steam's `HKCU\Software\Valve\Steam\RunningAppID`.** Only trusted while `steam.exe` is running.
 
-Excluded games are ignored. **Fraglink never reads game memory, injects, hooks or overlays anything**, so it is safe with anti-cheat. It only lists process names and paths and reads the launcher files above. `GetLastInputInfo` gives the idle time.
+Excluded games are ignored. **Fraglink never reads game memory, injects, hooks or overlays anything**, so it is safe with anti-cheat. It only lists process names and paths and reads the launcher files above.
 
-**Idle trimming:** if you are idle longer than the threshold (default 15 min, configurable in Options) while a game runs, that whole idle stretch is removed from the session. Minimised games still count unless you are idle.
+**Hours:** since dev.9 a session counts all the time the game is running, like Steam, including minimised or idle time. (Earlier builds trimmed idle stretches; that was removed because it under-counted.)
 
 **Sessions:** a session ends after 2 missed polls (about 10 s). Sessions shorter than 2 min are dropped (configurable). A relaunch within 10 min continues the previous session. The open session is checkpointed to SQLite every 60 s and recovered after a crash or power loss. Gaps between polls longer than 60 s (sleep/hibernate) add no time.
 
@@ -165,7 +184,7 @@ Pre-releases are on the [releases page](https://github.com/Lucrona/fraglink/rele
 
 ## Window notes
 
-The default Dark skin is a frameless, resizable window (345×555 at minimum). The info panel joins flush on the right and widens the window when it opens. The Classic Silver skin keeps the fixed 290×381 chassis (scaled 100–200 %). Closing or minimising sends Fraglink to the tray. The webview is destroyed while hidden to keep memory low.
+The default Dark skin is a frameless, resizable window (345×555 at minimum). The side panel joins flush on the right and widens the window when it opens; drag its edge to resize it. Options › Appearance › Text size makes the Dark skin text larger. The Classic Silver skin keeps the fixed 290×381 chassis (scaled 100–200 %). Closing or minimising sends Fraglink to the tray. The webview is destroyed while hidden to keep memory low.
 
 ## Documentation
 

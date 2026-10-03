@@ -270,6 +270,26 @@ impl Client {
         )
     }
 
+    /// Friends' recent activity for the side panel (`GET /api/v1/friends/activity`).
+    pub fn friends_activity(&self) -> Result<serde_json::Value, SyncError> {
+        self.call("GET", "/api/v1/friends/activity", None)
+    }
+
+    /// A friend's current game and hours this week (`GET /api/v1/friends/{handle}/summary`).
+    /// `handle` must already be validated (letters, digits, `_`, `-`).
+    pub fn friend_summary(&self, handle: &str) -> Result<serde_json::Value, SyncError> {
+        self.call("GET", &format!("/api/v1/friends/{handle}/summary"), None)
+    }
+
+    /// Whether friends may see your recent play history and weekly hours.
+    pub fn set_share_activity(&self, on: bool) -> Result<serde_json::Value, SyncError> {
+        self.call(
+            "POST",
+            "/api/v1/me/privacy",
+            Some(serde_json::json!({ "share_activity": on })),
+        )
+    }
+
     pub fn upload(&self, batch: &UploadBatch) -> Result<UploadResult, SyncError> {
         let body = serde_json::to_value(batch).map_err(|e| SyncError::Decode(e.to_string()))?;
         self.call("POST", "/api/v1/sessions/upload", Some(body))

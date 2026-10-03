@@ -12,7 +12,7 @@
   let st = null, catalog = null, gsel = null, detecting = false;
   const fail = e => alert(String(e && e.message || e));
   const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '' };
-  const PAGES = { notifications: 'general', advanced: 'general' }; // old page names
+  const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
   // Dark and Phoenix skins get the dark 2013 look; Classic and Stream keep the plain system look.
   const applyTheme = skin => document.body.classList.toggle('dark', skin === 'dark' || skin === 'phoenix');
@@ -23,7 +23,7 @@
     $$('.op-tabs button').forEach(b => b.classList.toggle('on', b.dataset.page === page));
     $$('section[data-page]').forEach(s => { s.hidden = s.dataset.page !== page; });
     if (page === 'account') renderSync();
-    if (page === 'privacy') renderBlocked();
+    if (page === 'privacy') { renderBlocked(); renderShare(); }
     if (page === 'games' && !catalog && !detecting) detect();
   }
 
@@ -39,7 +39,8 @@
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
       skin: ['dark', 'classic'].includes(s.skin) ? s.skin : 'dark', zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
       theme: s.theme || 'blue', always_on_top: on(s, 'always_on_top', '0'),
-      idle_threshold_min: String(st.idle_threshold_min), min_session_min: String(st.min_session_min), paused: on(s, 'paused', '0'),
+      min_session_min: String(st.min_session_min), paused: on(s, 'paused', '0'),
+      text_size: ['normal', 'large', 'larger'].includes(s.text_size) ? s.text_size : 'normal',
     };
     $$('[data-key]').forEach(el => {
       const v = cur[el.dataset.key] ?? '';
@@ -63,6 +64,11 @@
 
   document.addEventListener('change', e => {
     const t = e.target;
+    if (t.id === 'share-activity') {
+      FLB.setShareActivity(t.checked).then(() => { $('#share-msg').textContent = t.checked ? 'Friends can see your recent games and hours this week.' : 'Friends only see what you are playing right now.'; })
+        .catch(err => { t.checked = !t.checked; $('#share-msg').textContent = String(err); });
+      return;
+    }
     const el = t.closest('[data-key]');
     $('#apply').disabled = false;
     if (el) { pending.set(el.dataset.key, value(el)); if (el.name === 'skin') scaleBox(); return; }
@@ -95,13 +101,26 @@
     const t = $('#tree');
     if (!catalog) { t.innerHTML = ''; return; }
     const inst = catalog.filter(g => g.installed), not = catalog.filter(g => !g.installed);
-    const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}">${esc(g.name)}<small>${esc(SOURCES[g.source] ?? g.source)}</small></div>`;
+    const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}" title="${esc(SOURCES[g.source] ?? g.source)}">${iconHtml(g.id)}<span>${esc(g.name)}</span></div>`;
     const node = (k, label, arr) => `<div class="node" data-node="${k}"><span class="tw">${open[k] ? '−' : '+'}</span>${label} (${arr.length})</div>` + (open[k] ? arr.map(leaf).join('') : '');
     t.innerHTML = node('inst', 'Installed games', inst) + node('not', 'Not installed', not);
   }
+  // Same icon order as everywhere: Xfire, Steam, exe, then the generic icon.
+  const icons = {};
+  const GENERIC = '<svg viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="3" fill="#3b4a66" stroke="#0b1424"/><circle cx="5" cy="8" r="1.6" fill="#cfd8e8"/><circle cx="11" cy="7" r="1" fill="#cfd8e8"/><circle cx="12" cy="9.4" r="1" fill="#cfd8e8"/></svg>';
+  const iconHtml = id => `<i class="gi">${icons[id] ? `<img src="${icons[id]}" alt="">` : GENERIC}</i>`;
+  async function loadIcons() {
+    if (!catalog || !FLB.gameIcons) return;
+    const ids = catalog.map(g => g.id).filter(id => !(id in icons));
+    if (!ids.length) return;
+    try { const m = await FLB.gameIcons(ids, false); for (const id of ids) icons[id] = m && m[id] || null; renderTree(); renderDetail(); } catch (e) { console.warn('icons', e); }
+  }
   function renderDetail() {
     const g = catalog && catalog.find(x => x.id === gsel);
-    $('#gd-name').textContent = g ? g.name : 'Select a game';
+    $('#gd-name').textContent = 'Select Game';
+    $('#gd-title').textContent = g ? g.name : 'Select a game on the left';
+    $('#gd-src').textContent = g ? (g.installed ? 'Installed' : 'Not installed') + (SOURCES[g.source] ? ' · ' + SOURCES[g.source] : '') : '';
+    $('#gd-icon').innerHTML = g ? iconHtml(g.id) : '';
     $$('#gd input, #gd button').forEach(x => { x.disabled = !g; });
     $('#gd-path').value = g ? staged(g.id, 'game_path:', g.game_path || '') : '';
     $('#gd-detect').value = g ? g.detect_path : '';
@@ -121,7 +140,8 @@
       $('#det-msg').textContent = `Found ${n} installed game${n === 1 ? '' : 's'} (${catalog.length} known).`;
     } catch (e) { $('#det-msg').textContent = 'Detection failed: ' + e; catalog = catalog || []; }
     clearInterval(tick); bar.style.width = '100%'; detecting = false;
-    renderTree(); renderDetail();
+    if (!gsel && catalog.length) { const f = catalog.find(x => x.installed) || catalog[0]; gsel = f.id; }
+    renderTree(); renderDetail(); loadIcons();
   }
   async function loadCands() {
     try {
@@ -143,6 +163,14 @@
     } catch (e) { $('#block-msg').textContent = String(e); }
   }
 
+  /* ---- Privacy: share recent games + weekly hours with friends (server setting, saved at once) ---- */
+  async function renderShare() {
+    const cb = $('#share-activity'), m = $('#share-msg');
+    let signed = false; try { signed = !!(FLB.syncStatus && (await FLB.syncStatus()).signed_in); } catch (e) {}
+    cb.disabled = !signed;
+    if (!signed) { cb.checked = false; m.textContent = 'Sign in (Account tab) to choose what friends see.'; return; }
+    try { const a = await FLB.accountInfo(); cb.checked = a.share_activity !== false; m.textContent = ''; } catch (e) { m.textContent = String(e); }
+  }
   /* ---- Account: optional sync ---- */
   async function renderSync() {
     if (!FLB.syncStatus) return;
@@ -209,6 +237,7 @@
   const acts = {
     ok: async () => { if (await apply()) close(); },
     cancel: close,
+    'win-min': () => FLB.minimizeWindow && FLB.minimizeWindow(),
     apply: async () => { await apply(); if (catalog) { catalog = null; detect(); } },
     advanced: () => { $('#adv').hidden = !$('#adv').hidden; },
     export: async () => { try { const p = await FLB.exportData(); $('#export-msg').innerHTML = 'Saved: <code>' + p.map(esc).join('</code>, <code>') + '</code>'; } catch (e) { fail(e); } },
@@ -238,6 +267,12 @@
     const d = e.target.closest('[data-do]'); if (d && acts[d.dataset.do]) acts[d.dataset.do]();
   });
   $('#cands').addEventListener('change', e => { if (!$('#man-name').value) $('#man-name').value = prettyExe(e.target.value); });
+  // custom title bar: drag the window, resize from the edges
+  document.addEventListener('mousedown', e => {
+    if (e.button !== 0 || !FLB.tauri) return;
+    const r = e.target.closest('[data-resize]'); if (r) { e.preventDefault(); FLB.resize(r.dataset.resize); return; }
+    if (e.target.closest('#op-title') && !e.target.closest('button')) { e.preventDefault(); FLB.drag(); }
+  });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') close();
     else if (e.key === 'Enter' && !['INPUT', 'SELECT', 'BUTTON'].includes(e.target.tagName)) acts.ok();
@@ -245,13 +280,15 @@
 
   (async () => {
     try { st = await FLB.settings(); load(); } catch (e) { fail(e); }
+    if (FLB.tauri) document.body.classList.add('tauri');
+    const ts = st && st.settings && st.settings.text_size; if (ts) document.body.style.zoom = { large: 1.1, larger: 1.2 }[ts] || '';
     applyTheme((st && st.settings && st.settings.skin) || params.get('skin') || 'dark');
     renderDetail();
     show(params.get('page') || 'general');
     if (FLB.on) {
       FLB.on('fraglink://sync', () => { if (!$('section[data-page=account]').hidden) renderSync(); });
       FLB.on('fraglink://options-page', p => show(p));
-      FLB.on('fraglink://settings', ([k, v]) => { if (k === 'skin') applyTheme(v); });
+      FLB.on('fraglink://settings', ([k, v]) => { if (k === 'skin') applyTheme(v); if (k === 'text_size') document.body.style.zoom = { large: 1.1, larger: 1.2 }[v] || ''; });
     }
   })();
 })();

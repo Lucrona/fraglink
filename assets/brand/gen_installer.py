@@ -2,7 +2,7 @@
 """NSIS installer art (dark, understated): sidebar 164x314 and header 150x57, 24-bit BMP.
 Near-black charcoal gradient, flat silver Split Orbit mark and Saira Expanded wordmark. Needs rsvg-convert + Pillow."""
 import io, os, subprocess
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
 INST = os.path.join(HERE, '..', '..', 'apps/desktop/src-tauri/installer')
 SILVER = '#D9DDE3'
@@ -19,6 +19,21 @@ def wordmark(w):
     word = word.crop(word.getchannel('A').getbbox())
     return word.resize((w, round(w * word.height / word.width)), Image.LANCZOS)
 
+SLOGAN = 'PLAY. CONNECT. TRACK.'
+FONT = os.path.join(HERE, 'RussoOne-Regular.ttf')
+
+def slogan(img, y, size=7, spacing=1.6, color=(150, 156, 166, 255)):
+    """The slogan in small, letter-spaced caps, centred at height y."""
+    f = ImageFont.truetype(FONT, size * 4)
+    widths = [f.getlength(c) for c in SLOGAN]
+    total = sum(widths) + spacing * 4 * (len(SLOGAN) - 1)
+    big = Image.new('RGBA', (int(total) + 8, size * 6), (0, 0, 0, 0)); d = ImageDraw.Draw(big); x = 4
+    for c, cw in zip(SLOGAN, widths):
+        d.text((x, size), c, font=f, fill=color); x += cw + spacing * 4
+    big = big.crop(big.getchannel('A').getbbox())
+    small = big.resize((max(1, big.width // 4), max(1, big.height // 4)), Image.LANCZOS)
+    img.alpha_composite(small, ((img.width - small.width) // 2, y))
+
 def grad(w, h, top=(26, 28, 32), bottom=(9, 10, 12)):
     g = Image.new('RGBA', (w, h)); d = ImageDraw.Draw(g)
     for y in range(h):
@@ -30,6 +45,7 @@ def build():
     sb = grad(164, 314)
     m = svg('v28-split-orbit-mark.svg', 92); sb.alpha_composite(m, ((164 - m.width) // 2, 78))
     wm = wordmark(124); sb.alpha_composite(wm, ((164 - wm.width) // 2, 78 + m.height + 22))
+    slogan(sb, 78 + m.height + 22 + wm.height + 10)
     ImageDraw.Draw(sb).line([(0, 0), (0, 313)], fill=(40, 43, 49, 255))  # hairline where it meets the page
     hd = grad(150, 57, (24, 26, 30), (12, 13, 15))
     m2 = svg('v28-split-orbit-mark.svg', 34); hd.alpha_composite(m2, (12, (57 - m2.height) // 2))

@@ -145,7 +145,6 @@ pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Set
 }
 
 const ALLOWED: &[&str] = &[
-    keys::IDLE_THRESHOLD_MIN,
     keys::MIN_SESSION_MIN,
     keys::PAUSED,
     keys::TOASTS,
@@ -185,6 +184,10 @@ const ALLOWED: &[&str] = &[
     "friend_groups",
     "friend_toasts_logon",
     "connection_alerts",
+    // 0.2.0-dev.9
+    "side_w",
+    "text_size",
+    "first_detect_done",
 ];
 
 /// Per-game settings from Options > Games (`game_path:<id>`, `launch_args:<id>`).
@@ -241,6 +244,10 @@ pub fn set_setting(
         e.tracker.store.set_setting(&key, &value).map_err(err)?;
         e.apply_settings().map_err(err)?;
     }
+    if key == "text_size" {
+        let open = *state.side_open.lock().unwrap();
+        windows::resize_main(&app, windows::zoom(&app), open);
+    }
     // let the other windows (main <-> Options) follow the change
     let _ = app.emit("fraglink://settings", (&key, &value));
     if matches!(
@@ -259,6 +266,127 @@ pub fn set_setting(
 #[tauri::command]
 pub async fn open_options(app: AppHandle, page: Option<String>) {
     windows::show_options(&app, page);
+}
+
+/// Drag the info panel wider: remember the width and grow the window to fit.
+#[tauri::command]
+pub fn set_side_width(app: AppHandle, state: State<'_, AppState>, width: f64) -> CmdResult<()> {
+    if !width.is_finite() {
+        return Err("bad width".into());
+    }
+    let w = width.clamp(windows::SIDE_PANEL_MIN, windows::SIDE_PANEL_MAX);
+    state
+        .engine
+        .lock()
+        .unwrap()
+        .tracker
+        .store
+        .set_setting("side_w", &format!("{w:.0}"))
+        .map_err(err)?;
+    let open = *state.side_open.lock().unwrap();
+    if open {
+        windows::resize_main(&app, windows::zoom(&app), true);
+    }
+    Ok(())
+}
+
+/// One entry of a native popup menu built by the page (friend right-click, status).
+#[derive(serde::Deserialize)]
+pub struct PopItem {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    label: String,
+    #[serde(default)]
+    disabled: bool,
+    checked: Option<bool>,
+    #[serde(default)]
+    sep: bool,
+    #[serde(default)]
+    items: Vec<PopItem>,
+}
+
+type MenuItemBox = Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>;
+
+fn pop_items(app: &AppHandle, items: &[PopItem], depth: u8) -> tauri::Result<Vec<MenuItemBox>> {
+    use tauri::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
+    let mut out: Vec<MenuItemBox> = Vec::new();
+    for it in items.iter().take(40) {
+        let id = format!("pm:{}", it.id);
+        let label: String = it.label.chars().take(80).collect();
+        if it.sep {
+            out.push(Box::new(PredefinedMenuItem::separator(app)?));
+        } else if !it.items.is_empty() && depth < 2 {
+            let sub = pop_items(app, &it.items, depth + 1)?;
+            let refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+                sub.iter().map(|b| b.as_ref()).collect();
+            out.push(Box::new(Submenu::with_items(
+                app,
+                &label,
+                !it.disabled,
+                &refs,
+            )?));
+        } else if let Some(c) = it.checked {
+            out.push(Box::new(CheckMenuItem::with_id(
+                app,
+                id,
+                &label,
+                !it.disabled,
+                c,
+                None::<&str>,
+            )?));
+        } else {
+            out.push(Box::new(MenuItem::with_id(
+                app,
+                id,
+                &label,
+                !it.disabled,
+                None::<&str>,
+            )?));
+        }
+    }
+    Ok(out)
+}
+
+/// Show a real Windows popup menu at (x, y) in the window (logical px), or at the
+/// cursor. The pick comes back as a `fraglink://menu-pick` event with the item id.
+#[tauri::command]
+pub async fn popup_menu(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    items: Vec<PopItem>,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> CmdResult<()> {
+    let built = pop_items(&app, &items, 0).map_err(err)?;
+    let refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+        built.iter().map(|b| b.as_ref()).collect();
+    let menu = tauri::menu::Menu::with_items(&app, &refs).map_err(err)?;
+    match (x, y) {
+        (Some(x), Some(y)) if x.is_finite() && y.is_finite() => window
+            .popup_menu_at(&menu, tauri::LogicalPosition::new(x, y))
+            .map_err(err),
+        _ => window.popup_menu(&menu).map_err(err),
+    }
+}
+
+/// Side panel "Activity Report": friends' recent sessions and what they're playing now.
+#[tauri::command]
+pub async fn friends_activity(app: AppHandle) -> CmdResult<serde_json::Value> {
+    account_call(app, |c| c.friends_activity()).await
+}
+
+/// Side panel friend details: current game, hours this week.
+#[tauri::command]
+pub async fn friend_summary(app: AppHandle, handle: String) -> CmdResult<serde_json::Value> {
+    let h = clean_handle(&handle)?;
+    account_call(app, move |c| c.friend_summary(&h)).await
+}
+
+/// Connections > Tracking: share recent play history and weekly hours with friends.
+#[tauri::command]
+pub async fn set_share_activity(app: AppHandle, on: bool) -> CmdResult<serde_json::Value> {
+    account_call(app, move |c| c.set_share_activity(on)).await
 }
 
 #[tauri::command]
@@ -506,6 +634,7 @@ pub async fn account_info(app: AppHandle) -> CmdResult<serde_json::Value> {
         let u = &v["user"];
         Ok(serde_json::json!({
             "handle": u["handle"], "email": u["email"], "email_verified": u["email_verified"],
+            "share_activity": u["share_activity"],
         }))
     })
     .await
