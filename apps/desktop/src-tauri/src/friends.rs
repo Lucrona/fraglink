@@ -18,7 +18,10 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
 pub const FRIENDS_EVENT: &str = "fraglink://friends";
-const PING_EVERY: Duration = Duration::from_secs(60);
+/// Keep-alive. The server drops a socket after 150 s of silence, but NAT routers and
+/// proxies on the way can cut idle TCP connections after 60 s (seen in testing), so
+/// ping well inside that. Discord heartbeats about every 41 s.
+const PING_EVERY: Duration = Duration::from_secs(30);
 /// At most one "started playing" toast per friend in this window.
 const TOAST_GAP_SECS: i64 = 30 * 60;
 
@@ -58,7 +61,7 @@ pub fn emit(app: &AppHandle) {
 pub fn my_presence(app: &AppHandle) -> MyPresence {
     let st = app.state::<AppState>();
     let e = st.engine.lock().unwrap();
-    let status = e
+    let mut status = e
         .tracker
         .store
         .get_setting(core_keys::STATUS)
@@ -66,6 +69,10 @@ pub fn my_presence(app: &AppHandle) -> MyPresence {
         .flatten()
         .filter(|s| ["online", "away", "invisible"].contains(&s.as_str()))
         .unwrap_or_else(|| "online".into());
+    // automatic Away (10 min without input) only replaces Online
+    if status == "online" && st.auto_away.load(std::sync::atomic::Ordering::SeqCst) {
+        status = "away".into();
+    }
     // Options > Privacy: "Show my game to my friends"
     let share = e
         .tracker

@@ -50,9 +50,6 @@
         <label><input type="checkbox" id="share-activity" /> Show my recent games and hours this week to friends <span class="hint">(Activity Report)</span></label>
         <div id="share-msg" class="hint"></div>
       </fieldset>
-      <fieldset><legend>Idle</legend>
-        <label><input type="checkbox" id="idle-on" /> Show me as Away after <input type="number" id="idle-min" min="1" max="240" value="10" class="num" /> minutes without input <span class="hint">(later)</span></label>
-      </fieldset>
       <fieldset><legend>Blocked users</legend>
         <div class="split"><select id="blocked" size="5" class="lb"></select>
           <div class="col"><button type="button" data-do="block-add">Add…</button><button type="button" data-do="block-remove">Remove</button></div></div>
@@ -124,8 +121,6 @@
         <div class="conn"><i class="conn-ic" style="--c:#5865f2">D</i><div class="conn-tx"><b>Discord</b><small>Open a Discord DM from a friend's chat button</small></div><button type="button" disabled title="Coming soon">Connect</button><span class="soon">coming soon</span></div>
       </fieldset>
       <fieldset><legend>Tracking</legend>
-        <label class="row">Ignore sessions shorter than <select data-key="min_session_min"><option>0</option><option>1</option><option>2</option><option>5</option></select> minutes</label>
-        <label><input type="checkbox" data-key="paused" /> Pause tracking</label>
         <div class="line"><button type="button" data-do="export">Export my data…</button><button type="button" data-do="open-data">Open data folder</button></div>
         <div id="export-msg" class="hint"></div>
         <span class="hint">Hours count all the time a game is running, like Steam.</span>

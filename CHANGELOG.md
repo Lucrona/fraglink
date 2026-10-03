@@ -5,6 +5,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.10] - 2026-10-03
+
+Test update (builds report `0.2.0-10`).
+
+### Added
+- **Startup window** like Xfire's and Discord's: a small dark borderless window with the logo,
+  "PLAY. CONNECT. TRACK.", "Checking for updates…" and a progress bar. A newer build is
+  downloaded (progress shown), checked, installed, and Fraglink relaunches into it; otherwise the
+  window closes after about a second and the client opens. Offline or a slow server: it gives up
+  after 5 seconds and opens normally. Not shown when Fraglink starts to the tray (Windows startup /
+  "Start minimised"), like Discord's "Start Minimized"; the background check covers that.
+- **Check for Updates** in the Help menu and the tray menu: "You're up to date", or the update
+  downloads, installs and restarts.
+- **Automatic Away** like Discord: after 10 minutes without keyboard or mouse input your status
+  shows "Away" (or "World of Warcraft (Away)" in a game) for you and your friends, and switches back
+  on input. Hours keep counting. A status you picked yourself (Away, Invisible) isn't changed. No
+  setting; the unused "Show me as Away after…" box is gone from Options.
+
+### Changed
+- **Background update check** every hour (was every 6 hours).
+- **Update ready** is a small bright green download arrow in the title bar (Discord style) instead
+  of the green "Update ready - Restart" pill. Tooltip "Update ready - click to restart"; one click
+  installs and restarts. The tray dot and "Restart to Update" stay.
+- **Title bar logo** is bigger (grey, embossed).
+- **Info panel resize:** the whole right frame strip of the panel (scrollbar to window edge) is now
+  the drag handle, wider than the window's own resize border, so it no longer fights it.
+- **Game icons:** installed games without an Xfire icon (e.g. Satisfactory) now get their icon
+  from Steam's library cache or from the game's own exe (found in its install folder), cached like
+  the others. Before, that only worked once the game had run in the current session.
+- **Options > Games:** "Detect path" shows the exe actually found (full path) instead of the list of
+  candidate exe names; "Game path" is shown in normal Windows form with the real casing
+  (`E:\Steam\steamapps\common\Satisfactory\`) instead of lowercase with forward slashes.
+- **Every session counts** (like Steam): "Ignore sessions shorter than…" and "Pause tracking" are
+  gone from Options > Connections > Tracking, along with their logic.
+- **Presence connection:** the client pings every 30 s (was 60 s). In testing, a network on the
+  way cut idle connections after exactly 60 s (the server's own limit is 150 s), which could make a
+  friend flicker offline/online.
+
 ## [0.2.0-dev.9] - 2026-10-03
 
 Test update (builds report `0.2.0-9`) with the feedback from testing dev.8.

@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
 <p align="center"><b>PLAY. CONNECT. TRACK.</b><br>A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
-<sub>Early development · current pre-release <b>0.2.0-dev.9</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
+<sub>Early development · current pre-release <b>0.2.0-dev.10</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 
@@ -17,20 +17,20 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 <img src="docs/images/client-main.png" alt="Main window with the side panel: Activity Report and installed games, update notice in the title bar" width="400">
 &nbsp;
 <img src="docs/images/client-friend.png" alt="Main window with a friend selected: playing time and hours this week" width="400">
-<br><sub>The main window with the side panel (Activity Report and installed games, green "Update ready" notice in the title bar), and with a friend selected. Browser preview of the dev.9 UI with sample data.</sub>
+<br><sub>The main window with the side panel (Activity Report and installed games, green update arrow in the title bar), and with a friend selected. Browser preview of the dev.10 UI with sample data.</sub>
 </p>
 
-## What works today (0.2.0-dev.9)
+## What works today (0.2.0-dev.10)
 
 - **Game detection on every launcher:** installed Steam, Epic, GOG, Battle.net, EA app, Ubisoft Connect and Xbox games, 170 curated signatures, and "This is a game…" for anything else. Read-only: no injection, no memory reading.
-- **Honest hours:** hours count all the time a game is running, like Steam (no idle trimming since dev.9). Very short sessions are dropped and sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.
+- **Honest hours:** hours count all the time a game is running, like Steam: no idle trimming and no minimum session length. Sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.
 - **Accounts in the client:** log in with username (or email) and password, or **Create Account** right in the main window. Change your email, password or display name, or delete your account, from Options › Account.
 - **Friends:** search users and send requests, accept or decline, remove or block. Live status (Online / Away / Invisible) and the game each friend is playing, how long they've been playing and their hours this week. Friend tooltips, native right-click menus, sign-on toasts.
 - **Side panel:** an **Activity Report** of what your friends played recently, your installed games with **Launch** links, or details of the friend you click. Drag its edge to make it wider. Friends can turn off sharing their hours in Options › Privacy.
-- **Update notice:** updates download quietly in the background. A green **Update ready – Restart** notice in the title bar (and a dot on the tray icon) installs them when you choose. Updates are signature-checked before they install.
-- **Status menu:** Online, Away, Invisible, custom status and recent statuses. **Looking to Play** and **Music Status** are in the menu as early placeholders.
-- **Options:** a dark Options window with a two-column Games tab, a **Connections** tab (Steam, Battle.net, Spotify and Discord, shown as "coming soon" for now), and a **Text size** setting.
-- **Classic tray menu:** Open Fraglink, Launch (installed games, with their icons), Skin, Status, Log Off, Exit.
+- **Updates like Discord's:** a small "Checking for updates…" window at startup installs a new build before the client opens. While Fraglink runs it checks every hour and downloads quietly; a small green arrow in the title bar (and a dot on the tray icon) restarts into it. **Help › Check for Updates** and the tray menu check on demand. Updates are signature-checked before they install.
+- **Status menu:** Online, Away, Invisible, custom status and recent statuses. Automatic **Away** after 10 minutes without input, like Discord ("World of Warcraft (Away)" in a game). **Looking to Play** and **Music Status** are in the menu as early placeholders.
+- **Options:** a dark Options window with a two-column Games tab (install folder and the exe Fraglink found), a **Connections** tab (Steam, Battle.net, Spotify and Discord, shown as "coming soon" for now), and a **Text size** setting.
+- **Classic tray menu:** Open Fraglink, Launch (installed games, with their icons), Skin, Status, Check for Updates, Log Off, Exit.
 - **Export everything** (JSON + CSV) from Options at any time.
 
 Stats and Activity views exist in the code but are hidden for now. They return with the website's stats.
@@ -40,6 +40,11 @@ Stats and Activity views exist in the code but are hidden for now. They return w
 &nbsp;
 <img src="docs/images/client-create-account.png" alt="Create Account screen" width="260">
 <br><sub>Signed out: Login and Create Account, inside the main window.</sub>
+</p>
+
+<p align="center">
+<img src="docs/images/splash.png" alt="Startup window: Checking for updates" width="240">
+<br><sub>The startup window checks for updates before the client opens (like Xfire's and Discord's).</sub>
 </p>
 
 <p align="center">
@@ -93,7 +98,7 @@ Stats and Activity views exist in the code but are hidden for now. They return w
 ## Privacy stance
 
 - **No game memory reading, no injection, no overlays, no packet sniffing.** Fraglink only lists running processes and reads documented launcher files, so it is safe alongside anti-cheat (VAC, EAC, BattlEye, Vanguard, Ricochet).
-- **No keyboard or mouse hooks.** Fraglink doesn't watch your input at all; hours count while a game is running.
+- **No keyboard or mouse hooks.** For the automatic Away status (10 minutes without input, like Discord) Fraglink asks Windows how long ago your last input was (`GetLastInputInfo`), never what you typed. Hours always count while a game is running.
 - **No telemetry.** Signed out, the only network request is the update check. Signed in, the client uploads game sessions (game, start, end, active time) and your presence, never program names or paths. Friends see your recent games and weekly hours unless you turn that off in Options › Privacy.
 - **Export-everything pledge.** All your data is exportable, free, at any time. If Fraglink ever shuts down, you'll get plenty of notice and a full export.
 
@@ -131,7 +136,7 @@ Excluded games are ignored. **Fraglink never reads game memory, injects, hooks o
 
 **Hours:** since dev.9 a session counts all the time the game is running, like Steam, including minimised or idle time. (Earlier builds trimmed idle stretches; that was removed because it under-counted.)
 
-**Sessions:** a session ends after 2 missed polls (about 10 s). Sessions shorter than 2 min are dropped (configurable). A relaunch within 10 min continues the previous session. The open session is checkpointed to SQLite every 60 s and recovered after a crash or power loss. Gaps between polls longer than 60 s (sleep/hibernate) add no time.
+**Sessions:** a session ends after 2 missed polls (about 10 s). Every session counts, however short (like Steam). A relaunch within 10 min continues the previous session. The open session is checkpointed to SQLite every 60 s and recovered after a crash or power loss. Gaps between polls longer than 60 s (sleep/hibernate) add no time.
 
 ## Build from source
 

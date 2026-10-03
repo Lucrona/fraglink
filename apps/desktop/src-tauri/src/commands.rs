@@ -106,8 +106,6 @@ pub struct SettingsView {
     pub steam_apps: usize,
     pub epic_apps: usize,
     pub gog_apps: usize,
-    pub idle_threshold_min: i64,
-    pub min_session_min: i64,
 }
 
 #[tauri::command]
@@ -139,14 +137,10 @@ pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Set
             .detector
             .libs
             .count(fraglink_core::libraries::Launcher::Gog),
-        idle_threshold_min: e.tracker.cfg.idle_threshold_s / 60,
-        min_session_min: e.tracker.cfg.min_session_s / 60,
     })
 }
 
 const ALLOWED: &[&str] = &[
-    keys::MIN_SESSION_MIN,
-    keys::PAUSED,
     keys::TOASTS,
     keys::SKIN,
     keys::ZOOM,
@@ -166,7 +160,6 @@ const ALLOWED: &[&str] = &[
     "language",
     "share_profile",
     "share_fof",
-    "idle_status",
     "sound_signin",
     "sound_signout",
     "sound_pack",
@@ -189,6 +182,12 @@ const ALLOWED: &[&str] = &[
     "text_size",
     "first_detect_done",
 ];
+
+/// Automatic Away is on (10 minutes without keyboard/mouse input).
+#[tauri::command]
+pub fn get_auto_away(state: State<'_, AppState>) -> bool {
+    state.auto_away.load(std::sync::atomic::Ordering::SeqCst)
+}
 
 /// Per-game settings from Options > Games (`game_path:<id>`, `launch_args:<id>`).
 fn per_game_key(key: &str) -> bool {
@@ -229,10 +228,6 @@ pub fn set_setting(
         }
     }
     match key.as_str() {
-        k if k == keys::PAUSED => {
-            crate::set_paused(&app, value == "1");
-            return Ok(());
-        }
         k if k == keys::STATUS => {
             crate::set_status(&app, &value);
             return Ok(());
@@ -740,6 +735,7 @@ pub fn games_catalog(state: State<'_, AppState>) -> Vec<catalog::Entry> {
 #[tauri::command]
 pub async fn detect_games(app: AppHandle) -> Vec<catalog::Entry> {
     let state = app.state::<AppState>();
+    fraglink_core::installs::clear_exe_cache();
     if !state.sim {
         state.engine.lock().unwrap().refresh_steam(now());
     }

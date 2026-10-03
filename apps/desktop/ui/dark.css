@@ -270,8 +270,8 @@ body:not(.skin-dark):not(.skin-phoenix) .about-lock { filter: invert(.85); }
    ===================================================================== */
 :root { --side-w: 180px; }
 body.skin-dark .xf-titlebar { height: 28px; }
-body.skin-dark .xf-logo { left: 8px; top: 5px; height: 18px; }
-body.skin-dark .xf-logo-lock { height: 17px; filter: brightness(0) invert(.58) drop-shadow(0 -1px 0 rgba(0,0,0,.95)) drop-shadow(0 1px 0 rgba(255,255,255,.22)); }
+body.skin-dark .xf-logo { left: 8px; top: 3px; height: 22px; }
+body.skin-dark .xf-logo-lock { height: 21px; filter: brightness(0) invert(.58) drop-shadow(0 -1px 0 rgba(0,0,0,.95)) drop-shadow(0 1px 0 rgba(255,255,255,.22)); }
 body.skin-dark .xf-winbtns { right: 6px; top: 4px; gap: 3px; }
 body.skin-dark .xf-winbtns button { width: 25px; height: 20px; border-radius: 3px; font: bold 13px/16px var(--font); padding: 0; }
 body.skin-dark .xf-winbtns button[data-action="win-min"] { line-height: 10px; }
@@ -281,16 +281,16 @@ body.skin-dark .xf-identity { top: 111px; }
 body.skin-dark .xf-status { top: 112px; }
 body.skin-dark .dk-vtabs, body.skin-dark .dk-sechead { top: 135px; }
 body.skin-dark .xf-list { top: 153px; }
-/* update ready: a clear green pill left of the window buttons */
-body.skin-dark .xf-upd { left: auto; right: 64px; top: 5px; width: auto; height: 18px; display: flex; align-items: center; gap: 4px; padding: 0 9px 0 6px;
-  border: 1px solid #0b3d1a; border-radius: 9px; color: #fff; font: bold 11px/16px var(--font); text-shadow: 0 1px 0 rgba(0,0,0,.45); white-space: nowrap;
-  background: linear-gradient(#5fe08a, #2fb85c 50%, #1f9a48 51%, #2bb158); box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 0 6px rgba(63,207,106,.55);
-  animation: updglow 1.6s ease-in-out 3; }
+/* update ready (dev.10): a small bright green download arrow left of the window
+   buttons, like Discord's. Click = restart and install. */
+body.skin-dark .xf-upd { left: auto; right: 62px; top: 4px; width: 22px; height: 20px; padding: 0; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 3px; background: transparent; box-shadow: none; color: #3ee66b; cursor: pointer;
+  filter: drop-shadow(0 0 3px rgba(62,230,107,.55)); animation: updpulse 1.4s ease-in-out 3; }
 body.skin-dark .xf-upd[hidden] { display: none; }
-body.skin-dark .xf-upd svg { width: 11px; height: 11px; filter: none; flex: none; }
-body.skin-dark .xf-upd:hover { background: linear-gradient(#78ec9e, #3cc86a 50%, #27a852 51%, #36c063); }
-body.skin-dark .xf-upd.busy { opacity: .7; cursor: default; animation: none; }
-@keyframes updglow { 50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 0 12px 2px rgba(63,207,106,.9); } }
+body.skin-dark .xf-upd svg { width: 15px; height: 15px; filter: drop-shadow(0 1px 0 rgba(0,0,0,.8)); flex: none; }
+body.skin-dark .xf-upd:hover { background: rgba(255,255,255,.08); color: #6dff93; }
+body.skin-dark .xf-upd.busy { opacity: .6; cursor: default; animation: none; }
+@keyframes updpulse { 50% { filter: drop-shadow(0 0 6px rgba(62,230,107,.95)); } }
 /* status: a button that opens the native status menu */
 .xf-status select { display: none; }
 .st-btn { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; color: #dadbdf; font: bold 10px/12px var(--font);
@@ -315,8 +315,11 @@ body.skin-dark .side-scroll { bottom: 4px; }
 .side-btns { display: none !important; }
 .side-scroll { bottom: 8px; }
 .side-grip { display: none; }
-body.skin-dark .xf-app.side-open .side-grip { display: block; position: absolute; right: 0; top: 8px; bottom: 14px; width: 5px; cursor: ew-resize; z-index: 60; }
-body.skin-dark .side-grip:hover, body.side-dragging .side-grip { background: linear-gradient(90deg, transparent, rgba(120,160,230,.35)); }
+/* dev.10: the whole right frame strip of the panel (scrollbar to window edge) is the
+   drag handle; wider than the window's own resize border so it's easy to hit. */
+body.skin-dark .xf-app.side-open .side-scroll { right: 11px; }
+body.skin-dark .xf-app.side-open .side-grip { display: block; position: absolute; right: 0; top: 0; bottom: 14px; width: 12px; cursor: ew-resize; z-index: 60; }
+body.skin-dark .side-grip:hover, body.side-dragging .side-grip { background: linear-gradient(90deg, rgba(120,160,230,.05), rgba(120,160,230,.22)); }
 body.side-dragging, body.side-dragging * { cursor: ew-resize !important; user-select: none; }
 .side-scroll .side-sec { display: flex; align-items: baseline; gap: 6px; margin: 0 0 3px; }
 .side-scroll .side-sec h4 { margin: 0; flex: 1; min-width: 0; }

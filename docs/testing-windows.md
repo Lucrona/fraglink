@@ -39,3 +39,13 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - Press + (Add Friend): the search opens inside the main window; Cancel returns to the list.
 - Open the info panel with the ◀ tab: it is joined to the window, same height, no gap; moving the window moves both.
 
+## Updates, Away and Options (0.2.0-dev.10)
+
+- Start Fraglink from the Start menu: a small dark "Checking for updates…" window appears, closes after about a second, then the main window opens. With the network off it waits at most about 5 s, then opens normally.
+- Windows startup / "Start minimised": no startup window; Fraglink goes straight to the tray.
+- When a newer build is on the server: the startup window shows "Downloading update…" with a progress bar, then the installer runs and Fraglink restarts into the new version.
+- While running, a new build appears within an hour as a small green arrow left of the minimise button (tooltip "Update ready - click to restart"); clicking it restarts into it. *Help → Check for Updates* and the tray's *Check for Updates* say "You're up to date" or start the update.
+- Leave the PC alone for 10 minutes: your status shows "Away" (or "<game> (Away)" while playing), and friends see Away. Move the mouse: back to Online within about 5 s. Pick Invisible first: it stays Invisible.
+- Drag the info panel's right frame (between its scrollbar and the window edge): the panel widens; the cursor is a left-right arrow along the whole strip.
+- *Options → Games*, select a Steam game: Game path like `E:\Steam\steamapps\common\Satisfactory\` (real casing), Detect path the full path of the exe found. A game with no Xfire icon (e.g. Satisfactory) shows its own icon.
+- *Options → Connections → Tracking*: only Export my data and Open data folder; play a game for under a minute: the session is kept.

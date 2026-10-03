@@ -39,7 +39,6 @@
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
       skin: ['dark', 'classic'].includes(s.skin) ? s.skin : 'dark', zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
       theme: s.theme || 'blue', always_on_top: on(s, 'always_on_top', '0'),
-      min_session_min: String(st.min_session_min), paused: on(s, 'paused', '0'),
       text_size: ['normal', 'large', 'larger'].includes(s.text_size) ? s.text_size : 'normal',
     };
     $$('[data-key]').forEach(el => {
@@ -48,8 +47,6 @@
       else if (el.type === 'radio') el.checked = el.value === v;
       else el.value = v;
     });
-    const idle = parseInt(s.idle_status || '0', 10);
-    $('#idle-on').checked = idle > 0; $('#idle-min').value = idle > 0 ? idle : 10; $('#idle-min').disabled = !(idle > 0);
     scaleBox();
     $('#about').innerHTML = [
       ['Version', `Fraglink ${esc(st.version)}${st.sim ? ' <span class="bad">(simulation mode)</span>' : ''}`],
@@ -60,7 +57,6 @@
     ].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('') + '<b></b><span><button type="button" data-do="open-data">Open data folder</button></span>';
   }
   function scaleBox() { const r = $('input[name=skin]:checked'); $('#scale-box').hidden = !r || r.value !== 'classic'; }
-  const idleValue = () => $('#idle-on').checked ? String(Math.max(1, Math.min(240, parseInt($('#idle-min').value, 10) || 10))) : '0';
 
   document.addEventListener('change', e => {
     const t = e.target;
@@ -72,7 +68,6 @@
     const el = t.closest('[data-key]');
     $('#apply').disabled = false;
     if (el) { pending.set(el.dataset.key, value(el)); if (el.name === 'skin') scaleBox(); return; }
-    if (t.id === 'idle-on' || t.id === 'idle-min') { $('#idle-min').disabled = !$('#idle-on').checked; pending.set('idle_status', idleValue()); return; }
     if (!gsel) return;
     if (t.id === 'gd-path') pending.set('game_path:' + gsel, t.value.trim());
     else if (t.id === 'gd-args') pending.set('launch_args:' + gsel, t.value.trim());
@@ -123,7 +118,7 @@
     $('#gd-icon').innerHTML = g ? iconHtml(g.id) : '';
     $$('#gd input, #gd button').forEach(x => { x.disabled = !g; });
     $('#gd-path').value = g ? staged(g.id, 'game_path:', g.game_path || '') : '';
-    $('#gd-detect').value = g ? g.detect_path : '';
+    $('#gd-detect').value = $('#gd-detect').title = g ? g.detect_path : '';
     $('#gd-args').value = g ? staged(g.id, 'launch_args:', g.launch_args || '') : '';
     $('#gd-ex').checked = !!g && isEx(g);
     const mode = g ? staged(g.id, 'detect_mode:', (st.settings || {})['detect_mode:' + g.id] || 'auto') : 'auto';
@@ -140,7 +135,7 @@
       $('#det-msg').textContent = `Found ${n} installed game${n === 1 ? '' : 's'} (${catalog.length} known).`;
     } catch (e) { $('#det-msg').textContent = 'Detection failed: ' + e; catalog = catalog || []; }
     clearInterval(tick); bar.style.width = '100%'; detecting = false;
-    if (!gsel && catalog.length) { const f = catalog.find(x => x.installed) || catalog[0]; gsel = f.id; }
+    if (!gsel && catalog.length) { const f = catalog.find(x => x.id === params.get('game')) || catalog.find(x => x.installed) || catalog[0]; gsel = f.id; }
     renderTree(); renderDetail(); loadIcons();
   }
   async function loadCands() {

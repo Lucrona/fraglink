@@ -1,7 +1,7 @@
 //! Blocking client for the presence WebSocket (`GET /api/v1/ws`).
 //!
 //! The tray keeps one socket open while signed in, sends its status and current
-//! game when they change plus a ping every minute, and receives friends' presence
+//! game when they change plus a ping every 30 s, and receives friends' presence
 //! and friend-request events. Reads use a short socket timeout so one thread can
 //! both send and receive.
 

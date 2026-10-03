@@ -199,6 +199,38 @@ pub fn show_main(app: &AppHandle) {
     });
 }
 
+/// Startup window ("Checking for updates…"), Discord/Xfire style: small, borderless,
+/// centred. See `updater::start_with_splash`.
+pub fn show_splash(app: &AppHandle) {
+    off_main(app, "splash", |app| {
+        if app.get_webview_window("splash").is_some() {
+            return;
+        }
+        let r = WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("splash.html".into()))
+            .title("Fraglink")
+            .inner_size(SPLASH_W, SPLASH_H)
+            .decorations(false)
+            .resizable(false)
+            .maximizable(false)
+            .minimizable(false)
+            .center()
+            .focused(true)
+            .build();
+        if let Err(e) = r {
+            log::warn!("startup window failed: {e}");
+        }
+    });
+}
+
+pub const SPLASH_W: f64 = 300.0;
+pub const SPLASH_H: f64 = 330.0;
+
+pub fn close_splash(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("splash") {
+        let _ = w.close();
+    }
+}
+
 /// Close (destroy) the main window; the app keeps running in the tray.
 pub fn hide_main(app: &AppHandle) {
     persist_main_pos(app);

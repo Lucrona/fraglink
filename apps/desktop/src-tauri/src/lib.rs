@@ -49,6 +49,39 @@ pub struct AppState {
     pub side_open: Mutex<bool>,
     pub sync: sync::SyncShared,
     pub friends: friends::FriendsShared,
+    /// Automatic Away: no keyboard/mouse input for [`AUTO_AWAY_SECS`].
+    pub auto_away: std::sync::atomic::AtomicBool,
+}
+
+/// Like Discord: Away after 10 minutes without input (not a setting). Only replaces
+/// "Online"; a status the user picked (Away, Invisible) is left alone.
+pub const AUTO_AWAY_SECS: u64 = 10 * 60;
+
+/// Update the automatic Away flag; tells the UI and friends when it flips.
+fn update_auto_away(app: &AppHandle, idle_s: u64) {
+    use std::sync::atomic::Ordering;
+    let away = idle_s >= AUTO_AWAY_SECS;
+    let st = app.state::<AppState>();
+    if st.auto_away.swap(away, Ordering::SeqCst) != away {
+        log::info!("auto-away: {}", if away { "away" } else { "back" });
+        let _ = app.emit("fraglink://auto-away", away);
+        friends::nudge(app);
+    }
+}
+
+/// Running with the fake process source (`--sim`).
+pub fn is_sim(app: &AppHandle) -> bool {
+    app.try_state::<AppState>().is_some_and(|s| s.sim)
+}
+
+/// "0.2.0-10" -> "0.2.0-dev.10" (how the release is named).
+pub fn dev_version(v: &str) -> String {
+    match v.split_once('-') {
+        Some((base, n)) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => {
+            format!("{base}-dev.{n}")
+        }
+        _ => v.to_string(),
+    }
 }
 
 pub fn now() -> i64 {
@@ -59,6 +92,8 @@ struct Flags {
     sim: bool,
     sim_script: String,
     minimized: bool,
+    /// `--no-splash`: open the main window straight away (development).
+    no_splash: bool,
 }
 
 fn flags() -> Flags {
@@ -75,6 +110,7 @@ fn flags() -> Flags {
         sim,
         sim_script,
         minimized: args.iter().any(|a| a == "--minimized"),
+        no_splash: args.iter().any(|a| a == "--no-splash"),
     }
 }
 
@@ -355,6 +391,8 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let exit = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Fraglink", true, None::<&str>)?;
     let sep0 = PredefinedMenuItem::separator(app)?;
+    // "Check for Updates" (dev.10); once an update is downloaded it becomes
+    // "Restart to Update" at the top instead.
     if updater::ready_version(app).is_some() {
         let upd = MenuItem::with_id(app, "update", "Restart to Update", true, None::<&str>)?;
         return Menu::with_items(
@@ -364,9 +402,18 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             ],
         );
     }
+    let chk = MenuItem::with_id(
+        app,
+        "check_updates",
+        "Check for Updates",
+        true,
+        None::<&str>,
+    )?;
     Menu::with_items(
         app,
-        &[&open, &sep0, &launch, &skin, &status, &sep, &logoff, &exit],
+        &[
+            &open, &sep0, &launch, &skin, &status, &sep, &chk, &logoff, &exit,
+        ],
     )
 }
 
@@ -496,16 +543,6 @@ pub fn set_status(app: &AppHandle, status: &str) {
     friends::nudge(app);
 }
 
-pub fn set_paused(app: &AppHandle, paused: bool) {
-    let state = app.state::<AppState>();
-    let evs = {
-        let mut e = state.engine.lock().unwrap();
-        e.set_paused(paused).unwrap_or_default()
-    };
-    handle_events(app, evs);
-    let _ = app.emit("fraglink://paused", paused);
-}
-
 fn on_menu(app: &AppHandle, id: &str) {
     let app2 = app.clone();
     match id {
@@ -522,6 +559,7 @@ fn on_menu(app: &AppHandle, id: &str) {
             let _ = app.emit("fraglink://menu-pick", &s[3..]);
         }
         "update" => updater::install_from_tray(app),
+        "check_updates" => updater::check_from_tray(app),
         "logoff" => {
             windows::show_main(app);
             let _ = app.emit("fraglink://logoff", ());
@@ -592,11 +630,13 @@ fn start_tracker(app: AppHandle) {
     std::thread::Builder::new()
         .name("fraglink-tracker".into())
         .spawn(move || loop {
-            let evs = {
+            let (evs, idle) = {
                 let state = app.state::<AppState>();
                 let mut e = state.engine.lock().unwrap();
-                e.step(now())
+                let evs = e.step(now());
+                (evs, e.idle_seconds())
             };
+            update_auto_away(&app, idle);
             match evs {
                 Ok(evs) => handle_events(&app, evs),
                 Err(err) => log::error!("tracker step failed: {err:#}"),
@@ -708,18 +748,26 @@ pub fn run() {
                 side_open: Mutex::new(false),
                 sync: sync::SyncShared::default(),
                 friends: friends::FriendsShared::default(),
+                auto_away: Default::default(),
             });
             build_tray(&handle)?;
             let start_min = windows::flag(&handle, "start_minimized");
             let show = !fl.minimized && !start_min;
-            // An update downloaded last time (and ignored) is applied now, before the
-            // window comes up; if that fails the window is shown as usual.
-            let apply_now = !fl.sim && updater::pending_on_start(&handle);
-            if !fl.sim {
-                updater::start(handle.clone(), apply_now, show);
-            }
-            if show && !apply_now {
-                windows::show_main(&handle);
+            if show && !fl.no_splash {
+                // Startup window: check for updates first, then open the client.
+                windows::show_splash(&handle);
+                updater::start_with_splash(handle.clone());
+            } else {
+                // Started to the tray (autostart / start minimised), like Discord's
+                // "Start Minimized": no startup window. An update downloaded last time
+                // (and ignored) is applied now; if that fails the window is shown.
+                let apply_now = !fl.sim && updater::pending_on_start(&handle);
+                if !fl.sim {
+                    updater::start(handle.clone(), apply_now, show);
+                }
+                if show && !apply_now {
+                    windows::show_main(&handle);
+                }
             }
             sync::init(&handle);
             start_tracker(handle);
@@ -761,6 +809,8 @@ pub fn run() {
             commands::friend_search,
             updater::update_available,
             updater::install_update,
+            updater::check_for_updates,
+            commands::get_auto_away,
             commands::quit_app,
             commands::sync_status,
             commands::sync_sign_in,

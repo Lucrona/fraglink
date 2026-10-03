@@ -17,8 +17,6 @@ const STEAM_REFRESH_SECS: i64 = 600;
 /// Settings keys stored in the `settings` table.
 pub mod keys {
     pub const IDLE_THRESHOLD_MIN: &str = "idle_threshold_min";
-    pub const MIN_SESSION_MIN: &str = "min_session_min";
-    pub const PAUSED: &str = "paused";
     pub const TOASTS: &str = "toasts";
     pub const SKIN: &str = "skin";
     pub const ZOOM: &str = "zoom";
@@ -69,29 +67,24 @@ impl Engine {
         Ok(e)
     }
 
+    /// Seconds since the last keyboard/mouse input (Windows `GetLastInputInfo`; the
+    /// simulation scripts it). Only used for the automatic Away status, never for hours.
+    pub fn idle_seconds(&mut self) -> u64 {
+        self.env.idle_seconds()
+    }
+
     pub fn env_label(&self) -> &'static str {
         self.env.label()
     }
 
-    fn setting_i64(&self, key: &str, default: i64) -> i64 {
-        self.tracker
-            .store
-            .get_setting(key)
-            .ok()
-            .flatten()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(default)
-    }
-
     /// Re-read tracker-related settings from the store.
     pub fn apply_settings(&mut self) -> Result<()> {
-        let min = self.setting_i64(keys::MIN_SESSION_MIN, 2).clamp(0, 60);
-        // Since 0.2.0-dev.9 there's no idle cutoff: hours count all the time a game runs
-        // (like Steam). The old idle_threshold_min setting is ignored.
-        self.tracker.cfg.min_session_s = min * 60;
-        let paused = self.tracker.store.get_setting(keys::PAUSED)?.as_deref() == Some("1");
-        if paused != self.tracker.is_paused() {
-            self.tracker.set_paused(paused)?;
+        // Like Steam, every session counts: since 0.2.0-dev.9 there's no idle cutoff
+        // and since dev.10 no minimum length and no "pause tracking". The old
+        // idle_threshold_min, min_session_min and paused settings are ignored.
+        self.tracker.cfg.min_session_s = 0;
+        if self.tracker.is_paused() {
+            self.tracker.set_paused(false)?;
         }
         Ok(())
     }
@@ -246,13 +239,6 @@ impl Engine {
             ev = self.tracker.stop()?;
         }
         Ok(ev)
-    }
-
-    pub fn set_paused(&mut self, paused: bool) -> Result<Vec<TrackerEvent>> {
-        self.tracker
-            .store
-            .set_setting(keys::PAUSED, if paused { "1" } else { "0" })?;
-        self.tracker.set_paused(paused)
     }
 
     /// Stats for the tray (checkpoints the live session first so it is included).

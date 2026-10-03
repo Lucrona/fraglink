@@ -31,6 +31,37 @@ pub struct Entry {
     pub can_launch: bool,
 }
 
+/// A folder in normal Windows form for Options > Games: real casing (asked from the
+/// file system when the folder exists), backslashes and a trailing `\`, e.g.
+/// `E:\Steam\steamapps\common\Satisfactory\`. Non-Windows paths are left alone.
+pub fn display_dir(p: &str) -> String {
+    let p = p.trim();
+    let win = p.contains('\\') || p.as_bytes().get(1) == Some(&b':');
+    if !win {
+        return p.to_string();
+    }
+    let mut s = std::fs::canonicalize(p)
+        .ok()
+        .map(|c| c.to_string_lossy().into_owned())
+        .map(|c| {
+            if let Some(r) = c.strip_prefix(r"\\?\UNC\") {
+                format!(r"\\{r}")
+            } else {
+                c.strip_prefix(r"\\?\").unwrap_or(&c).to_string()
+            }
+        })
+        .unwrap_or_else(|| p.replace('/', "\\"));
+    if !s.ends_with('\\') {
+        s.push('\\');
+    }
+    s
+}
+
+/// The exe detection looks for, as found in the install folder (full path), if any.
+fn found_exe(folder: Option<&str>, names: &[String]) -> Option<String> {
+    crate::installs::find_exe(folder?, names)
+}
+
 /// How to start a game. Only built from catalog data, never from UI input.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Launch {
@@ -61,7 +92,7 @@ pub fn build(
         });
         let exe = set(EXE_KEY, &g.id);
         let (installed, source, path) = if let Some(a) = app {
-            (true, "steam", Some(a.prefix.clone()))
+            (true, "steam", Some(a.dir.clone()))
         } else if let Some(l) = lib {
             (true, l.store.as_str(), Some(l.install_dir.clone()))
         } else if exe.is_some() {
@@ -85,15 +116,24 @@ pub fn build(
             steam_appid: app
                 .map(|a| a.appid)
                 .or_else(|| row.and_then(|r| r.steam_appid)),
-            game_path: set(PATH_KEY, &g.id).or(path),
-            detect_path: exe.unwrap_or_else(|| {
-                g.exes
-                    .iter()
-                    .chain(&g.path_exes)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            }),
+            // dev.10: only the exe actually found (not the list of candidates), and
+            // folders in normal Windows form
+            detect_path: exe
+                .clone()
+                .filter(|_| source == "seen")
+                .or_else(|| {
+                    let names: Vec<String> = g.exes.iter().chain(&g.path_exes).cloned().collect();
+                    found_exe(path.as_deref().filter(|_| source != "seen"), &names)
+                })
+                .or(exe.clone())
+                .unwrap_or_default(),
+            game_path: set(PATH_KEY, &g.id).or(path.map(|p| {
+                if source == "seen" {
+                    p
+                } else {
+                    display_dir(&p)
+                }
+            })),
             launch_args: set(ARGS_KEY, &g.id).unwrap_or_default(),
             excluded: row.is_some_and(|r| r.excluded),
             can_launch: false,
@@ -118,8 +158,12 @@ pub fn build(
             installed: true,
             source: l.store.as_str().into(),
             steam_appid: None,
-            game_path: set(PATH_KEY, &id).or(Some(l.install_dir.clone())),
-            detect_path: l.launch_exe.clone().unwrap_or_default(),
+            game_path: set(PATH_KEY, &id).or(Some(display_dir(&l.install_dir))),
+            detect_path: l
+                .launch_exe
+                .as_deref()
+                .map(|x| crate::installs::join_display(&l.install_dir, x))
+                .unwrap_or_default(),
             launch_args: set(ARGS_KEY, &id).unwrap_or_default(),
             excluded: rows.get(id.as_str()).is_some_and(|r| r.excluded),
             can_launch: false,
@@ -146,7 +190,7 @@ pub fn build(
             },
             steam_appid: r.steam_appid,
             game_path: set(PATH_KEY, &r.id)
-                .or(steam_app.map(|a| a.prefix.clone()))
+                .or(steam_app.map(|a| display_dir(&a.dir)))
                 .or(exe.clone()),
             detect_path: exe.unwrap_or_default(),
             launch_args: set(ARGS_KEY, &r.id).unwrap_or_default(),
@@ -298,6 +342,61 @@ mod tests {
         let first_uninstalled = c.iter().position(|e| !e.installed).unwrap();
         assert!(c[..first_uninstalled].iter().all(|e| e.installed));
         assert!(c[first_uninstalled..].iter().all(|e| !e.installed));
+    }
+
+    #[test]
+    fn options_show_windows_paths_and_the_exe_found() {
+        let sigs = SignatureDb::builtin();
+        let mut steam = SteamIndex::default();
+        steam.insert("E:/Steam", 526870, "Satisfactory", "Satisfactory");
+        let c = build(
+            &sigs,
+            &steam,
+            &LibraryIndex::default(),
+            &[],
+            &BTreeMap::new(),
+        );
+        let s = c.iter().find(|e| e.id == "satisfactory").unwrap();
+        // real casing, backslashes, trailing backslash (not the lowercase match prefix)
+        assert_eq!(
+            s.game_path.as_deref(),
+            Some(r"E:\Steam\steamapps\common\Satisfactory\")
+        );
+        // folder doesn't exist here: nothing found, and no list of candidates
+        assert_eq!(s.detect_path, "");
+        let rust = c.iter().find(|e| e.id == "rust").unwrap();
+        assert!(!rust.installed && rust.detect_path.is_empty());
+
+        // a real folder: the exe actually present is shown with its full path
+        let tmp = std::env::temp_dir().join(format!("fl-cat-{}", std::process::id()));
+        let bin = tmp.join("steamapps/common/Satisfactory/FactoryGame/Binaries/Win64");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("FactoryGameSteam-Win64-Shipping.exe"), b"").unwrap();
+        std::fs::write(
+            tmp.join("steamapps/common/Satisfactory/FactoryGame.exe"),
+            b"",
+        )
+        .unwrap();
+        let mut steam = SteamIndex::default();
+        steam.insert(
+            &tmp.to_string_lossy(),
+            526870,
+            "Satisfactory",
+            "Satisfactory",
+        );
+        let dir = steam.get(526870).unwrap().dir.clone();
+        crate::installs::clear_exe_cache();
+        let found = crate::installs::find_exe(
+            &dir,
+            &[
+                "FactoryGame-Win64-Shipping.exe".into(),
+                "FactoryGameSteam-Win64-Shipping.exe".into(),
+            ],
+        );
+        assert!(found.as_deref().is_some_and(
+            |f| f.ends_with("FactoryGame/Binaries/Win64/FactoryGameSteam-Win64-Shipping.exe")
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

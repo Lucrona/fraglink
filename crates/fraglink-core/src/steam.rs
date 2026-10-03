@@ -20,6 +20,8 @@ pub struct SteamApp {
     pub installdir: String,
     /// Normalized `<library>/steamapps/common/<installdir>/` prefix.
     pub prefix: String,
+    /// The install folder as Steam wrote it (original casing), for display.
+    pub dir: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -126,6 +128,10 @@ impl SteamIndex {
             name: name.to_string(),
             installdir: installdir.to_string(),
             prefix: prefix_for(library, installdir),
+            dir: format!(
+                "{}/steamapps/common/{installdir}",
+                library.trim_end_matches(['\\', '/'])
+            ),
         };
         if let Some(&i) = self.by_appid.get(&appid) {
             self.apps[i] = app;

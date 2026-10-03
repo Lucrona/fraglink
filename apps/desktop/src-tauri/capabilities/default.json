@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main, Options and toast windows. App commands (invoke) are allowed by default; only window plumbing is listed here.",
+  "description": "Main, Options, toast and startup (splash) windows. App commands (invoke) are allowed by default; only window plumbing is listed here.",
   "windows": [
     "main",
     "toast",
-    "options"
+    "options",
+    "splash"
   ],
   "permissions": [
     "core:default",

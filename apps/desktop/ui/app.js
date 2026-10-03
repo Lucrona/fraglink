@@ -266,7 +266,7 @@
   function fmtH(h) { return h.toFixed(1) + ' h'; }
   function fmtT(ms) { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; }
   function statusText(f) {
-    if (f.kind === 'playing' || f.kind === 'fof') return GAMES[f.game].name;
+    if (f.kind === 'playing' || f.kind === 'fof') return GAMES[f.game].name + (f.away ? ' (Away)' : '');
     if (f.kind === 'online' || f.kind === 'req' || f.kind === 'out') return f.status;
     return 'Offline';
   }
@@ -335,7 +335,7 @@
     const out = [];
     for (const f of l.friends || []) {
       const p = f.presence || {}, name = f.display_name || f.handle, base = { id: 'u:' + f.handle, handle: f.handle, name, real: true, since: f.since, presence: p, week: 0, total: 0 };
-      if (p.status !== 'offline' && p.game_id) out.push({ ...base, kind: 'playing', game: ensureGame(p.game_id, p.game_name), server: sinceText(p.session_started_at), info: p.status === 'away' ? 'Away' : '' });
+      if (p.status !== 'offline' && p.game_id) out.push({ ...base, kind: 'playing', game: ensureGame(p.game_id, p.game_name), server: sinceText(p.session_started_at), info: '', away: p.status === 'away' });
       else if (p.status === 'online' || p.status === 'away') out.push({ ...base, kind: 'online', status: p.status === 'away' ? 'Away' : 'Online' });
       else out.push({ ...base, kind: 'off', last: '' });
     }
@@ -435,8 +435,7 @@
     if (!g) { list.innerHTML = h + `<div class="fl-empty">Loading your stats…</div></div>`; return; }
     h += `<div class="xf-sec s-now"><i class="tri"></i>Now Playing</div>`;
     const np = g.now_playing;
-    if (g.paused) h += `<div class="xf-row st-row fl-muted"><span class="c-name st-g"><i class="noicon"></i><span class="nm">Tracking paused</span></span><span class="st-live"><a data-action="pause-toggle">resume</a></span></div>`;
-    else if (np) { const id = ensureGame(np.game_id, np.name); h += `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(np.name)} · detected via ${esc(String(np.source).replace('_', ' '))}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(np.name)}</span></span><span class="st-live timer" id="session">${fmtT(liveSeconds() * 1000)}</span></div>`; }
+    if (np) { const id = ensureGame(np.game_id, np.name); h += `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(np.name)} · detected via ${esc(String(np.source).replace('_', ' '))}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(np.name)}</span></span><span class="st-live timer" id="session">${fmtT(liveSeconds() * 1000)}</span></div>`; }
     else h += `<div class="xf-row st-row fl-muted"><span class="c-name st-g"><i class="noicon"></i><span class="nm">Not in a game · watching</span></span><span class="st-live"></span></div>`;
     const change = g.last_week_seconds > 0 ? Math.round((g.week_seconds - g.last_week_seconds) / g.last_week_seconds * 100) : null;
     const chg = change === null ? '' : `<em class="${change < 0 ? 'down' : ''}" title="vs all of last week">${change < 0 ? '&#9660;' : '&#9650;'}${Math.abs(change)}%</em>`;
@@ -900,7 +899,6 @@
     if (k.startsWith('game_path:') || k.startsWith('launch_args:')) loadCatalog();
     if (k === 'skin' && v !== state.skin) applySkin(v, false);
     else if (k === 'zoom' && state.skin !== 'dark') setZoom(v);
-    else if (k === 'paused') refreshSoon();
   });
 
   /* ---- games dialog: "this is a game" + exclusions ---- */
@@ -939,7 +937,6 @@
       if (!candSel || !name) { notice('This is a game', 'Pick a running program from the list and type the game name.'); return; }
       try { await FLB.tag(candSel, name); $('#games-dlg').hidden = true; notice('Tagged', `<b>${esc(name)}</b> (${esc(candSel)}) will be tracked from now on.`); refreshSoon(); } catch (e) { toastErr(e); }
     },
-    'pause-toggle': async () => { try { await FLB.set('paused', LIVE.glance && LIVE.glance.paused ? '0' : '1'); refreshSoon(); } catch (e) { toastErr(e); } },
     'export': async () => { try { const p = await FLB.exportData(); notice('Export my data', `Saved:<br><code>${p.map(esc).join('</code><br><code>')}</code>`); } catch (e) { toastErr(e); } },
     'open-data': () => FLB.openData().catch(toastErr),
     'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options. Then your game sessions (game, start, end, time played) are uploaded, and while the app runs your friends see your status and the game you\'re playing now. Friends also see your recent sessions in their Activity Report and your hours this week, unless you turn that off in Options &gt; Connections. <b>Invisible</b> shows you as offline. Program names and paths are never sent.'),
@@ -964,7 +961,16 @@
       try { const r = await FLB.friendAdd(h); m.innerHTML = r === 'accepted' ? `You and <b>${esc(h)}</b> are now friends.` : `Request sent. <b>${esc(h)}</b> shows under Friend Requests until they accept.`; refreshFriends(); }
       catch (e) { m.innerHTML = `<span class="bad">${esc(String(e && e.message || e))}</span>`; }
     },
-    'update-now': a => { a.disabled = true; a.classList.add('busy'); a.querySelector('span').textContent = 'Restarting…'; FLB.installUpdate().catch(e => { a.disabled = false; a.classList.remove('busy'); a.querySelector('span').textContent = 'Update ready - Restart'; toastErr(e); }); },
+    'update-now': a => { a.disabled = true; a.classList.add('busy'); a.title = 'Restarting…'; FLB.installUpdate().catch(e => { a.disabled = false; a.classList.remove('busy'); a.title = 'Update ready - click to restart'; toastErr(e); }); },
+    // Help > Check for Updates: "You're up to date", or the update downloads, installs and restarts.
+    'check-updates': async () => {
+      notice('Check for Updates', '<p class="upd-msg" id="upd-msg">Checking for updates…</p>');
+      let r; try { r = await FLB.checkUpdates(); } catch (e) { r = { result: 'failed', message: String(e) }; }
+      const m = $('#upd-msg'); if (!m) return;
+      if (r.result === 'up_to_date') m.innerHTML = `You're up to date.<br><small>Fraglink ${esc(devVer(r.version))}</small>`;
+      else if (r.result === 'installing') m.innerHTML = `Installing Fraglink ${esc(devVer(r.version))}…<br><small>Fraglink restarts when it's done.</small>`;
+      else m.innerHTML = `Couldn't check for updates.<br><small>${esc(r.message || '')}</small>`;
+    },
     'detect-skip': () => { state.detectRun = false; if (TAURI) saveSetting('games_detected_once', '1'); render(); },
     'activity-more': () => { if (tabOn('activity')) { state.tab = 'activity'; render(); } else notice('Activity Report', 'The full Activity Report (all of your friends\' recent games, with filters) arrives with the Fraglink website. The side panel shows the latest few.'); },
     'status-menu': a => statusMenu(a),
@@ -1192,17 +1198,20 @@
   });
   /* Status: the game I'm in shows automatically (it is "Online, playing X"),
      then Online / Away / Invisible, a custom line, and Set Custom Status. */
-  let myStatus = 'online';
+  let myStatus = 'online', autoAway = false;
   const LOOKING = 'Looking to Play';
-  function statusLabel() { return myStatus === 'online' ? '' : ' (' + ({ away: 'Away', invisible: 'Invisible' })[myStatus] + ')'; }
+  // automatic Away only replaces Online; a status picked by hand stays
+  const shownStatus = () => myStatus === 'online' && autoAway ? 'away' : myStatus;
+  function statusLabel() { const s = shownStatus(); return s === 'online' ? '' : ' (' + ({ away: 'Away', invisible: 'Invisible' })[s] + ')'; }
   function syncStatus() {
     const btn = $('#status-btn'), np = LIVE.glance && LIVE.glance.now_playing, custom = SET().custom_status || '';
     const customOn = SET().custom_on === '1' && custom;
     btn.disabled = signedOut();
     if (btn.disabled) { btn.querySelector('span').textContent = 'Offline'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
-    const txt = myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : np && setOn('share_game') ? 'Playing ' + np.name : 'Online';
-    btn.querySelector('span').textContent = txt; btn.title = 'Status: ' + txt;
-    btn.dataset.st = myStatus;
+    const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? np.name : '';
+    const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? 'Playing ' + game : 'Online';
+    btn.querySelector('span').textContent = txt; btn.title = 'Status: ' + txt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
+    btn.dataset.st = shownStatus();
     $('#username').textContent = (realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name) + statusLabel();
     if ($('#px-user') && $('#px-user').textContent === '(Offline)') $('#px-user').textContent = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
   }
@@ -1361,17 +1370,22 @@
     // Auto-update: Rust downloads + verifies quietly (startup + every 6 h); then a green arrow
     // in the title bar installs and restarts in one click. No prompt.
     const askUpdate = v => { const b = $('#upd-ready'); if (!b || !v) return;
-      b.title = `Fraglink ${devVer(v)} is downloaded and verified. Click to restart and update.`; b.hidden = false; document.body.classList.add('has-upd'); };
+      b.title = 'Update ready - click to restart'; b.dataset.version = devVer(v); b.hidden = false; document.body.classList.add('has-upd'); };
+    FLB.on('fraglink://update-found', v => { const m = $('#upd-msg'); if (m) m.innerHTML = `Downloading Fraglink ${esc(v)}…<br><small>Fraglink restarts when it's done.</small>`; });
+    FLB.on('fraglink://update-progress', p => { const m = $('#upd-msg small'); if (m && p != null && m.parentNode.textContent.startsWith('Downloading')) m.textContent = `${p}% · Fraglink restarts when it's done.`; });
+    // Automatic Away after 10 minutes without input (Rust watches; like Discord).
+    FLB.on('fraglink://auto-away', v => { autoAway = !!v; syncStatus(); });
+    if (FLB.autoAway) FLB.autoAway().then(v => { autoAway = !!v; syncStatus(); }).catch(() => {});
     FLB.on('fraglink://update', askUpdate);
     if (FLB.updateAvailable) FLB.updateAvailable().then(askUpdate).catch(() => {});
     FLB.on('fraglink://catalog', loadCatalog);
     FLB.on('fraglink://show-friend', h => { state.tab = 'friends'; state.sel = 'u:' + h; refreshFriends(); });
     setInterval(() => { if (realMode() && state.tab === 'friends') render(); refreshActivity(); }, 60000);
-    FLB.on('fraglink://paused', refreshSoon);
     FLB.on('fraglink://status', v => { myStatus = v; syncStatus(); });
     setInterval(refresh, 30000);
     if (!TAURI && params.get('toast') === '1') { const f = FRIENDS.find(x => x.id === 'rift'); Object.assign(f, { kind: 'playing', game: 'bf2', server: SERVERS[1], info: 'Karkand · 32/64' }); render(); toast(f, 'bf2'); }
-    if (params.get('upd') === '1') askUpdate('0.2.0-9');
+    if (params.get('upd') === '1') askUpdate('0.2.0-10');
+    if (params.get('check') === '1') actions['check-updates']();
     if (params.get('modal') === 'options') openOptions();
     if (params.get('modal') === 'about') actions.about();
     if (params.get('menu') === 'status') setTimeout(() => statusMenu($('#status-btn')), 300);

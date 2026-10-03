@@ -117,7 +117,7 @@
         </div>
         <div class="xf-userfield"><span id="username">Lucrona</span></div>
         <button class="xf-min" type="button" title="Minimize" data-action="minimize"><i></i></button>
-        <button class="xf-upd" id="upd-ready" type="button" data-action="update-now" hidden><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.4 1.2h3.2v4.3h2.5L6 10 1.9 5.5h2.5z" fill="currentColor"/><path d="M2.2 11h7.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg><span>Update ready - Restart</span></button>
+        <button class="xf-upd" id="upd-ready" type="button" data-action="update-now" title="Update ready - click to restart" aria-label="Update ready - click to restart" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4v6h3.2L8 13 2.8 7.5H6z" fill="currentColor"/><path d="M2.5 14.6h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
         <div class="xf-winbtns only-phoenix only-stream only-dark">
           <button type="button" data-action="win-min" title="Minimize">_</button><button type="button" class="no-dark" title="Maximize" disabled>□</button><button type="button" data-action="minimize" title="Close (keeps running in the tray)">×</button>
         </div>
@@ -187,6 +187,7 @@
         <div class="xf-menu" data-menu="help"><span><u>H</u>elp</span>
           <div class="xf-dropdown">
             <button data-action="help-contents"><u>C</u>ontents</button>
+            <button data-action="check-updates">Check for <u>U</u>pdates</button>
             <hr />
             <button data-action="about"><u>A</u>bout Fraglink…</button>
           </div>

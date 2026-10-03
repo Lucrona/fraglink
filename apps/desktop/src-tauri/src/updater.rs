@@ -1,23 +1,43 @@
-//! Quiet auto-update, Discord style: check at startup and every 6 hours; a newer
-//! signed build is downloaded (and its signature verified) in the background. Then
-//! the main window shows a small green arrow in the title bar, the tray gets a
-//! "Restart to Update" item and a green dot; one click installs and restarts. An
-//! update that is ignored is applied on the next app start.
+//! Updates, Discord/Xfire style.
+//!
+//! * **Startup window** (0.2.0-dev.10): when Fraglink starts with its window, a
+//!   small borderless window ("Checking for updates…") checks first. A newer build is
+//!   downloaded (progress bar), its signature verified, installed, and Fraglink
+//!   relaunches into it. Otherwise the window closes after about a second and the
+//!   main window opens. Offline or a slow server: the check gives up after
+//!   [`SPLASH_TIMEOUT`] and Fraglink opens normally.
+//! * **Started to the tray** (Windows autostart, "start minimised"): no window, like
+//!   Discord's "Start Minimized". The background check runs 20 s later; an update
+//!   left ready last time is applied straight away.
+//! * **Background**: every hour; a new build is downloaded and verified quietly, then a
+//!   small green arrow in the title bar and a tray dot / "Restart to Update" install it.
+//! * **Check for Updates** (Help menu, tray): checks now; "You're up to date" or the
+//!   update downloads, installs and restarts.
+use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 pub const UPDATE_EVENT: &str = "fraglink://update";
+pub const SPLASH_EVENT: &str = "fraglink://splash";
+pub const FOUND_EVENT: &str = "fraglink://update-found";
 const FIRST_CHECK: Duration = Duration::from_secs(20);
-const EVERY: Duration = Duration::from_secs(6 * 3600);
+pub const EVERY: Duration = Duration::from_secs(3600);
+/// Give up on the startup check after this (offline, slow server).
+pub const SPLASH_TIMEOUT: Duration = Duration::from_secs(5);
+/// Keep the startup window up at least this long so it doesn't just flash.
+const SPLASH_MIN: Duration = Duration::from_millis(1000);
+/// Startup / manual download limit before Fraglink gives up and opens normally.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Default)]
 pub struct UpdateState {
     /// A downloaded, verified update: (update, installer bytes).
     ready: Mutex<Option<(Update, Vec<u8>)>>,
     installing: Mutex<bool>,
+    checking: Mutex<bool>,
 }
 
 /// Version of the downloaded update waiting for a restart, if any.
@@ -35,6 +55,12 @@ fn marker(app: &AppHandle) -> Option<PathBuf> {
     Some(app.path().app_data_dir().ok()?.join("update-ready"))
 }
 
+fn clear_marker(app: &AppHandle) {
+    if let Some(p) = marker(app) {
+        let _ = std::fs::remove_file(p);
+    }
+}
+
 /// True when the last run left a downloaded update: the caller keeps the main
 /// window hidden while [`start`] applies it (shown again if that fails).
 pub fn pending_on_start(app: &AppHandle) -> bool {
@@ -43,52 +69,174 @@ pub fn pending_on_start(app: &AppHandle) -> bool {
     };
     let cur = app.package_info().version.to_string();
     if v.trim().is_empty() || v.trim() == cur {
-        if let Some(p) = marker(app) {
-            let _ = std::fs::remove_file(p);
-        }
+        clear_marker(app);
         return false;
     }
     true
 }
 
-/// `apply_now`: the previous run left an update ready; install it straight away.
+/// Started to the tray (no startup window). `apply_now`: the previous run left an
+/// update ready; install it straight away.
 pub fn start(app: AppHandle, apply_now: bool, show_after: bool) {
     tauri::async_runtime::spawn(async move {
         if apply_now {
             if check(&app).await && install(&app).await.is_ok() {
                 return; // restarting
             }
-            if let Some(p) = marker(&app) {
-                let _ = std::fs::remove_file(p);
-            }
+            clear_marker(&app);
             if show_after {
                 crate::windows::show_main(&app);
             }
         } else {
-            tokio_sleep(FIRST_CHECK).await;
+            sleep(FIRST_CHECK).await;
         }
-        loop {
-            check(&app).await;
-            tokio_sleep(EVERY).await;
-        }
+        background(app).await;
     });
 }
 
-async fn tokio_sleep(d: Duration) {
-    // tauri's runtime is tokio; avoid a direct tokio dependency
-    let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(d)).await;
+async fn background(app: AppHandle) -> ! {
+    loop {
+        check(&app).await;
+        sleep(EVERY).await;
+    }
 }
 
-/// Check and, when there's a newer build, download + verify it. True = one is ready.
-async fn check(app: &AppHandle) -> bool {
-    let res = match app.updater() {
-        Ok(u) => u.check().await,
-        Err(e) => {
-            log::warn!("updater unavailable: {e}");
-            return ready_version(app).is_some();
+async fn sleep(d: Duration) {
+    tokio::time::sleep(d).await;
+}
+
+#[derive(Clone, Serialize)]
+struct SplashMsg {
+    text: String,
+    /// 0-100, or None for the moving "busy" bar.
+    pct: Option<u32>,
+}
+
+fn splash(app: &AppHandle, text: &str, pct: Option<u32>) {
+    let _ = app.emit_to(
+        "splash",
+        SPLASH_EVENT,
+        SplashMsg {
+            text: text.into(),
+            pct,
+        },
+    );
+}
+
+/// Startup window flow (see the module docs). The caller has shown the window.
+pub fn start_with_splash(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let t0 = Instant::now();
+        let found = if crate::is_sim(&app) {
+            None // simulation: show the window, never update
+        } else {
+            match tokio::time::timeout(SPLASH_TIMEOUT, find(&app)).await {
+                Ok(Ok(u)) => u,
+                Ok(Err(e)) => {
+                    log::info!("startup update check failed: {e}");
+                    None
+                }
+                Err(_) => {
+                    log::info!("startup update check timed out");
+                    None
+                }
+            }
+        };
+        if let Some(up) = found {
+            log::info!("startup: update {} -> {}", up.current_version, up.version);
+            if download_with_progress(&app, up, true).await {
+                splash(&app, "Installing update…", Some(100));
+                match install(&app).await {
+                    Ok(()) => return, // the installer relaunches Fraglink
+                    Err(e) => log::warn!("startup update install failed: {e}"),
+                }
+            }
+        } else {
+            clear_marker(&app);
+        }
+        splash(&app, "Starting…", Some(100));
+        let shown = t0.elapsed();
+        if shown < SPLASH_MIN {
+            sleep(SPLASH_MIN - shown).await;
+        }
+        crate::windows::show_main(&app);
+        sleep(Duration::from_millis(250)).await; // let the main window paint first
+        crate::windows::close_splash(&app);
+        sleep(EVERY).await;
+        background(app).await;
+    });
+}
+
+/// Ask the server; `Ok(Some)` = a newer build exists (not downloaded yet).
+async fn find(app: &AppHandle) -> Result<Option<Update>, String> {
+    app.updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Download + verify `up` (progress on the startup window when `to_splash`).
+/// True = it's ready to install.
+async fn download_with_progress(app: &AppHandle, up: Update, to_splash: bool) -> bool {
+    let what = format!("Downloading update {}…", crate::dev_version(&up.version));
+    if to_splash {
+        splash(app, &what, Some(0));
+    }
+    let (app2, what2) = (app.clone(), what.clone());
+    let mut got: u64 = 0;
+    let mut last_pct = u32::MAX;
+    let fut = up.download(
+        move |chunk, total| {
+            got += chunk as u64;
+            if let Some(t) = total.filter(|t| *t > 0) {
+                let pct = ((got * 100) / t).min(100) as u32;
+                if pct != last_pct {
+                    last_pct = pct;
+                    if to_splash {
+                        splash(&app2, &what2, Some(pct));
+                    }
+                    let _ = app2.emit("fraglink://update-progress", pct);
+                }
+            }
+        },
+        || {},
+    );
+    // `download` verifies the minisign signature against the configured public key.
+    let bytes = match tokio::time::timeout(DOWNLOAD_TIMEOUT, fut).await {
+        Ok(Ok(b)) => b,
+        Ok(Err(e)) => {
+            log::info!("update download failed: {e}");
+            return false;
+        }
+        Err(_) => {
+            log::info!("update download timed out");
+            return false;
         }
     };
-    let up = match res {
+    log::info!("update {} downloaded and verified", up.version);
+    *app.state::<UpdateState>().ready.lock().unwrap() = Some((up, bytes));
+    true
+}
+
+/// Background check and, when there's a newer build, download + verify it quietly.
+/// True = one is ready.
+async fn check(app: &AppHandle) -> bool {
+    {
+        let st = app.state::<UpdateState>();
+        let mut busy = st.checking.lock().unwrap();
+        if *busy {
+            return ready_version(app).is_some();
+        }
+        *busy = true;
+    }
+    let r = check_inner(app).await;
+    *app.state::<UpdateState>().checking.lock().unwrap() = false;
+    r
+}
+
+async fn check_inner(app: &AppHandle) -> bool {
+    let up = match find(app).await {
         Ok(Some(up)) => up,
         Ok(None) => {
             log::debug!("no update");
@@ -107,24 +255,24 @@ async fn check(app: &AppHandle) -> bool {
         up.current_version,
         up.version
     );
-    // `download` verifies the minisign signature against the configured public key.
-    let bytes = match up.download(|_, _| {}, || {}).await {
-        Ok(b) => b,
-        Err(e) => {
-            log::info!("update download failed: {e}");
-            return ready_version(app).is_some();
-        }
+    if !download_with_progress(app, up, false).await {
+        return ready_version(app).is_some();
+    }
+    announce_ready(app);
+    true
+}
+
+/// Title-bar arrow, tray dot and "Restart to Update" for the ready update.
+fn announce_ready(app: &AppHandle) {
+    let Some(version) = ready_version(app) else {
+        return;
     };
-    log::info!("update {} downloaded and verified", up.version);
-    let version = up.version.clone();
-    *app.state::<UpdateState>().ready.lock().unwrap() = Some((up, bytes));
     if let Some(p) = marker(app) {
         let _ = std::fs::write(p, &version);
     }
     crate::refresh_tray(app);
     crate::set_tray_update_dot(app, true);
     let _ = app.emit(UPDATE_EVENT, &version);
-    true
 }
 
 async fn install(app: &AppHandle) -> Result<(), String> {
@@ -142,9 +290,7 @@ async fn install(app: &AppHandle) -> Result<(), String> {
         return Err("no update ready".into());
     };
     log::info!("installing update {}", up.version);
-    if let Some(p) = marker(app) {
-        let _ = std::fs::remove_file(p);
-    }
+    clear_marker(app);
     crate::stop_for_update(app); // close open sessions before the installer takes over
     if let Err(e) = up.install(bytes) {
         // Windows: install() exits and the installer relaunches the app
@@ -152,6 +298,63 @@ async fn install(app: &AppHandle) -> Result<(), String> {
         return Err(e.to_string());
     }
     app.restart();
+}
+
+/// Result of "Check for Updates".
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case", tag = "result")]
+pub enum Manual {
+    UpToDate {
+        version: String,
+    },
+    /// An update was found (or already ready) and is installing; Fraglink restarts.
+    Installing {
+        version: String,
+    },
+    Failed {
+        message: String,
+    },
+}
+
+/// "Check for Updates": check now; install straight away when there is one.
+pub async fn check_now(app: &AppHandle) -> Manual {
+    let current = crate::dev_version(&app.package_info().version.to_string());
+    if crate::is_sim(app) {
+        return Manual::UpToDate { version: current };
+    }
+    if ready_version(app).is_none() {
+        let found = match tokio::time::timeout(Duration::from_secs(20), find(app)).await {
+            Ok(Ok(u)) => u,
+            Ok(Err(e)) => return Manual::Failed { message: e },
+            Err(_) => {
+                return Manual::Failed {
+                    message: "The update server didn't answer.".into(),
+                }
+            }
+        };
+        let Some(up) = found else {
+            return Manual::UpToDate { version: current };
+        };
+        let _ = app.emit(FOUND_EVENT, crate::dev_version(&up.version));
+        if !download_with_progress(app, up, false).await {
+            return Manual::Failed {
+                message: "The update couldn't be downloaded.".into(),
+            };
+        }
+    }
+    let version = ready_version(app)
+        .map(|v| crate::dev_version(&v))
+        .unwrap_or_default();
+    let app2 = app.clone();
+    // install after this answer reaches the UI
+    tauri::async_runtime::spawn(async move {
+        sleep(Duration::from_millis(600)).await;
+        if let Err(e) = install(&app2).await {
+            log::warn!("update install failed: {e}");
+            announce_ready(&app2);
+        }
+    });
+    Manual::Installing { version }
 }
 
 /// Version of the update that is downloaded and ready, if any (the UI asks on load).
@@ -166,6 +369,12 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
     install(&app).await
 }
 
+/// Help > Check for Updates.
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> Manual {
+    check_now(&app).await
+}
+
 /// Tray "Restart to Update".
 pub fn install_from_tray(app: &AppHandle) {
     let app = app.clone();
@@ -173,5 +382,29 @@ pub fn install_from_tray(app: &AppHandle) {
         if let Err(e) = install(&app).await {
             log::warn!("update install failed: {e}");
         }
+    });
+}
+
+/// Tray "Check for Updates": same as the Help menu, answered with a small message box.
+pub fn check_from_tray(app: &AppHandle) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let (kind, text) = match check_now(&app).await {
+            Manual::UpToDate { version } => (
+                MessageDialogKind::Info,
+                format!("You're up to date.\n\nFraglink {version}"),
+            ),
+            Manual::Installing { .. } => return, // the installer window takes over
+            Manual::Failed { message } => (
+                MessageDialogKind::Warning,
+                format!("Couldn't check for updates.\n\n{message}"),
+            ),
+        };
+        app.dialog()
+            .message(text)
+            .title("Check for Updates")
+            .kind(kind)
+            .show(|_| {});
     });
 }

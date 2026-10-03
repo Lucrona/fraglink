@@ -24,8 +24,10 @@ Last updated: 26 September 2026 · Operator: **TBD** (who runs the public server
 - The list of running programs (name, full path, process id), which it compares against a list of known games.
 - Steam's current game id and library files, Epic Games install manifests and GOG Galaxy's install
   list. It uses these only to recognise games you installed through them.
-- Nothing about your keyboard or mouse. Since version 0.2.0-dev.9 playtime counts all the time a
-  game is running, like Steam, so the app no longer reads even your idle time.
+- How long it's been since you last touched the keyboard or mouse (one number from Windows), only
+  to show you as Away after 10 minutes, like Discord. It never records which keys you press or
+  where you click, and it doesn't change your playtime: hours count all the time a game is running,
+  like Steam.
 
 **What it never does:** read or change game memory, inject code into games, hook input, take
 screenshots, read chat or window contents, or log keystrokes. That's also why it's safe to use
@@ -48,7 +50,7 @@ Signing in is optional. You start it in **Options → Sync** and approve a pairi
 | Data | Why |
 |---|---|
 | Finished game sessions: a random session id, the game's id and name, its Steam app id if known, start and end time, active seconds, an idle field that is always 0 since dev.9, app version | So your hours work across PCs and appear on your profile and stats |
-| While the app is running: your status (online, away or invisible) and the game you're playing right now (id, name, start time), plus a keep-alive message every minute | So your friends can see you're online and what you're playing |
+| While the app is running: your status (online, away or invisible) and the game you're playing right now (id, name, start time), plus a keep-alive message every 30 seconds (Away after 10 minutes without input) | So your friends can see you're online and what you're playing |
 | Your recently played games (last 7 days) and hours this week, worked out from the sessions above | Shown only to your friends in their Activity Report and friend details. Turn it off in **Options → Privacy** |
 
 **Never uploaded:** program names or paths, your list of running programs, idle timestamps,

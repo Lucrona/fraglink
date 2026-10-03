@@ -64,6 +64,9 @@
       friendsActivity: () => inv('friends_activity'),
       friendSummary: (handle) => inv('friend_summary', { handle }),
       setShareActivity: (on) => inv('set_share_activity', { on: !!on }),
+      // 0.2.0-dev.10
+      checkUpdates: () => inv('check_for_updates'),
+      autoAway: () => inv('get_auto_away'),
     };
     return;
   }
@@ -88,7 +91,7 @@
     { id: 2, ts: now() - 3 * 86400, kind: 'tagged', game_id: 'manual:myindie', game_name: 'My Indie', payload: { exe_name: 'MyIndie.exe' } },
     { id: 1, ts: now() - 12 * 86400, kind: 'stopped', game_id: 'cs2', game_name: 'Counter-Strike 2', payload: { active_seconds: 7300 } },
   ];
-  const settings = { skin: localStorage.getItem('fl-skin') || 'dark', friend_toasts: '1', friend_toasts_dnd: '1', zoom: '2', toasts: '1', min_session_min: '2', status: 'online' };
+  const settings = { skin: localStorage.getItem('fl-skin') || 'dark', friend_toasts: '1', friend_toasts_dnd: '1', zoom: '2', toasts: '1', status: 'online' };
   let paused = false;
   const ok = v => Promise.resolve(v);
   window.FL = {
@@ -110,8 +113,8 @@
     tag: (exe, name) => { games.push({ id: 'manual:' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, source: 'manual', excluded: false, total_seconds: 0, sessions: 0 }); return ok('manual:x'); },
     untag: () => ok(),
     exclude: (id, ex) => { const g = games.find(x => x.id === id); if (g) g.excluded = ex; return ok(); },
-    settings: () => ok({ settings, autostart: false, sim: false, data_dir: '(browser preview: no data is stored)', log_dir: '', version: 'preview', signatures: 170, signatures_version: 'preview', steam_apps: 0, min_session_min: 2 }),
-    set: (k, v) => { settings[k] = String(v); if (k === 'paused') paused = v === '1' || v === true; return ok(); },
+    settings: () => ok({ settings, autostart: false, sim: false, data_dir: '(browser preview: no data is stored)', log_dir: '', version: 'preview', signatures: 170, signatures_version: 'preview', steam_apps: 0 }),
+    set: (k, v) => { settings[k] = String(v); return ok(); },
     autostart: (e) => ok(e),
     exportData: () => ok(['(preview) fraglink-export-20260926-200000.zip']),
     openData: () => ok(),
@@ -167,6 +170,8 @@
     ] }),
     friendSummary: (h) => ok({ handle: h, shares_activity: true, week_seconds: (h.length * 7919 % 20 + 3) * 3600 + 1260, last_7d_seconds: (h.length * 7919 % 20 + 5) * 3600, top_game_7d: null }),
     setShareActivity: (on) => { settings.share_activity_mock = on ? '1' : '0'; return ok({ share_activity: on }); },
+    checkUpdates: () => new Promise(r => setTimeout(() => r({ result: 'up_to_date', version: 'preview' }), 700)),
+    autoAway: () => ok(new URLSearchParams(location.search).get('away') === '1'),
   };
   function placeholderIcon(id) {
     const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
@@ -179,14 +184,15 @@
   const cat = (id, name, genre, installed, source, extra = {}) => ({ id, name, genre, installed, source, steam_appid: null, game_path: null, detect_path: '', launch_args: '', excluded: false, can_launch: installed, ...extra });
   const catalog = [
     cat('wow', 'World of Warcraft', 'mmo', true, 'seen', { game_path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe', detect_path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe' }),
-    cat('cs2', 'Counter-Strike 2', 'fps', true, 'steam', { steam_appid: 730, game_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive', detect_path: 'cs2.exe' }),
-    cat('hl2', 'Half-Life 2', 'fps', true, 'steam', { steam_appid: 220, detect_path: 'hl2.exe' }),
-    cat('steam:1145350', 'Hades II', 'action', true, 'steam', { steam_appid: 1145350, detect_path: 'Hades2.exe' }),
-    cat('wc3', 'Warcraft III', 'strategy', true, 'tracked', { detect_path: 'war3.exe', can_launch: false }),
-    cat('rust', 'Rust', 'survival', false, 'signature', { detect_path: 'RustClient.exe' }),
-    cat('dota2', 'Dota 2', 'moba', false, 'signature', { detect_path: 'dota2.exe' }),
-    cat('minecraft', 'Minecraft', 'sandbox', false, 'signature', { detect_path: 'javaw.exe' }),
-    cat('rocketleague', 'Rocket League', 'sports', false, 'signature', { detect_path: 'RocketLeague.exe' }),
+    cat('cs2', 'Counter-Strike 2', 'fps', true, 'steam', { steam_appid: 730, game_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\', detect_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\bin\\win64\\cs2.exe' }),
+    cat('hl2', 'Half-Life 2', 'fps', true, 'steam', { steam_appid: 220, game_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Half-Life 2\\', detect_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Half-Life 2\\hl2.exe' }),
+    cat('steam:1145350', 'Hades II', 'action', true, 'steam', { steam_appid: 1145350, game_path: 'E:\\Steam\\steamapps\\common\\Hades II\\', detect_path: 'E:\\Steam\\steamapps\\common\\Hades II\\Ship\\Hades2.exe' }),
+    cat('satisfactory', 'Satisfactory', 'sandbox', true, 'steam', { steam_appid: 526870, game_path: 'E:\\Steam\\steamapps\\common\\Satisfactory\\', detect_path: 'E:\\Steam\\steamapps\\common\\Satisfactory\\FactoryGame\\Binaries\\Win64\\FactoryGameSteam-Win64-Shipping.exe' }),
+    cat('wc3', 'Warcraft III', 'strategy', true, 'tracked', { detect_path: '', can_launch: false }),
+    cat('rust', 'Rust', 'survival', false, 'signature'),
+    cat('dota2', 'Dota 2', 'moba', false, 'signature'),
+    cat('minecraft', 'Minecraft', 'sandbox', false, 'signature'),
+    cat('rocketleague', 'Rocket League', 'sports', false, 'signature'),
   ];
   const iso = (s) => new Date((now() - s) * 1000).toISOString();
   const muted = [];

@@ -434,6 +434,109 @@ pub fn norm_name(s: &str) -> String {
         .collect()
 }
 
+/// The first of `names` (signature exe names, in order) found in `dir` up to three
+/// folders deep, as a full path. Cached per folder until [`clear_exe_cache`]
+/// (Detect Games), so Options and icons don't walk game folders every time.
+pub fn find_exe(dir: &str, names: &[String]) -> Option<String> {
+    if dir.trim().is_empty() || names.is_empty() {
+        return None;
+    }
+    let key = format!("{dir}|{}", names.join("|"));
+    let cache = exe_cache();
+    if let Some(v) = cache.lock().unwrap().get(&key) {
+        return v.clone();
+    }
+    let found = probe_exe(Path::new(dir), names).or_else(|| scan_for(dir, names));
+    cache.lock().unwrap().insert(key, found.clone());
+    found
+}
+
+/// Quick look in the usual places first (game folder, `<sub>/`, Unreal's
+/// `<sub>/Binaries/Win64/`, `bin/`-style folders) so big installs don't use up the
+/// scan budget in an Engine folder.
+fn probe_exe(dir: &Path, names: &[String]) -> Option<String> {
+    let files: Vec<&str> = names
+        .iter()
+        .filter(|n| !n.contains(['/', '\\']))
+        .map(|n| n.as_str())
+        .collect();
+    let subs: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .map(|e| e.path())
+        .collect();
+    for f in &files {
+        let mut spots = vec![dir.to_path_buf()];
+        for s in &subs {
+            spots.push(s.clone());
+            spots.push(s.join("Binaries").join("Win64"));
+            for b in ["Win64", "x64", "Bin64", "bin"] {
+                spots.push(s.join(b));
+            }
+        }
+        for spot in spots {
+            // case-insensitive match on the file name (Windows is; tests may not be)
+            let Ok(rd) = std::fs::read_dir(&spot) else {
+                continue;
+            };
+            if let Some(e) = rd
+                .flatten()
+                .find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(f))
+            {
+                let rel = e.path();
+                let rel = rel
+                    .strip_prefix(dir)
+                    .ok()?
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                return Some(join_display(&dir.to_string_lossy(), &rel));
+            }
+        }
+    }
+    None
+}
+
+fn scan_for(dir: &str, names: &[String]) -> Option<String> {
+    let exes = scan_exes(Path::new(dir));
+    names.iter().find_map(|n| {
+        let n = n.to_ascii_lowercase();
+        // names may carry a folder ("bin/Game.exe"): match the file name, then prefer
+        // a relative path ending in the full name
+        let file = n.rsplit(['/', '\\']).next().unwrap_or(&n).to_string();
+        let want = n.replace('\\', "/");
+        exes.iter()
+            .filter(|(f, _)| *f == file)
+            .find(|(_, r)| r.to_ascii_lowercase().ends_with(&want))
+            .or_else(|| exes.iter().find(|(f, _)| *f == file))
+            .map(|(_, rel)| join_display(dir, rel))
+    })
+}
+
+type ExeCache = std::sync::Mutex<std::collections::HashMap<String, Option<String>>>;
+
+fn exe_cache() -> &'static ExeCache {
+    static CACHE: std::sync::OnceLock<ExeCache> = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+/// Forget [`find_exe`] results (after Detect Games).
+pub fn clear_exe_cache() {
+    exe_cache().lock().unwrap().clear();
+}
+
+/// `dir` + `rel` (forward slashes) in the folder's own style.
+pub fn join_display(dir: &str, rel: &str) -> String {
+    let win = dir.contains('\\') || dir.as_bytes().get(1) == Some(&b':');
+    let sep = if win { '\\' } else { '/' };
+    let rel = if win {
+        rel.replace('/', "\\")
+    } else {
+        rel.to_string()
+    };
+    format!("{}{sep}{rel}", dir.trim_end_matches(['\\', '/']))
+}
+
 /// .exe files up to three folders deep: (lowercase file name, relative path).
 fn scan_exes(dir: &Path) -> Vec<(String, String)> {
     let mut out = vec![];

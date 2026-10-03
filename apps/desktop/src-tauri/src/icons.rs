@@ -23,13 +23,31 @@ pub fn data_url(png: &[u8]) -> String {
     )
 }
 
-/// Local sources for each id, gathered under one short engine lock.
+/// Local sources for each id, gathered under one short engine lock. A game that
+/// hasn't run in this session still gets its exe (the one Options > Games shows
+/// as found in its install folder) and Steam app id from the catalog (dev.10), so
+/// installed games without an Xfire icon (e.g. Satisfactory) get their own icon.
 fn sources(app: &AppHandle, ids: &[String]) -> HashMap<String, LocalSources> {
     let st = app.state::<AppState>();
     let steam_root = if st.sim {
         None
     } else {
         fraglink_core::steam::steam_root()
+    };
+    let cat: HashMap<String, (Option<PathBuf>, Option<u32>)> = if st.sim {
+        HashMap::new()
+    } else {
+        crate::commands::catalog_now(&st)
+            .into_iter()
+            .filter(|c| c.installed && ids.contains(&c.id))
+            .map(|c| {
+                let exe = Some(c.detect_path)
+                    .filter(|p| p.to_ascii_lowercase().ends_with(".exe"))
+                    .filter(|p| p.contains(['\\', '/']))
+                    .map(PathBuf::from);
+                (c.id, (exe, c.steam_appid))
+            })
+            .collect()
     };
     let e = st.engine.lock().unwrap();
     let rows: HashMap<String, Option<u32>> = e
@@ -43,11 +61,15 @@ fn sources(app: &AppHandle, ids: &[String]) -> HashMap<String, LocalSources> {
     ids.iter()
         .map(|id| {
             let seen = e.seen.get(id);
+            let (cat_exe, cat_appid) = cat.get(id).cloned().unwrap_or_default();
             let src = LocalSources {
-                exe_path: seen.and_then(|s| s.exe_path.as_ref().map(PathBuf::from)),
+                exe_path: seen
+                    .and_then(|s| s.exe_path.as_ref().map(PathBuf::from))
+                    .or(cat_exe),
                 steam_appid: seen
                     .and_then(|s| s.steam_appid)
-                    .or_else(|| rows.get(id).copied().flatten()),
+                    .or_else(|| rows.get(id).copied().flatten())
+                    .or(cat_appid),
                 steam_root: steam_root.clone(),
             };
             (id.clone(), src)
