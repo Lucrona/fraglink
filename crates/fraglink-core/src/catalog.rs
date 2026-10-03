@@ -393,9 +393,11 @@ mod tests {
                 "FactoryGameSteam-Win64-Shipping.exe".into(),
             ],
         );
-        assert!(found.as_deref().is_some_and(
-            |f| f.ends_with("FactoryGame/Binaries/Win64/FactoryGameSteam-Win64-Shipping.exe")
-        ));
+        let found = found.unwrap_or_default().replace('\\', "/");
+        assert!(
+            found.ends_with("FactoryGame/Binaries/Win64/FactoryGameSteam-Win64-Shipping.exe"),
+            "{found}"
+        );
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
