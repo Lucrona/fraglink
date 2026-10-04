@@ -30,6 +30,22 @@ hr{width:180px;height:1px;margin:26px auto;border:0;background:linear-gradient(9
 p{margin:0 0 10px}
 a{color:#7fa7d9;text-decoration:none}a:hover{color:#a9c6ea;text-decoration:underline}
 footer{position:fixed;bottom:14px;left:0;right:0;font-size:11px;color:#4b5261}
+.links{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:26px}
+.discord{display:inline-flex;align-items:center;gap:10px;padding:9px 18px 9px 15px;border:1px solid #2a3343;border-radius:6px;
+background:linear-gradient(#1a2130,#121822);color:#d5dae2;font-size:13px;font-weight:bold;letter-spacing:.04em;
+box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 3px rgba(0,0,0,.5);transition:border-color .15s,background .15s}
+.discord:hover{color:#fff;text-decoration:none;border-color:#5865f2;background:linear-gradient(#1d2538,#141b28)}
+.discord:focus-visible,.status:focus-visible{outline:2px solid #5865f2;outline-offset:3px}
+.discord img{width:20px;height:auto;display:block}
+.discord .count{font-weight:normal;color:#7c8696;letter-spacing:0;font-size:12px;padding-left:10px;border-left:1px solid #2a3343}
+.discord .count:empty{display:none}
+.status{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#7c8696}
+.status:hover{color:#b9c0cc;text-decoration:none}
+.dot{width:8px;height:8px;border-radius:50%;background:#4b5261;flex:none}
+.status[data-s=ok] .dot{background:#3ba55d;box-shadow:0 0 6px rgba(59,165,93,.7)}
+.status[data-s=degraded] .dot{background:#e0a030;box-shadow:0 0 6px rgba(224,160,48,.7)}
+.status[data-s=down] .dot{background:#e5484d;box-shadow:0 0 6px rgba(229,72,77,.7)}
+@media (max-width:380px){.discord .count{display:none}}
 @media (max-height:460px){footer{position:static;margin-top:28px}}
 </style>
 </head>
@@ -40,7 +56,40 @@ footer{position:fixed;bottom:14px;left:0;right:0;font-size:11px;color:#4b5261}
 <hr>
 <p>A lightweight gaming tracker. Coming soon.</p>
 <p>Contact: <a href="mailto:support@playfraglink.com">support@playfraglink.com</a></p>
+<div class="links">
+<a class="discord" href="https://discord.gg/QbaYRtvADj" rel="noopener"><img src="/site/discord-symbol-white.svg" alt="" width="20" height="15"><span>Join the Discord</span><span class="count" id="dc"></span></a>
+<a class="status" id="st" data-s="unknown" href="https://discord.gg/QbaYRtvADj" rel="noopener" title="Live status of the Fraglink server and updates. Status posts are in #status on Discord."><span class="dot"></span><span id="stt">Checking status…</span></a>
+</div>
 </main>
 <footer>&copy; 2026 Fraglink</footer>
+<script>
+(function(){
+  function get(url,ms){
+    var c=window.AbortController?new AbortController():null,t=setTimeout(function(){c&&c.abort()},ms||6000);
+    return fetch(url,{cache:"no-store",signal:c&&c.signal}).then(function(r){clearTimeout(t);return r},function(e){clearTimeout(t);throw e});
+  }
+  // Server status: API health + update manifest, same-origin.
+  var st=document.getElementById("st"),stt=document.getElementById("stt");
+  function set(s,txt){st.setAttribute("data-s",s);stt.textContent=txt}
+  // "net" = fetch itself failed (offline/blocked); "bad" = server answered with an error.
+  function check(url,ok){return get(url).then(function(r){if(!r.ok)return"bad";return r.json().then(function(j){return ok(j)?"ok":"bad"},function(){return"bad"})},function(){return"net"})}
+  Promise.all([
+    check("/api/v1/health",function(j){return j&&j.ok===true}),
+    check("/updates/latest.json",function(j){return j&&j.version&&j.platforms})
+  ]).then(function(r){
+    var api=r[0],upd=r[1];
+    if(api==="ok"&&upd==="ok")set("ok","All systems operational");
+    else if(api==="net"&&upd==="net")set("unknown","Status unavailable");
+    else if(api!=="ok")set("down","Down");
+    else set("degraded","Degraded");
+  });
+  // Discord member / online count (Discord allows this origin via CORS). Optional; hidden on failure.
+  get("https://discord.com/api/v10/invites/QbaYRtvADj?with_counts=true").then(function(r){return r.ok?r.json():null}).then(function(d){
+    if(!d||!d.approximate_member_count)return;
+    var m=d.approximate_member_count,o=d.approximate_presence_count||0;
+    document.getElementById("dc").textContent=o+" online · "+m+" member"+(m===1?"":"s");
+  }).catch(function(){});
+})();
+</script>
 </body>
 </html>
