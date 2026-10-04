@@ -305,14 +305,7 @@ at <input name="hours_per_week" type="number" step="0.5" min="0.5" max="80" valu
         let p = &f.presence;
         let state = match (p.status.as_str(), &p.game_name) {
             ("offline", _) => r#"<small class="m">Offline</small>"#.to_string(),
-            (_, Some(g)) => match &p.game_detail {
-                Some(d) => format!(
-                    r#"<span class="t-tracked">Playing {} · {}</span>"#,
-                    esc(g),
-                    esc(d)
-                ),
-                None => format!(r#"<span class="t-tracked">Playing {}</span>"#, esc(g)),
-            },
+            (_, Some(g)) => format!(r#"<span class="t-tracked">Playing {}</span>"#, esc(g)),
             ("away", None) => "Away".to_string(),
             _ => "Online".to_string(),
         };

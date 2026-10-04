@@ -265,11 +265,11 @@
   const CS = makeScroller($('#chat-log'), false);
   function fmtH(h) { return h.toFixed(1) + ' h'; }
   function fmtT(ms) { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; }
-  // "World of Warcraft · Frostmourne": the game plus its detail (WoW realm) when known
-  const withDetail = (name, detail) => name + (detail ? ' · ' + detail : '');
-  const gameLabel = f => withDetail(GAMES[f.game] ? GAMES[f.game].name : '', f.detail);
+  // "World of Warcraft · Frostmourne": the game plus its detail (WoW realm); only the friend
+  // side panel and the hover tooltip show the detail, the list row and my status don't
+  const gameLabel = f => (GAMES[f.game] ? GAMES[f.game].name : '') + (f.detail ? ' · ' + f.detail : '');
   function statusText(f) {
-    if (f.kind === 'playing' || f.kind === 'fof') return gameLabel(f) + (f.away ? ' (Away)' : '');
+    if (f.kind === 'playing' || f.kind === 'fof') return GAMES[f.game].name + (f.away ? ' (Away)' : '');
     if (f.kind === 'online' || f.kind === 'req' || f.kind === 'out') return f.status;
     return 'Offline';
   }
@@ -1228,7 +1228,7 @@
     const customOn = SET().custom_on === '1' && custom;
     btn.disabled = signedOut();
     if (btn.disabled) { btn.querySelector('span').textContent = 'Offline'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
-    const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? withDetail(np.name, np.detail) : '';
+    const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? np.name : '';
     const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? 'Playing ' + game : 'Online';
     btn.querySelector('span').textContent = txt; btn.title = 'Status: ' + txt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();

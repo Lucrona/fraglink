@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.13] - 2026-10-05
+
+Test update (builds report `0.2.0-13`).
+
+### Changed
+- **WoW realm** now shows only in the friend side panel and the friend hover tooltip
+  ("World of Warcraft · Frostmourne"). The friends list row, your own status and the web friends page show
+  just the game again. The realm is still sent with presence (`game_detail`) as in dev.12.
+
 ## [0.2.0-dev.12] - 2026-10-05
 
 Test update (builds report `0.2.0-12`).

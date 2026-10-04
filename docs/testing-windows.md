@@ -71,3 +71,10 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - Hover a friend: the tooltip is dark with light text.
 - Leave the mouse and keyboard alone for 10 minutes: Away; move the mouse: Online again.
 - Offline (no network) start: games are still detected (bundled list); the log says the server wasn't reachable.
+
+## WoW realm placement (0.2.0-dev.13)
+
+- dev.12 installed: it updates itself to dev.13. Help > About shows 0.2.0-dev.13.
+- Friend playing WoW (retail or Forever): the friends list row and their status show just **World of Warcraft** (no realm). Hover them: the tooltip says **Playing: World of Warcraft · <realm>**. Click them: the side panel shows **World of Warcraft · <realm>**.
+- You playing WoW: your own status box shows **Playing World of Warcraft** without the realm.
+- Everything else from the dev.12 list still applies.

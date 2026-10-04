@@ -24,7 +24,7 @@ The device token is encrypted with Windows DPAPI on your PC. Signing out forgets
 
 **Game detection (dev.12):** games are recognised from Discord's public list of detectable games (downloaded by the Fraglink server once a day; the app only ever talks to the Fraglink server) plus Fraglink's own rules. To spot unlisted games the app checks whether the window in front covers the whole screen (its size and frame only, never its contents). After 5 minutes it asks "Track <name> as a game?". **Yes** tracks it and sends that exe name and the game name (nothing else, no account id) to the server so it can be added to the list after a manual review; **Not a game** is remembered on this PC and sends nothing.
 
-**World of Warcraft realm (dev.12):** while a WoW version runs, the app reads the realm name from that version's `WTF\Config.wtf` (`SET realmName "…"`) and shows it next to the game. While signed in it's sent with your presence like the game name, so friends see "World of Warcraft · Frostmourne". "Show my game to my friends" off hides it too.
+**World of Warcraft realm (dev.12):** while a WoW version runs, the app reads the realm name from that version's `WTF\Config.wtf` (`SET realmName "…"`) (it isn't shown in your own status). While signed in it's sent with your presence like the game name, so friends see "World of Warcraft · Frostmourne" in their side panel and your hover tooltip (from dev.13 only there). "Show my game to my friends" off hides it too.
 
 **Game icons:** read from the detected game's exe and Steam's local library cache, then cached in `icons\` in the data folder. While you're signed in, icons of friends' games that aren't installed on this PC may be downloaded from Steam's public CDN.
 
