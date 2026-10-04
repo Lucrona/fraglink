@@ -15,8 +15,8 @@ Test update (builds report `0.2.0-14`). Needs the dev.14 server (deployed the sa
   at its last heartbeat + 45 s). The app no longer tracks anything while offline or signed out, keeps no
   offline queue and no longer uploads sessions. Session uploads from older apps are acknowledged (so they
   clear their queue) but nothing from them is stored. Existing sessions and hours are untouched.
-- **Game names come from the server.** The app sends only a game id; the server names it from Discord's
-  detectable list, Fraglink's rules and signatures, Steam store names and games an admin approved. Any name a
+- **Game names come from the server.** The app sends only a game id; the server names it from its own
+  games list, Fraglink's rules and signatures, Steam store names and games an admin approved. Any name a
   client sends is ignored. Unknown ids show as **Playing a game** (presence `game_id` `unlisted`, name
   `a game`; "Unlisted game" in stats). Typed game names on the website and in the hours API must match a
   listed game; nobody can create or rename games.
@@ -26,8 +26,8 @@ Test update (builds report `0.2.0-14`). Needs the dev.14 server (deployed the sa
   Approved games keep the hours already recorded and show under the approved name; they're also handed to
   every app as detection rules.
 - **"Show my game to my friends" off** still counts the time (the game is sent marked hidden); friends see no game.
-- **World of Warcraft follows Discord's list:** World of Warcraft (retail, incl. `_ptr_` / `_beta_` folders),
-  World of Warcraft Classic and World of Warcraft: Forever (`WowB.exe`). Discord's "Public Test" / PTR entries
+- **Improved game detection, World of Warcraft tidied up:** World of Warcraft (retail, incl. `_ptr_` / `_beta_` folders),
+  World of Warcraft Classic and World of Warcraft: Forever (`WowB.exe`). "Public Test" / PTR entries
   are skipped and not tracked. Fraglink's own WoW folder rules (PTR, Beta, Classic Era, Classic PTR,
   Anniversary splits) are removed; the `wow` id is unchanged. The realm still shows in the friend side panel
   and tooltip.
@@ -52,8 +52,8 @@ Test update (builds report `0.2.0-13`).
 Test update (builds report `0.2.0-12`).
 
 ### Added
-- **Game detection from Discord's public detectable list** (about 10,000 Windows games). The Fraglink
-  server downloads Discord's list once a day, keeps the last good copy if that fails, and serves a compact
+- **Much bigger, more accurate games list** (about 10,000 Windows games). The Fraglink
+  server refreshes the list once a day, keeps the last good copy if that fails, and serves a compact
   Windows-only version (no launchers) at `GET /api/v1/games/detectable` (gzip, ETag). The app only gets it
   from the Fraglink server, caches it, refreshes it at startup and every 24 hours, and falls back to a
   snapshot bundled in the app plus the existing signatures when offline. Matching uses the exe name and,
