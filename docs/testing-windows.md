@@ -47,7 +47,7 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - While running, a new build appears within an hour as a small green arrow left of the minimise button (tooltip "Update ready - click to restart"); clicking it restarts into it. *Help → Check for Updates* and the tray's *Check for Updates* say "You're up to date" or start the update.
 - Leave the PC alone for 10 minutes: your status shows "Away" (or "<game> (Away)" while playing), and friends see Away. Move the mouse: back to Online within about 5 s. Pick Invisible first: it stays Invisible.
 - Drag the info panel's right frame (between its scrollbar and the window edge): the panel widens; the cursor is a left-right arrow along the whole strip.
-- *Options → Games*, select a Steam game: Game path like `E:\Steam\steamapps\common\Satisfactory\` (real casing), Detect path the full path of the exe found. A game with no Xfire icon (e.g. Satisfactory) shows its own icon.
+- *Options → Games*, select a Steam game: Game path like `E:\Steam\steamapps\common\Satisfactory\` (real casing), Detect path the full path of the exe found. Satisfactory shows its official icon.
 - *Options → Connections → Tracking*: only Export my data and Open data folder; play a game for under a minute: the session is kept.
 
 ## Domain, startup and side panel (0.2.0-dev.11)
@@ -87,4 +87,13 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - Tag an unlisted program ("Track this as a game?" > Yes, or Fraglink > This is a game…) and run it: you see your own name for it; a friend sees **Playing a game** in the list, tooltip, side panel and Activity Report, and on the website. After `fraglink-server approve-game <exe> "<Name>"` on the server, restart the game: friends see the approved name and its earlier hours show under it.
 - Options > Privacy > "Show my game to my friends" off: friends see you Online with no game; your hours still go up.
 - WoW: retail shows **World of Warcraft**, Classic (`_classic_`, `_classic_era_`, anniversary) shows **World of Warcraft Classic**, `WowB.exe` shows **World of Warcraft: Forever**. A PTR build (`WowT.exe`) isn't tracked. The realm still shows in the friend tooltip and side panel only.
+
+## Official game icons (0.2.0-dev.15)
+
+- dev.14 installed: it updates itself to dev.15. Help > About shows 0.2.0-dev.15.
+- Friends list, Now Playing, the friend tooltip and side panel: icons are the games' official icons, the same size and position as before (no blurry or stretched ones).
+- Check World of Warcraft, World of Warcraft Classic, World of Warcraft: Forever, Marvel Rivals, Satisfactory, Gray Zone Warfare and Star Citizen (yours or a friend's).
+- A friend's game you don't have installed still shows its icon (it comes from the Fraglink server).
+- A program you tagged yourself ("This is a game…") shows the icon from its exe; anything without one shows the generic game symbol.
+- `%APPDATA%\gg.fraglink.desktop\icons`: old icon files are cleared on the first start; official icons are cached as `sv_*.png`.
 

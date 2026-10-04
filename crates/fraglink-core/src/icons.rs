@@ -1,14 +1,15 @@
-//! Game icons, sourced locally the way the old Xfire client effectively did:
+//! Game icons (0.2.0-dev.15):
 //!
 //! 1. our own cache (`<data dir>/icons/<game>.png`, 32x32 PNG shown at 16 px),
-//! 2. the icon inside the detected game's exe (Windows only, read at runtime),
+//! 2. the official icon from the Fraglink server (`/icons/games/<size>/<id>.png`,
+//!    which the server fetches and caches from the publishers' public game
+//!    listings); the app never downloads icons from anyone else,
 //! 3. Steam's own library cache for Steam games
 //!    (`Steam\appcache\librarycache\<appid>_icon.jpg`, or the per-app folder
 //!    `librarycache\<appid>\<sha1>.jpg` used by newer Steam clients),
-//! 4. otherwise nothing, and the UI draws a neutral generic game icon.
+//! 4. the icon inside the detected game's exe (Windows only, read at runtime),
+//! 5. otherwise nothing, and the UI draws a neutral generic game icon.
 //!
-//! Friends' games that aren't on this PC can use Steam's public community icon
-//! (see [`steam_cdn_icon_url`]); the desktop app fetches that and stores it here.
 //! No third-party icons are bundled with Fraglink.
 
 use anyhow::{Context, Result};
@@ -80,6 +81,15 @@ impl IconCache {
         Ok(())
     }
 
+    /// How old the cached icon is (None = not cached).
+    pub fn age(&self, game_id: &str, now: SystemTime) -> Option<Duration> {
+        let t = std::fs::metadata(self.png_path(game_id))
+            .ok()?
+            .modified()
+            .ok()?;
+        Some(now.duration_since(t).unwrap_or(Duration::ZERO))
+    }
+
     /// True if we looked recently and found nothing.
     pub fn recent_miss(&self, game_id: &str, now: SystemTime) -> bool {
         std::fs::metadata(self.miss_path(game_id))
@@ -137,8 +147,13 @@ fn exe_stamp(exe: &Path) -> Option<String> {
 /// [`ICON_PX`] square and encode as PNG. Small sources are scaled up with
 /// nearest-neighbour so pixel art stays sharp; big ones use Lanczos.
 pub fn normalize(bytes: &[u8]) -> Option<Vec<u8>> {
+    normalize_px(bytes, ICON_PX)
+}
+
+/// [`normalize`] to any square size (the server keeps 16, 32 and 64 px copies).
+pub fn normalize_px(bytes: &[u8], px: u32) -> Option<Vec<u8>> {
     let img = image::load_from_memory(bytes).ok()?;
-    Some(encode_png(&fit(img)))
+    Some(encode_png(&fit_px(img, px.clamp(8, 256))))
 }
 
 pub fn normalize_rgba(img: RgbaImage) -> Vec<u8> {
@@ -146,17 +161,21 @@ pub fn normalize_rgba(img: RgbaImage) -> Vec<u8> {
 }
 
 fn fit(img: DynamicImage) -> RgbaImage {
+    fit_px(img, ICON_PX)
+}
+
+fn fit_px(img: DynamicImage, px: u32) -> RgbaImage {
     let (w, h) = (img.width().max(1), img.height().max(1));
-    let filter = if w.max(h) < ICON_PX {
+    let filter = if w.max(h) < px {
         FilterType::Nearest
     } else {
         FilterType::Lanczos3
     };
     // keep aspect ratio, centre on a transparent square
-    let scaled = img.resize(ICON_PX, ICON_PX, filter).to_rgba8();
-    let mut out = RgbaImage::from_pixel(ICON_PX, ICON_PX, Rgba([0, 0, 0, 0]));
-    let x = (ICON_PX - scaled.width()) / 2;
-    let y = (ICON_PX - scaled.height()) / 2;
+    let scaled = img.resize(px, px, filter).to_rgba8();
+    let mut out = RgbaImage::from_pixel(px, px, Rgba([0, 0, 0, 0]));
+    let x = (px - scaled.width()) / 2;
+    let y = (px - scaled.height()) / 2;
     image::imageops::overlay(&mut out, &scaled, x as i64, y as i64);
     out
 }
@@ -190,12 +209,20 @@ pub fn steam_library_icon(steam_root: &Path, appid: u32) -> Option<PathBuf> {
     found.into_iter().next()
 }
 
-/// Public Steam community icon (the hash comes from Steam's `img_icon_url`).
-pub fn steam_cdn_icon_url(appid: u32, icon_hash: &str) -> Option<String> {
+/// Public Steam community icon under `cdn_base` (the hash comes from Steam's
+/// `img_icon_url` / `community_icon`). `full` = the 184 px version. Server side only.
+pub fn steam_cdn_icon_url(
+    cdn_base: &str,
+    appid: u32,
+    icon_hash: &str,
+    full: bool,
+) -> Option<String> {
     (icon_hash.len() == 40 && icon_hash.chars().all(|c| c.is_ascii_hexdigit())).then(|| {
         format!(
-            "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/{appid}/{}.jpg",
-            icon_hash.to_ascii_lowercase()
+            "{}/{appid}/{}{}.jpg",
+            cdn_base.trim_end_matches('/'),
+            icon_hash.to_ascii_lowercase(),
+            if full { "_full" } else { "" }
         )
     })
 }
@@ -566,11 +593,19 @@ mod tests {
 
     #[test]
     fn cdn_url_needs_a_real_hash() {
-        assert!(steam_cdn_icon_url(570, "../evil").is_none());
-        let u = steam_cdn_icon_url(570, "0BAD0BAD0BAD0BAD0BAD0BAD0BAD0BAD0BAD0BAD").unwrap();
+        let cdn = "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/";
+        assert!(steam_cdn_icon_url(cdn, 570, "../evil", false).is_none());
+        let h = "0BAD0BAD0BAD0BAD0BAD0BAD0BAD0BAD0BAD0BAD";
+        let u = steam_cdn_icon_url(cdn, 570, h, false).unwrap();
         assert!(u.starts_with(
             "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/570/0bad"
         ));
+        assert!(steam_cdn_icon_url(cdn, 570, h, true)
+            .unwrap()
+            .ends_with("_full.jpg"));
+        let png = normalize_rgba(placeholder("x"));
+        let big = normalize_px(&png, 64).unwrap();
+        assert_eq!(image::load_from_memory(&big).unwrap().width(), 64);
         assert_eq!(appid_from_game_id("steam:570"), Some(570));
         assert_eq!(appid_from_game_id("wow"), None);
     }

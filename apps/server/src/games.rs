@@ -43,6 +43,96 @@ pub struct Built {
     pub updated: String,
     /// Fraglink id (slug) -> Discord's name, for server-side display names.
     pub names: Arc<std::collections::HashMap<String, String>>,
+    /// Where each game's official icon comes from (built from the raw list).
+    pub icons: Arc<IconIndex>,
+}
+
+/// Official icon sources per game, from the detectable list's `icon_hash` and its
+/// Steam store links (see `crate::icons`).
+#[derive(Default, Debug)]
+pub struct IconIndex {
+    /// slug -> (application id, icon hash, Steam app id)
+    pub by_slug: std::collections::HashMap<String, IconSrc>,
+    /// Steam app id -> slug
+    pub by_steam: std::collections::HashMap<u32, String>,
+    /// normalised name -> slug
+    pub by_name: std::collections::HashMap<String, String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct IconSrc {
+    pub app_id: String,
+    pub icon_hash: Option<String>,
+    pub steam_appid: Option<u32>,
+}
+
+/// Lower case, letters and digits only ("World of Warcraft: Forever" -> "worldofwarcraftforever").
+pub fn norm_name(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+#[derive(Deserialize)]
+struct RawIconApp {
+    id: String,
+    #[serde(default)]
+    icon_hash: Option<String>,
+    #[serde(default)]
+    third_party_skus: Option<Vec<RawSku>>,
+}
+
+#[derive(Deserialize)]
+struct RawSku {
+    #[serde(default)]
+    distributor: Option<String>,
+    #[serde(default)]
+    id: Option<String>,
+}
+
+fn icon_index(compact: &[u8], raw: Option<&[u8]>) -> IconIndex {
+    let mut idx = IconIndex::default();
+    let Some(raw) = raw else { return idx };
+    let Ok(apps) = serde_json::from_slice::<Vec<RawIconApp>>(raw) else {
+        return idx;
+    };
+    let by_id: std::collections::HashMap<String, RawIconApp> =
+        apps.into_iter().map(|a| (a.id.clone(), a)).collect();
+    let Ok(db) = DetectableDb::from_json(compact) else {
+        return idx;
+    };
+    for g in db.games() {
+        let Some(a) = by_id.get(&g.id) else { continue };
+        let hash = a.icon_hash.clone().filter(|h| {
+            h.len() <= 64
+                && !h.is_empty()
+                && h.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        });
+        let steam = a.third_party_skus.iter().flatten().find_map(|k| {
+            (k.distributor.as_deref() == Some("steam"))
+                .then(|| k.id.as_deref()?.parse::<u32>().ok())
+                .flatten()
+        });
+        if hash.is_none() && steam.is_none() {
+            continue;
+        }
+        if let Some(appid) = steam {
+            idx.by_steam.entry(appid).or_insert_with(|| g.slug.clone());
+        }
+        idx.by_name
+            .entry(norm_name(&g.name))
+            .or_insert_with(|| g.slug.clone());
+        idx.by_slug.insert(
+            g.slug.clone(),
+            IconSrc {
+                app_id: g.id.clone(),
+                icon_hash: hash,
+                steam_appid: steam,
+            },
+        );
+    }
+    idx
 }
 
 #[derive(Default)]
@@ -69,7 +159,13 @@ fn gzip(b: &[u8]) -> std::io::Result<Vec<u8>> {
     gz.finish()
 }
 
-fn built_from_json(json: Vec<u8>, games: usize, updated: String) -> std::io::Result<Built> {
+fn built_from_json(
+    json: Vec<u8>,
+    games: usize,
+    updated: String,
+    raw: Option<&[u8]>,
+) -> std::io::Result<Built> {
+    let icons = icon_index(&json, raw);
     // DetectableDb drops public test builds, so they never get a display name either.
     let names = DetectableDb::from_json(&json)
         .map(|db| {
@@ -86,6 +182,7 @@ fn built_from_json(json: Vec<u8>, games: usize, updated: String) -> std::io::Res
         games,
         updated,
         names: Arc::new(names),
+        icons: Arc::new(icons),
     })
 }
 
@@ -96,7 +193,7 @@ fn bundled() -> Option<Built> {
         .read_to_end(&mut json)
         .ok()?;
     let db = DetectableDb::from_json(&json).ok()?;
-    built_from_json(json, db.len(), db.updated.clone()).ok()
+    built_from_json(json, db.len(), db.updated.clone(), None).ok()
 }
 
 impl GameLists {
@@ -109,13 +206,18 @@ impl GameLists {
         Some(w.get_or_insert(b).clone())
     }
 
-    fn set(&self, b: Built) {
+    pub fn install(&self, b: Built) {
         *self.built.write().unwrap() = Some(b);
     }
 
     /// Discord's name for a Fraglink game id, if it is on the detectable list.
     pub fn detectable_name(&self, id: &str) -> Option<String> {
         self.current().and_then(|b| b.names.get(id).cloned())
+    }
+
+    /// Official icon index of the current list (empty for the bundled snapshot).
+    pub fn icon_index(&self) -> Arc<IconIndex> {
+        self.current().map(|b| b.icons).unwrap_or_default()
     }
 
     /// Name of an override rule (`star_citizen`), from the server's file or the bundled one.
@@ -166,7 +268,12 @@ pub fn build_from_cache(
         write_atomic(&slugs_path, &serde_json::to_vec_pretty(&slugs)?)?;
     }
     let games = file.games.len();
-    Ok(built_from_json(serde_json::to_vec(&file)?, games, updated)?)
+    Ok(built_from_json(
+        serde_json::to_vec(&file)?,
+        games,
+        updated,
+        Some(&raw),
+    )?)
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -231,7 +338,7 @@ pub async fn refresh_loop(st: AppState) {
                         b.games,
                         b.etag
                     );
-                    st.games.set(b);
+                    st.games.install(b);
                     loaded = true;
                 }
                 Ok(Err(e)) => tracing::warn!("detectable list build failed: {e:#}"),
@@ -425,12 +532,27 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(
             d.join("discord.json"),
-            r#"[{"id":"452295596917784577","name":"Star Citizen","executables":[{"name":"starcitizen.exe","os":"win32","is_launcher":false}]}]"#,
+            r#"[{"id":"452295596917784577","name":"Star Citizen","icon_hash":"7a55868f259fca03ba55756e41983e44","executables":[{"name":"starcitizen.exe","os":"win32","is_launcher":false}]},
+               {"id":"1234821572246896730","name":"Gray Zone Warfare","icon_hash":"16c256e96f8565fcc14ba843aa245f2b","third_party_skus":[{"distributor":"steam","id":"2479810"}],"executables":[{"name":"gzwclientsteam-win64-shipping.exe","os":"win32","is_launcher":false}]}]"#,
         )
         .unwrap();
         let sigs = fraglink_core::signatures::SignatureDb::builtin();
         let b = build_from_cache(dir.path(), &sigs).unwrap();
-        assert_eq!(b.games, 1);
+        assert_eq!(b.games, 2);
+        // official icon sources come along
+        let sc = &b.icons.by_slug["star_citizen"];
+        assert_eq!(
+            sc.icon_hash.as_deref(),
+            Some("7a55868f259fca03ba55756e41983e44")
+        );
+        assert_eq!(
+            b.icons.by_steam.get(&2479810).map(String::as_str),
+            Some("gray_zone_warfare")
+        );
+        assert_eq!(
+            b.icons.by_name.get("grayzonewarfare").map(String::as_str),
+            Some("gray_zone_warfare")
+        );
         let slugs: BTreeMap<String, String> =
             serde_json::from_slice(&std::fs::read(d.join("slugs.json")).unwrap()).unwrap();
         assert_eq!(slugs["452295596917784577"], "star_citizen");

@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.15] - 2026-10-05
+
+Test update (builds report `0.2.0-15`). Needs the dev.15 server (deployed the same day).
+
+### Changed
+- **Sharper, official game icons.** Game icons now use each game's official icon, served by the Fraglink
+  server from our own domain in 16, 32 and 64 px (cached, with long cache headers and an occasional refresh).
+  The app never downloads images from third-party sites. The previous icon set is gone.
+- **Steam games** without an icon in the games list use their official Steam icon.
+- **Fallback:** games the server has no icon for use the icon from the game's own exe on your PC (read
+  locally, never uploaded), otherwise a neutral game symbol.
+- Old cached icons are cleared once after the update, so every game picks up its new icon.
+
 ## [0.2.0-dev.14] - 2026-10-05
 
 Test update (builds report `0.2.0-14`). Needs the dev.14 server (deployed the same day).

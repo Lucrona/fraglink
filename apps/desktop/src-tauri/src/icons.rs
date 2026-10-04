@@ -1,8 +1,9 @@
 //! Small game icons for the Friends, Stats and Activity tabs and toasts.
-//! Order (every game): the classic Xfire icon matched by the Fraglink server →
-//! Steam's icon (server CDN answer or Steam's library cache) → the game's exe
-//! (Windows) → none (the UI draws a generic icon). Everything fetched is cached
-//! on disk so it works offline. See `fraglink_core::icons`.
+//! Order (every game, 0.2.0-dev.15): the official icon from the Fraglink server
+//! (it fetches and caches them; the app never downloads icons from anyone else)
+//! → Steam's local library cache → the game's exe (Windows) → none (the UI draws
+//! a generic icon). Everything is cached on disk so it works offline. See
+//! `fraglink_core::icons`.
 
 use crate::{sync, AppState};
 use base64::Engine as _;
@@ -26,7 +27,7 @@ pub fn data_url(png: &[u8]) -> String {
 /// Local sources for each id, gathered under one short engine lock. A game that
 /// hasn't run in this session still gets its exe (the one Options > Games shows
 /// as found in its install folder) and Steam app id from the catalog (dev.10), so
-/// installed games without an Xfire icon (e.g. Satisfactory) get their own icon.
+/// installed games the server has no icon for still get their own icon.
 fn sources(app: &AppHandle, ids: &[String]) -> HashMap<String, LocalSources> {
     let st = app.state::<AppState>();
     let steam_root = if st.sim {
@@ -77,29 +78,59 @@ fn sources(app: &AppHandle, ids: &[String]) -> HashMap<String, LocalSources> {
         .collect()
 }
 
-const XF: &str = "xf~"; // cached Xfire icon from the server
-const ST: &str = "st~"; // cached Steam icon (server CDN answer or Steam's library cache)
+const SV: &str = "sv~"; // cached official icon from the Fraglink server
+const ST: &str = "st~"; // cached copy of Steam's local library icon
+/// Server icons are checked again after this long (kept if the server is unreachable).
+const SERVER_REFRESH: std::time::Duration = std::time::Duration::from_secs(14 * 24 * 3600);
 
 fn key(prefix: &str, id: &str) -> String {
     format!("{prefix}{id}")
 }
 
+/// Icons cached by apps before dev.15 (`xf~` from the server's old icon set, `st~`
+/// downloaded from a CDN) are dropped once so the official ones replace them.
+fn drop_old_icons(cache: &IconCache) {
+    let marker = cache.dir().join(".dev15");
+    if marker.exists() {
+        return;
+    }
+    if let Ok(rd) = std::fs::read_dir(cache.dir()) {
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().to_string();
+            if n.starts_with("xf_") || n.starts_with("st_") {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+    let _ = std::fs::create_dir_all(cache.dir());
+    let _ = std::fs::write(marker, b"");
+}
+
 /// Resolve icons as `data:` URLs (None = use the generic icon). Priority for every
-/// game, installed or not: 1) the server's matched Xfire icon, 2) Steam's icon,
-/// 3) the local exe icon, 4) generic. Server answers are cached on disk, so icons
-/// keep working offline after the first fetch. `remote` allows asking the server.
+/// game, installed or not: 1) the official icon from the Fraglink server, 2) Steam's
+/// local library icon, 3) the local exe icon, 4) generic. Server answers are cached
+/// on disk, so icons keep working offline. `remote` allows asking the server.
 pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String, Option<String>> {
     let sim = app.state::<AppState>().sim;
     let cache = cache(app);
+    drop_old_icons(&cache);
     let srcs = sources(app, ids);
     let now = SystemTime::now();
     let mut out: HashMap<String, Option<String>> = HashMap::new();
-    // 1) cached Xfire icons; ask the server for games it hasn't answered lately
+    // 1) cached server icons; ask the server about games it hasn't answered lately
+    // (manual tags are this PC's own names: the server has nothing for them)
     let mut ask = vec![];
     for id in ids {
-        if let Some(png) = cache.get(&key(XF, id)) {
+        if id.starts_with("manual:") {
+            continue;
+        }
+        let k = key(SV, id);
+        if let Some(png) = cache.get(&k) {
             out.insert(id.clone(), Some(data_url(&png)));
-        } else if !cache.recent_miss(&key(XF, id), now) {
+            if cache.age(&k, now).is_some_and(|a| a > SERVER_REFRESH) {
+                ask.push(id.clone());
+            }
+        } else if !cache.recent_miss(&k, now) {
             ask.push(id.clone());
         }
     }
@@ -114,29 +145,21 @@ pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String,
             Ok(v) => {
                 for id in &ask {
                     answered.insert(id.clone());
-                    let e = v.get(id);
-                    let xf = e
+                    let png = v
+                        .get(id)
                         .and_then(|e| e.get("icon_path"))
                         .and_then(|p| p.as_str())
+                        .filter(|p| p.starts_with("/icons/games/"))
                         .and_then(|p| client.fetch_server_icon(p).ok())
                         .and_then(|b| icons::normalize(&b));
-                    match xf {
+                    match png {
                         Some(p) => {
-                            let _ = cache.put(&key(XF, id), &p);
+                            let _ = cache.put(&key(SV, id), &p);
                             out.insert(id.clone(), Some(data_url(&p)));
                         }
-                        None => cache.put_miss(&key(XF, id)),
-                    }
-                    if out.contains_key(id) || cache.get(&key(ST, id)).is_some() {
-                        continue;
-                    }
-                    if let Some(p) = e
-                        .and_then(|e| e.get("icon_url"))
-                        .and_then(|u| u.as_str())
-                        .and_then(|u| fraglink_sync::fetch_icon(u).ok())
-                        .and_then(|b| icons::normalize(&b))
-                    {
-                        let _ = cache.put(&key(ST, id), &p);
+                        // keep a cached icon if the server has none right now
+                        None if out.contains_key(id) => {}
+                        None => cache.put_miss(&key(SV, id)),
                     }
                 }
             }
@@ -163,7 +186,7 @@ pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String,
             continue;
         }
         let src = srcs.get(id).cloned().unwrap_or_default();
-        // 2) Steam: the server's CDN icon (cached) or Steam's local library cache
+        // 2) Steam's local library cache (this PC only)
         let steam = cache.get(&key(ST, id)).or_else(|| {
             let appid = src.steam_appid.or_else(|| icons::appid_from_game_id(id))?;
             let p = icons::steam_library_icon(src.steam_root.as_deref()?, appid)?;

@@ -36,4 +36,5 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 fraglink-sync = { path = "../../crates/fraglink-sync" }
 tempfile = "3"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }

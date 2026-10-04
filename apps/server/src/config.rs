@@ -16,9 +16,11 @@ pub struct Config {
     pub steam_openid_url: String,
     /// Seconds without any message before a presence socket is dropped (default 150).
     pub presence_idle_secs: u64,
-    /// `FRAGLINK_XFIRE_ICONS=1` turns on the Xfire icon fallback, read from
-    /// `FRAGLINK_XFIRE_ICONS_DIR` (default `/var/lib/fraglink/icons/xfire`).
-    pub xfire_icons_dir: Option<std::path::PathBuf>,
+    /// `FRAGLINK_APP_ICON_CDN` (default `https://cdn.discordapp.com`): where the
+    /// detectable list's `icon_hash` icons are fetched from (server side only).
+    pub app_icon_cdn_url: String,
+    /// `FRAGLINK_STEAM_ICON_CDN`: base of Steam community icons (server side only).
+    pub steam_cdn_url: String,
     /// `FRAGLINK_DATA_DIR` (default `/var/lib/fraglink`): cached game lists and the
     /// optional `detect-overrides.json`.
     pub data_dir: std::path::PathBuf,
@@ -49,10 +51,10 @@ impl Config {
             steam_openid_url: var("STEAM_OPENID_URL")
                 .unwrap_or_else(|| "https://steamcommunity.com/openid/login".into()),
             presence_idle_secs: crate::presence::IDLE_TIMEOUT_SECS,
-            xfire_icons_dir: (var("FRAGLINK_XFIRE_ICONS").as_deref() == Some("1")).then(|| {
-                var("FRAGLINK_XFIRE_ICONS_DIR")
-                    .unwrap_or_else(|| "/var/lib/fraglink/icons/xfire".into())
-                    .into()
+            app_icon_cdn_url: var("FRAGLINK_APP_ICON_CDN")
+                .unwrap_or_else(|| "https://cdn.discordapp.com".into()),
+            steam_cdn_url: var("FRAGLINK_STEAM_ICON_CDN").unwrap_or_else(|| {
+                "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps".into()
             }),
             data_dir: var("FRAGLINK_DATA_DIR")
                 .unwrap_or_else(|| "/var/lib/fraglink".into())
@@ -77,7 +79,8 @@ impl Config {
             steam_api_base: "http://127.0.0.1:9".into(),
             steam_openid_url: "http://127.0.0.1:9/openid/login".into(),
             presence_idle_secs: crate::presence::IDLE_TIMEOUT_SECS,
-            xfire_icons_dir: None,
+            app_icon_cdn_url: "http://127.0.0.1:9".into(),
+            steam_cdn_url: "http://127.0.0.1:9/apps".into(),
             data_dir: std::env::temp_dir().join("fraglink-server-tests"),
             detectable_url: "http://127.0.0.1:9/detectable".into(),
             steam_store_url: None,

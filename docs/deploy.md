@@ -65,25 +65,17 @@ back, copy it over `latest.json`.
 The private key's backup is outside the repo (`~/.secrets/fraglink-updater.key` + `.password` on the build box).
 Losing it means existing installs can't auto-update to builds signed with a new key.
 
-## Xfire game icons (optional, private testing)
+## Game icons
 
-A removable fallback source of game icons, extracted from the 2013 Xfire client. The images are
-**not** in the git repo or the desktop installer; only `scripts/xfire_icons.py` is.
-
-- Generate: `python scripts/xfire_icons.py icons.dll xfire_games.ini out/` (needs `pefile` and
-  `Pillow`). It writes `<game>--<xfire short>-32.png` (plus `-16.png` when a native 16 px exists)
-  and `manifest.json`.
-- Install: copy `out/*` to `/var/lib/fraglink/icons/xfire/` (world readable). Caddy serves it at
-  `/icons/xfire/` (see `deploy/Caddyfile`).
-- Enable: `FRAGLINK_XFIRE_ICONS=1` in `/etc/fraglink/server.env` (the directory can be changed with
-  `FRAGLINK_XFIRE_ICONS_DIR`), then `sudo systemctl restart fraglink-server`. The log shows
-  `xfire icons: N games`.
-- Effect: `GET /api/v1/games/icons` adds `"icon_path": "/icons/xfire/<file>"` whenever an Xfire
-  icon matches (even if there is a Steam icon) and `"preferred": "xfire"`. Clients (0.2.0-dev.7+)
-  use it first, then Steam, then the local exe icon. It matches the signature's exe names first (only exes unique to one Xfire game),
-  then the normalised game name, then a bare series name ("Halo" gives the oldest Xfire "Halo: ..." entry).
-- Remove: delete the flag line and restart, then optionally delete the directory and the
-  `/icons/xfire/*` block in the Caddyfile. Nothing else depends on it.
+`GET /icons/games/{16,32,64}/<game id>.png` serves official game icons from our own domain. The
+server fetches each icon once (the game list's app icon first, then the Steam community icon by
+appid), resizes it to 16/32/64 px and caches it in `/var/lib/fraglink/icon-cache/`
+(`<hash>-<px>.png`; a `.miss` file stops retries for 24 h). Icons older than 30 days are refreshed in
+the background. Responses carry an ETag and `Cache-Control: public, max-age=604800`.
+`GET /api/v1/games/icons?ids=...` returns the `icon_path` for ids that have one. Upstream bases can be
+changed with `FRAGLINK_APP_ICON_CDN` and `FRAGLINK_STEAM_ICON_CDN`. To force a refetch, delete the
+cache directory. The desktop app never contacts third-party image hosts; without a server icon it
+uses the exe icon or a generic glyph.
 
 ## Domain and HTTPS
 

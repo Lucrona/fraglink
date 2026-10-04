@@ -406,8 +406,8 @@ impl Client {
         Ok(())
     }
 
-    /// Public icon sources for games that aren't installed here
-    /// (`GET /api/v1/games/icons`): `{id: {steam_appid, icon_url|null}}`.
+    /// Which games the server has an official icon for (`GET /api/v1/games/icons`):
+    /// `{id: {icon_path: "/icons/games/32/<id>.png", ...}}`.
     pub fn game_icons(&self, ids: &[String]) -> Result<serde_json::Value, SyncError> {
         let list: Vec<String> = ids.iter().take(50).map(|i| enc(i)).collect();
         self.call(
@@ -417,7 +417,8 @@ impl Client {
         )
     }
 
-    /// Download an icon the server hosts itself (`/icons/xfire/...`, max 256 KB).
+    /// Download an icon the server hosts itself (`/icons/games/...`, max 256 KB).
+    /// Icons only ever come from the Fraglink server.
     pub fn fetch_server_icon(&self, path: &str) -> Result<Vec<u8>, SyncError> {
         if !path.starts_with("/icons/")
             || path.contains("..")
@@ -564,44 +565,9 @@ pub fn normalize_server_url(input: &str) -> Option<String> {
     Some(s.to_string())
 }
 
-/// The only host the tray downloads game icons from (Steam's public CDN).
-pub const ICON_HOST: &str =
-    "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/";
-
-/// Download a Steam community icon (max 256 KB). Other URLs are refused.
-pub fn fetch_icon(url: &str) -> Result<Vec<u8>, SyncError> {
-    if !url.starts_with(ICON_HOST) || url.contains("..") {
-        return Err(SyncError::Decode("icon URL not allowed".into()));
-    }
-    let resp = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .get(url)
-        .call()
-        .map_err(|e| SyncError::Network(e.to_string()))?;
-    let mut buf = Vec::new();
-    use std::io::Read;
-    resp.into_reader()
-        .take(256 * 1024)
-        .read_to_end(&mut buf)
-        .map_err(|e| SyncError::Network(e.to_string()))?;
-    Ok(buf)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn icon_downloads_only_from_steam_cdn() {
-        for u in [
-            "http://evil.example/a.jpg",
-            "https://cdn.cloudflare.steamstatic.com/steam/apps/570/header.jpg",
-            "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/../../x",
-        ] {
-            assert!(matches!(fetch_icon(u), Err(SyncError::Decode(_))), "{u}");
-        }
-    }
 
     #[test]
     fn server_url_normalization() {

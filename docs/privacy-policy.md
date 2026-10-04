@@ -106,10 +106,11 @@ account is yours. We never see your Steam password. Unlinking Steam on its own i
 
 ### Game icons
 
-The tray shows each game's icon. It reads icons from the game's own files and from Steam's local
-cache on your PC. For a friend's game you don't have installed, a signed-in tray asks the Fraglink
-server for the game's public Steam icon and downloads that image from Steam's CDN (Valve). That
-request includes no account details, but like any web request it shows Valve your IP address.
+The tray shows each game's icon. A signed-in tray asks the Fraglink server for the game's official
+icon; the server fetches public icons once, caches them and serves them from our own domain, so the
+app never contacts third-party image servers. That request includes only the game's ID. Games the
+server has no icon for use the icon in the game's own files on your PC (read locally, never
+uploaded) or a generic game symbol.
 
 ## 5. Cookies
 

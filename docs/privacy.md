@@ -25,6 +25,6 @@ The device token is encrypted with Windows DPAPI on your PC. Signing out forgets
 
 **World of Warcraft realm (dev.12):** while a WoW version runs, the app reads the realm name from that version's `WTF\Config.wtf` (`SET realmName "…"`) (it isn't shown in your own status). While signed in it's sent with your presence like the game name, so friends see "World of Warcraft · Frostmourne" in their side panel and your hover tooltip (from dev.13 only there). From dev.14 the WoW versions are World of Warcraft, World of Warcraft Classic and World of Warcraft: Forever; Public Test (PTR) builds aren't tracked. "Show my game to my friends" off hides it too.
 
-**Game icons:** read from the detected game's exe and Steam's local library cache, then cached in `icons\` in the data folder. While you're signed in, icons of friends' games that aren't installed on this PC may be downloaded from Steam's public CDN.
+**Game icons:** official icons downloaded from the Fraglink server (only the game's ID is sent), otherwise read from the detected game's exe or Steam's local library cache; cached in `icons\` in the data folder.
 
 **Your control:** exclude any game (Options > Games > "Don't track this game"), Export my data (a zip with JSON + CSV), and delete everything by quitting and removing the folder above.

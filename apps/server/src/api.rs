@@ -56,6 +56,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/blocks/{handle}", delete(unblock_user))
         .route("/api/v1/ws", get(crate::presence::ws_handler))
         .route("/api/v1/games/icons", get(game_icons))
+        .route("/icons/games/{size}/{file}", get(crate::icons::serve))
         .route("/api/v1/games/detectable", get(crate::games::detectable))
         .route("/api/v1/games/overrides", get(crate::games::overrides))
         .route("/api/v1/games/suggest", post(crate::games::suggest))
@@ -1321,11 +1322,11 @@ struct IconsQ {
 }
 
 /// Where a client can get a game's icon:
-/// `{ "<game id>": { "steam_appid": 570 | null, "icon_url": "https://cdn...jpg" | null,
-///   "icon_path": "/icons/xfire/<file>" (when an Xfire icon matches),
-///   "preferred": "xfire" | "steam" | "none" } }`.
-/// Clients use the Xfire icon first, then Steam, then their local exe icon.
-/// Unknown ids are left out.
+/// `{ "<game id>": { "icon_path": "/icons/games/32/<id>.png", "preferred": "server",
+///   "steam_appid": 570 | null, "icon_url": null } }` for games this server has (or
+/// can fetch) an official icon for; other ids are left out and the app uses the
+/// exe icon on its own PC. `icon_url` stays null: apps never download icons from
+/// anyone but this server (older apps used it for a CDN link).
 async fn game_icons(
     State(st): State<AppState>,
     _a: AuthUser,
@@ -1335,46 +1336,31 @@ async fn game_icons(
         .ids
         .split(',')
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty() && s.len() <= 120)
+        .filter(|s| !s.is_empty() && s.len() <= 120 && !s.starts_with("manual:"))
         .take(50)
         .collect();
-    let rows: Vec<(String, Option<i32>, Option<String>, String)> = sqlx::query_as(
-        "SELECT id, steam_appid, steam_icon_hash, name FROM games WHERE id = ANY($1)",
-    )
-    .bind(&ids)
-    .fetch_all(&st.db)
-    .await?;
     let mut out = serde_json::Map::new();
     for id in &ids {
-        let row = rows.iter().find(|r| &r.0 == id);
-        let appid = row
-            .and_then(|r| r.1.map(|a| a as u32))
-            .or_else(|| fraglink_core::icons::appid_from_game_id(id));
-        let url = appid.and_then(|appid| {
-            row.and_then(|r| r.2.as_deref())
-                .and_then(|h| fraglink_core::icons::steam_cdn_icon_url(appid, h))
-        });
-        // The classic Xfire icon (a path on this server) whenever one matches, even
-        // if there's a Steam icon: Xfire is the preferred icon.
-        let xfire = st.xfire.as_ref().as_ref().and_then(|x| {
-            x.lookup(&st.sigs, id, row.map(|r| r.3.as_str()))
-                .map(|f| format!("/icons/xfire/{f}"))
-        });
-        if appid.is_none() && xfire.is_none() {
+        let Some(cid) = crate::names::canonical_id(Uuid::nil(), id) else {
+            continue;
+        };
+        if !crate::icons::available(&st, &cid).await {
             continue;
         }
-        let preferred = if xfire.is_some() {
-            "xfire"
-        } else if url.is_some() {
-            "steam"
-        } else {
-            "none"
-        };
-        let mut v = json!({ "steam_appid": appid, "icon_url": url, "preferred": preferred });
-        if let Some(p) = xfire {
-            v["icon_path"] = json!(p);
-        }
-        out.insert(id.clone(), v);
+        let appid = fraglink_core::icons::appid_from_game_id(&cid).or_else(|| {
+            st.sigs
+                .get(&cid)
+                .and_then(|g| g.steam_appids.first().copied())
+        });
+        out.insert(
+            id.clone(),
+            json!({
+                "icon_path": crate::icons::icon_path(&cid, 32),
+                "preferred": "server",
+                "steam_appid": appid,
+                "icon_url": null,
+            }),
+        );
     }
     Ok(Json(Value::Object(out)))
 }

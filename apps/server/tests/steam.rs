@@ -129,7 +129,7 @@ async fn link_by_vanity_and_import(pool: PgPool) {
     assert_eq!(cs2["display_tier"], "tracked");
     assert_eq!(cs2["tracked_min"], cs2_min);
 
-    // icon lookup for friends' trays: hash from GetOwnedGames, junk hashes ignored
+    // icon lookup for friends' trays: our own icon paths only, never a third-party URL
     let ic = api(
         &app,
         "GET",
@@ -140,14 +140,9 @@ async fn link_by_vanity_and_import(pool: PgPool) {
     .await
     .json();
     assert_eq!(ic["cs2"]["steam_appid"], 730);
-    assert_eq!(
-        ic["cs2"]["icon_url"],
-        "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/730/8dbc71957312bbd3baea65848b545be9eae2a355.jpg"
-    );
-    assert!(
-        ic["dota2"]["icon_url"].is_null(),
-        "invalid hash \"x\" is dropped"
-    );
+    assert_eq!(ic["cs2"]["icon_path"], "/icons/games/32/cs2.png");
+    assert!(ic["cs2"]["icon_url"].is_null());
+    assert!(ic["dota2"]["icon_url"].is_null());
     assert_eq!(ic["steam:999"]["steam_appid"], 999);
     assert!(ic.get("wow-unknown").is_none());
 

@@ -807,7 +807,7 @@ pub async fn game_icons(
         .filter(|i| !i.is_empty() && i.len() <= 120)
         .take(60)
         .collect();
-    // Same priority for friends' games and our own (Xfire, Steam, exe); `friends`
+    // Same priority for friends' games and our own (server, Steam, exe); `friends`
     // is kept for older UI builds.
     let _ = friends;
     tauri::async_runtime::spawn_blocking(move || crate::icons::resolve(&app, &ids, true))
