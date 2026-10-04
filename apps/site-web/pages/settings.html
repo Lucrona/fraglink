@@ -1,0 +1,38 @@
+<!-- title: Account settings · Fraglink | page: settings -->
+<div class="mid wrap stack" style="padding-bottom:28px">
+  <h1 style="margin:0;font-size:22px">Account settings</h1>
+  <div id="msg" class="alert" hidden></div>
+  <section class="panel"><h2>Profile</h2><div class="body">
+    <dl class="kv" style="margin-bottom:12px"><dt>Username</dt><dd id="s-handle">…</dd><dt>Email</dt><dd id="s-email">…</dd></dl>
+    <form class="f" id="f-name"><div class="alert" hidden></div>
+      <label>Display name<input type="text" name="display_name" maxlength="32"><small>Shown on your profile and to friends. Leave empty to use your username.</small></label>
+      <div class="row"><button class="btn">Save</button></div></form>
+  </div></section>
+  <section class="panel"><h2>Privacy</h2><div class="body">
+    <form class="f" id="f-privacy"><div class="alert" hidden></div>
+      <label class="check"><input type="checkbox" name="share"> <span>Share my play history with friends<br><small>Friends see your games table, hours and recent activity. Live status (online, what you're playing now) follows your status in the app: pick Invisible there to hide it.</small></span></label>
+    </form>
+    <p class="hint" style="margin:10px 0 0">Profiles are only visible to signed-in Fraglink users. Non-friends see your name, join date and friend count only.</p>
+  </div></section>
+  <section class="panel"><h2>Signed-in apps</h2><div id="devices"><div class="body empty">Loading…</div></div></section>
+  <section class="panel"><h2>Password</h2><div class="body">
+    <form class="f" id="f-pw"><div class="alert" hidden></div>
+      <label>Current password<input type="password" name="current_password" required autocomplete="current-password"></label>
+      <label>New password<input type="password" name="new_password" required minlength="10" maxlength="128" autocomplete="new-password"></label>
+      <label>New password again<input type="password" name="new_password2" required minlength="10" maxlength="128" autocomplete="new-password"></label>
+      <div class="row"><button class="btn">Change password</button></div></form>
+  </div></section>
+  <section class="panel"><h2>Email</h2><div class="body">
+    <form class="f" id="f-email"><div class="alert" hidden></div>
+      <label>New email<input type="email" name="new_email" required autocomplete="email"></label>
+      <label>Current password<input type="password" name="current_password" required autocomplete="current-password"></label>
+      <div class="row"><button class="btn">Change email</button></div></form>
+  </div></section>
+  <section class="panel"><h2>Your data</h2><div class="body">
+    <p style="margin-top:0">Download everything we store about you (JSON and CSV files in a zip).</p>
+    <p><button class="btn" id="export" type="button">Export my data</button></p>
+    <form class="f" id="f-delete" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="alert" hidden></div>
+      <label>Delete account: enter your password<input type="password" name="password" required autocomplete="current-password"><small>Removes your account, hours, friends and presence immediately. This can't be undone.</small></label>
+      <div class="row"><button class="btn danger">Delete my account</button></div></form>
+  </div></section>
+</div>

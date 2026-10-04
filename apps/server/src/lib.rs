@@ -14,6 +14,7 @@ pub mod games;
 pub mod hours;
 pub mod names;
 pub mod presence;
+pub mod profile;
 pub mod steam;
 pub mod web;
 pub mod xfire_icons;
@@ -124,6 +125,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(api::routes())
         .merge(web::routes())
+        .merge(profile::routes())
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(state)
 }
