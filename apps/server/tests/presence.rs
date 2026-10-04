@@ -305,8 +305,9 @@ async fn silent_client_times_out_to_offline(pool: PgPool) {
     let a = signup(&app, "a@example.com", "alice").await;
     let b = signup(&app, "b@example.com", "bob").await;
     befriend(&app, &a, &b, "bob", "alice").await;
-    let mut ca = Client::connect(&base, &a).await;
+    // bob first: alice's socket has a 1 s idle limit, so she speaks right after connecting
     let mut cb = Client::connect(&base, &b).await;
+    let mut ca = Client::connect(&base, &a).await;
     ca.presence("online", Some(("wow", "World of Warcraft")))
         .await;
     assert_eq!(cb.expect("presence").await["status"], "online");
