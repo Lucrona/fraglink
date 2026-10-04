@@ -28,6 +28,12 @@ pub const FALLBACK_SERVER: &str = "http://119.42.54.86";
 /// The default before 0.2.0-dev.6. A saved copy of it only counts when signed in (a local dev server).
 pub const LEGACY_DEFAULT_SERVER: &str = "http://localhost:8787";
 
+/// `Retry-After` in seconds (the HTTP-date form is ignored), capped at 10 minutes.
+pub fn parse_retry_after(v: Option<&str>) -> Option<u64> {
+    v.and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|n| n.min(600))
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
     /// The server rejected our token (revoked from the website, or account deleted).
@@ -38,6 +44,8 @@ pub enum SyncError {
         status: u16,
         code: String,
         message: String,
+        /// Seconds from a `Retry-After` header (503/429), if the server sent one.
+        retry_after: Option<u64>,
     },
     #[error("can't reach the server: {0}")]
     Network(String),
@@ -52,6 +60,14 @@ impl SyncError {
             SyncError::Network(_) => true,
             SyncError::Server { status, .. } => *status >= 500 || *status == 429,
             _ => false,
+        }
+    }
+
+    /// The server's `Retry-After`, if it asked us to wait.
+    pub fn retry_after(&self) -> Option<u64> {
+        match self {
+            SyncError::Server { retry_after, .. } => *retry_after,
+            _ => None,
         }
     }
 }
@@ -212,6 +228,7 @@ impl Client {
             }
             Err(ureq::Error::Status(401, _)) => Err(SyncError::Unauthorized),
             Err(ureq::Error::Status(status, resp)) => {
+                let retry_after = parse_retry_after(resp.header("Retry-After"));
                 let b: ErrBody = resp.into_json().unwrap_or(ErrBody {
                     error: String::new(),
                     message: String::new(),
@@ -220,6 +237,7 @@ impl Client {
                     status,
                     code: b.error,
                     message: b.message,
+                    retry_after,
                 })
             }
             Err(ureq::Error::Transport(t)) => Err(SyncError::Network(t.to_string())),
@@ -478,10 +496,11 @@ impl Client {
                     .map_err(|e| SyncError::Network(e.to_string()))?;
                 Ok(Some((buf, tag)))
             }
-            Err(ureq::Error::Status(status, _)) => Err(SyncError::Server {
+            Err(ureq::Error::Status(status, resp)) => Err(SyncError::Server {
                 status,
                 code: String::new(),
                 message: format!("GET {path} failed"),
+                retry_after: parse_retry_after(resp.header("Retry-After")),
             }),
             Err(ureq::Error::Transport(t)) => Err(SyncError::Network(t.to_string())),
         }
@@ -630,19 +649,22 @@ mod tests {
         assert!(SyncError::Server {
             status: 503,
             code: String::new(),
-            message: String::new()
+            message: String::new(),
+            retry_after: None
         }
         .is_transient());
         assert!(SyncError::Server {
             status: 429,
             code: String::new(),
-            message: String::new()
+            message: String::new(),
+            retry_after: None
         }
         .is_transient());
         assert!(!SyncError::Server {
             status: 400,
             code: String::new(),
-            message: String::new()
+            message: String::new(),
+            retry_after: None
         }
         .is_transient());
         assert!(!SyncError::Unauthorized.is_transient());

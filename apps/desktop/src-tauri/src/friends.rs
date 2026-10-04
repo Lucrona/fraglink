@@ -229,19 +229,48 @@ pub fn request_refresh(app: &AppHandle) {
         .store(true, Ordering::SeqCst);
 }
 
-fn sleep_while_signed_in(app: &AppHandle, secs: u64) -> bool {
-    for _ in 0..secs {
+fn sleep_while_signed_in(app: &AppHandle, wait: Duration) -> bool {
+    let end = Instant::now() + wait;
+    while Instant::now() < end {
         if !sync::signed_in(app) {
             return false;
         }
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep((end - Instant::now()).min(Duration::from_secs(1)));
     }
     sync::signed_in(app)
 }
 
+/// Random 0.0..1.0 without an extra crate (RandomState is seeded per process).
+fn rand01() -> f64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+    );
+    (h.finish() >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// Reconnect delays: exponential (2 s doubling to 2 min) with "equal jitter", so a server
+/// restart or overload doesn't get every client back at the same instant. A server
+/// `Retry-After` (503 when it's full) is a floor.
+const BACKOFF_MIN: f64 = 2.0;
+const BACKOFF_MAX: f64 = 120.0;
+
+fn backoff_delay(attempt: u32, retry_after: Option<u64>) -> Duration {
+    let cap = (BACKOFF_MIN * 2f64.powi(attempt.min(10) as i32)).min(BACKOFF_MAX);
+    let mut secs = cap / 2.0 + rand01() * cap / 2.0;
+    if let Some(ra) = retry_after {
+        secs = secs.max(ra as f64 + rand01() * 10.0);
+    }
+    Duration::from_secs_f64(secs)
+}
+
 fn run(app: &AppHandle) {
     let st = app.state::<AppState>();
-    let mut backoff = 2u64;
+    let mut attempt = 0u32;
     log::info!("presence: started");
     while let Some(client) = sync::client(app) {
         let mut sock = match client.presence() {
@@ -252,15 +281,19 @@ fn run(app: &AppHandle) {
                 return;
             }
             Err(e) => {
-                log::info!("presence: can't connect ({e}); retry in {backoff}s");
-                if !sleep_while_signed_in(app, backoff) {
+                let wait = backoff_delay(attempt, e.retry_after());
+                attempt += 1;
+                log::info!(
+                    "presence: can't connect ({e}); retry in {:.0}s",
+                    wait.as_secs_f64()
+                );
+                if !sleep_while_signed_in(app, wait) {
                     return;
                 }
-                backoff = (backoff * 2).min(60);
                 continue;
             }
         };
-        backoff = 2;
+        let connected_at = Instant::now();
         log::info!("presence: connected");
         st.friends.connected.store(true, Ordering::SeqCst);
         emit(app);
@@ -273,8 +306,20 @@ fn run(app: &AppHandle) {
                 return; // signed out
             }
             Err(e) => {
-                log::info!("presence: connection lost ({e}); reconnecting");
-                if !sleep_while_signed_in(app, 2) {
+                // A connection that lived a while resets the backoff; one that drops right
+                // away (server restarting or overloaded) keeps escalating it.
+                if connected_at.elapsed() > Duration::from_secs(60) {
+                    attempt = 0;
+                }
+                // Spread the first retry over ~15 s so a server restart isn't a reconnect stampede.
+                let wait = backoff_delay(attempt, None)
+                    .max(Duration::from_secs_f64(1.0 + rand01() * 14.0));
+                attempt += 1;
+                log::info!(
+                    "presence: connection lost ({e}); reconnecting in {:.0}s",
+                    wait.as_secs_f64()
+                );
+                if !sleep_while_signed_in(app, wait) {
                     return;
                 }
             }

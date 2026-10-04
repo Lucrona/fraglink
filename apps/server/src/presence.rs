@@ -13,18 +13,34 @@ use crate::friends;
 use crate::AppState;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, TimeZone, Utc};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub const IDLE_TIMEOUT_SECS: u64 = 150;
+
+/// Default cap on live presence sockets (about 3,500 fit a 2 GB VPS with Caddy in front).
+pub const DEFAULT_MAX_SOCKETS: usize = 3500;
+
+/// `FRAGLINK_MAX_WS`: live socket cap; past it new sockets get 503 + Retry-After so
+/// clients back off instead of piling onto an overloaded box.
+pub fn max_sockets() -> usize {
+    static MAX: OnceLock<usize> = OnceLock::new();
+    *MAX.get_or_init(|| {
+        std::env::var("FRAGLINK_MAX_WS")
+            .ok()
+            .and_then(|v| v.trim().parse().ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(DEFAULT_MAX_SOCKETS)
+    })
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct PresenceView {
@@ -114,9 +130,31 @@ pub enum ClientMsg {
 pub struct Hub {
     conns: Mutex<HashMap<Uuid, Vec<(u64, mpsc::UnboundedSender<ServerMsg>)>>>,
     next: AtomicU64,
+    /// Sockets accepted or being upgraded (includes ones not yet in `conns`).
+    live: AtomicUsize,
+}
+
+/// Holds one socket slot; released when dropped (also when an upgrade never happens).
+pub struct SocketSlot(Arc<Hub>);
+
+impl Drop for SocketSlot {
+    fn drop(&mut self) {
+        self.0.live.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 impl Hub {
+    /// Reserve a socket slot, or None when `max` sockets are already live.
+    pub fn try_reserve(self: &Arc<Self>, max: usize) -> Option<SocketSlot> {
+        if self.live.fetch_add(1, Ordering::SeqCst) >= max {
+            self.live.fetch_sub(1, Ordering::SeqCst);
+            return None;
+        }
+        Some(SocketSlot(self.clone()))
+    }
+    pub fn live_sockets(&self) -> usize {
+        self.live.load(Ordering::SeqCst)
+    }
     fn add(&self, user: Uuid, tx: mpsc::UnboundedSender<ServerMsg>) -> u64 {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         self.conns
@@ -303,8 +341,18 @@ pub async fn reset_all(st: &AppState) -> ApiResult<()> {
 }
 
 pub async fn ws_handler(State(st): State<AppState>, a: AuthUser, ws: WebSocketUpgrade) -> Response {
+    let Some(slot) = st.hub.try_reserve(max_sockets()) else {
+        tracing::warn!(
+            "presence: {} sockets live, refusing new ones (503)",
+            st.hub.live_sockets()
+        );
+        return crate::error::AppError::overloaded().into_response();
+    };
     ws.max_message_size(16 * 1024)
-        .on_upgrade(move |socket| connection(st, a, socket))
+        .on_upgrade(move |socket| async move {
+            let _slot = slot;
+            connection(st, a, socket).await
+        })
 }
 
 async fn connection(st: AppState, a: AuthUser, socket: WebSocket) {

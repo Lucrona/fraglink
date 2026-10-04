@@ -30,6 +30,14 @@ impl AppError {
     pub fn not_found() -> Self {
         Self::new(StatusCode::NOT_FOUND, "not_found", "Not found.")
     }
+    /// 503 with Retry-After: the server is at capacity, try again later.
+    pub fn overloaded() -> Self {
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "overloaded",
+            "The server is busy. Trying again shortly.",
+        )
+    }
     pub fn internal(e: impl std::fmt::Display) -> Self {
         tracing::error!("internal error: {e}");
         Self::new(
@@ -42,6 +50,10 @@ impl AppError {
 
 impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
+        if matches!(e, sqlx::Error::PoolTimedOut) {
+            tracing::warn!("database pool exhausted (503)");
+            return AppError::overloaded();
+        }
         AppError::internal(e)
     }
 }
@@ -54,10 +66,19 @@ impl From<anyhow::Error> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        (
+        let mut r = (
             self.status,
             Json(json!({ "error": self.code, "message": self.message })),
         )
-            .into_response()
+            .into_response();
+        if self.status == StatusCode::SERVICE_UNAVAILABLE {
+            // Spread retries out: 15-45 s.
+            let secs = 15 + rand::random::<u8>() % 31;
+            r.headers_mut().insert(
+                axum::http::header::RETRY_AFTER,
+                axum::http::HeaderValue::from(secs as u32),
+            );
+        }
+        r
     }
 }

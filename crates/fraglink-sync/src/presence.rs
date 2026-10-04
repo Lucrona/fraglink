@@ -116,6 +116,9 @@ impl PresenceSocket {
                 status: r.status().as_u16(),
                 code: String::new(),
                 message: "presence connection refused".into(),
+                retry_after: crate::parse_retry_after(
+                    r.headers().get("retry-after").and_then(|v| v.to_str().ok()),
+                ),
             }),
             Err(e) => Err(SyncError::Network(e.to_string())),
         }

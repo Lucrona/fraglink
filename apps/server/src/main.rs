@@ -12,6 +12,8 @@ async fn main() -> anyhow::Result<()> {
     let cfg = Config::from_env()?;
     let db = PgPoolOptions::new()
         .max_connections(10)
+        // Fail fast (503 + Retry-After) instead of queueing requests for 30 s.
+        .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(&cfg.database_url)
         .await?;
     MIGRATOR.run(&db).await?;
