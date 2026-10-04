@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Publish a CI build to the auto-updater: copies the signed NSIS installer, its .sig and
-# latest.json from a GitHub Actions run to http://119.42.54.86/updates/ (Caddy serves
-# /var/www/fraglink-updates). Installed clients check that latest.json every 6 hours.
+# latest.json from a GitHub Actions run to the server's /var/www/fraglink-updates (Caddy serves it
+# at https://playfraglink.com/updates/ and http://119.42.54.86/updates/). Installed clients check
+# latest.json at startup and every hour. The previous manifest is kept as latest.json.prev.
 #
 #   scripts/publish-update.sh <run-id>      # the CI run of the release tag
 #
@@ -20,5 +21,5 @@ test -f "$EXE.sig" && test -f "$TMP/nsis/latest.json"
 scp -i "$KEY" "$EXE" "$EXE.sig" "$USER_@$HOST:/var/www/fraglink-updates/"
 # latest.json last, so clients never see a manifest before its installer is there
 scp -i "$KEY" "$TMP/nsis/latest.json" "$USER_@$HOST:/var/www/fraglink-updates/latest.json.new"
-ssh -i "$KEY" "$USER_@$HOST" 'mv /var/www/fraglink-updates/latest.json.new /var/www/fraglink-updates/latest.json'
-curl -fsS "http://$HOST/updates/latest.json"
+ssh -i "$KEY" "$USER_@$HOST" 'cd /var/www/fraglink-updates && cp latest.json latest.json.prev && mv latest.json.new latest.json'
+curl -fsS "https://playfraglink.com/updates/latest.json"

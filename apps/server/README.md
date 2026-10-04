@@ -21,8 +21,8 @@ cargo run -p fraglink-server
 Or everything in containers: `docker compose --profile server up --build`.
 
 Then point the client at it: on the Login screen open **Server** and enter `http://localhost:8787`
-(or use Options > Account). Since dev.6 the client defaults to the hosted Fraglink server at
-`http://119.42.54.86`. Log in or use **Create Account**; "Sign in with your browser instead" uses
+(or use Options > Account). Since dev.11 the client defaults to the hosted Fraglink server at
+`https://playfraglink.com` (falling back to `http://119.42.54.86` when HTTPS fails). Log in or use **Create Account**; "Sign in with your browser instead" uses
 the pairing page (sign in, check the code, approve).
 
 ## Configuration (environment variables)

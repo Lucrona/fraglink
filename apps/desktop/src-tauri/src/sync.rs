@@ -4,7 +4,9 @@
 //! later when the server can't be reached.
 
 use crate::{now, AppState};
-use fraglink_sync::{secret, Client, PollResult, SyncError, DEFAULT_SERVER, LEGACY_DEFAULT_SERVER};
+use fraglink_sync::{
+    secret, Client, PollResult, SyncError, DEFAULT_SERVER, FALLBACK_SERVER, LEGACY_DEFAULT_SERVER,
+};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
@@ -112,13 +114,26 @@ pub fn server_stats(app: &AppHandle) -> Option<serde_json::Value> {
 }
 
 pub fn server(app: &AppHandle) -> String {
-    pick_server(setting(app, keys::SERVER), signed_in(app))
+    let saved = setting(app, keys::SERVER);
+    let s = pick_server(saved.clone(), signed_in(app));
+    // dev.10 and older saved the IP; move the saved setting to the domain (same server).
+    if saved.as_deref().is_some_and(is_ip_default) {
+        set(app, keys::SERVER, &s);
+    }
+    s
+}
+
+/// The production server by IP (the default up to dev.10).
+fn is_ip_default(s: &str) -> bool {
+    s.trim_end_matches('/') == FALLBACK_SERVER
 }
 
 /// The saved server, except that the old localhost default (saved by every sign-in before
-/// dev.6) moves to the production server unless this PC is signed in to it.
+/// dev.6) moves to the production server unless this PC is signed in to it, and the
+/// production server's IP (dev.6 to dev.10) moves to its domain.
 fn pick_server(saved: Option<String>, signed_in: bool) -> String {
     match saved {
+        Some(s) if is_ip_default(&s) => DEFAULT_SERVER.to_string(),
         Some(s) if s.trim_end_matches('/') == LEGACY_DEFAULT_SERVER && !signed_in => {
             DEFAULT_SERVER.to_string()
         }
@@ -432,6 +447,11 @@ mod server_default_tests {
     #[test]
     fn legacy_localhost_migrates_unless_signed_in() {
         assert_eq!(pick_server(None, false), DEFAULT_SERVER);
+        assert_eq!(DEFAULT_SERVER, "https://playfraglink.com");
+        for ip in ["http://119.42.54.86", "http://119.42.54.86/"] {
+            assert_eq!(pick_server(Some(ip.into()), true), DEFAULT_SERVER);
+            assert_eq!(pick_server(Some(ip.into()), false), DEFAULT_SERVER);
+        }
         assert_eq!(
             pick_server(Some("http://localhost:8787".into()), false),
             DEFAULT_SERVER

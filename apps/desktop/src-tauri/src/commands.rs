@@ -786,7 +786,7 @@ pub async fn pick_game_exe(app: AppHandle) -> Option<String> {
 }
 
 /// Placeholder address of the Fraglink website (Fraglink > My Stats).
-pub const WEBSITE: &str = "https://fraglink.gg";
+pub const WEBSITE: &str = "https://playfraglink.com";
 
 /// Open a page of the website in the default browser.
 #[tauri::command]

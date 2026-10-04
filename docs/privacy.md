@@ -12,9 +12,9 @@
 
 **Stores (locally, SQLite in `%APPDATA%\gg.fraglink.desktop\`):** games seen, play sessions (start, end, active seconds; the idle field is always 0 since dev.9), daily totals, your manual tags and exclusions, your local activity feed, and settings.
 
-**Sends:** no telemetry. Signed out, the only network request is the **update check** (from dev.6): at startup (the "Checking for updates…" window, from dev.10) and every hour the app downloads `http://119.42.54.86/updates/latest.json`; a newer build is downloaded and signature-checked before it installs. Nothing about you or your games is sent until you log in (Login or Create Account in the main window, or browser pairing).
+**Sends:** no telemetry. Signed out, the only network request is the **update check** (from dev.6): at startup (the "Checking for updates…" window, from dev.10) and every hour the app downloads `https://playfraglink.com/updates/latest.json` (from dev.11; `http://119.42.54.86/updates/latest.json` if that fails, and before dev.11); a newer build is downloaded and signature-checked before it installs. Nothing about you or your games is sent until you log in (Login or Create Account in the main window, or browser pairing).
 
-**After you sign in**, the app uploads to the server you chose (default: the Fraglink server at `http://119.42.54.86`, changeable in Options > Account):
+**After you sign in**, the app uploads to the server you chose (default: the Fraglink server at `https://playfraglink.com`, over HTTPS from dev.11, or `http://119.42.54.86` for the rest of the session if HTTPS can't be reached; changeable in Options > Account):
 - closed game sessions: a random session id, game id and name, Steam app id if known, start and end time, active seconds, an idle field (always 0 since dev.9), and the app version.
 - **Never:** program names, install paths, the list of running programs, idle timestamps or anything about other apps.
 

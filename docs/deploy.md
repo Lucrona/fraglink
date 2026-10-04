@@ -1,6 +1,6 @@
 # Production server
 
-One BinaryLane VPS in Sydney (Ubuntu 24.04, 1 vCPU, 2 GB RAM + 1 GB swap), public IP `119.42.54.86`.
+One BinaryLane VPS in Sydney (Ubuntu 24.04, 1 vCPU, 2 GB RAM + 1 GB swap), public IP `119.42.54.86`, domain `playfraglink.com` (Cloudflare Registrar, DNS only, not proxied).
 Everything below is already set up; this page is for redeploys and recovery.
 
 | What | Where |
@@ -8,7 +8,8 @@ Everything below is already set up; this page is for redeploys and recovery.
 | Server binary | `/opt/fraglink/fraglink-server` (previous one: `fraglink-server.prev`) |
 | Service | `fraglink-server.service` (user `fraglink-srv`, listens on `127.0.0.1:8787`; migrations run at start) |
 | Secrets / config | `/etc/fraglink/server.env` (root-only, `DATABASE_URL`, `FRAGLINK_BIND`, `FRAGLINK_PUBLIC_URL`, optional `STEAM_API_KEY`) |
-| Reverse proxy | Caddy, `/etc/caddy/Caddyfile` (HTTP on the IP for now) |
+| Reverse proxy | Caddy, `/etc/caddy/Caddyfile`: HTTPS on `playfraglink.com` (Let's Encrypt, automatic), `www` redirects to it, plain HTTP on the IP kept for old clients |
+| Coming-soon page | `/var/www/fraglink-site` (`apps/site-coming-soon/`), served for `https://playfraglink.com/` only |
 | Database | PostgreSQL 16, database and role `fraglink`, localhost only |
 | Backups | `/var/backups/fraglink/fraglink-YYYYMMDD-HHMMSS.dump` nightly at 03:30 (`fraglink-backup.timer`), 14 days kept |
 | Copies of the unit files, Caddyfile, backup script | `deploy/` in this repo |
@@ -26,13 +27,15 @@ scripts/deploy.sh --configs   # the same, and reinstall everything in deploy/
 If the new binary fails its health check the script puts the previous one back. It can't undo migrations, so
 a release with a new migration should stay backward compatible or be rolled forward.
 
-Check it: `curl http://119.42.54.86/api/v1/health` → `{"ok":true,"version":"…"}`.
+Check it: `curl https://playfraglink.com/api/v1/health` (and `http://119.42.54.86/api/v1/health`) → `{"ok":true,"version":"…"}`.
 Logs: `sudo journalctl -u fraglink-server -f`.
 
 ## Desktop auto-updates
 
-Installed clients check `http://119.42.54.86/updates/latest.json` (startup and every 6 hours). Caddy serves
-`/updates/` from `/var/www/fraglink-updates` (owned by `fraglink`). The repo is private, so GitHub release URLs
+Installed clients check `https://playfraglink.com/updates/latest.json` first and `http://119.42.54.86/updates/latest.json`
+second (dev.11+; older builds only the IP) at startup and every hour. Caddy serves `/updates/` from
+`/var/www/fraglink-updates` (owned by `fraglink`) on both. `latest.json` points at the HTTPS download. Access log:
+`/var/log/caddy/updates-https.log` and `updates-ip.log` (only `/updates/*` requests). The repo is private, so GitHub release URLs
 aren't reachable by clients; that's why the files live here.
 
 Release flow: push the tag, let CI build (it signs the update files with the `TAURI_SIGNING_PRIVATE_KEY` /
@@ -41,6 +44,9 @@ Release flow: push the tag, let CI build (it signs the update files with the `TA
 ```sh
 scripts/publish-update.sh <ci-run-id>   # copies the setup exe, .sig and latest.json to the server
 ```
+
+The previous manifest stays next to it (`latest.json.prev`, or `latest.json.devN` when done by hand); to roll
+back, copy it over `latest.json`.
 
 The private key's backup is outside the repo (`~/.secrets/fraglink-updater.key` + `.password` on the build box).
 Losing it means existing installs can't auto-update to builds signed with a new key.
@@ -65,13 +71,18 @@ A removable fallback source of game icons, extracted from the 2013 Xfire client.
 - Remove: delete the flag line and restart, then optionally delete the directory and the
   `/icons/xfire/*` block in the Caddyfile. Nothing else depends on it.
 
-## Switch to the domain (once DNS is set)
+## Domain and HTTPS
 
-1. DNS: `A` records for `fraglink.gg` and `app.fraglink.gg` → `119.42.54.86`.
-2. In `/etc/caddy/Caddyfile` delete the `:80` block and uncomment the `app.fraglink.gg, fraglink.gg` block
-   (also in `deploy/Caddyfile`). Caddy then gets Let's Encrypt certificates by itself.
-3. Set `FRAGLINK_PUBLIC_URL=https://app.fraglink.gg` in `/etc/fraglink/server.env` (secure cookies follow).
-4. `sudo systemctl reload caddy && sudo systemctl restart fraglink-server`.
+- DNS (Cloudflare, DNS only): `A playfraglink.com` and `A www.playfraglink.com` → `119.42.54.86`.
+- `deploy/Caddyfile` is the live config: `playfraglink.com` gets a Let's Encrypt certificate automatically
+  (`http://` and `www` redirect to `https://playfraglink.com`); the `:80` block keeps the IP working over plain
+  HTTP for dev.10 and older clients (API, websocket, updates). Both use the same snippet.
+- `FRAGLINK_PUBLIC_URL=https://playfraglink.com` in `/etc/fraglink/server.env`: pairing links, Steam sign-in and
+  secure web cookies use it. Web sign-in works on the domain; on the IP the web forms are refused (other origin).
+- Clients (dev.11+) use `https://playfraglink.com` and `wss://playfraglink.com/api/v1/ws`; if HTTPS or DNS fails
+  they switch to `http://119.42.54.86` for the rest of the session.
+- Change: edit `deploy/Caddyfile`, then `sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`
+  and `sudo systemctl reload caddy` (a reload drops open websockets for a few seconds; clients reconnect).
 
 ## Restore a backup
 

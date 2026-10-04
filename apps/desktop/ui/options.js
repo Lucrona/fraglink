@@ -100,7 +100,7 @@
     const node = (k, label, arr) => `<div class="node" data-node="${k}"><span class="tw">${open[k] ? '−' : '+'}</span>${label} (${arr.length})</div>` + (open[k] ? arr.map(leaf).join('') : '');
     t.innerHTML = node('inst', 'Installed games', inst) + node('not', 'Not installed', not);
   }
-  // Same icon order as everywhere: Xfire, Steam, exe, then the generic icon.
+  // Same icon order as everywhere: server, Steam, exe, then the generic icon.
   const icons = {};
   const GENERIC = '<svg viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="3" fill="#3b4a66" stroke="#0b1424"/><circle cx="5" cy="8" r="1.6" fill="#cfd8e8"/><circle cx="11" cy="7" r="1" fill="#cfd8e8"/><circle cx="12" cy="9.4" r="1" fill="#cfd8e8"/></svg>';
   const iconHtml = id => `<i class="gi">${icons[id] ? `<img src="${icons[id]}" alt="">` : GENERIC}</i>`;

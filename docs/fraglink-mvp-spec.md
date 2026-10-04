@@ -19,7 +19,7 @@
 **Fraglink** gives PC gamers one place to **track their gaming stats across every launcher and see what their friends are playing, from anywhere.** It has two halves:
 
 - **A tiny Windows tray client**: a sensor that detects which game is running (no injection, no overlay), a live friends list, a toast when a friend starts playing, and a quick glance at today's and this week's stats. It wears a faithful 2000s chrome UI (Classic Silver, Phoenix and StreamEngine skins) that already exists as a working HTML prototype.
-- **The website (`fraglink.gg`)**, which does the heavy lifting: an auto-filled public profile, a full stats dashboard and gaming history, friends (viewable from any device, including phones), game pages, recaps, achievements, WoW character cards, linked accounts, a signature image for forums and stream panels, settings and data export.
+- **The website (`playfraglink.com`)**, which does the heavy lifting: an auto-filled public profile, a full stats dashboard and gaming history, friends (viewable from any device, including phones), game pages, recaps, achievements, WoW character cards, linked accounts, a signature image for forums and stream panels, settings and data export.
 
 It sits next to Discord, Steam and Twitch and doesn't replace them. Discord keeps chat, voice and communities. Steam keeps the store and its own friends list. Twitch keeps streaming. Fraglink adds what none of them does well: a single, launcher-agnostic record of your hours (with an honest trust label on every number), a cross-platform "who's playing what" list, and a profile you're proud to link.
 
@@ -49,11 +49,11 @@ The beta seeds from Lucrona's own friend circle and Discord communities. Growth 
 
 | # | Feature | Acceptance criteria |
 |---|---|---|
-| T1 | **Tray app + classic UI shell** | Per-user signed NSIS installer, starts minimised to tray, optional launch at login, single instance. Main window is the prototype's 290×381 chassis (1×/1.5×/2× scale), frameless, draggable, remembers position. Tray menu: Open, Status (Online/Away/Invisible), Pause tracking, Open fraglink.gg, Quit. Idle footprint target (estimate to validate): under 1% CPU averaged over 10 min and under ~80 MB RAM with the window hidden (the WebView is destroyed when hidden). |
+| T1 | **Tray app + classic UI shell** | Per-user signed NSIS installer, starts minimised to tray, optional launch at login, single instance. Main window is the prototype's 290×381 chassis (1×/1.5×/2× scale), frameless, draggable, remembers position. Tray menu: Open, Status (Online/Away/Invisible), Pause tracking, Open playfraglink.com, Quit. Idle footprint target (estimate to validate): under 1% CPU averaged over 10 min and under ~80 MB RAM with the window hidden (the WebView is destroyed when hidden). |
 | T2 | **Game detection & session tracking** | Detects a game within 15 s of launch (target) and ends the session within 15 s of exit. Sessions under 2 min dropped (configurable). A 10-minute crash/relaunch gap merges sessions. **Idle trimming:** if there's no user input for N minutes (default 15, via `GetLastInputInfo`), the session pauses; this fixes Xfire's "left at the menu for 3 days = 72 h" bug. Sessions are written to local SQLite before any upload (offline-safe). Works for Steam, Epic, GOG, Battle.net, EA, Riot and standalone games when the exe is in the signature DB or manually tagged. |
 | T3 | **Signature DB + manual tagging** | Ships with and auto-updates a curated exe→game DB (§7.2). Steam library scan (Epic/GOG manifests as a stretch). "This is a game…" tagging, per-exe exclusions, suggestions to the global DB. |
 | T4 | **Friends tab** | Sections: *Playing* (game + session time), *Online*, *Steam friends playing* (bonus, W4), *Requests*, *Offline* (collapsible, sortable, as in the prototype). Presence change reaches online friends in under 5 s at p95 (target). Friend side panel shows game, session time, hours in that game, and (v1.1) a one-line WoW character ("Playing WoW as Fragnar – Frostmourne, 80 Hunter"). Chat button hands off to Discord (`discord.com/users/<id>`) if linked. |
-| T5 | **Stats tab (quick glance)** | Shows **Now playing** (live timer), **Today** (total + per game), **This week** (total, vs last week), **Top games** (top 5: 7-day hours, total with trust marker, small bar), and a **"Full stats on fraglink.gg"** link. No sorting UI, no history: the website does that. Loads from local SQLite in under 200 ms (target). |
+| T5 | **Stats tab (quick glance)** | Shows **Now playing** (live timer), **Today** (total + per game), **This week** (total, vs last week), **Top games** (top 5: 7-day hours, total with trust marker, small bar), and a **"Full stats on playfraglink.com"** link. No sorting UI, no history: the website does that. Loads from local SQLite in under 200 ms (target). |
 | T6 | **Activity tab (friends feed)** | Short, day-grouped feed ("Today", "Yesterday", weekday, "Earlier"): *started playing X*, *played X for the first time*, *hit 500 hours in X*, *unlocked an achievement tier*, *went live on Twitch*, *weekly recap ready*. Max ~50 items; each entry links to the relevant website page. Aggregated server-side (one "played 3 sessions of X" line rather than three). |
 | T7 | **"Friend started playing" toast** | Skinned toast, bottom-right, 6 s. Click opens the friend in the side panel. Rate limit: at most one per friend per 30 min (configurable). Global mute, per-friend mute, Do-Not-Disturb while *I* am in a game (default on). |
 | T8 | **Local sensors for the website** (all opt-in, each with its own toggle) | (a) **WoW characters:** reads *folder names only* under `World of Warcraft\_retail_|_classic_|_classic_era_\WTF\Account\<ACCOUNT>\<Realm>\<Character>\` and region from `WTF\Config.wtf`; uploads `{flavor, region, realm, character}` as *suggested characters*, never the account folder name or file contents. (b) **/played import:** reads the Fraglink addon's SavedVariables file (§5.3) from disk when WoW isn't running. (c) **Gaming rig:** CPU, GPU, RAM, OS, main monitor resolution via WMI/DXGI, uploaded once and on change, editable on the website. **Never touches game memory or game processes.** |
@@ -131,7 +131,7 @@ The beta seeds from Lucrona's own friend circle and Discord communities. Growth 
 
 **3.4 Friend starts playing**: presence fan-out → Friends tab moves the row to *Playing* → toast "Dizz has started playing World of Warcraft" (unless muted/DND) → Activity tab gets an entry → click opens the side panel with a link to the friend's web profile.
 
-**3.5 Quick glance → full stats**: Stats tab shows today / this week / top games → "Full stats on fraglink.gg" opens `/u/<handle>/stats`, already signed in.
+**3.5 Quick glance → full stats**: Stats tab shows today / this week / top games → "Full stats on playfraglink.com" opens `/u/<handle>/stats`, already signed in.
 
 **3.6 Link WoW characters**
 1. Website → Linked accounts → "Link Battle.net" → Blizzard OAuth consent (`wow.profile`).
@@ -262,7 +262,7 @@ v1: OAuth link, EventSub live status, OBS widget, and **live streams on game pag
 IGDB is used server-side only (4 req/s, 8 concurrent). It is **"free for non-commercial usage"** under the Twitch Developer Service Agreement, with commercial use via partner@igdb.com ([IGDB API docs](https://api-docs.igdb.com/)). **A Supporter tier probably makes Fraglink "commercial"**, so contact IGDB before launching Supporter, or switch to fallbacks: Steam store data for Steam games, Wikidata (CC0) for release years/genres, and Fraglink's own curated rows. SteamGridDB: terms page not located; treat as optional. Fallback art: the prototype's original lettered tiles.
 
 ### 7.8 Website hosting
-**Astro (SSR) on Cloudflare Pages/Workers.** Reads public views from Supabase with the anon key under RLS; edge-caches 30–60 s. The prototype's website CSS (`.wp-*`, `.pf-*`, Cyan Grid / Gold 567) becomes a shared `@fraglink/skins` package. **Signature images** are rendered on a Worker with Satori/resvg (SVG → PNG), CDN-cached ≤10 min and purged on significant change. Domain: `fraglink.gg` primary (not yet registered, §12.3).
+**Astro (SSR) on Cloudflare Pages/Workers.** Reads public views from Supabase with the anon key under RLS; edge-caches 30–60 s. The prototype's website CSS (`.wp-*`, `.pf-*`, Cyan Grid / Gold 567) becomes a shared `@fraglink/skins` package. **Signature images** are rendered on a Worker with Satori/resvg (SVG → PNG), CDN-cached ≤10 min and purged on significant change. Domain: `playfraglink.com` primary (not yet registered, §12.3).
 
 ### 7.9 Supporting tooling
 GitHub monorepo (`apps/desktop`, `apps/web`, `packages/skins`, `addons/wow-fraglink-played`, `supabase/`), GitHub Actions for Windows builds, code signing (OV/EV or Azure Trusted Signing; AU sole-trader eligibility to confirm), Sentry (opt-in), privacy-friendly analytics (Plausible-style) on the website only.
@@ -358,7 +358,7 @@ The Steam Web API Terms cap usage at **100,000 calls/day** and require the key t
 - Premium client skins and profile themes (beyond the free 3–5)
 - **Animated signature images** (APNG/GIF), rendered from Fraglink-owned stats only, never Blizzard or Twitch data
 - **Longer history charts** (multi-year chart ranges; the underlying data and exports stay free)
-- **Custom profile URL** (`fraglink.gg/<slug>`)
+- **Custom profile URL** (`playfraglink.com/<slug>`)
 - **Supporter badge**
 
 **Rules:** never paywall stats, tracking, friends, history, exports, WoW cards or any linked-account feature. No ads-first model. No gambling, coins, loot boxes or sweepstakes (Australian gambling rules). No bundleware (Xfire removed OpenCandy in 2011 after it hurt trust).
@@ -430,7 +430,7 @@ Sequencing note: M1 is useful on its own (a local tracker). M2 + M4 together alr
 ### 12.3 Decisions
 
 **Resolved (26 Sep 2026)**
-1. ✅ **Name: Fraglink** (decided 25 Sep). On 25 Sep, `fraglink.gg`/`.app`/`.io`/`.com.au` looked unregistered and `fraglink.com` was listed for sale. **Still to do:** register `fraglink.gg` (+ `.app`, and `.com.au` via ABN) before announcing; IP Australia (ATMOSS) + TMview searches; AU trademark filing in classes 9, 41 and 42. Brand assets are in `/workspace/fraglink-brand/`.
+1. ✅ **Name: Fraglink** (decided 25 Sep). On 25 Sep, `fraglink.gg`/`.app`/`.io`/`.com.au` looked unregistered and `fraglink.com` was listed for sale. **Domain:** `playfraglink.com` (bought 3 Oct 2026, replaces the planned `fraglink.gg`). **Still to do:** IP Australia (ATMOSS) + TMview searches; AU trademark filing in classes 9, 41 and 42. Brand assets are in `/workspace/fraglink-brand/`.
 2. ✅ **Product direction:** stats + friends from anywhere; tiny tray, the website carries the bulk.
 3. ✅ **Client tabs: Friends | Stats | Activity.** Profile moves to the website; Servers deferred (A2S community-server games only).
 4. ✅ **Monetisation direction:** free core + optional cosmetic Supporter tier (post-beta); never paywall stats; no ads-first; no gambling/coins. (Was open decision 7.)
@@ -463,7 +463,7 @@ Sequencing note: M1 is useful on its own (a local tracker). M2 + M4 together alr
 |---|---|
 | Main chassis, menus, maroon banner, slanted glossy tabs, blue headers, skinned scrollbars | Reused as-is. Tabs are now **Friends / Stats / Activity** in all three skins. |
 | Friends tab (Playing / Friends of Friends / Offline) | Playing / Online / Steam friends / Requests / Offline. FoF hidden until v1.1. |
-| **Stats tab** (Now playing, Today, This week, Top games with bars + trust markers, "Full stats on fraglink.gg") | Wired to `stats_glance_view` + the live session. |
+| **Stats tab** (Now playing, Today, This week, Top games with bars + trust markers, "Full stats on playfraglink.com") | Wired to `stats_glance_view` + the live session. |
 | **Activity tab** (day-grouped friend events with lettered game tiles) | Wired to `activity_feed_view`; entries deep-link to website pages. |
 | Former Profile tab | **Removed** from the client; Fraglink → My Profile opens the website. |
 | Chat window, REPLIES mock | Kept in code, not shipped; the chat button opens the friend's Discord profile. |

@@ -55,7 +55,10 @@ pub struct AppState {
 
 /// Like Discord: Away after 10 minutes without input (not a setting). Only replaces
 /// "Online"; a status the user picked (Away, Invisible) is left alone.
-pub const AUTO_AWAY_SECS: u64 = 10 * 60;
+///
+/// TEMPORARY (0.2.0-dev.11 test build only): 20 seconds so auto-away is quick to test.
+/// dev.12 MUST set this back to `10 * 60`.
+pub const AUTO_AWAY_SECS: u64 = 20;
 
 /// Update the automatic Away flag; tells the UI and friends when it flips.
 fn update_auto_away(app: &AppHandle, idle_s: u64) {

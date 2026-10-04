@@ -1,7 +1,6 @@
 # /etc/caddy/Caddyfile - Fraglink. The server itself listens on 127.0.0.1:8787.
 
-# Now: plain HTTP on the IP (no certificate possible for a bare IP).
-:80 {
+(fraglink) {
 	encode gzip
 	# desktop auto-update files (latest.json + signed installers), put there by scripts/publish-update.sh
 	handle_path /updates/* {
@@ -17,23 +16,60 @@
 	reverse_proxy 127.0.0.1:8787
 }
 
-# When DNS A records for fraglink.gg and app.fraglink.gg point at 119.42.54.86:
-#  1. delete the ":80 { ... }" block above,
-#  2. uncomment the block below (Caddy gets Let's Encrypt certificates and redirects HTTP to HTTPS),
-#  3. set FRAGLINK_PUBLIC_URL=https://app.fraglink.gg in /etc/fraglink/server.env,
-#  4. sudo systemctl reload caddy && sudo systemctl restart fraglink-server
-#
-# app.fraglink.gg, fraglink.gg {
-# 	encode gzip
-# 	handle_path /updates/* {
-# 		root * /var/www/fraglink-updates
-# 		file_server
-# 	}
-# 	handle_path /icons/xfire/* {
-# 		root * /var/lib/fraglink/icons/xfire
-# 		header Cache-Control "public, max-age=604800"
-# 		file_server
-# 	}
-# 	reverse_proxy 127.0.0.1:8787
-# }
-# (keep serving /updates/ on http://119.42.54.86 too: installed clients have that URL baked in)
+# Access log for update downloads only (everything else is skipped).
+(updates_log) {
+	@not_updates not path /updates/*
+	skip_log @not_updates
+	log {
+		output file /var/log/caddy/{args.0} {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		format json
+	}
+}
+
+# playfraglink.com: HTTPS with an automatic Let's Encrypt certificate.
+# http://playfraglink.com redirects to https automatically.
+playfraglink.com {
+	# Temporary "coming soon" page (apps/site-coming-soon): ONLY the bare root "/" for visitors
+	# who aren't signed in on the web (no fl_session cookie; signed in, "/" is the server's
+	# dashboard) and without a query string (the server's "/?msg=" redirects), plus its assets
+	# under /site/. Everything else goes to the Fraglink server as before.
+	@landing {
+		path /
+		expression {query} == ""
+		not header Cookie *fl_session=*
+	}
+	handle @landing {
+		root * /var/www/fraglink-site
+		rewrite * /index.html
+		header Cache-Control "public, max-age=300"
+		file_server
+	}
+	handle /site/* {
+		root * /var/www/fraglink-site
+		header Cache-Control "public, max-age=3600"
+		file_server
+	}
+	import fraglink
+	import updates_log updates-https.log
+}
+
+www.playfraglink.com {
+	redir https://playfraglink.com{uri} permanent
+}
+
+# Plain-HTTP requests for the domain: straight to https://playfraglink.com, not logged.
+# (Caddy still answers Let's Encrypt HTTP challenges here.)
+http://playfraglink.com, http://www.playfraglink.com {
+	skip_log
+	redir https://playfraglink.com{uri} permanent
+}
+
+# Plain HTTP on the IP: KEEP. dev.9/dev.10 clients have http://119.42.54.86 baked in
+# (API, websocket, updates). Catches every other HTTP request too, as before.
+:80 {
+	import fraglink
+	import updates_log updates-ip.log
+}

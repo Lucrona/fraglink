@@ -1,5 +1,5 @@
 /* =====================================================================
-   Fraglink — high-fidelity classic Xfire-style client (mock prototype)
+   Fraglink — high-fidelity classic-style client (mock prototype)
    Main window laid out at the reference's native 290x381 px, then
    scaled with CSS zoom (--z). Palette sampled from the user's photo.
    ===================================================================== */
@@ -11,7 +11,7 @@
   --z: 2;
   --vfont: Verdana, "DejaVu Sans", "FL Tahoma", sans-serif;
   --font: Tahoma, "FL Tahoma", Verdana, "Segoe UI", Arial, sans-serif;
-  /* sampled palette (see /workspace/xfire-refs-hd/palette.md) */
+  /* sampled palette (see the private palette notes) */
   --desk-1: #5c79b1; --desk-2: #7f9dcf; --desk-3: #6a88ba;
   --list-bg: #000; --cyan: #04c1fa; --grey-txt: #bdbfbf;
   --hdr-1: #5b70ab; --hdr-2: #375182; --hdr-3: #102658;

@@ -347,3 +347,20 @@ body.side-dragging, body.side-dragging * { cursor: ew-resize !important; user-se
 /* About */
 .about-slogan { font-size: 8px; letter-spacing: 3px; color: #9fb4d6; margin: 3px 0 6px; }
 /* text size: the window keeps its layout; content scales via zoom on <body> (set by app.js) */
+
+/* 0.2.0-dev.11: a little air above each friends group, slightly taller rows (still dense) */
+body.skin-dark .xf-row { height: 17px; line-height: 17px; }
+body.skin-dark .xf-row .gi { margin-top: 1px; }
+body.skin-dark .xf-sec[data-sec] { height: 17px; line-height: 17px; margin-top: 5px; }
+body.skin-dark .xf-head + .xf-sec[data-sec], body.skin-dark .xf-sec[data-sec]:first-child { margin-top: 0; }
+/* side panel headings: bars like the blue "Friends" strip, links on the right */
+body.skin-dark .side-scroll .side-sec { align-items: center; height: 18px; margin: 0 -7px 3px; padding: 0 6px; box-sizing: border-box;
+  background: linear-gradient(var(--dk-blue1), var(--dk-blue2) 60%, var(--dk-blue3)); border-top: 1px solid #000; border-bottom: 1px solid #000;
+  text-shadow: 0 1px 0 rgba(0,0,0,.5); }
+body.skin-dark .side-scroll .side-sec:first-child { margin-top: -6px; border-top: 0; }
+body.skin-dark .side-scroll .side-sec + * { margin-top: 0; }
+body.skin-dark .side-scroll .side-sec h4 { font-size: 11px; line-height: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.skin-dark .side-scroll .side-sec .side-more { color: #cfe2ff; text-shadow: none; }
+body.skin-dark .side-scroll .side-sec .side-more:hover { color: #fff; }
+body.skin-dark .side-scroll .ar-row:first-of-type { border-top: 0; }
+body.skin-dark .side-scroll .ar-row + .side-sec, body.skin-dark .side-scroll .ar-empty + .side-sec { margin-top: 8px; }

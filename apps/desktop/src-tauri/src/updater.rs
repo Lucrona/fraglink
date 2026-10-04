@@ -4,7 +4,8 @@
 //!   small borderless window ("Checking for updates…") checks first. A newer build is
 //!   downloaded (progress bar), its signature verified, installed, and Fraglink
 //!   relaunches into it. Otherwise the window closes after about a second and the
-//!   main window opens. Offline or a slow server: the check gives up after
+//!   main window opens ("Detecting games…" first waits up to 2 s for the installed-games
+//!   scan). Offline or a slow server: the check gives up after
 //!   [`SPLASH_TIMEOUT`] and Fraglink opens normally.
 //! * **Started to the tray** (Windows autostart, "start minimised"): no window, like
 //!   Discord's "Start Minimized". The background check runs 20 s later; an update
@@ -29,6 +30,8 @@ pub const EVERY: Duration = Duration::from_secs(3600);
 pub const SPLASH_TIMEOUT: Duration = Duration::from_secs(5);
 /// Keep the startup window up at least this long so it doesn't just flash.
 const SPLASH_MIN: Duration = Duration::from_millis(1000);
+/// Longest the startup window waits for "Detecting games…".
+const DETECT_MAX: Duration = Duration::from_secs(2);
 /// Startup / manual download limit before Fraglink gives up and opens normally.
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -154,6 +157,7 @@ pub fn start_with_splash(app: AppHandle) {
         } else {
             clear_marker(&app);
         }
+        detect_games(&app).await;
         splash(&app, "Starting…", Some(100));
         let shown = t0.elapsed();
         if shown < SPLASH_MIN {
@@ -165,6 +169,29 @@ pub fn start_with_splash(app: AppHandle) {
         sleep(EVERY).await;
         background(app).await;
     });
+}
+
+/// "Detecting games…": wait for the tracker's first installed-games scan (it starts with the
+/// app), at most [`DETECT_MAX`]; a slower scan just finishes in the background.
+async fn detect_games(app: &AppHandle) {
+    splash(app, "Detecting games…", None);
+    let t0 = Instant::now();
+    loop {
+        let done = {
+            let st = app.state::<crate::AppState>();
+            let r = st.engine.try_lock().map(|e| e.installs_scanned());
+            r.unwrap_or(false) // locked = the scan is still running
+        };
+        if done {
+            log::info!("startup: games detected in {} ms", t0.elapsed().as_millis());
+            return;
+        }
+        if t0.elapsed() >= DETECT_MAX {
+            log::info!("startup: game detection continues in the background");
+            return;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
 }
 
 /// Ask the server; `Ok(Some)` = a newer build exists (not downloaded yet).

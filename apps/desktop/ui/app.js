@@ -100,7 +100,7 @@
     GAMES[id] = { name: n, c1: `hsl(${hue} 70% 72%)`, c2: `hsl(${(hue + 40) % 360} 60% 28%)`, fg: '#fff', g, genre: '', real: true };
     return id;
   }
-  /* Real game icons (Xfire style: the game's own 16x16 icon). The app resolves
+  /* Real game icons (classic style: the game's own 16x16 icon). The app resolves
      them locally (icon cache → the game's exe → Steam's library cache → Steam's
      public icon for friends' games); anything else gets a neutral generic icon. */
   const ICONS = {}; // game id -> data URL | null (none) ; undefined = not asked yet
@@ -152,7 +152,7 @@
     }
     if (changed) render();
   }
-  // Friends' games use the same icon priority as ours (Xfire, Steam, exe), see icons.rs.
+  // Friends' games use the same icon priority as ours (server, Steam, exe), see icons.rs.
   const friendGameIcon = gameIcon;
   function gameIcon(id) {
     const g = GAMES[id]; if (!g) return '';
@@ -507,7 +507,7 @@
       const kindTile = a.game_id ? ensureGame(a.game_id, a.game_name) : '_new';
       h += `<div class="av-row" title="${esc(new Date(a.ts * 1000).toLocaleString())}"><i class="gi">${gameIcon(kindTile)}</i><div class="av-tx"><b class="me">You</b> ${activityHtml(a)}</div><span class="av-t">${esc(whenLabel(a.ts))}</span></div>`;
     }
-    h += `<div class="st-link"><a data-action="website">&raquo; All activity on fraglink.gg (later)</a></div></div>`;
+    h += `<div class="st-link"><a data-action="website">&raquo; All activity on playfraglink.com (later)</a></div></div>`;
     list.innerHTML = h;
   }
   function render() {
@@ -527,7 +527,7 @@
     // A selected group heading only highlights the row; the panel keeps its default content.
     const f = friendsNow().find(x => x.id === state.sel);
     if (f) {
-      // Xfire-style: big name, username, Profile link, then status or the game
+      // Classic style: big name, username, Profile link, then status or the game
       const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';
       let h = `<div class="sf-name">${esc(f.name)}</div><div class="sf-user">Username: ${H}</div><a data-action="friend-profile" data-handle="${H}">Profile</a><div class="sep"></div>`;
       if (f.kind === 'req') h += `<div>Wants to be your friend.</div><a data-action="friend-accept" data-handle="${H}">Accept</a> · <a data-action="friend-decline" data-handle="${H}">Decline</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
@@ -543,10 +543,10 @@
         const muted = (LIVE.friends.muted || []).includes(f.handle.toLowerCase());
         h += `<div class="sep"></div><div><span style="color:#8ea3c8">Friends since:</span> <b>${f.since ? esc(new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })) : '?'}</b></div><a data-action="friend-mute" data-handle="${H}" data-mute="${muted ? 0 : 1}">${muted ? 'Unmute' : 'Mute'} pop-ups</a>`;
       }
-      el.innerHTML = h + `<div class="sep"></div><a data-action="clear-sel">« My Games</a>`;
+      el.innerHTML = h;
       return;
     }
-    // Nothing selected (Xfire layout): Activity Report, then the games on this PC with Launch links.
+    // Nothing selected (classic layout): Activity Report, then the games on this PC with Launch links.
     el.innerHTML = activityReportHtml() + installedHtml();
   }
   /* Friends' recent activity (server: presence + finished sessions, friends only, opt-out per user). */
@@ -561,7 +561,7 @@
       const what = x.kind === 'playing' ? `started playing ${g}` : `played ${g} for ${esc(fmtMins(Math.round((x.duration_s || 0) / 60)))}`;
       return `<div class="ar-row" title="${esc(new Date(x.at).toLocaleString())}"><i class="gi">${friendGameIcon(id)}</i><div><b>${esc(x.display_name || x.handle)}</b> ${what}<small>${esc(agoText(x.at))}</small></div></div>`;
     }).join('');
-    return `<div class="side-sec"><h4>Activity Report</h4><a class="side-more" data-action="activity-more">View More</a></div>${rows}<div class="sep"></div>`;
+    return `<div class="side-sec"><h4>Activity Report</h4><a class="side-more" data-action="activity-more">View More</a></div>${rows}`;
   }
   function installedHtml() {
     const inst = (CATALOG || []).filter(g => g.installed && !g.excluded);
@@ -713,7 +713,7 @@
       </div><div class="wp-side"><div class="wp-box"><h3>Friends Playing Now</h3>${FRIENDS.filter(f => f.kind === 'playing').map(f => `<div class="wp-fr"><span class="gi">${gameIcon(f.game)}</span><a>${esc(f.name)}</a><br><small>${esc(GAMES[f.game].name)}</small></div>`).join('')}</div>
       <div class="wp-box"><h3>Fraglink Stats</h3><p>Registered users: <b>9,812</b><br>Hours tracked this week: <b>120,497</b></p></div></div></div>${webFoot()}</div>`;
   }
-  function webFoot() { return `<div class="wp-foot">Fraglink is a mock prototype · All data and characters fictional · No Blizzard, Valve or Xfire assets used · <a>Privacy</a> · <a>Terms</a> · <a>Our data promise</a></div>`; }
+  function webFoot() { return `<div class="wp-foot">Fraglink is a mock prototype · All data and characters fictional · No third-party assets used · <a>Privacy</a> · <a>Terms</a> · <a>Our data promise</a></div>`; }
 
   /* original placeholder portrait (hooded ranger silhouette + leaf) — not Blizzard art */
   function portrait(c1 = '#2f6b3a', c2 = '#0c1f14', mono = false) {
@@ -735,7 +735,7 @@
       <rect x=".5" y=".5" width="439" height="109" rx="3" fill="url(#sg-${theme})" stroke="${L}"/><rect x="1" y="1" width="438" height="108" fill="url(#sgp-${theme})"/>
       <rect x="10" y="12" width="64" height="64" fill="#0c2236" stroke="${A}" stroke-width="1.5"/><text x="42" y="56" text-anchor="middle" font-size="34" font-weight="bold" fill="#fff">L</text>
       <circle cx="17" cy="84" r="3.5" fill="#3ddc5a"/><text x="25" y="87.5" font-size="9" fill="#9fe8a8">Online</text>
-      <text x="86" y="26" font-size="15" font-weight="bold" fill="#fff">Lucrona</text><text x="160" y="26" font-size="9" fill="${A}">fraglink.gg/u/lucrona</text>
+      <text x="86" y="26" font-size="15" font-weight="bold" fill="#fff">Lucrona</text><text x="160" y="26" font-size="9" fill="${A}">playfraglink.com/u/lucrona</text>
       <text x="86" y="44" font-size="8" fill="#8ea3c8" letter-spacing=".6">THIS WEEK</text>
       <text x="86" y="57" font-size="10.5" fill="#fff" font-weight="bold">${esc(GAMES[wk.game].name.replace(/:.*/, ''))}</text><text x="86" y="70" font-size="10" fill="${A}">${wk.week.toFixed(1)} hrs</text>
       <text x="262" y="44" font-size="8" fill="#8ea3c8" letter-spacing=".6">ALL TIME</text>
@@ -778,7 +778,7 @@
           <p>Sessions, hours by tier, characters, friends and activity. Free, any time.</p><p class="pledge"><b>Our pledge:</b> if Fraglink ever shuts down you get at least 90 days' notice and a working export.</p></div></div>
       </div><div class="wp-main">
         <div class="wp-box" data-sec="miniprofile"><h3>Miniprofile <small class="h3n">signature image for forums, READMEs &amp; Twitch panels</small></h3><div class="pf-sig">${signatureSVG(theme)}
-          <div class="pf-embed"><label>Image URL<input readonly value="https://fraglink.gg/sig/lucrona.png"></label><label>BBCode<input readonly value="[url=https://fraglink.gg/u/lucrona][img]https://fraglink.gg/sig/lucrona.png[/img][/url]"></label><span>Also: Markdown · HTML · 320×100 Twitch panel · 350×20 userbar</span></div></div></div>
+          <div class="pf-embed"><label>Image URL<input readonly value="https://playfraglink.com/sig/lucrona.png"></label><label>BBCode<input readonly value="[url=https://playfraglink.com/u/lucrona][img]https://playfraglink.com/sig/lucrona.png[/img][/url]"></label><span>Also: Markdown · HTML · 320×100 Twitch panel · 350×20 userbar</span></div></div></div>
         <div class="wp-box" data-sec="achievements"><h3>Achievements <small class="h3n">24 of 35 tiers · play-time only · estimated hours never count</small></h3><div class="pf-ach">${ACH.map(a => `<div class="ach ach-${a.c}" title="${esc(a.k)} · ${a.tier}"><i><b>${esc(a.g)}</b></i><div><b>${esc(a.k)}</b><span class="t">${a.tier}</span><small>${esc(a.prog)}</small></div></div>`).join('')}</div></div>
         <div class="wp-box" data-sec="history"><h3>Gaming History</h3><table class="wp-t pf-hist"><tr><th>Game</th><th>Past 7 Days</th><th></th><th>Total</th><th>Source</th></tr>
           ${MY_HOURS.map(r => histRow(r, max)).join('')}
@@ -818,7 +818,7 @@
     const w = $('#web'); w.hidden = false;
     const prof = params.get('prof') === 'gold' ? 'gold' : 'cyan';
     state.webPage = page;
-    $('#web-url').textContent = page === 'profile' ? 'http://www.fraglink.gg/u/lucrona' : 'http://www.fraglink.gg/';
+    $('#web-url').textContent = page === 'profile' ? 'https://playfraglink.com/u/lucrona' : 'https://playfraglink.com/';
     const pg = $('#web-page'), st = pg.scrollTop;
     pg.innerHTML = page === 'profile' ? profilePage(prof) : homePage() + (state.estOpen ? estimatorModal() : '');
     pg.scrollTop = st;
@@ -1006,11 +1006,11 @@
     'friend-mute': a => FLB.friendMute(a.dataset.handle, a.dataset.mute === '1').then(refreshFriends).catch(toastErr),
     'my-profile': () => notice('My Profile', LATER),
     'friend-profile': a => { const h = a && a.dataset && a.dataset.handle || a && a.dataset && a.dataset.key; if (TAURI && FLB.openWebsite && h) FLB.openWebsite('u/' + h).catch(toastErr); else notice('Profile', LATER); },
-    'my-stats': () => notice('Full stats', LATER), 'website': () => notice('fraglink.gg', LATER), 'estimate': () => notice('Estimate my history', LATER),
+    'my-stats': () => notice('Full stats', LATER), 'website': () => notice('playfraglink.com', LATER), 'estimate': () => notice('Estimate my history', LATER),
     'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${devVer(st.version)}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {}
       notice('About Fraglink', `<div class="about-box"><img class="about-lock" src="brand/v28-lockup.svg" alt="Fraglink" draggable="false"><b class="about-ver">Fraglink ${esc(v)}</b><div class="about-slogan">PLAY. CONNECT. TRACK.</div>
         <p>Track your game hours and see what friends are playing.</p><p class="about-c">\u00a9 2026 Lucrona. All rights reserved.</p>
-        <p class="about-credits">Look inspired by the classic gaming IM clients; original Fraglink art. Logo: <i>Split Orbit</i>, wordmark set in Saira Expanded Bold (SIL OFL 1.1). Fonts: Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).</p></div>`); },
+        <p class="about-credits">Logo: <i>Split Orbit</i>. Fonts: Saira Expanded, Russo One (SIL OFL 1.1), Wine Tahoma clone (LGPL).</p></div>`); },
     'chat': () => { const f = friendsNow().find(x => x.id === state.sel); if (f && f.real) { notice('Chat', 'Fraglink has no built-in chat. Linking Discord so this opens a DM arrives in a later update.'); return; } openChat(state.sel); },
     'join': () => notice('Join Game', 'Joining friends arrives with friends in a later update.'),
     'clear-sel': () => { state.sel = null; render(); },
@@ -1063,7 +1063,7 @@
     const s = e.target.closest('[data-sec]');
     if (s) {
       const k = s.dataset.sec;
-      // the arrow folds the group; clicking the heading only selects it (grey bar, like Xfire)
+      // the arrow folds the group; clicking the heading only selects it (grey bar, classic style)
       if (e.target.closest('.tri')) { state.collapsed[k] = !state.collapsed[k]; saveSetting('collapsed_groups', JSON.stringify(Object.keys(state.collapsed).filter(x => state.collapsed[x]).slice(0, 30))); }
       else state.sel = 'g:' + k;
       render(); return;
@@ -1071,9 +1071,11 @@
     const so = e.target.closest('[data-sort]'); if (so) { const k = so.dataset.sort; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : 1 }; render(); return; }
     const hs = e.target.closest('[data-hsort]'); if (hs) { const k = hs.dataset.hsort; state.hoursSort = { key: k, dir: state.hoursSort.key === k ? -state.hoursSort.dir : -1 }; render(); return; }
     const w = e.target.closest('[data-web]'); if (w) { website(w.dataset.web); return; }
-    const r = e.target.closest('[data-friend]'); if (r) { state.sel = r.dataset.friend; render(); }
+    const r = e.target.closest('[data-friend]'); if (r) { state.sel = r.dataset.friend; render(); return; }
+    // empty space: deselect, the side panel goes back to its default view
+    if (state.sel && !e.target.closest('a,button,input,select,label')) { state.sel = null; render(); }
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); if (e.key === 'Enter' && e.target.id === 'custom-status') actions['custom-status-go'](); if (e.key === 'Escape') hideCtx(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); if (e.key === 'Enter' && e.target.id === 'custom-status') actions['custom-status-go'](); if (e.key === 'Escape') { if (!ctx.hidden) hideCtx(); else if (state.sel && !e.target.closest('input,textarea,select')) { state.sel = null; render(); } } });
   /* Rich friend tooltip (Windows-style), shown after a short hover; the info panel stays click-only. */
   const tip = $('#ftip'); let tipTimer = null, tipRow = null;
   const mutualOf = f => (f.mutual || ((f.info || '').match(/via ([^·]+)/) || [])[1] || '').split(',').map(x => x.trim()).filter(Boolean);

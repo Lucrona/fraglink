@@ -49,3 +49,13 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - Drag the info panel's right frame (between its scrollbar and the window edge): the panel widens; the cursor is a left-right arrow along the whole strip.
 - *Options → Games*, select a Steam game: Game path like `E:\Steam\steamapps\common\Satisfactory\` (real casing), Detect path the full path of the exe found. A game with no Xfire icon (e.g. Satisfactory) shows its own icon.
 - *Options → Connections → Tracking*: only Export my data and Open data folder; play a game for under a minute: the session is kept.
+
+## Domain, startup and side panel (0.2.0-dev.11)
+
+- dev.10 installed: within an hour (or on the next start) it updates itself to dev.11. Help > About shows 0.2.0-dev.11.
+- Start Fraglink: "Checking for updates…", then briefly "Detecting games…", then the main window with your installed games already in the side panel.
+- Signed in: friends and live status work as before (the client now uses `https://playfraglink.com`).
+- Options > Account: the server shows `https://playfraglink.com` (an old `http://119.42.54.86` setting is moved automatically).
+- Friends list: a small gap above each group header; rows a little taller.
+- Side panel: Activity Report and Installed Games have blue heading bars with View More / Detect Games on the right. Click a friend, then empty space in the list (or press Esc): back to the default panel.
+- **Test build only:** leave the mouse and keyboard alone for 20 seconds: status shows Away (friends see it); move the mouse: back to Online within about 5 s.

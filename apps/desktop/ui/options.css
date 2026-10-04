@@ -112,7 +112,7 @@ body:not(.dark) .op-title { background: linear-gradient(#5b6170, #2f343e); }
 .op-edges [data-resize=SouthWest] { left: 0; bottom: 0; width: 8px; height: 8px; cursor: nesw-resize; }
 .op-edges [data-resize=SouthEast] { right: 0; bottom: 0; width: 8px; height: 8px; cursor: nwse-resize; }
 body:not(.tauri) .op-edges { display: none; }
-/* Games: list with icons on the left, Select Game settings on the right (Xfire layout) */
+/* Games: list with icons on the left, Select Game settings on the right (classic layout) */
 .games-split { display: flex; gap: 8px; align-items: stretch; }
 .games-split .tree { width: 210px; flex: none; height: 330px; margin: 0; }
 .gd-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }

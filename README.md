@@ -1,15 +1,15 @@
 <p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
 <p align="center"><b>PLAY. CONNECT. TRACK.</b><br>A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
-<sub>Early development · current pre-release <b>0.2.0-dev.10</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
+<sub>Early development · current pre-release <b>0.2.0-dev.11</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 
 ## What is Fraglink?
 
-Fraglink is a **lightweight tray client for Windows, inspired by Xfire**. It notices which game you're playing on any launcher (Steam, Battle.net, Epic, EA, Ubisoft, GOG, Xbox or standalone), keeps an honest record of your play time, and shows your friends list with who is online and what they're playing. It wears a dark, 2013-style client UI.
+Fraglink is a **lightweight tray client for Windows** in the spirit of the classic gaming clients. It notices which game you're playing on any launcher (Steam, Battle.net, Epic, EA, Ubisoft, GOG, Xbox or standalone), keeps an honest record of your play time, and shows your friends list with who is online and what they're playing. It wears a dark, 2013-style client UI.
 
-The client stays small on purpose. The bigger things (profiles, full stats and history, game pages) are planned for the website, fraglink.gg, which comes later.
+The client stays small on purpose. The bigger things (profiles, full stats and history, game pages) are planned for the website, playfraglink.com, which comes later.
 
 **How it fits with Discord:** Fraglink doesn't do chat, voice or overlays. Discord already does that well. Fraglink adds the part Discord doesn't have: your hours across every launcher and a "who's playing what" list. Discord sign-in and "Message on Discord" are on the roadmap.
 
@@ -17,17 +17,17 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 <img src="docs/images/client-main.png" alt="Main window with the side panel: Activity Report and installed games, update notice in the title bar" width="400">
 &nbsp;
 <img src="docs/images/client-friend.png" alt="Main window with a friend selected: playing time and hours this week" width="400">
-<br><sub>The main window with the side panel (Activity Report and installed games, green update arrow in the title bar), and with a friend selected. Browser preview of the dev.10 UI with sample data.</sub>
+<br><sub>The main window with the side panel (Activity Report and installed games, green update arrow in the title bar), and with a friend selected. Browser preview of the dev.11 UI with sample data.</sub>
 </p>
 
-## What works today (0.2.0-dev.10)
+## What works today (0.2.0-dev.11)
 
 - **Game detection on every launcher:** installed Steam, Epic, GOG, Battle.net, EA app, Ubisoft Connect and Xbox games, 170 curated signatures, and "This is a game…" for anything else. Read-only: no injection, no memory reading.
 - **Honest hours:** hours count all the time a game is running, like Steam: no idle trimming and no minimum session length. Sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.
 - **Accounts in the client:** log in with username (or email) and password, or **Create Account** right in the main window. Change your email, password or display name, or delete your account, from Options › Account.
 - **Friends:** search users and send requests, accept or decline, remove or block. Live status (Online / Away / Invisible) and the game each friend is playing, how long they've been playing and their hours this week. Friend tooltips, native right-click menus, sign-on toasts.
-- **Side panel:** an **Activity Report** of what your friends played recently, your installed games with **Launch** links, or details of the friend you click. Drag its edge to make it wider. Friends can turn off sharing their hours in Options › Privacy.
-- **Updates like Discord's:** a small "Checking for updates…" window at startup installs a new build before the client opens. While Fraglink runs it checks every hour and downloads quietly; a small green arrow in the title bar (and a dot on the tray icon) restarts into it. **Help › Check for Updates** and the tray menu check on demand. Updates are signature-checked before they install.
+- **Side panel:** an **Activity Report** of what your friends played recently, your installed games with **Launch** links, or details of the friend you click (click empty space or press Esc to go back). Drag its edge to make it wider. Friends can turn off sharing their hours in Options › Privacy.
+- **Updates like Discord's:** a small "Checking for updates…" window at startup installs a new build before the client opens, then finds your installed games. While Fraglink runs it checks every hour and downloads quietly; a small green arrow in the title bar (and a dot on the tray icon) restarts into it. **Help › Check for Updates** and the tray menu check on demand. Updates are signature-checked before they install.
 - **Status menu:** Online, Away, Invisible, custom status and recent statuses. Automatic **Away** after 10 minutes without input, like Discord ("World of Warcraft (Away)" in a game). **Looking to Play** and **Music Status** are in the menu as early placeholders.
 - **Options:** a dark Options window with a two-column Games tab (install folder and the exe Fraglink found), a **Connections** tab (Steam, Battle.net, Spotify and Discord, shown as "coming soon" for now), and a **Text size** setting.
 - **Classic tray menu:** Open Fraglink, Launch (installed games, with their icons), Skin, Status, Check for Updates, Log Off, Exit.
@@ -44,7 +44,7 @@ Stats and Activity views exist in the code but are hidden for now. They return w
 
 <p align="center">
 <img src="docs/images/splash.png" alt="Startup window: Checking for updates" width="240">
-<br><sub>The startup window checks for updates before the client opens (like Xfire's and Discord's).</sub>
+<br><sub>The startup window checks for updates before the client opens (like Discord's).</sub>
 </p>
 
 <p align="center">
@@ -78,13 +78,13 @@ Stats and Activity views exist in the code but are hidden for now. They return w
 | **Battle.net / WoW characters** | Verified WoW characters via Battle.net, exact `/played` import | Planned (placeholder in Connections) |
 | **Spotify (Music Status)** | Show what you're listening to as your status | Planned (placeholder in Connections and the status menu) |
 | **Discord** | Sign in with Discord; "Message on Discord" from a friend's menu (Fraglink has no chat of its own) | Planned |
-| **Website (fraglink.gg)** | Auto-filled profiles, gaming history, stats, signature images, game pages | Planned |
+| **Website (playfraglink.com)** | Auto-filled profiles, gaming history, stats, signature images, game pages | Planned |
 | **Web installer** | Small download from the website that fetches the latest version | Once the domain is live |
 | **Beta** | Code-signed installers, download page, closed beta | Planned (auto-update is already in) |
 
 **Not planned:** chat, voice, clans or in-game overlays. Discord and Steam already cover those, and overlays and injection risk anti-cheat bans. Details in the [roadmap](docs/ROADMAP.md).
 
-<p align="center"><img src="docs/images/website-concept.png" alt="Concept mock-up of a fraglink.gg profile" width="640"><br><sub>Concept mock-up of a fraglink.gg profile (not built yet; all data fictional).</sub></p>
+<p align="center"><img src="docs/images/website-concept.png" alt="Concept mock-up of a playfraglink.com profile" width="640"><br><sub>Concept mock-up of a playfraglink.com profile (not built yet; all data fictional).</sub></p>
 
 ## Look and feel
 
@@ -201,6 +201,6 @@ The default Dark skin is a frameless, resizable window (345×555 at minimum). Th
 
 **All rights reserved; license to be decided before public release.** See [`LICENSE`](LICENSE). Bundled fonts keep their own licences (Russo One: SIL OFL 1.1; Wine Tahoma-metric fonts: LGPL 2.1+). The wordmark is Saira Expanded Bold (SIL OFL 1.1), converted to outlines.
 
-## Not affiliated with Xfire
+## Independent project
 
-Fraglink is an independent project inspired by the classic Xfire client. It is **not affiliated with, endorsed by or connected to Xfire** or its past or present owners. "Xfire" is a trademark of its respective owner. The Fraglink name, mark and UI artwork are original. Game names are used only to identify games and belong to their owners.
+Fraglink is an independent project, not affiliated with or endorsed by any game company, launcher or chat service. The Fraglink name, mark and UI artwork are original. Game names are used only to identify games and belong to their owners.

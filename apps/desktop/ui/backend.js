@@ -207,5 +207,5 @@
     outgoing: [{ handle: 'zed', display_name: 'Zed', created_at: iso(7200) }],
     blocked: [],
   };
-  const sync = { signed_in: /[?&]signed=1/.test(location.search), user: /[?&]signed=1/.test(location.search) ? 'Lucrona' : null, server: 'http://119.42.54.86', last_ok: null, last_error: null, pairing: null, pairing_error: null };
+  const sync = { signed_in: /[?&]signed=1/.test(location.search), user: /[?&]signed=1/.test(location.search) ? 'Lucrona' : null, server: 'https://playfraglink.com', last_ok: null, last_error: null, pairing: null, pairing_error: null };
 })();

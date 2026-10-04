@@ -97,6 +97,11 @@ impl Engine {
         Ok(())
     }
 
+    /// True once the installed-games scan (Steam + other launchers) has run at least once.
+    pub fn installs_scanned(&self) -> bool {
+        self.steam_loaded_at.is_some()
+    }
+
     pub fn refresh_steam(&mut self, now: i64) {
         self.steam_loaded_at = Some(now);
         match steam::steam_root() {

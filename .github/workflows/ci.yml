@@ -78,7 +78,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build --ci
-      - name: Write latest.json (updater manifest, served from http://119.42.54.86/updates/)
+      - name: Write latest.json (updater manifest, served from https://playfraglink.com/updates/ and http://119.42.54.86/updates/)
         shell: pwsh
         run: |
           $exe = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
@@ -88,7 +88,7 @@ jobs:
             version = $ver
             notes = "Fraglink $ver"
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            platforms = [ordered]@{ "windows-x86_64" = [ordered]@{ signature = $sig.Trim(); url = "http://119.42.54.86/updates/$($exe.Name)" } }
+            platforms = [ordered]@{ "windows-x86_64" = [ordered]@{ signature = $sig.Trim(); url = "https://playfraglink.com/updates/$($exe.Name)" } }
           }
           $m | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM target/release/bundle/nsis/latest.json
           Get-Content target/release/bundle/nsis/latest.json

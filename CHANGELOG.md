@@ -5,12 +5,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.11] - 2026-10-04
+
+Test update (builds report `0.2.0-11`).
+
+### Changed
+- **Server address:** the client now talks to `https://playfraglink.com` (HTTPS, and `wss://` for live
+  presence). If HTTPS or DNS fails it switches to `http://119.42.54.86` for the rest of the session.
+  A saved server address pointing at the IP moves to the domain (same server).
+- **Updates** are checked on `https://playfraglink.com/updates/` first and on the IP second; the update
+  download is HTTPS.
+- **Startup window:** after "Checking for updates…" it shows "Detecting games…" while the installed-games
+  scan runs (at most about 2 seconds; a slower scan finishes in the background).
+- **Friends list:** a little space above each group (Friends Online, Friends of Friends Playing, Friends
+  Offline) and slightly taller rows.
+- **Side panel:** Activity Report and Installed Games have heading bars like the blue "Friends" strip, with
+  View More / Detect Games on the right. The "« My Games" link is gone: click empty space in the friends
+  list (or press Esc) to deselect and go back to the default view.
+- **About box:** shorter credits (logo and font licences).
+- Website links now point at playfraglink.com.
+
+### Testing only
+- **Automatic Away after 20 seconds** without input (normally 10 minutes) so it's quick to test. The next
+  build sets it back to 10 minutes.
+
 ## [0.2.0-dev.10] - 2026-10-03
 
 Test update (builds report `0.2.0-10`).
 
 ### Added
-- **Startup window** like Xfire's and Discord's: a small dark borderless window with the logo,
+- **Startup window** like Discord's: a small dark borderless window with the logo,
   "PLAY. CONNECT. TRACK.", "Checking for updates…" and a progress bar. A newer build is
   downloaded (progress shown), checked, installed, and Fraglink relaunches into it; otherwise the
   window closes after about a second and the client opens. Offline or a slow server: it gives up
@@ -31,7 +55,7 @@ Test update (builds report `0.2.0-10`).
 - **Title bar logo** is bigger (grey, embossed).
 - **Info panel resize:** the whole right frame strip of the panel (scrollbar to window edge) is now
   the drag handle, wider than the window's own resize border, so it no longer fights it.
-- **Game icons:** installed games without an Xfire icon (e.g. Satisfactory) now get their icon
+- **Game icons:** installed games without a server icon (e.g. Satisfactory) now get their icon
   from Steam's library cache or from the game's own exe (found in its install folder), cached like
   the others. Before, that only worked once the game had run in the current session.
 - **Options > Games:** "Detect path" shows the exe actually found (full path) instead of the list of
@@ -118,8 +142,8 @@ Windows MSI versions only allow one numeric pre-release number, so it's dev.7 (s
 for the updater).
 
 ### Changed
-- **Classic Xfire game icons are the default everywhere.** Icon priority for every game, including
-  your own installed ones: 1) the matched Xfire icon from the server, 2) Steam's icon (server CDN
+- **Classic game icons are the default everywhere.** Icon priority for every game, including
+  your own installed ones: 1) the matched classic icon from the server, 2) Steam's icon (server CDN
   answer or Steam's local library cache), 3) the game's exe icon, 4) a generic icon. Friends' games
   use the same order. Icons fetched from the server are cached on disk, so they work offline after
   the first fetch.
@@ -131,10 +155,10 @@ for the updater).
   its old prompt once for this update.
 
 ### Server
-- `GET /api/v1/games/icons` always includes the matched Xfire icon (`icon_path`), even when there's
-  a Steam icon, plus `"preferred": "xfire" | "steam" | "none"`.
-- Optional Xfire icon source (`FRAGLINK_XFIRE_ICONS=1`, files served from `/icons/xfire/`). The
-  extraction script is `scripts/xfire_icons.py`; the images are not in the repo or the installer.
+- `GET /api/v1/games/icons` always includes the matched classic icon (`icon_path`), even when there's
+  a Steam icon, plus which source is preferred.
+- Optional classic icon source (turned on by a server setting, see `docs/deploy.md`); the images are
+  not in the repo or the installer.
 
 ## [0.2.0-dev.6] - 2026-09-28
 
@@ -269,7 +293,7 @@ M2 checkpoint (accounts, Steam import, trust tiers) and the first M3 checkpoint 
 - `fraglink-sync`: friends API, a blocking `PresenceSocket`, and `examples/presence.rs` (acts as a friend's tray for local testing).
 - Tests: a multi-client WebSocket presence suite (fan-out, invisible, away, pings, second device, disconnects, idle timeout, pushes of requests/blocks) and a test driving the tray's own client against a real server.
 
-### Added (game icons, Xfire style)
+### Added (game icons, classic style)
 - **Real 16x16 game icons** next to game names in Friends (now playing and side panel), Stats (Now Playing, top games, account totals), Activity and the "started playing" toasts. Games with no icon get a neutral generic icon. The old lettered tiles are only used for the signed-out sample data.
 - Icons are found on your own PC: the detected game's exe (Windows `ExtractIconExW`, read at runtime), then Steam's library cache (`appcache\librarycache\<appid>_icon.jpg` or the per-app folder). They're cached as 32x32 PNGs in `<data dir>\icons\`. Nothing is bundled.
 - For a friend's game that isn't on your PC, only the game id travels over presence. Your tray asks the server for Steam's public icon (the hash recorded from Steam imports, `GET /api/v1/games/icons`) and downloads it from Steam's CDN (only that host, only while signed in), otherwise it shows the generic icon.
