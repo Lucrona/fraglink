@@ -113,6 +113,9 @@ struct ErrBody {
     message: String,
 }
 
+/// A downloaded list: body and its ETag (if the server sent one).
+pub type ListBody = (Vec<u8>, Option<String>);
+
 impl Client {
     pub fn new(base: &str, token: Option<String>) -> Self {
         let agent = ureq::AgentBuilder::new()
@@ -433,6 +436,66 @@ impl Client {
             .read_to_end(&mut buf)
             .map_err(|e| SyncError::Network(e.to_string()))?;
         Ok(buf)
+    }
+
+    /// Conditional GET of a public list (`/api/v1/games/detectable`, `/overrides`):
+    /// `Ok(None)` on 304 Not Modified, else the body (gzip or plain JSON, max 16 MB) and its ETag.
+    pub fn fetch_list(
+        &self,
+        path: &str,
+        etag: Option<&str>,
+    ) -> Result<Option<ListBody>, SyncError> {
+        #[allow(clippy::result_large_err)] // ureq's own error type, handled right away
+        let go = |base: &str| {
+            let mut r = self
+                .agent
+                .get(&format!("{base}{path}"))
+                .set("Accept-Encoding", "gzip");
+            if let Some(e) = etag {
+                r = r.set("If-None-Match", e);
+            }
+            r.call()
+        };
+        let mut res = go(self.effective_base());
+        if let Err(ureq::Error::Transport(_)) = &res {
+            if self.primary() && !on_fallback() {
+                let again = go(FALLBACK_SERVER);
+                if !matches!(again, Err(ureq::Error::Transport(_))) {
+                    ON_FALLBACK.store(true, Ordering::Relaxed);
+                    res = again;
+                }
+            }
+        }
+        match res {
+            Ok(resp) if resp.status() == 304 => Ok(None),
+            Ok(resp) => {
+                let tag = resp.header("ETag").map(str::to_string);
+                let mut buf = Vec::new();
+                use std::io::Read;
+                resp.into_reader()
+                    .take(16 * 1024 * 1024)
+                    .read_to_end(&mut buf)
+                    .map_err(|e| SyncError::Network(e.to_string()))?;
+                Ok(Some((buf, tag)))
+            }
+            Err(ureq::Error::Status(status, _)) => Err(SyncError::Server {
+                status,
+                code: String::new(),
+                message: format!("GET {path} failed"),
+            }),
+            Err(ureq::Error::Transport(t)) => Err(SyncError::Network(t.to_string())),
+        }
+    }
+
+    /// "Track it as a game": report the exe and the name the user accepted, for review
+    /// (`POST /api/v1/games/suggest`; works signed out too).
+    pub fn suggest_game(&self, exe: &str, name: &str) -> Result<(), SyncError> {
+        let _: Option<serde_json::Value> = self.call(
+            "POST",
+            "/api/v1/games/suggest",
+            Some(serde_json::json!({ "exe": exe, "name": name })),
+        )?;
+        Ok(())
     }
 
     /// Open the live presence socket.

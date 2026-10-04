@@ -17,6 +17,7 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico", "bmp"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
+flate2 = "1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

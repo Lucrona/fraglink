@@ -1,19 +1,33 @@
 //! Turns a process snapshot into "which games are running".
-//! Priority: manual tags > signature DB > Steam library path > Epic/GOG install
-//! folder > Steam RunningAppID.
+//!
+//! Priority (0.2.0-dev.12): manual tags > Fraglink overrides (WoW flavours, Star
+//! Citizen channels) > signature DB > Discord's detectable list > Steam library
+//! path > Steam RunningAppID.
+//!
+//! Other launchers' install records (Epic, GOG, Battle.net, EA, Ubisoft, Xbox)
+//! no longer decide *whether* something is a game: they only feed the Installed
+//! Games list and Launch buttons, and keep the old `epic:`/`gog:` id of a game
+//! the detectable list recognises inside such an install (so its hours stay put).
 
+use crate::detectable::DetectableDb;
 use crate::env::ProcInfo;
 use crate::libraries::{InstalledGame, Launcher, LibraryIndex};
+use crate::overrides::Overrides;
 use crate::signatures::{normalize_path, SignatureDb};
 use crate::steam::SteamIndex;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DetectSource {
     Manual,
+    /// Fraglink's own folder rules (`overrides.json`).
+    Override,
     Signature,
+    /// Discord's public detectable list.
+    Detectable,
     SteamLibrary,
     SteamRunning,
     EpicLibrary,
@@ -30,7 +44,9 @@ impl DetectSource {
     pub fn as_str(&self) -> &'static str {
         match self {
             DetectSource::Manual => "manual",
+            DetectSource::Override => "override",
             DetectSource::Signature => "signature",
+            DetectSource::Detectable => "detectable",
             DetectSource::SteamLibrary => "steam_library",
             DetectSource::SteamRunning => "steam_running",
             DetectSource::EpicLibrary => "epic_library",
@@ -70,6 +86,10 @@ pub struct Detector {
     pub tags: HashMap<String, (String, String)>,
     pub excluded_games: HashSet<String>,
     pub excluded_exes: HashSet<String>,
+    /// Folder rules that win over every list (server-updatable).
+    pub overrides: Overrides,
+    /// Discord's detectable list (latest download, else the bundled snapshot).
+    pub detectable: Arc<DetectableDb>,
 }
 
 pub fn steam_game_id(sigs: &SignatureDb, appid: u32) -> String {
@@ -106,6 +126,8 @@ impl Detector {
             tags: HashMap::new(),
             excluded_games: HashSet::new(),
             excluded_exes: HashSet::new(),
+            overrides: Overrides::builtin(),
+            detectable: DetectableDb::bundled_shared(),
         }
     }
 
@@ -150,6 +172,18 @@ impl Detector {
         if self.sigs.is_ignored(&p.name) {
             return None;
         }
+        if let Some(r) = self.overrides.match_process(&p.name, p.path.as_deref()) {
+            return Some(Detection {
+                game_id: r.id.clone(),
+                name: r.name.clone(),
+                source: DetectSource::Override,
+                exe: Some(p.name.clone()),
+                steam_appid: self
+                    .sigs
+                    .get(&r.id)
+                    .and_then(|g| g.steam_appids.first().copied()),
+            });
+        }
         if let Some(g) = self.sigs.match_process(&p.name, p.path.as_deref()) {
             return Some(Detection {
                 game_id: g.id.clone(),
@@ -159,35 +193,54 @@ impl Detector {
                 steam_appid: g.steam_appids.first().copied(),
             });
         }
-        if let Some(path) = &p.path {
+        let path_n = p.path.as_deref().map(normalize_path);
+        if !self.sigs.is_known_non_game(&p.name) {
+            if let Some(m) = self.detectable.match_process(&p.name, p.path.as_deref()) {
+                // Same game, old id: inside a Steam / launcher install keep that id.
+                if let Some(path) = &p.path {
+                    if let Some(app) = self.steam.app_for_path(path) {
+                        return Some(Detection {
+                            game_id: steam_game_id(&self.sigs, app.appid),
+                            name: self.steam_name(app.appid),
+                            source: DetectSource::Detectable,
+                            exe: Some(p.name.clone()),
+                            steam_appid: Some(app.appid),
+                        });
+                    }
+                    if let Some(g) = self.libs.game_for_path(path) {
+                        if g.store != Launcher::Windows {
+                            let (game_id, name) = self.library_identity(g);
+                            return Some(Detection {
+                                game_id,
+                                name,
+                                source: DetectSource::Detectable,
+                                exe: Some(p.name.clone()),
+                                steam_appid: None,
+                            });
+                        }
+                    }
+                }
+                let sig = self.sigs.get(&m.game.slug);
+                return Some(Detection {
+                    game_id: m.game.slug.clone(),
+                    name: sig
+                        .map(|g| g.name.clone())
+                        .unwrap_or_else(|| m.game.name.clone()),
+                    source: DetectSource::Detectable,
+                    exe: Some(p.name.clone()),
+                    steam_appid: sig.and_then(|g| g.steam_appids.first().copied()),
+                });
+            }
+        }
+        if let (Some(path), Some(path_n)) = (&p.path, &path_n) {
             if let Some(app) = self.steam.app_for_path(path) {
-                if !looks_like_helper(&exe_l, &normalize_path(path)) {
+                if !looks_like_helper(&exe_l, path_n) {
                     return Some(Detection {
                         game_id: steam_game_id(&self.sigs, app.appid),
                         name: self.steam_name(app.appid),
                         source: DetectSource::SteamLibrary,
                         exe: Some(p.name.clone()),
                         steam_appid: Some(app.appid),
-                    });
-                }
-            }
-            if let Some(g) = self.libs.game_for_path(path) {
-                if !looks_like_helper(&exe_l, &normalize_path(path)) {
-                    let (game_id, name) = self.library_identity(g);
-                    return Some(Detection {
-                        game_id,
-                        name,
-                        source: match g.store {
-                            Launcher::Epic => DetectSource::EpicLibrary,
-                            Launcher::Gog => DetectSource::GogLibrary,
-                            Launcher::Battlenet => DetectSource::BattlenetLibrary,
-                            Launcher::Ea => DetectSource::EaLibrary,
-                            Launcher::Ubisoft => DetectSource::UbisoftLibrary,
-                            Launcher::Xbox => DetectSource::XboxLibrary,
-                            Launcher::Windows => DetectSource::InstalledLibrary,
-                        },
-                        exe: Some(p.name.clone()),
-                        steam_appid: None,
                     });
                 }
             }
@@ -307,7 +360,7 @@ mod tests {
         let found = d.detect(&procs, None);
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].game_id, "wow");
-        assert_eq!(found[0].source, DetectSource::Signature);
+        assert_eq!(found[0].source, DetectSource::Override);
         assert_eq!(found[1].game_id, "steam:999999");
         assert_eq!(found[1].name, "Tiny Indie Game");
         assert_eq!(found[1].source, DetectSource::SteamLibrary);
@@ -404,10 +457,36 @@ mod tests {
         );
     }
 
+    fn dgame(id: &str, slug: &str, name: &str, exes: &[&str]) -> crate::detectable::DGame {
+        crate::detectable::DGame {
+            id: id.into(),
+            slug: slug.into(),
+            name: name.into(),
+            exes: exes.iter().map(|e| e.to_string()).collect(),
+        }
+    }
+
+    fn with_list(mut d: Detector, games: Vec<crate::detectable::DGame>) -> Detector {
+        d.detectable = Arc::new(DetectableDb::from_file(crate::detectable::DetectableFile {
+            v: 1,
+            updated: String::new(),
+            games,
+        }));
+        d
+    }
+
     #[test]
-    fn detects_epic_and_gog_installs_by_folder() {
+    fn launcher_installs_no_longer_decide_what_is_a_game() {
         use crate::libraries::{parse_epic_item, parse_gog_values};
-        let mut d = det();
+        let mut d = with_list(
+            det(),
+            vec![dgame(
+                "77",
+                "known_indie",
+                "Known Indie",
+                &["knownindie.exe"],
+            )],
+        );
         d.libs.insert(
             parse_epic_item(
                 r#"{"AppName":"Obscure","DisplayName":"Obscure Indie","InstallLocation":"D:\\Epic Games\\ObscureIndie","LaunchExecutable":"Obscure.exe","AppCategories":["games"]}"#,
@@ -416,7 +495,7 @@ mod tests {
         );
         d.libs.insert(
             parse_epic_item(
-                r#"{"AppName":"Fortnite","DisplayName":"Fortnite","InstallLocation":"C:\\Program Files\\Epic Games\\Fortnite","LaunchExecutable":"FortniteGame/Binaries/Win64/FortniteLauncher.exe"}"#,
+                r#"{"AppName":"Known","DisplayName":"Known Indie (Epic)","InstallLocation":"D:\\Epic Games\\KnownIndie","LaunchExecutable":"KnownIndie.exe","AppCategories":["games"]}"#,
             )
             .unwrap(),
         );
@@ -427,6 +506,8 @@ mod tests {
         d.libs.insert(parse_gog_values("1207658924", &v).unwrap());
 
         let procs = vec![
+            // in an Epic install, but on no list: not detected (the full-screen
+            // prompt offers it instead)
             p(
                 1,
                 "Obscure.exe",
@@ -437,41 +518,174 @@ mod tests {
                 "UT2004.exe",
                 Some(r"C:\GOG Games\UT2004\System\UT2004.exe"),
             ),
+            // on the detectable list and inside an Epic install: keeps the old epic: id
             p(
                 3,
-                "CrashReportClient.exe",
-                Some(r"D:\Epic Games\ObscureIndie\CrashReportClient.exe"),
+                "KnownIndie.exe",
+                Some(r"D:\Epic Games\KnownIndie\KnownIndie.exe"),
             ),
         ];
         let found = d.detect(&procs, None);
         assert_eq!(found.len(), 2, "{found:?}");
-        assert_eq!(found[0].game_id, "epic:Obscure");
-        assert_eq!(found[0].name, "Obscure Indie");
-        assert_eq!(found[0].source, DetectSource::EpicLibrary);
-        // UT2004 is in the signature DB, so the signature wins with its own id
-        assert_eq!(found[1].source, DetectSource::Signature);
-
-        // A helper process in the Fortnite folder maps to the signature id via the launch exe
-        let helper = vec![p(
-            4,
-            "FortniteClient-Win64-Shipping_EAC_EOS.exe",
-            Some(
-                r"C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping_EAC_EOS.exe",
-            ),
-        )];
-        let f = d.detect(&helper, None);
-        assert_eq!(f.len(), 1);
-        assert_eq!(f[0].source, DetectSource::EpicLibrary);
+        assert_eq!(found[0].game_id, "ut2004");
+        assert_eq!(found[0].source, DetectSource::Signature);
+        assert_eq!(found[1].game_id, "epic:Known");
+        assert_eq!(found[1].source, DetectSource::Detectable);
+        // ...and outside any install it gets the list's slug
+        let loose = vec![p(4, "KnownIndie.exe", Some(r"C:\Games\KnownIndie.exe"))];
+        let f = d.detect(&loose, None);
         assert_eq!(
-            f[0].game_id,
-            d.sigs
-                .match_process("FortniteLauncher.exe", None)
-                .map(|g| g.id.clone())
-                .unwrap_or("epic:Fortnite".into())
+            (f[0].game_id.as_str(), f[0].name.as_str()),
+            ("known_indie", "Known Indie")
         );
+        assert!(d.candidates(&procs).iter().any(|c| c.exe == "Obscure.exe"));
 
-        // exclusions apply to library games too
-        d.excluded_games.insert("epic:Obscure".into());
+        d.excluded_games.insert("ut2004".into());
         assert_eq!(d.detect(&procs, None).len(), 1);
+    }
+
+    /// The paths from the 0.2.0-dev.12 brief, against the real bundled lists.
+    #[test]
+    fn wow_flavours_and_star_citizen_real_paths() {
+        let d = det();
+        let one = |name: &str, path: &str| {
+            let f = d.detect(&[p(1, name, Some(path))], None);
+            assert_eq!(f.len(), 1, "{path}: {f:?}");
+            (f[0].game_id.clone(), f[0].name.clone(), f[0].source)
+        };
+        assert_eq!(
+            one(
+                "WowB.exe",
+                r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe"
+            ),
+            (
+                "wow_forever".into(),
+                "World of Warcraft: Forever".into(),
+                DetectSource::Override
+            )
+        );
+        assert_eq!(
+            one(
+                "Wow.exe",
+                r"E:\Battle.net Games\World of Warcraft\_retail_\Wow.exe"
+            ),
+            (
+                "wow".into(),
+                "World of Warcraft".into(),
+                DetectSource::Override
+            )
+        );
+        assert_eq!(
+            one(
+                "WowClassic.exe",
+                r"E:\Battle.net Games\World of Warcraft\_classic_era_\WowClassic.exe"
+            )
+            .0,
+            "wow_classic_era"
+        );
+        assert_eq!(
+            one(
+                "WowClassic.exe",
+                r"E:\Battle.net Games\World of Warcraft\_classic_\WowClassic.exe"
+            )
+            .0,
+            "wow_classic"
+        );
+        assert_eq!(
+            one(
+                "WowT.exe",
+                r"E:\Battle.net Games\World of Warcraft\_ptr_\WowT.exe"
+            )
+            .0,
+            "wow_ptr"
+        );
+        assert_eq!(
+            one(
+                "StarCitizen.exe",
+                r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE\Bin64\StarCitizen.exe"
+            ),
+            (
+                "star_citizen".into(),
+                "Star Citizen".into(),
+                DetectSource::Override
+            )
+        );
+        assert_eq!(
+            one(
+                "StarCitizen.exe",
+                r"D:\RSI\StarCitizen\PTU\Bin64\StarCitizen.exe"
+            )
+            .0,
+            "star_citizen"
+        );
+        // two flavours at once are two games
+        let both = d.detect(
+            &[
+                p(
+                    1,
+                    "Wow.exe",
+                    Some(r"E:\Battle.net Games\World of Warcraft\_retail_\Wow.exe"),
+                ),
+                p(
+                    2,
+                    "WowB.exe",
+                    Some(r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe"),
+                ),
+            ],
+            None,
+        );
+        assert_eq!(
+            both.iter().map(|d| d.game_id.as_str()).collect::<Vec<_>>(),
+            vec!["wow", "wow_forever"]
+        );
+    }
+
+    #[test]
+    fn detectable_list_fills_the_long_tail() {
+        let d = det();
+        // not one of our signatures, but on Discord's list
+        let f = d.detect(
+            &[p(
+                1,
+                "Brawlhalla.exe",
+                Some(r"C:\Games\Brawlhalla\Brawlhalla.exe"),
+            )],
+            None,
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert_eq!(f[0].source, DetectSource::Detectable);
+        assert_eq!(f[0].name, "Brawlhalla");
+        // our signature still wins (same id as before)
+        let cs = d.detect(&[p(2, "cs2.exe", Some(r"C:\S\cs2.exe"))], None);
+        assert_eq!(
+            (cs[0].game_id.as_str(), cs[0].source),
+            ("cs2", DetectSource::Signature)
+        );
+        // known desktop apps are never games, whatever a list says
+        let mut d2 = with_list(det(), vec![dgame("9", "vlc_game", "VLC", &["vlc.exe"])]);
+        assert!(d2
+            .detect(&[p(3, "vlc.exe", Some(r"C:\VLC\vlc.exe"))], None)
+            .is_empty());
+        // inside a Steam library the Steam id is kept
+        d2.detectable = Arc::new(DetectableDb::from_file(crate::detectable::DetectableFile {
+            v: 1,
+            updated: String::new(),
+            games: vec![dgame(
+                "10",
+                "tiny_indie",
+                "Tiny Indie (Discord)",
+                &["tinyindie.exe"],
+            )],
+        }));
+        let t = d2.detect(
+            &[p(
+                4,
+                "TinyIndie.exe",
+                Some(r"D:\SteamLibrary\steamapps\common\TinyIndie\TinyIndie.exe"),
+            )],
+            None,
+        );
+        assert_eq!(t[0].game_id, "steam:999999");
+        assert_eq!(t[0].name, "Tiny Indie Game");
     }
 }

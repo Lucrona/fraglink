@@ -58,4 +58,16 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - Options > Account: the server shows `https://playfraglink.com` (an old `http://119.42.54.86` setting is moved automatically).
 - Friends list: a small gap above each group header; rows a little taller.
 - Side panel: Activity Report and Installed Games have blue heading bars with View More / Detect Games on the right. Click a friend, then empty space in the list (or press Esc): back to the default panel.
-- **Test build only:** leave the mouse and keyboard alone for 20 seconds: status shows Away (friends see it); move the mouse: back to Online within about 5 s.
+- **Test build only (dev.11):** leave the mouse and keyboard alone for 20 seconds: status shows Away (friends see it); move the mouse: back to Online within about 5 s.
+
+## Detection, WoW realm and the "Track as a game?" question (0.2.0-dev.12)
+
+- dev.11 installed: it updates itself to dev.12. Help > About shows 0.2.0-dev.12.
+- WoW retail (`...\World of Warcraft\_retail_\Wow.exe`): status shows **World of Warcraft · <your realm>**; a friend sees the same in the friends list, tooltip and side panel. Switch realm and log out to the character screen (WoW rewrites `WTF\Config.wtf`): the realm updates within a few seconds.
+- WoW: Forever (`...\_classic_beta_\WowB.exe`): **World of Warcraft: Forever · <realm>**. Its hours are separate from retail.
+- Star Citizen (`...\StarCitizen\LIVE\Bin64\StarCitizen.exe`, also PTU): **Star Citizen**.
+- A game that isn't one of Fraglink's own (e.g. something small from itch.io that is on Discord's list): detected by name.
+- An unlisted program full screen (or borderless) in front for 5 minutes: "Track <name> as a game?" pops up bottom-right and waits as a bar in the main window. **Yes**: it's tracked from now on. **Not a game**: never asked again. A browser or video player full screen is never asked about. For a quicker test start Fraglink with `FRAGLINK_PROMPT_SECS=30`.
+- Hover a friend: the tooltip is dark with light text.
+- Leave the mouse and keyboard alone for 10 minutes: Away; move the mouse: Online again.
+- Offline (no network) start: games are still detected (bundled list); the log says the server wasn't reachable.

@@ -30,6 +30,20 @@ a release with a new migration should stay backward compatible or be rolled forw
 Check it: `curl https://playfraglink.com/api/v1/health` (and `http://119.42.54.86/api/v1/health`) → `{"ok":true,"version":"…"}`.
 Logs: `sudo journalctl -u fraglink-server -f`.
 
+## Game detection lists (dev.12)
+
+- The server downloads Discord's public detectable list (`FRAGLINK_DETECTABLE_URL`, default
+  `https://discord.com/api/v10/applications/detectable`, browser User-Agent) when its copy is a day old, into
+  `/var/lib/fraglink/detectable/discord.json` (`FRAGLINK_DATA_DIR`, default `/var/lib/fraglink`). A failed or
+  short download keeps the last good copy; with no copy at all it serves the snapshot built into the binary.
+  `slugs.json` next to it keeps the Fraglink game id of every Discord id stable.
+- `GET /api/v1/games/detectable`: compact Windows-only list, gzip + ETag. `GET /api/v1/games/overrides`: the
+  folder rules; put a valid `/var/lib/fraglink/detect-overrides.json` there (same format as
+  `packages/signatures/overrides.json`) to change them without an app release (clients pick it up within a day
+  or on restart).
+- "Track as a game" answers land in the `game_suggestions` table for review:
+  `sudo -u postgres psql fraglink -c "SELECT exe, name, reports, last_at FROM game_suggestions WHERE status = 'new' ORDER BY reports DESC"`.
+
 ## Desktop auto-updates
 
 Installed clients check `https://playfraglink.com/updates/latest.json` first and `http://119.42.54.86/updates/latest.json`

@@ -70,6 +70,109 @@ pub fn tag_process(
     Ok(id)
 }
 
+/// The pending "Track <exe> as a game?" question, if any.
+#[tauri::command]
+pub fn track_prompt(state: State<'_, AppState>) -> Option<Candidate> {
+    state.track_prompt.lock().unwrap().clone()
+}
+
+/// `OddGame.exe` -> `OddGame`, `my_cool-game.exe` -> `my cool game`.
+pub fn name_from_exe(exe: &str) -> String {
+    let stem = exe
+        .rsplit_once('.')
+        .filter(|(_, ext)| ext.eq_ignore_ascii_case("exe"))
+        .map(|(s, _)| s)
+        .unwrap_or(exe);
+    let n = stem.replace(['_', '-'], " ");
+    let n = n.split_whitespace().collect::<Vec<_>>().join(" ");
+    if n.is_empty() {
+        exe.to_string()
+    } else {
+        n.chars().take(80).collect()
+    }
+}
+
+/// Answer the question. Yes: track it from now on (manual tag) and report the exe and
+/// name to the server for review. No: never ask about this exe again.
+#[tauri::command]
+pub fn track_prompt_answer(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    exe: String,
+    yes: bool,
+    name: Option<String>,
+) -> CmdResult<Option<String>> {
+    let exe = exe.trim().to_string();
+    if exe.is_empty() {
+        return Err("no program".into());
+    }
+    let mut out = None;
+    if yes {
+        let name = name
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| name_from_exe(&exe));
+        let id = state
+            .engine
+            .lock()
+            .unwrap()
+            .tag_exe(&exe, &name, now())
+            .map_err(err)?;
+        log::info!("track prompt: {exe} is a game ({id})");
+        let app2 = app.clone();
+        let (e2, n2) = (exe.clone(), name.clone());
+        std::thread::spawn(move || {
+            let c = crate::sync::client(&app2)
+                .unwrap_or_else(|| fraglink_sync::Client::new(&crate::sync::server(&app2), None));
+            if let Err(e) = c.suggest_game(&e2, &n2) {
+                log::info!("game suggestion not sent: {e}");
+            }
+        });
+        out = Some(id);
+    } else {
+        state
+            .engine
+            .lock()
+            .unwrap()
+            .dismiss_prompt(&exe)
+            .map_err(err)?;
+        log::info!("track prompt: {exe} is not a game");
+    }
+    {
+        let mut p = state.track_prompt.lock().unwrap();
+        if p.as_ref().is_some_and(|c| c.exe.eq_ignore_ascii_case(&exe)) {
+            *p = None;
+        }
+    }
+    let toast_is_prompt = state
+        .pending_toast
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|t| t.kind.starts_with("track:"));
+    if toast_is_prompt {
+        if let Some(w) = app.get_webview_window("toast") {
+            let _ = w.close();
+        }
+    }
+    let _ = app.emit(crate::TRACK_PROMPT_EVENT, None::<Candidate>);
+    let _ = app.emit("fraglink://catalog", ());
+    crate::handle_events(&app, vec![]);
+    Ok(out)
+}
+
+#[cfg(test)]
+mod track_tests {
+    #[test]
+    fn names_from_exes() {
+        use super::name_from_exe;
+        assert_eq!(name_from_exe("OddGame.exe"), "OddGame");
+        assert_eq!(name_from_exe("my_cool-game.EXE"), "my cool game");
+        assert_eq!(name_from_exe("noext"), "noext");
+        assert_eq!(name_from_exe(".exe"), ".exe");
+    }
+}
+
 #[tauri::command]
 pub fn untag_process(state: State<'_, AppState>, exe: String) -> CmdResult<()> {
     state.engine.lock().unwrap().untag_exe(&exe).map_err(err)

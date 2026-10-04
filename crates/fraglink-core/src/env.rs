@@ -16,6 +16,14 @@ pub struct ProcInfo {
     pub path: Option<String>,
 }
 
+/// The window the user is looking at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Foreground {
+    pub pid: u32,
+    /// Covers its whole monitor without a title bar (exclusive or borderless full screen).
+    pub fullscreen: bool,
+}
+
 pub trait Environment: Send {
     fn processes(&mut self) -> Vec<ProcInfo>;
     /// Seconds since the last keyboard/mouse input (0 if unknown).
@@ -24,6 +32,10 @@ pub trait Environment: Send {
     fn steam_running_appid(&mut self) -> Option<u32>;
     /// Short label for logs/UI ("system" or "simulation").
     fn label(&self) -> &'static str;
+    /// The foreground window's process and whether it is full screen (None if unknown).
+    fn foreground(&mut self) -> Option<Foreground> {
+        None
+    }
 }
 
 /// The real machine.
@@ -70,6 +82,10 @@ impl Environment for SystemEnv {
 
     fn label(&self) -> &'static str {
         "system"
+    }
+
+    fn foreground(&mut self) -> Option<Foreground> {
+        foreground_window()
     }
 }
 
@@ -148,6 +164,58 @@ pub fn idle_seconds() -> u64 {
         let now = GetTickCount();
         (now.wrapping_sub(li.dwTime) / 1000) as u64
     }
+}
+
+/// Foreground window via `GetForegroundWindow` + its rectangle vs. its monitor.
+/// Read-only window-manager queries; nothing is sent to the window.
+#[cfg(windows)]
+pub fn foreground_window() -> Option<Foreground> {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
+        IsWindowVisible, GWL_STYLE, WS_CAPTION,
+    };
+    // SAFETY: plain Win32 queries on the foreground HWND with zeroed, sized out-structs.
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() {
+            return None;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 {
+            return None;
+        }
+        let mut r: RECT = std::mem::zeroed();
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        let mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let fullscreen = IsWindowVisible(hwnd) != 0
+            && IsIconic(hwnd) == 0
+            && GetWindowRect(hwnd, &mut r) != 0
+            && !mon.is_null()
+            && GetMonitorInfoW(mon, &mut mi) != 0
+            && covers(&r, &mi.rcMonitor)
+            // a maximised normal window keeps its title bar
+            && (GetWindowLongW(hwnd, GWL_STYLE) as u32 & WS_CAPTION) != WS_CAPTION;
+        Some(Foreground { pid, fullscreen })
+    }
+}
+
+#[cfg(windows)]
+fn covers(
+    w: &windows_sys::Win32::Foundation::RECT,
+    m: &windows_sys::Win32::Foundation::RECT,
+) -> bool {
+    w.left <= m.left && w.top <= m.top && w.right >= m.right && w.bottom >= m.bottom
+}
+
+#[cfg(not(windows))]
+pub fn foreground_window() -> Option<Foreground> {
+    None
 }
 
 // ------------------------------------------------------------------ Linux (dev only)

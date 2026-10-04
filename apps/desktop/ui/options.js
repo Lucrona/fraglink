@@ -11,7 +11,7 @@
   const pending = new Map();
   let st = null, catalog = null, gsel = null, detecting = false;
   const fail = e => alert(String(e && e.message || e));
-  const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '' };
+  const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '', detectable: '' };
   const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
   // Dark and Phoenix skins get the dark 2013 look; Classic and Stream keep the plain system look.

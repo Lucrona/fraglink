@@ -1,10 +1,12 @@
 //! Fraglink tray app (Tauri 2): tray icon + menu, single instance, optional
 //! autostart, the 290x381 classic window, a toast window, and the local tracker
-//! thread from `fraglink-core`. No network calls and no telemetry by default;
-//! the optional account sync (`sync.rs`) only runs after the user signs in.
+//! thread from `fraglink-core`. No telemetry; without an account the app only
+//! downloads public files (updates, the game detection lists in `gamelist.rs`).
+//! The optional account sync (`sync.rs`) only runs after the user signs in.
 
 mod commands;
 mod friends;
+mod gamelist;
 mod icons;
 mod sync;
 mod updater;
@@ -51,14 +53,46 @@ pub struct AppState {
     pub friends: friends::FriendsShared,
     /// Automatic Away: no keyboard/mouse input for [`AUTO_AWAY_SECS`].
     pub auto_away: std::sync::atomic::AtomicBool,
+    /// "Track <exe> as a game?" waiting for an answer (dev.12).
+    pub track_prompt: Mutex<Option<fraglink_core::detector::Candidate>>,
+}
+
+pub const TRACK_PROMPT_EVENT: &str = "fraglink://track-prompt";
+
+/// An unknown program has been full screen for 5 minutes: ask (toast + in-app bar).
+fn offer_track(app: &AppHandle, c: fraglink_core::detector::Candidate) {
+    log::info!("asking whether {} is a game", c.exe);
+    *app.state::<AppState>().track_prompt.lock().unwrap() = Some(c.clone());
+    let _ = app.emit(TRACK_PROMPT_EVENT, Some(&c));
+    // the question also waits in the main window, so toasts-off just skips the popup
+    if get_setting(app, keys::TOASTS).as_deref() != Some("0") {
+        let icon =
+            fraglink_core::icons::extract_exe_icon(std::path::Path::new(&c.path)).map(|img| {
+                use base64::Engine as _;
+                let png = fraglink_core::icons::normalize_rgba(img);
+                format!(
+                    "data:image/png;base64,{}",
+                    base64::engine::general_purpose::STANDARD.encode(png)
+                )
+            });
+        windows::show_toast(
+            app,
+            ToastPayload {
+                kind: format!("track:{}", c.exe),
+                // the toast shows "Track <title> as a game?" with Yes / Not a game
+                title: commands::name_from_exe(&c.exe),
+                line: "as a game?".into(),
+                game_id: String::new(),
+                game: c.exe.clone(),
+                icon,
+            },
+        );
+    }
 }
 
 /// Like Discord: Away after 10 minutes without input (not a setting). Only replaces
 /// "Online"; a status the user picked (Away, Invisible) is left alone.
-///
-/// TEMPORARY (0.2.0-dev.11 test build only): 20 seconds so auto-away is quick to test.
-/// dev.12 MUST set this back to `10 * 60`.
-pub const AUTO_AWAY_SECS: u64 = 20;
+pub const AUTO_AWAY_SECS: u64 = 10 * 60;
 
 /// Update the automatic Away flag; tells the UI and friends when it flips.
 fn update_auto_away(app: &AppHandle, idle_s: u64) {
@@ -633,13 +667,26 @@ fn start_tracker(app: AppHandle) {
     std::thread::Builder::new()
         .name("fraglink-tracker".into())
         .spawn(move || loop {
-            let (evs, idle) = {
+            let (evs, idle, ask, details) = {
                 let state = app.state::<AppState>();
                 let mut e = state.engine.lock().unwrap();
                 let evs = e.step(now());
-                (evs, e.idle_seconds())
+                (
+                    evs,
+                    e.idle_seconds(),
+                    e.take_prompt(),
+                    e.take_details_changed(),
+                )
             };
             update_auto_away(&app, idle);
+            if details {
+                // the WoW realm appeared or changed: refresh my status and tell friends
+                let _ = app.emit(EVENTS, Vec::<TrackerEvent>::new());
+                friends::nudge(&app);
+            }
+            if let Some(c) = ask {
+                offer_track(&app, c);
+            }
             match evs {
                 Ok(evs) => handle_events(&app, evs),
                 Err(err) => log::error!("tracker step failed: {err:#}"),
@@ -698,6 +745,14 @@ pub fn run() {
                 Box::new(SystemEnv::new())
             };
             let mut engine = Engine::new(store, env, local_day_fn())?;
+            // testing aid: FRAGLINK_PROMPT_SECS shortens the 5-minute full-screen wait
+            if let Some(s) = std::env::var("FRAGLINK_PROMPT_SECS")
+                .ok()
+                .and_then(|v| v.parse::<i64>().ok())
+                .filter(|s| *s > 0)
+            {
+                engine.prompt_after_secs = s;
+            }
             let recovered = engine.tracker.recover()?;
             log::info!(
                 "Fraglink {} starting: data={} env={} signatures={} ({}) recovered={}",
@@ -752,6 +807,7 @@ pub fn run() {
                 sync: sync::SyncShared::default(),
                 friends: friends::FriendsShared::default(),
                 auto_away: Default::default(),
+                track_prompt: Mutex::new(None),
             });
             build_tray(&handle)?;
             let start_min = windows::flag(&handle, "start_minimized");
@@ -773,6 +829,7 @@ pub fn run() {
                 }
             }
             sync::init(&handle);
+            gamelist::start(&handle);
             start_tracker(handle);
             Ok(())
         })
@@ -832,6 +889,8 @@ pub fn run() {
             commands::account_change_password,
             commands::account_change_email,
             commands::friend_mute,
+            commands::track_prompt,
+            commands::track_prompt_answer,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Fraglink");

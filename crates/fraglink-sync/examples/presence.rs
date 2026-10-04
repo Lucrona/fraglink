@@ -10,13 +10,16 @@ use std::time::{Duration, Instant};
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
     if a.len() < 3 {
-        eprintln!("usage: presence SERVER TOKEN online|away|invisible [GAME_ID GAME_NAME]");
+        eprintln!(
+            "usage: presence SERVER TOKEN online|away|invisible [GAME_ID GAME_NAME [DETAIL]]"
+        );
         std::process::exit(2);
     }
     let game = (a.len() >= 5).then(|| GameRef {
         id: a[3].clone(),
         name: a[4].clone(),
         started_at: Some(chrono_now() - 38 * 60),
+        detail: a.get(5).cloned(),
     });
     let mut sock = Client::new(&a[0], Some(a[1].clone()))
         .presence()

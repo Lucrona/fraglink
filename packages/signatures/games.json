@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "version": "2026.09.28.1",
+ "version": "2026.10.04.1",
  "note": "Fraglink seed signatures. Hand-curated exe names + Steam app ids only; uncertain=true means unverified. Not derived from Discord's detectable list.",
  "ignore_exes": [
   "Agent.exe",
@@ -177,14 +177,11 @@
    "name": "World of Warcraft",
    "exes": [
     "Wow.exe",
-    "WowT.exe",
-    "WowB.exe"
+    "Wow-64.exe"
    ],
    "path_exes": [],
    "path_hints": [
-    "/_retail_/",
-    "/_ptr_/",
-    "/_beta_/"
+    "/_retail_/"
    ],
    "steam_appids": [],
    "platform": "battlenet",
@@ -193,16 +190,14 @@
   },
   {
    "id": "wow_classic",
-   "name": "World of Warcraft Classic",
+   "name": "WoW Classic",
    "exes": [
     "WowClassic.exe",
-    "WowClassicT.exe",
-    "WowClassicB.exe"
+    "WowClassic-64.exe"
    ],
    "path_exes": [],
    "path_hints": [
-    "/_classic_/",
-    "/_classic_ptr_/"
+    "/_classic_/"
    ],
    "steam_appids": [],
    "platform": "battlenet",
@@ -211,20 +206,132 @@
   },
   {
    "id": "wow_classic_era",
-   "name": "World of Warcraft Classic Era",
+   "name": "WoW Classic Era",
+   "exes": [],
+   "path_exes": [
+    "WowClassic.exe",
+    "WowClassic-64.exe"
+   ],
+   "path_hints": [
+    "/_classic_era_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false,
+   "genre": "mmo"
+  },
+  {
+   "id": "wow_forever",
+   "name": "World of Warcraft: Forever",
+   "exes": [
+    "WowB.exe",
+    "WowB-64.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [
+    "/_classic_beta_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false,
+   "genre": "mmo"
+  },
+  {
+   "id": "wow_ptr",
+   "name": "WoW PTR",
+   "exes": [
+    "WowT.exe",
+    "WowT-64.exe"
+   ],
+   "path_exes": [
+    "Wow.exe",
+    "Wow-64.exe"
+   ],
+   "path_hints": [
+    "/_ptr_/",
+    "/_xptr_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false,
+   "genre": "mmo"
+  },
+  {
+   "id": "wow_beta",
+   "name": "WoW Beta",
+   "exes": [],
+   "path_exes": [
+    "Wow.exe",
+    "Wow-64.exe"
+   ],
+   "path_hints": [
+    "/_beta_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false,
+   "genre": "mmo"
+  },
+  {
+   "id": "wow_classic_ptr",
+   "name": "WoW Classic PTR",
+   "exes": [
+    "WowClassicT.exe"
+   ],
+   "path_exes": [
+    "WowClassic.exe"
+   ],
+   "path_hints": [
+    "/_classic_ptr_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false,
+   "genre": "mmo"
+  },
+  {
+   "id": "wow_classic_era_ptr",
+   "name": "WoW Classic Era PTR",
    "exes": [],
    "path_exes": [
     "WowClassic.exe",
     "WowClassicT.exe"
    ],
    "path_hints": [
-    "/_classic_era_/",
     "/_classic_era_ptr_/"
    ],
    "steam_appids": [],
    "platform": "battlenet",
    "uncertain": false,
    "genre": "mmo"
+  },
+  {
+   "id": "wow_anniversary",
+   "name": "WoW Classic Anniversary",
+   "exes": [],
+   "path_exes": [
+    "WowClassic.exe"
+   ],
+   "path_hints": [
+    "/_anniversary_/"
+   ],
+   "steam_appids": [],
+   "platform": "battlenet",
+   "uncertain": false,
+   "genre": "mmo"
+  },
+  {
+   "id": "star_citizen",
+   "name": "Star Citizen",
+   "exes": [
+    "StarCitizen.exe"
+   ],
+   "path_exes": [],
+   "path_hints": [],
+   "steam_appids": [],
+   "platform": "rsi",
+   "uncertain": false,
+   "genre": "action"
   },
   {
    "id": "overwatch2",

@@ -13,3 +13,8 @@ Regenerate after editing:
 python3 packages/signatures/tools/build_games_json.py
 cargo test -p fraglink-core signatures
 ```
+
+## Detectable list and overrides (0.2.0-dev.12)
+
+- `detectable.json.gz` is a compact, Windows-only snapshot of Discord's public detectable-applications list, built by `crates/fraglink-core/src/bin/fraglink-detectable.rs` (refresh with `scripts/update-detectable.sh`). It is the offline fallback only: the server re-downloads the list daily and the app fetches it from the server. It is kept separate from `games.json`.
+- `overrides.json` holds Fraglink's folder rules (WoW versions, Star Citizen channels), checked before every list. The server can serve a newer copy from `/var/lib/fraglink/detect-overrides.json`.

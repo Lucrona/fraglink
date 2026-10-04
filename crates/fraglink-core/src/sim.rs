@@ -8,8 +8,10 @@
 //! * `C:/Games/X/X.exe`  a process with a full path (name = file name)
 //! * `steam:570`    Steam running with RunningAppID = 570
 //! * `:idle`        no user input during the segment (idle grows from segment start)
+//! * `:fs`          the segment's program is the foreground window, full screen
+//!   (suffixes combine in this order: `<what>:<seconds>[:fs][:idle]`)
 
-use crate::env::{Environment, ProcInfo};
+use crate::env::{Environment, Foreground, ProcInfo};
 use anyhow::{bail, Result};
 use std::sync::Arc;
 
@@ -22,6 +24,7 @@ pub struct Segment {
     pub secs: u64,
     pub idle: bool,
     pub steam_appid: Option<u32>,
+    pub fullscreen: bool,
 }
 
 pub fn parse_script(script: &str) -> Result<Vec<Segment>> {
@@ -36,6 +39,10 @@ pub fn parse_script(script: &str) -> Result<Vec<Segment>> {
         let (body, idle) = match raw.strip_suffix(":idle") {
             Some(b) => (b, true),
             None => (raw, false),
+        };
+        let (body, fullscreen) = match body.strip_suffix(":fs") {
+            Some(b) => (b, true),
+            None => (body, false),
         };
         let Some((what, secs)) = body.rsplit_once(':') else {
             bail!("segment {i} '{raw}': expected <what>:<seconds>")
@@ -52,6 +59,7 @@ pub fn parse_script(script: &str) -> Result<Vec<Segment>> {
             secs,
             idle,
             steam_appid: None,
+            fullscreen,
         };
         if let Some(appid) = what.strip_prefix("steam:") {
             seg.steam_appid = Some(
@@ -162,6 +170,21 @@ impl Environment for SimEnv {
     fn label(&self) -> &'static str {
         "simulation"
     }
+
+    fn foreground(&mut self) -> Option<Foreground> {
+        let (seg, _) = self.at((self.clock)());
+        match seg.procs.first() {
+            Some(p) => Some(Foreground {
+                pid: p.pid,
+                fullscreen: seg.fullscreen,
+            }),
+            // the desktop (explorer) otherwise
+            None => Some(Foreground {
+                pid: 4,
+                fullscreen: false,
+            }),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -181,6 +204,10 @@ mod tests {
         assert_eq!(segs[2].procs[0].path.as_deref(), Some("C:/Games/X/X.exe"));
         assert_eq!(segs[3].steam_appid, Some(570));
         assert!(segs[4].idle);
+        let fs = parse_script("C:/Games/Odd/Odd.exe:400:fs, X.exe:5:fs:idle").unwrap();
+        assert!(fs[0].fullscreen && !fs[0].idle);
+        assert!(fs[1].fullscreen && fs[1].idle);
+        assert_eq!(fs[0].procs[0].name, "Odd.exe");
         assert!(parse_script("cs2.exe").is_err());
         assert!(parse_script("cs2.exe:abc").is_err());
         assert!(parse_script("").is_err());

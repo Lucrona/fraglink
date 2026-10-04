@@ -109,6 +109,9 @@ pub struct NowPlaying {
     pub idle_trimmed_seconds: i64,
     pub idle: bool,
     pub source: DetectSource,
+    /// Extra detail shown after the name, e.g. the WoW realm (filled in by the engine).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 #[derive(Debug)]
@@ -173,6 +176,7 @@ impl Tracker {
             idle_trimmed_seconds: c.trimmed,
             idle: c.in_idle,
             source: c.source,
+            detail: None,
         })
     }
 
@@ -350,7 +354,8 @@ impl Tracker {
     fn open(&mut self, now: i64, d: &Detection) -> Result<Vec<TrackerEvent>> {
         let src = match d.source {
             DetectSource::Manual => "manual",
-            DetectSource::Signature => "signature",
+            DetectSource::Signature | DetectSource::Override => "signature",
+            DetectSource::Detectable => "detectable",
             DetectSource::SteamLibrary | DetectSource::SteamRunning => "steam",
             DetectSource::EpicLibrary => "epic",
             DetectSource::GogLibrary => "gog",

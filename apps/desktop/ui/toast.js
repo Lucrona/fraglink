@@ -10,6 +10,7 @@
   function show(p) {
     if (!p) return;
     const icon = p.icon && /^data:image\/png;base64,/.test(p.icon) ? `<img class="gi-img" src="${p.icon}" alt="">` : GENERIC;
+    if (/^track:/.test(p.kind || '')) return ask(p, icon);
     const friend = /^(friend|request):/.test(p.kind || '');
     // plain one-liner: "<name> logged on" / "<name> started playing <game>"
     body.innerHTML = (p.game || !friend ? `<i class="gi">${icon}</i>` : '') +
@@ -17,6 +18,17 @@
       `${friend ? '<br><a class="more" href="#" id="toast-more">View More</a>' : ''}</div>`;
     el.hidden = false; el.classList.remove('out');
     clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 6000);
+  }
+  // "Track <name> as a game?" with Yes / Not a game (the question also waits in the main window)
+  function ask(p, icon) {
+    body.innerHTML = `<i class="gi">${icon}</i><div>Track <b>${esc(p.title)}</b> as a game?<div class="tq"><button type="button" data-yes="1">Yes</button><button type="button" data-yes="0">Not a game</button></div></div>`;
+    body.querySelectorAll('button[data-yes]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!T) return close();
+      T.core.invoke('track_prompt_answer', { exe: p.game, yes: b.dataset.yes === '1', name: p.title }).catch(close);
+    }));
+    el.hidden = false; el.classList.remove('out');
+    clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 30000);
   }
   document.getElementById('toast-close').addEventListener('click', e => { e.stopPropagation(); close(); });
   el.addEventListener('click', e => { e.preventDefault(); if (T) T.core.invoke('toast_clicked'); else close(); });

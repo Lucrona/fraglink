@@ -32,6 +32,9 @@ pub struct PresenceView {
     pub status: String,
     pub game_id: Option<String>,
     pub game_name: Option<String>,
+    /// Shown after the game name, e.g. the WoW realm (0.2.0-dev.12 clients).
+    #[serde(default)]
+    pub game_detail: Option<String>,
     pub session_started_at: Option<DateTime<Utc>>,
 }
 
@@ -90,6 +93,9 @@ pub struct GameRef {
     pub name: String,
     /// Unix seconds.
     pub started_at: Option<i64>,
+    /// e.g. the WoW realm; optional (older clients don't send it).
+    #[serde(default)]
+    pub detail: Option<String>,
 }
 
 /// Client → server.
@@ -153,12 +159,13 @@ type Row = (
     String,
     Option<String>,
     Option<String>,
+    Option<String>,
     Option<DateTime<Utc>>,
     DateTime<Utc>,
 );
 
 fn to_view(r: Row) -> PresenceView {
-    let (status, game_id, game_name, started, heartbeat) = r;
+    let (status, game_id, game_name, game_detail, started, heartbeat) = r;
     let stale = (Utc::now() - heartbeat).num_seconds() > IDLE_TIMEOUT_SECS as i64;
     if status == "invisible" || status == "offline" || stale {
         return PresenceView::offline();
@@ -167,13 +174,14 @@ fn to_view(r: Row) -> PresenceView {
         status,
         game_id,
         game_name,
+        game_detail,
         session_started_at: started,
     }
 }
 
 /// What friends are allowed to see of `user` right now.
 pub async fn visible_presence(st: &AppState, user: Uuid) -> ApiResult<Option<PresenceView>> {
-    let r: Option<Row> = sqlx::query_as("SELECT status, game_id, game_name, session_started_at, heartbeat_at FROM presence WHERE user_id = $1")
+    let r: Option<Row> = sqlx::query_as("SELECT status, game_id, game_name, game_detail, session_started_at, heartbeat_at FROM presence WHERE user_id = $1")
         .bind(user)
         .fetch_optional(&st.db)
         .await?;
@@ -184,8 +192,9 @@ pub async fn visible_presence_many(
     st: &AppState,
     users: &[Uuid],
 ) -> ApiResult<HashMap<Uuid, PresenceView>> {
-    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<DateTime<Utc>>, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT user_id, status, game_id, game_name, session_started_at, heartbeat_at FROM presence WHERE user_id = ANY($1)",
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>, Option<DateTime<Utc>>, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT user_id, status, game_id, game_name, game_detail, session_started_at, heartbeat_at FROM presence WHERE user_id = ANY($1)",
     )
     .bind(users)
     .fetch_all(&st.db)
@@ -194,8 +203,8 @@ pub async fn visible_presence_many(
         .iter()
         .map(|u| (*u, PresenceView::offline()))
         .collect();
-    for (u, s, gid, gname, started, hb) in rows {
-        m.insert(u, to_view((s, gid, gname, started, hb)));
+    for (u, s, gid, gname, gdetail, started, hb) in rows {
+        m.insert(u, to_view((s, gid, gname, gdetail, started, hb)));
     }
     Ok(m)
 }
@@ -224,6 +233,11 @@ pub async fn set(
     let game = game.filter(|_| status != "offline").and_then(|g| {
         let id = clean(&g.id, 120);
         let name = clean(&g.name, 120);
+        let detail = g
+            .detail
+            .as_deref()
+            .map(|d| clean(d, 64))
+            .filter(|d| !d.is_empty());
         (!id.is_empty()).then_some((
             id,
             if name.is_empty() {
@@ -232,6 +246,7 @@ pub async fn set(
                 name
             },
             g.started_at,
+            detail,
         ))
     });
     let before = visible_presence(st, user)
@@ -243,10 +258,11 @@ pub async fn set(
         .and_then(|t| Utc.timestamp_opt(t, 0).single())
         .map(|t| t.min(Utc::now()));
     sqlx::query(
-        "INSERT INTO presence(user_id, status, game_id, game_name, session_started_at, heartbeat_at, updated_at)
-         VALUES($1, $2, $3, $4, $5, now(), now())
+        "INSERT INTO presence(user_id, status, game_id, game_name, session_started_at, game_detail, heartbeat_at, updated_at)
+         VALUES($1, $2, $3, $4, $5, $6, now(), now())
          ON CONFLICT (user_id) DO UPDATE SET status = excluded.status, game_id = excluded.game_id,
              game_name = excluded.game_name, session_started_at = excluded.session_started_at,
+             game_detail = excluded.game_detail,
              heartbeat_at = now(), updated_at = now()",
     )
     .bind(user)
@@ -254,6 +270,7 @@ pub async fn set(
     .bind(game.as_ref().map(|g| g.0.clone()))
     .bind(game.as_ref().map(|g| g.1.clone()))
     .bind(started_at)
+    .bind(game.as_ref().and_then(|g| g.3.clone()))
     .execute(&st.db)
     .await?;
     let after = visible_presence(st, user)
@@ -279,7 +296,7 @@ async fn heartbeat(st: &AppState, user: Uuid) -> ApiResult<()> {
 
 /// At startup nobody is connected yet.
 pub async fn reset_all(st: &AppState) -> ApiResult<()> {
-    sqlx::query("UPDATE presence SET status = 'offline', game_id = NULL, game_name = NULL, session_started_at = NULL WHERE status <> 'offline'")
+    sqlx::query("UPDATE presence SET status = 'offline', game_id = NULL, game_name = NULL, game_detail = NULL, session_started_at = NULL WHERE status <> 'offline'")
         .execute(&st.db)
         .await?;
     Ok(())

@@ -19,6 +19,11 @@ pub struct Config {
     /// `FRAGLINK_XFIRE_ICONS=1` turns on the Xfire icon fallback, read from
     /// `FRAGLINK_XFIRE_ICONS_DIR` (default `/var/lib/fraglink/icons/xfire`).
     pub xfire_icons_dir: Option<std::path::PathBuf>,
+    /// `FRAGLINK_DATA_DIR` (default `/var/lib/fraglink`): cached game lists and the
+    /// optional `detect-overrides.json`.
+    pub data_dir: std::path::PathBuf,
+    /// `FRAGLINK_DETECTABLE_URL` (default Discord's public detectable list).
+    pub detectable_url: String,
 }
 
 impl Config {
@@ -46,6 +51,11 @@ impl Config {
                     .unwrap_or_else(|| "/var/lib/fraglink/icons/xfire".into())
                     .into()
             }),
+            data_dir: var("FRAGLINK_DATA_DIR")
+                .unwrap_or_else(|| "/var/lib/fraglink".into())
+                .into(),
+            detectable_url: var("FRAGLINK_DETECTABLE_URL")
+                .unwrap_or_else(|| crate::games::DISCORD_URL.into()),
         })
     }
 
@@ -60,6 +70,8 @@ impl Config {
             steam_openid_url: "http://127.0.0.1:9/openid/login".into(),
             presence_idle_secs: crate::presence::IDLE_TIMEOUT_SECS,
             xfire_icons_dir: None,
+            data_dir: std::env::temp_dir().join("fraglink-server-tests"),
+            detectable_url: "http://127.0.0.1:9/detectable".into(),
         }
     }
 

@@ -83,3 +83,13 @@ body.toast-page.skin-dark .toast-body { display: flex; gap: 6px; align-items: fl
 body.toast-page.skin-dark .toast-body .gi svg, body.toast-page.skin-dark .toast-body .gi img { width: 16px; height: 16px; }
 body.toast-page.skin-dark .toast-body .g { color: #7fc4ff; }
 body.toast-page .toast-body a.more { color: #5aa2f2; text-decoration: underline; font-size: 10px; cursor: pointer; }
+
+/* 0.2.0-dev.12: "Track <name> as a game?" (toast and main-window bar) */
+.toast-body .tq { display: flex; gap: 4px; margin-top: 4px; }
+.toast-body .tq button, .fl-ask button { font: 10px Tahoma, Verdana, sans-serif; padding: 1px 7px; cursor: pointer; color: #e8eaee; border: 1px solid #000; border-radius: 2px;
+  background: linear-gradient(#5b5f68, #2b2e34 50%, #191a1e 51%, #2a2c31); }
+.toast-body .tq button:hover, .fl-ask button:hover { background: linear-gradient(#6c717b, #363a41 50%, #22242a 51%, #33363c); }
+.fl-ask { position: fixed; left: 6px; right: 6px; bottom: 6px; z-index: 250; padding: 4px 6px; background: #1b1d22; color: #e8eaee; border: 1px solid #000;
+  box-shadow: 0 2px 6px rgba(0,0,0,.6); font: 11px Tahoma, "FLTahoma", Verdana, sans-serif; line-height: 15px; }
+.fl-ask b { color: #7fc4ff; }
+.fl-ask .fl-ask-b { display: inline-flex; gap: 4px; margin-left: 4px; }

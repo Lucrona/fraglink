@@ -13,6 +13,109 @@ use serde_json::json;
 
 pub const DEFAULT_POLL_SECS: u64 = 5;
 const STEAM_REFRESH_SECS: i64 = 600;
+/// An unknown program full screen in the foreground this long gets "Track it as a game?".
+pub const PROMPT_AFTER_SECS: i64 = 5 * 60;
+/// Settings key: JSON array of lower-case exe names answered "Not a game".
+pub const PROMPT_DISMISSED_KEY: &str = "prompt_dismissed";
+
+/// Full-screen programs that are never offered as games (on top of the
+/// signature file's `non_game_exes`): browsers, the shell, video players,
+/// streaming / chat / recording apps, presentations.
+const NOT_GAMES: &[&str] = &[
+    "explorer.exe",
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "brave.exe",
+    "opera.exe",
+    "opera_gx.exe",
+    "vivaldi.exe",
+    "iexplore.exe",
+    "arc.exe",
+    "zen.exe",
+    "floorp.exe",
+    "librewolf.exe",
+    "waterfox.exe",
+    "thorium.exe",
+    "yandex.exe",
+    "browser.exe",
+    "vlc.exe",
+    "mpc-hc.exe",
+    "mpc-hc64.exe",
+    "mpc-be.exe",
+    "mpc-be64.exe",
+    "potplayer.exe",
+    "potplayer64.exe",
+    "potplayermini.exe",
+    "potplayermini64.exe",
+    "mpv.exe",
+    "wmplayer.exe",
+    "video.ui.exe",
+    "microsoft.media.player.exe",
+    "kmplayer.exe",
+    "kmplayer64x.exe",
+    "plex.exe",
+    "plex htpc.exe",
+    "kodi.exe",
+    "stremio.exe",
+    "jellyfin media player.exe",
+    "netflix.exe",
+    "wwahost.exe",
+    "applicationframehost.exe",
+    "photos.exe",
+    "microsoft.photos.exe",
+    "discord.exe",
+    "discordptb.exe",
+    "discordcanary.exe",
+    "obs64.exe",
+    "obs32.exe",
+    "streamlabs obs.exe",
+    "streamlabs desktop.exe",
+    "xsplit.core.exe",
+    "twitch.exe",
+    "spotify.exe",
+    "zoom.exe",
+    "teams.exe",
+    "ms-teams.exe",
+    "slack.exe",
+    "powerpnt.exe",
+    "acrord32.exe",
+    "acrobat.exe",
+    "steam.exe",
+    "steamwebhelper.exe",
+    "battle.net.exe",
+    "epicgameslauncher.exe",
+    "galaxyclient.exe",
+    "eadesktop.exe",
+    "upc.exe",
+    "riotclientux.exe",
+    "rsi launcher.exe",
+    "fraglink.exe",
+    "fraglink-desktop.exe",
+    "lockapp.exe",
+    "logonui.exe",
+    "screenclippinghost.exe",
+    "snippingtool.exe",
+    "taskmgr.exe",
+    "mstsc.exe",
+    "vmware.exe",
+    "vmware-vmx.exe",
+    "virtualbox.exe",
+    "virtualboxvm.exe",
+    "parsecd.exe",
+    "moonlight.exe",
+    "nvidia overlay.exe",
+];
+
+/// Watches for an unknown full-screen program (see [`PROMPT_AFTER_SECS`]).
+#[derive(Debug, Default)]
+struct PromptWatch {
+    /// lower-case exe and when it became the full-screen foreground window
+    current: Option<(String, i64)>,
+    /// asked already this run
+    asked: std::collections::HashSet<String>,
+    pending: Option<Candidate>,
+}
 
 /// Settings keys stored in the `settings` table.
 pub mod keys {
@@ -31,6 +134,13 @@ pub struct Engine {
     steam_loaded_at: Option<i64>,
     /// Exe path and Steam app id of games detected since start (for icons).
     pub seen: std::collections::HashMap<String, SeenGame>,
+    prompt: PromptWatch,
+    /// Seconds before the "Track it as a game?" prompt (tests and simulation shorten it).
+    pub prompt_after_secs: i64,
+    dismissed: std::collections::HashSet<String>,
+    /// WoW realms of the running WoW flavours, by game id (see [`crate::realm`]).
+    realms: std::collections::HashMap<String, crate::realm::RealmWatch>,
+    details_changed: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -61,6 +171,11 @@ impl Engine {
             last_procs: vec![],
             steam_loaded_at: None,
             seen: Default::default(),
+            prompt: PromptWatch::default(),
+            prompt_after_secs: PROMPT_AFTER_SECS,
+            dismissed: Default::default(),
+            realms: Default::default(),
+            details_changed: false,
         };
         e.apply_settings()?;
         e.reload_rules()?;
@@ -94,7 +209,143 @@ impl Engine {
         self.detector.tags = self.tracker.store.manual_tags()?;
         self.detector.excluded_games = self.tracker.store.excluded_game_ids()?;
         self.detector.excluded_exes = self.tracker.store.excluded_exes()?;
+        self.dismissed = self
+            .tracker
+            .store
+            .get_setting(PROMPT_DISMISSED_KEY)?
+            .and_then(|v| serde_json::from_str::<Vec<String>>(&v).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|e| e.to_lowercase())
+            .collect();
         Ok(())
+    }
+
+    /// Swap in a newer detectable list (downloaded by the app).
+    pub fn set_detectable(&mut self, db: crate::detectable::DetectableDb) {
+        self.detector.detectable = std::sync::Arc::new(db);
+    }
+
+    /// Swap in newer override rules (downloaded by the app).
+    pub fn set_overrides(&mut self, o: crate::overrides::Overrides) {
+        self.detector.overrides = o;
+    }
+
+    /// Detail shown after a running game's name (the WoW realm), if known.
+    pub fn game_detail(&self, game_id: &str) -> Option<String> {
+        self.realms.get(game_id).and_then(|w| w.realm.clone())
+    }
+
+    /// The current game with its detail filled in.
+    pub fn now_playing(&self) -> Option<crate::tracker::NowPlaying> {
+        self.tracker.now_playing().map(|mut n| {
+            n.detail = self.game_detail(&n.game_id);
+            n
+        })
+    }
+
+    /// True once after a game detail (realm) appeared, changed or went away.
+    pub fn take_details_changed(&mut self) -> bool {
+        std::mem::take(&mut self.details_changed)
+    }
+
+    /// Start / re-check / drop the Config.wtf watch of each running WoW flavour.
+    fn update_details(&mut self, running: &[(String, Option<String>)]) {
+        let mut changed = false;
+        self.realms.retain(|id, w| {
+            let keep = running.iter().any(|(g, _)| g == id);
+            if !keep && w.realm.is_some() {
+                changed = true;
+            }
+            keep
+        });
+        for (id, path) in running {
+            if !crate::realm::is_wow(id) {
+                continue;
+            }
+            let Some(cfg) = path.as_deref().and_then(crate::realm::config_path) else {
+                continue;
+            };
+            let w = self
+                .realms
+                .entry(id.clone())
+                .or_insert_with(|| crate::realm::RealmWatch::new(cfg.clone()));
+            if w.path != cfg {
+                let had = w.realm.is_some();
+                *w = crate::realm::RealmWatch::new(cfg);
+                changed |= had;
+            }
+            changed |= w.poll();
+        }
+        self.details_changed |= changed;
+    }
+
+    /// The "Track <exe> as a game?" question, once it is due (taken = cleared).
+    pub fn take_prompt(&mut self) -> Option<Candidate> {
+        self.prompt.pending.take()
+    }
+
+    /// "Not a game": never ask about this exe again.
+    pub fn dismiss_prompt(&mut self, exe: &str) -> Result<()> {
+        let mut list: Vec<String> = self.dismissed.iter().cloned().collect();
+        let e = exe.trim().to_lowercase();
+        if e.is_empty() {
+            return Ok(());
+        }
+        if !list.contains(&e) {
+            list.push(e);
+        }
+        list.sort();
+        self.tracker
+            .store
+            .set_setting(PROMPT_DISMISSED_KEY, &serde_json::to_string(&list)?)?;
+        self.reload_rules()
+    }
+
+    /// One poll of the full-screen watch: the foreground program must be full
+    /// screen, unknown, not excluded and not dismissed for `prompt_after_secs`
+    /// in a row, with no recognised game running.
+    fn watch_fullscreen(&mut self, now: i64, procs: &[ProcInfo], games_running: bool) {
+        let fg = if games_running {
+            None
+        } else {
+            self.env.foreground().filter(|f| f.fullscreen)
+        };
+        let proc_ = fg.and_then(|f| procs.iter().find(|p| p.pid == f.pid));
+        let cand = proc_.and_then(|p| {
+            let exe_l = p.name.to_lowercase();
+            if NOT_GAMES.contains(&exe_l.as_str())
+                || self.dismissed.contains(&exe_l)
+                || self.prompt.asked.contains(&exe_l)
+                || self.detector.excluded_exes.contains(&exe_l)
+            {
+                return None;
+            }
+            self.detector
+                .candidates(std::slice::from_ref(p))
+                .into_iter()
+                .next()
+        });
+        let Some(c) = cand else {
+            self.prompt.current = None;
+            return;
+        };
+        let exe_l = c.exe.to_lowercase();
+        match &self.prompt.current {
+            Some((e, since)) if *e == exe_l => {
+                if now - since >= self.prompt_after_secs {
+                    log::info!(
+                        "full-screen unknown program for {}s: {}",
+                        now - since,
+                        c.exe
+                    );
+                    self.prompt.asked.insert(exe_l);
+                    self.prompt.current = None;
+                    self.prompt.pending = Some(c);
+                }
+            }
+            _ => self.prompt.current = Some((exe_l, now)),
+        }
     }
 
     /// True once the installed-games scan (Steam + other launchers) has run at least once.
@@ -148,6 +399,7 @@ impl Engine {
         let idle = 0;
         let appid = self.env.steam_running_appid();
         let dets = self.detector.detect(&procs, appid);
+        let mut running = Vec::with_capacity(dets.len());
         for d in &dets {
             let path = d.exe.as_ref().and_then(|x| {
                 procs
@@ -169,7 +421,10 @@ impl Engine {
             if d.steam_appid.is_some() {
                 e.steam_appid = d.steam_appid;
             }
+            running.push((d.game_id.clone(), e.exe_path.clone()));
         }
+        self.update_details(&running);
+        self.watch_fullscreen(now, &procs, !dets.is_empty());
         self.last_procs = procs;
         self.tracker.tick(now, &dets, idle)
     }
@@ -253,7 +508,7 @@ impl Engine {
         stats::glance(
             &self.tracker.store,
             &today,
-            self.tracker.now_playing(),
+            self.now_playing(),
             self.tracker.is_paused(),
         )
     }
@@ -266,6 +521,122 @@ mod tests {
     use crate::tracker::fixed_offset_day_fn;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+
+    #[test]
+    fn wow_realm_is_the_game_detail() {
+        std::env::set_var("FRAGLINK_STEAM_DIR", "/nonexistent-steam-dir");
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("World of Warcraft");
+        for f in ["_retail_", "_classic_beta_"] {
+            std::fs::create_dir_all(root.join(f).join("WTF")).unwrap();
+        }
+        std::fs::write(
+            root.join("_retail_/WTF/Config.wtf"),
+            "SET locale \"enUS\"\nSET realmName \"Frostmourne\"\n",
+        )
+        .unwrap();
+        let retail = root.join("_retail_/Wow.exe");
+        let forever = root.join("_classic_beta_/WowB.exe");
+        let clock = Arc::new(AtomicU64::new(0));
+        let c = clock.clone();
+        let env = SimEnv::new(
+            &format!("{}:100,{}:100", retail.display(), forever.display()),
+            Arc::new(move || c.load(Ordering::SeqCst)),
+        )
+        .unwrap();
+        let mut e = Engine::new(
+            Store::open_in_memory().unwrap(),
+            Box::new(env),
+            fixed_offset_day_fn(0),
+        )
+        .unwrap();
+        let t0 = 1_790_030_000;
+        e.step(t0).unwrap();
+        let np = e.now_playing().unwrap();
+        assert_eq!(
+            (np.game_id.as_str(), np.detail.as_deref()),
+            ("wow", Some("Frostmourne"))
+        );
+        assert!(e.take_details_changed());
+        assert!(!e.take_details_changed());
+        assert_eq!(
+            e.glance(t0).unwrap().now_playing.unwrap().detail.as_deref(),
+            Some("Frostmourne")
+        );
+        // realm switched in game: Config.wtf rewritten
+        std::fs::write(
+            root.join("_retail_/WTF/Config.wtf"),
+            "SET locale \"enUS\"\nSET realmName \"Barthilas\"\nSET x \"1\"\n",
+        )
+        .unwrap();
+        clock.store(5, Ordering::SeqCst);
+        e.step(t0 + 5).unwrap();
+        assert!(e.take_details_changed());
+        assert_eq!(e.game_detail("wow").as_deref(), Some("Barthilas"));
+        // WoW: Forever without a Config.wtf yet: no detail
+        for t in (10..130).step_by(5) {
+            clock.store(t, Ordering::SeqCst);
+            e.step(t0 + t as i64).unwrap();
+        }
+        assert_eq!(e.game_detail("wow"), None, "retail closed");
+        assert_eq!(e.game_detail("wow_forever"), None);
+        assert!(e.take_details_changed());
+    }
+
+    #[test]
+    fn full_screen_unknown_program_is_offered_once() {
+        std::env::set_var("FRAGLINK_STEAM_DIR", "/nonexistent-steam-dir");
+        let clock = Arc::new(AtomicU64::new(0));
+        let c = clock.clone();
+        // windowed unknown app, then the same app full screen, then a browser full screen,
+        // then a known game full screen, then the unknown app again
+        let env = SimEnv::new(
+            "C:/Games/Odd/OddGame.exe:400,C:/Games/Odd/OddGame.exe:400:fs,C:/Program Files/Google/Chrome/Application/chrome.exe:400:fs,cs2.exe:400:fs,C:/Tools/Other/Other.exe:200:fs,C:/Tools/Other/Other.exe:400:fs",
+            Arc::new(move || c.load(Ordering::SeqCst)),
+        )
+        .unwrap();
+        let mut e = Engine::new(
+            Store::open_in_memory().unwrap(),
+            Box::new(env),
+            fixed_offset_day_fn(0),
+        )
+        .unwrap();
+        let t0 = 1_790_020_000;
+        let mut asked = vec![];
+        let run = |e: &mut Engine, from: u64, to: u64, asked: &mut Vec<(u64, String)>| {
+            for t in (from..to).step_by(5) {
+                clock.store(t, Ordering::SeqCst);
+                e.step(t0 + t as i64).unwrap();
+                if let Some(c) = e.take_prompt() {
+                    asked.push((t, c.exe));
+                }
+            }
+        };
+        run(&mut e, 0, 2000, &mut asked);
+        // windowed: never; full screen: after 5 minutes; chrome / cs2: never.
+        // Other.exe: 200 s then a new segment (same exe, new pid) keeps the timer.
+        assert_eq!(asked.len(), 2, "{asked:?}");
+        assert_eq!(asked[0].1, "OddGame.exe");
+        assert!(
+            asked[0].0 >= 400 + 300 && asked[0].0 < 400 + 310,
+            "{asked:?}"
+        );
+        assert_eq!(asked[1].1, "Other.exe");
+        // "Not a game" sticks; asked once per run anyway
+        e.dismiss_prompt("Other.exe").unwrap();
+        assert!(e.dismissed.contains("other.exe"));
+        let mut again = vec![];
+        run(&mut e, 2000, 4000, &mut again);
+        assert!(again.is_empty(), "{again:?}");
+        // a fresh engine on the same store keeps the dismissal
+        assert!(e
+            .tracker
+            .store
+            .get_setting(PROMPT_DISMISSED_KEY)
+            .unwrap()
+            .unwrap()
+            .contains("other.exe"));
+    }
 
     #[test]
     fn slugs() {

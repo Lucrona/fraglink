@@ -10,6 +10,7 @@ pub mod auth;
 pub mod config;
 pub mod error;
 pub mod friends;
+pub mod games;
 pub mod hours;
 pub mod presence;
 pub mod steam;
@@ -42,6 +43,8 @@ pub struct AppState {
     /// Fallback Xfire icons (FRAGLINK_XFIRE_ICONS=1), else None.
     pub xfire: Arc<Option<xfire_icons::XfireIcons>>,
     pub sigs: Arc<fraglink_core::signatures::SignatureDb>,
+    /// Detection lists served to the desktop app.
+    pub games: Arc<games::GameLists>,
 }
 
 impl AppState {
@@ -70,6 +73,7 @@ impl AppState {
             limits: Arc::new(Mutex::new(HashMap::new())),
             xfire: Arc::new(xfire),
             sigs: Arc::new(fraglink_core::signatures::SignatureDb::builtin()),
+            games: Arc::new(games::GameLists::default()),
         }
     }
 

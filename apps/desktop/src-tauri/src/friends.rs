@@ -82,10 +82,11 @@ pub fn my_presence(app: &AppHandle) -> MyPresence {
         .flatten()
         .as_deref()
         != Some("0");
-    let game = e.tracker.now_playing().filter(|_| share).map(|n| GameRef {
+    let game = e.now_playing().filter(|_| share).map(|n| GameRef {
         id: n.game_id,
         name: n.name,
         started_at: Some(n.started_at),
+        detail: n.detail,
     });
     MyPresence { status, game }
 }
@@ -335,6 +336,7 @@ pub fn apply_presence(list: &mut Value, p: &FriendPresence) {
                     "status": p.status,
                     "game_id": p.game_id,
                     "game_name": p.game_name,
+                    "game_detail": p.game_detail,
                     "session_started_at": p.session_started_at,
                 });
             }
@@ -446,6 +448,7 @@ mod tests {
             status: "online".into(),
             game_id: Some("steam:570".into()),
             game_name: Some("Dota 2".into()),
+            game_detail: None,
             session_started_at: None,
         }
     }

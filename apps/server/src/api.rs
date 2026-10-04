@@ -59,6 +59,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/blocks/{handle}", delete(unblock_user))
         .route("/api/v1/ws", get(crate::presence::ws_handler))
         .route("/api/v1/games/icons", get(game_icons))
+        .route("/api/v1/games/detectable", get(crate::games::detectable))
+        .route("/api/v1/games/overrides", get(crate::games::overrides))
+        .route("/api/v1/games/suggest", post(crate::games::suggest))
 }
 
 /// Cookie-authenticated writes must come from our own pages (CSRF guard; SameSite=Lax

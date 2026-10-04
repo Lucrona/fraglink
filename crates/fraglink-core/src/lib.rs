@@ -2,9 +2,11 @@
 //!
 //! Read-only by design: the detector enumerates processes and reads Steam's
 //! documented files/registry values (Steam, Epic, GOG). It never reads game memory, injects
-//! code or installs hooks (anti-cheat safety). No network access.
+//! code or installs hooks (anti-cheat safety). No network access (the desktop app
+//! fetches the game lists and hands them to the [`Detector`]).
 
 pub mod catalog;
+pub mod detectable;
 pub mod detector;
 pub mod engine;
 pub mod env;
@@ -13,6 +15,8 @@ pub mod icons;
 pub mod installs;
 pub mod libraries;
 pub mod outbox;
+pub mod overrides;
+pub mod realm;
 pub mod signatures;
 pub mod sim;
 pub mod stats;

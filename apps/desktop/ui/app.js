@@ -265,8 +265,11 @@
   const CS = makeScroller($('#chat-log'), false);
   function fmtH(h) { return h.toFixed(1) + ' h'; }
   function fmtT(ms) { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; }
+  // "World of Warcraft · Frostmourne": the game plus its detail (WoW realm) when known
+  const withDetail = (name, detail) => name + (detail ? ' · ' + detail : '');
+  const gameLabel = f => withDetail(GAMES[f.game] ? GAMES[f.game].name : '', f.detail);
   function statusText(f) {
-    if (f.kind === 'playing' || f.kind === 'fof') return GAMES[f.game].name + (f.away ? ' (Away)' : '');
+    if (f.kind === 'playing' || f.kind === 'fof') return gameLabel(f) + (f.away ? ' (Away)' : '');
     if (f.kind === 'online' || f.kind === 'req' || f.kind === 'out') return f.status;
     return 'Offline';
   }
@@ -335,7 +338,7 @@
     const out = [];
     for (const f of l.friends || []) {
       const p = f.presence || {}, name = f.display_name || f.handle, base = { id: 'u:' + f.handle, handle: f.handle, name, real: true, since: f.since, presence: p, week: 0, total: 0 };
-      if (p.status !== 'offline' && p.game_id) out.push({ ...base, kind: 'playing', game: ensureGame(p.game_id, p.game_name), server: sinceText(p.session_started_at), info: '', away: p.status === 'away' });
+      if (p.status !== 'offline' && p.game_id) out.push({ ...base, kind: 'playing', game: ensureGame(p.game_id, p.game_name), detail: p.game_detail || '', server: sinceText(p.session_started_at), info: '', away: p.status === 'away' });
       else if (p.status === 'online' || p.status === 'away') out.push({ ...base, kind: 'online', status: p.status === 'away' ? 'Away' : 'Online' });
       else out.push({ ...base, kind: 'off', last: '' });
     }
@@ -534,7 +537,7 @@
       else if (f.kind === 'out') h += `<div>Friend request sent. They'll show up here once they accept.</div><a data-action="friend-remove" data-handle="${H}">Cancel request</a>`;
       else if (playing) {
         const mins = sessionMinutes(f);
-        h += `<div class="sf-lbl">Playing Game</div><div class="act"><i class="gi">${friendGameIcon(f.game)}</i><div><b>${esc(GAMES[f.game].name)}</b>${mins != null ? `<br><span class="sf-for">Playing for ${esc(fmtMins(mins))}</span>` : f.server ? '<br>' + esc(f.server) : ''}${!f.real && f.info ? `<br><span style="color:var(--cyan)">${esc(f.info)}</span>` : ''}</div></div>`;
+        h += `<div class="sf-lbl">Playing Game</div><div class="act"><i class="gi">${friendGameIcon(f.game)}</i><div><b>${esc(gameLabel(f))}</b>${mins != null ? `<br><span class="sf-for">Playing for ${esc(fmtMins(mins))}</span>` : f.server ? '<br>' + esc(f.server) : ''}${!f.real && f.info ? `<br><span style="color:var(--cyan)">${esc(f.info)}</span>` : ''}</div></div>`;
       }
       else h += `<div class="sf-lbl">Status</div><div>${esc(statusText(f))}${f.last ? ' · last online ' + esc(f.last) : ''}</div>`;
       if (f.kind !== 'req' && f.kind !== 'out') h += weekHtml(f);
@@ -1076,6 +1079,21 @@
     if (state.sel && !e.target.closest('a,button,input,select,label')) { state.sel = null; render(); }
   });
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); if (e.key === 'Enter' && e.target.id === 'custom-status') actions['custom-status-go'](); if (e.key === 'Escape') { if (!ctx.hidden) hideCtx(); else if (state.sel && !e.target.closest('input,textarea,select')) { state.sel = null; render(); } } });
+  /* "Track <name> as a game?" bar (also offered as a popup). Yes tracks it from now on and
+     sends the exe + name to the server for review; Not a game never asks again. */
+  const exeName = exe => { const s = String(exe || '').replace(/\.exe$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim(); return (s || String(exe || '')).slice(0, 80); };
+  function showTrackAsk(c) {
+    let bar = $('#track-ask');
+    if (!c || !c.exe) { if (bar) bar.hidden = true; return; }
+    if (!bar) { bar = document.createElement('div'); bar.id = 'track-ask'; bar.className = 'fl-ask'; document.body.appendChild(bar); }
+    const name = exeName(c.exe);
+    bar.innerHTML = `Track <b>${esc(name)}</b> as a game? <span class="fl-ask-b"><button type="button" data-yes="1">Yes</button><button type="button" data-yes="0">Not a game</button></span>`;
+    bar.title = c.path || c.exe; bar.hidden = false;
+    bar.querySelectorAll('button').forEach(b => b.onclick = async () => {
+      bar.hidden = true;
+      try { await FLB.trackAnswer(c.exe, b.dataset.yes === '1', name); refreshSoon(); } catch (e) { toastErr(e); }
+    });
+  }
   /* Rich friend tooltip (Windows-style), shown after a short hover; the info panel stays click-only. */
   const tip = $('#ftip'); let tipTimer = null, tipRow = null;
   const mutualOf = f => (f.mutual || ((f.info || '').match(/via ([^·]+)/) || [])[1] || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -1084,7 +1102,7 @@
     const user = f.handle || f.name, nick = f.handle && f.name !== f.handle ? f.name : '';
     let h = L('Username:', user) + L('Nickname:', nick);
     if (f.kind === 'playing' || f.kind === 'fof') {
-      h += L('Playing:', GAMES[f.game] && GAMES[f.game].name);
+      h += L('Playing:', GAMES[f.game] && gameLabel(f));
       if (f.real) h += L('Session:', f.server);
       else if (/^[\d.]+:\d+$/.test(f.server || '')) h += L('Server:', f.info) + L('IP:', f.server);
       else h += L('Server:', f.server);
@@ -1210,7 +1228,7 @@
     const customOn = SET().custom_on === '1' && custom;
     btn.disabled = signedOut();
     if (btn.disabled) { btn.querySelector('span').textContent = 'Offline'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
-    const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? np.name : '';
+    const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? withDetail(np.name, np.detail) : '';
     const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? 'Playing ' + game : 'Online';
     btn.querySelector('span').textContent = txt; btn.title = 'Status: ' + txt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();
@@ -1381,6 +1399,8 @@
     FLB.on('fraglink://update', askUpdate);
     if (FLB.updateAvailable) FLB.updateAvailable().then(askUpdate).catch(() => {});
     FLB.on('fraglink://catalog', loadCatalog);
+    // "Track <name> as a game?": an unknown program was full screen for 5 minutes
+    if (FLB.trackPrompt) { FLB.on('fraglink://track-prompt', showTrackAsk); FLB.trackPrompt().then(showTrackAsk).catch(() => {}); }
     FLB.on('fraglink://show-friend', h => { state.tab = 'friends'; state.sel = 'u:' + h; refreshFriends(); });
     setInterval(() => { if (realMode() && state.tab === 'friends') render(); refreshActivity(); }, 60000);
     FLB.on('fraglink://status', v => { myStatus = v; syncStatus(); });

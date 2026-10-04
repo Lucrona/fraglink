@@ -67,6 +67,9 @@
       // 0.2.0-dev.10
       checkUpdates: () => inv('check_for_updates'),
       autoAway: () => inv('get_auto_away'),
+      // 0.2.0-dev.12
+      trackPrompt: () => inv('track_prompt'),
+      trackAnswer: (exe, yes, name) => inv('track_prompt_answer', { exe, yes: !!yes, name }),
     };
     return;
   }

@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
 <p align="center"><b>PLAY. CONNECT. TRACK.</b><br>A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
-<sub>Early development · current pre-release <b>0.2.0-dev.11</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
+<sub>Early development · current pre-release <b>0.2.0-dev.12</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 
@@ -20,9 +20,10 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 <br><sub>The main window with the side panel (Activity Report and installed games, green update arrow in the title bar), and with a friend selected. Browser preview of the dev.11 UI with sample data.</sub>
 </p>
 
-## What works today (0.2.0-dev.11)
+## What works today (0.2.0-dev.12)
 
-- **Game detection on every launcher:** installed Steam, Epic, GOG, Battle.net, EA app, Ubisoft Connect and Xbox games, 170 curated signatures, and "This is a game…" for anything else. Read-only: no injection, no memory reading.
+- **Game detection like Discord's:** about 10,000 Windows games from Discord's public detectable list (refreshed daily through the Fraglink server, with a bundled copy for offline use), Fraglink's own signatures and folder rules (every WoW version and Star Citizen channel), installed Steam games, and a "Track <name> as a game?" question for an unlisted program that runs full screen for 5 minutes. Read-only: no injection, no memory reading.
+- **WoW realm:** the realm you're on shows next to the game ("World of Warcraft · Frostmourne") for you and your friends.
 - **Honest hours:** hours count all the time a game is running, like Steam: no idle trimming and no minimum session length. Sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.
 - **Accounts in the client:** log in with username (or email) and password, or **Create Account** right in the main window. Change your email, password or display name, or delete your account, from Options › Account.
 - **Friends:** search users and send requests, accept or decline, remove or block. Live status (Online / Away / Invisible) and the game each friend is playing, how long they've been playing and their hours this week. Friend tooltips, native right-click menus, sign-on toasts.

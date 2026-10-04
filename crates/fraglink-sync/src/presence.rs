@@ -19,6 +19,9 @@ pub struct GameRef {
     pub name: String,
     /// Unix seconds.
     pub started_at: Option<i64>,
+    /// Shown after the name, e.g. the WoW realm (servers before 0.2.0-dev.12 ignore it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 /// What this client publishes. `invisible` is stored but friends see offline.
@@ -36,6 +39,9 @@ pub struct FriendPresence {
     pub status: String,
     pub game_id: Option<String>,
     pub game_name: Option<String>,
+    /// e.g. the WoW realm; absent from older servers.
+    #[serde(default)]
+    pub game_detail: Option<String>,
     pub session_started_at: Option<String>,
 }
 
@@ -166,6 +172,7 @@ mod tests {
             Event::Presence(p) => {
                 assert!(p.started);
                 assert_eq!(p.game_name.as_deref(), Some("World of Warcraft"));
+                assert_eq!(p.game_detail, None);
             }
             other => panic!("{other:?}"),
         }
@@ -179,6 +186,20 @@ mod tests {
                 display_name: "A".into()
             }
         );
+    }
+
+    #[test]
+    fn game_detail_round_trips() {
+        let e: Event = serde_json::from_str(r#"{"type":"presence","handle":"bob","status":"online","game_id":"wow","game_name":"World of Warcraft","game_detail":"Frostmourne","session_started_at":null}"#).unwrap();
+        let Event::Presence(p) = e else { panic!() };
+        assert_eq!(p.game_detail.as_deref(), Some("Frostmourne"));
+        let g = GameRef {
+            id: "wow".into(),
+            name: "World of Warcraft".into(),
+            started_at: None,
+            detail: None,
+        };
+        assert!(!serde_json::to_string(&g).unwrap().contains("detail"));
     }
 
     #[test]

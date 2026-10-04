@@ -5,6 +5,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.12] - 2026-10-05
+
+Test update (builds report `0.2.0-12`).
+
+### Added
+- **Game detection from Discord's public detectable list** (about 10,000 Windows games). The Fraglink
+  server downloads Discord's list once a day, keeps the last good copy if that fails, and serves a compact
+  Windows-only version (no launchers) at `GET /api/v1/games/detectable` (gzip, ETag). The app only gets it
+  from the Fraglink server, caches it, refreshes it at startup and every 24 hours, and falls back to a
+  snapshot bundled in the app plus the existing signatures when offline. Matching uses the exe name and,
+  for entries with a folder (`_retail_/wow.exe`), the end of the full path; the most specific match wins.
+- **Folder rules that run first** (`packages/signatures/overrides.json`, updatable from the server at
+  `GET /api/v1/games/overrides` so a renamed beta exe can be fixed without a release): World of Warcraft
+  (`_retail_`), WoW Classic (`_classic_`), WoW Classic Era (`_classic_era_`), World of Warcraft: Forever
+  (`_classic_beta_` or `WowB.exe`), WoW PTR (`_ptr_`, `_xptr_`), WoW Beta (`_beta_`), and Star Citizen
+  (LIVE / PTU / EPTU / Hotfix / Tech Preview). Existing game ids (e.g. `wow`) stay the same.
+- **WoW realm:** for every WoW version Fraglink reads `WTF\Config.wtf` next to the game (`SET realmName`)
+  when it starts and whenever the file changes, and shows it after the game: "World of Warcraft ·
+  Frostmourne" in your status, the friends list, the friend tooltip and the side panel. It's sent with your
+  presence (new optional `detail` / `game_detail` field; older clients and servers ignore it). Hidden when
+  there's no realm.
+- **"Track <name> as a game?"**: a program that isn't on any list and stays in front, full screen or
+  borderless over the whole monitor, for 5 minutes gets a small question (popup and a bar in the main
+  window) with **Yes** / **Not a game**. Yes tracks it from then on and sends the exe and name to the server
+  for review (`game_suggestions`, nothing is published automatically); Not a game is never asked again.
+  Browsers, Explorer, video players, Discord, OBS and similar apps are never asked about.
+
+### Changed
+- Launcher install records (Epic, GOG, Battle.net, EA, Ubisoft, Xbox) are only used for the Installed
+  Games list and Launch buttons, no longer to decide whether a running program is a game. A game the list
+  recognises inside such an install keeps its old id, so its hours stay together.
+- **Friend tooltip** is dark (dark grey background, light text) to match the client.
+- **Automatic Away** is back to 10 minutes without input (dev.11 used 20 seconds for testing).
+
+### Server
+- New `game_suggestions` table (migration 0007) and `presence.game_detail` column (migration 0008).
+- `POST /api/v1/games/suggest` (exe + name, rate limited, no account needed).
+
 ## [0.2.0-dev.11] - 2026-10-04
 
 Test update (builds report `0.2.0-11`).

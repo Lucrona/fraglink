@@ -1434,10 +1434,11 @@ dependencies = [
 
 [[package]]
 name = "fraglink-core"
-version = "0.2.0-11"
+version = "0.2.0-12"
 dependencies = [
  "anyhow",
  "chrono",
+ "flate2",
  "image",
  "log",
  "rusqlite",
@@ -1452,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-desktop"
-version = "0.2.0-11"
+version = "0.2.0-12"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1477,13 +1478,14 @@ dependencies = [
 
 [[package]]
 name = "fraglink-server"
-version = "0.2.0-11"
+version = "0.2.0-12"
 dependencies = [
  "anyhow",
  "argon2",
  "axum",
  "base64 0.22.1",
  "chrono",
+ "flate2",
  "fraglink-core",
  "fraglink-sync",
  "futures-util",
@@ -1508,7 +1510,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-sync"
-version = "0.2.0-11"
+version = "0.2.0-12"
 dependencies = [
  "base64 0.22.1",
  "fraglink-core",

@@ -39,6 +39,7 @@ fn playing(status: &str, game: Option<(&str, &str)>) -> MyPresence {
             id: id.into(),
             name: name.into(),
             started_at: Some(now() - 60),
+            detail: None,
         }),
     }
 }
