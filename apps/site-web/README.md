@@ -22,7 +22,7 @@ The download button reads `/updates/latest.json`.
 ## Hosting (VPS)
 
 Served by Caddy at `https://beta.playfraglink.com` from `/var/www/fraglink-beta`, with `/api/*` proxied
-to the server, `/updates/*` read from the update folder, and `/icons/g/*` serving the game-icon folder.
+to the server, `/updates/*` read from the update folder, and `/icons/games/*` (official game icons) proxied to the server.
 Only people with the secret link (`/?key=<key>`, sets an HttpOnly `fl_preview` cookie for a year) get
 in; everyone else gets a plain 404. Every response carries `X-Robots-Tag: noindex, nofollow, noarchive`,
 pages have a noindex meta tag, and `/robots.txt` disallows everything.

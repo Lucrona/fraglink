@@ -90,7 +90,7 @@ async function loadIcons(ids) {
       chunk.forEach(id => {
         const v = m && m[id];
         let src = null;
-        if (v && v.icon_path) src = v.icon_path.replace(/^\/icons\/[a-z]+\//, "/icons/g/");
+        if (v && v.icon_path) src = v.icon_path; // served from our own domain (/icons/games/...)
         else if (v && v.icon_url) src = v.icon_url;
         iconCache[id] = src;
       });
