@@ -10,16 +10,13 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use fraglink_core::outbox::UploadBatch;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
 pub const MAX_UPLOAD_SESSIONS: usize = 500;
-const MAX_SESSION_SECS: i64 = 24 * 3600;
-const CLOCK_SKEW_SECS: i64 = 300;
-const OVERLAP_TOLERANCE_SECS: i64 = 60;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -651,40 +648,12 @@ pub struct Rejected {
     pub reason: String,
 }
 
-fn ts(secs: i64) -> Option<DateTime<Utc>> {
-    Utc.timestamp_opt(secs, 0).single()
-}
-
-/// Validate one uploaded session (spec §9 anti-abuse rules). `Err(reason)` = reject for good.
-pub fn validate_session(
-    s: &fraglink_core::outbox::UploadSession,
-    now: i64,
-) -> Result<Uuid, String> {
-    let id = Uuid::parse_str(&s.id).map_err(|_| "id must be a UUID".to_string())?;
-    if s.ended_at < s.started_at {
-        return Err("ends before it starts".into());
-    }
-    if s.ended_at - s.started_at > MAX_SESSION_SECS {
-        return Err("longer than 24 hours".into());
-    }
-    if s.ended_at > now + CLOCK_SKEW_SECS {
-        return Err("ends in the future".into());
-    }
-    if s.started_at < 946_684_800 {
-        return Err("starts before 2000".into());
-    }
-    if s.duration_s < 0 || s.idle_trimmed_s < 0 {
-        return Err("negative duration".into());
-    }
-    if s.duration_s > s.ended_at - s.started_at + 5 {
-        return Err("active time longer than the session".into());
-    }
-    Ok(id)
-}
-
+/// Session uploads from apps before 0.2.0-dev.14. Hours now come only from live
+/// presence (see `presence::set`), so uploads are acknowledged (the app clears its
+/// queue and stops retrying) and dropped: nothing a client claims is stored.
 async fn upload_sessions(
-    State(st): State<AppState>,
-    a: AuthUser,
+    State(_st): State<AppState>,
+    _a: AuthUser,
     Json(b): Json<UploadBatch>,
 ) -> ApiResult<Json<UploadResp>> {
     if b.sessions.len() > MAX_UPLOAD_SESSIONS {
@@ -693,94 +662,10 @@ async fn upload_sessions(
             format!("Send at most {MAX_UPLOAD_SESSIONS} sessions per request."),
         ));
     }
-    let uid = a.user.id;
-    let now = Utc::now().timestamp();
-    let mut out = UploadResp::default();
-    let mut tx = st.db.begin().await?;
-    // Games first (names are only set on first sight; clients can't rename shared games).
-    let mut game_ids = std::collections::HashMap::new();
-    for g in &b.games {
-        let Some(sid) = hours::server_game_id(uid, &g.id) else {
-            continue;
-        };
-        let name: String = g
-            .name
-            .trim()
-            .chars()
-            .filter(|c| !c.is_control())
-            .take(120)
-            .collect();
-        let name = if name.is_empty() { g.id.clone() } else { name };
-        sqlx::query(
-            "INSERT INTO games(id, name, steam_appid) VALUES($1, $2, $3)
-             ON CONFLICT (id) DO UPDATE SET steam_appid = COALESCE(games.steam_appid, excluded.steam_appid)",
-        )
-        .bind(&sid)
-        .bind(&name)
-        .bind(g.steam_appid.map(|x| x as i32))
-        .execute(&mut *tx)
-        .await?;
-        game_ids.insert(g.id.clone(), sid);
-    }
-    for s in &b.sessions {
-        let reject = |reason: &str| Rejected {
-            id: s.id.clone(),
-            reason: reason.to_string(),
-        };
-        let id = match validate_session(s, now) {
-            Ok(id) => id,
-            Err(r) => {
-                out.rejected.push(reject(&r));
-                continue;
-            }
-        };
-        let Some(gid) = game_ids.get(&s.game_id) else {
-            out.rejected
-                .push(reject("unknown game (include it in `games`)"));
-            continue;
-        };
-        let (start, end) = (ts(s.started_at).unwrap(), ts(s.ended_at).unwrap());
-        let overlap: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM sessions WHERE user_id = $1 AND id <> $2
-               AND started_at < $4 - make_interval(secs => $5) AND ended_at > $3 + make_interval(secs => $5) LIMIT 1",
-        )
-        .bind(uid)
-        .bind(id)
-        .bind(start)
-        .bind(end)
-        .bind(OVERLAP_TOLERANCE_SECS as f64)
-        .fetch_optional(&mut *tx)
-        .await?;
-        if overlap.is_some() {
-            out.rejected.push(reject("overlaps another session"));
-            continue;
-        }
-        let r = sqlx::query(
-            "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, idle_trimmed_s, client_version)
-             VALUES($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (id) DO UPDATE SET game_id = excluded.game_id, started_at = excluded.started_at,
-                 ended_at = excluded.ended_at, duration_s = excluded.duration_s,
-                 idle_trimmed_s = excluded.idle_trimmed_s, client_version = excluded.client_version, uploaded_at = now()
-             WHERE sessions.user_id = excluded.user_id",
-        )
-        .bind(id)
-        .bind(uid)
-        .bind(gid)
-        .bind(start)
-        .bind(end)
-        .bind(s.duration_s.min(i32::MAX as i64) as i32)
-        .bind(s.idle_trimmed_s.min(i32::MAX as i64) as i32)
-        .bind(b.client_version.chars().take(32).collect::<String>())
-        .execute(&mut *tx)
-        .await?;
-        if r.rows_affected() == 1 {
-            out.accepted.push(s.id.clone());
-        } else {
-            out.rejected.push(reject("id belongs to another account"));
-        }
-    }
-    tx.commit().await?;
-    Ok(Json(out))
+    Ok(Json(UploadResp {
+        accepted: b.sessions.iter().map(|s| s.id.clone()).collect(),
+        rejected: vec![],
+    }))
 }
 
 // ------------------------------------------------------------------ stats & ranks
@@ -798,14 +683,24 @@ pub struct GameStat {
     pub last_played_at: Option<DateTime<Utc>>,
 }
 
+/// Per-game totals with the server's names (unknown games: "Unlisted game").
 pub async fn game_stats(st: &AppState, user_id: Uuid) -> ApiResult<Vec<GameStat>> {
-    Ok(sqlx::query_as(
+    let mut rows: Vec<GameStat> = sqlx::query_as(
         "SELECT game_id, name, tracked_min, imported_min, estimated_min, display_min, display_tier, minutes_7d, last_played_at
          FROM user_game_stats WHERE user_id = $1 ORDER BY display_min DESC, estimated_min DESC, name",
     )
     .bind(user_id)
     .fetch_all(&st.db)
-    .await?)
+    .await?;
+    let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
+    let names = crate::names::public_names(st, &ids).await?;
+    for r in &mut rows {
+        r.name = names
+            .get(&r.game_id)
+            .cloned()
+            .unwrap_or_else(|| crate::names::UNLISTED_TITLE.to_string());
+    }
+    Ok(rows)
 }
 
 async fn stats(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
@@ -869,20 +764,8 @@ async fn leaderboard(
 
 // ------------------------------------------------------------------ imported / estimated
 
-fn slug(name: &str) -> String {
-    let mut s = String::new();
-    for c in name.trim().to_lowercase().chars() {
-        if c.is_ascii_alphanumeric() {
-            s.push(c);
-        } else if !s.ends_with('-') {
-            s.push('-');
-        }
-    }
-    s.trim_matches('-').chars().take(60).collect()
-}
-
-/// Find or create the game for hours entries: a known id (signature or existing row),
-/// or a free-text name that becomes the user's own `manual:` game.
+/// Resolve the game for hours entries: an id on our lists (or an existing row), or a
+/// free-text name that exactly matches a listed game. Users can't create or name games.
 async fn ensure_game(
     st: &AppState,
     user_id: Uuid,
@@ -905,6 +788,10 @@ async fn ensure_game(
             let _ = name;
             return Ok(id.to_string());
         }
+        if crate::names::list_name(st, id).is_some() && steam::sigs().get(id).is_none() {
+            crate::names::ensure_game_row(st, id).await?;
+            return Ok(id.to_string());
+        }
         if let Some(sig) = steam::sigs().games().iter().find(|g| g.id == id) {
             sqlx::query("INSERT INTO games(id, name, steam_appid) VALUES($1, $2, $3) ON CONFLICT (id) DO NOTHING")
                 .bind(&sig.id)
@@ -919,27 +806,46 @@ async fn ensure_game(
             "Unknown game id; send game_name instead.",
         ));
     }
-    let name: String = game_name
-        .unwrap_or("")
-        .trim()
-        .chars()
-        .filter(|c| !c.is_control())
-        .take(120)
-        .collect();
-    let sl = slug(&name);
-    if sl.is_empty() {
+    // Free text only picks a game from the server's lists: nobody names (or renames)
+    // games, so there are no private `manual:` games any more (dev.14).
+    let name = game_name.unwrap_or("").trim().to_string();
+    if name.is_empty() {
         return Err(AppError::bad_request(
             "missing_game",
             "Pick a game or type its name.",
         ));
     }
-    let id = hours::server_game_id(user_id, &format!("manual:{sl}")).unwrap();
-    sqlx::query("INSERT INTO games(id, name) VALUES($1, $2) ON CONFLICT (id) DO NOTHING")
-        .bind(&id)
-        .bind(&name)
-        .execute(&st.db)
-        .await?;
-    Ok(id)
+    match known_game_by_name(st, &name) {
+        Some(id) => {
+            crate::names::ensure_game_row(st, &id).await?;
+            Ok(id)
+        }
+        None => Err(AppError::bad_request(
+            "unknown_game",
+            "That game isn't on Fraglink's list yet. Pick it from the list (exact name).",
+        )),
+    }
+}
+
+/// A game id from the server's lists by its exact (case-insensitive) name.
+pub fn known_game_by_name(st: &AppState, name: &str) -> Option<String> {
+    let n = name.trim().to_lowercase();
+    if let Some(g) = steam::sigs()
+        .games()
+        .iter()
+        .find(|g| g.name.to_lowercase() == n)
+    {
+        return Some(g.id.clone());
+    }
+    let b = st.games.current()?;
+    let mut hits: Vec<&String> = b
+        .names
+        .iter()
+        .filter(|(_, v)| v.to_lowercase() == n)
+        .map(|(k, _)| k)
+        .collect();
+    hits.sort();
+    hits.first().map(|s| s.to_string())
 }
 
 fn clean_note(n: Option<String>) -> ApiResult<Option<String>> {

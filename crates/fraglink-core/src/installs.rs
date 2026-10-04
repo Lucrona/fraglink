@@ -38,8 +38,7 @@ pub fn bnet_product(code: &str) -> (Option<&'static str>, Option<&'static str>) 
     let c = strip_locale(&c);
     match c {
         "wow" => (Some("wow"), Some("WoW")),
-        "wow_classic" | "wowc" => (Some("wow_classic"), Some("WoWC")),
-        "wow_classic_era" => (Some("wow_classic_era"), Some("WoWC")),
+        "wow_classic" | "wowc" | "wow_classic_era" => (Some("wow_classic"), Some("WoWC")),
         "diablo3" | "d3" => (Some("diablo3"), Some("D3")),
         "fenris" | "fen" => (Some("diablo4"), Some("Fen")),
         "osi" => (Some("d2r"), Some("OSI")),

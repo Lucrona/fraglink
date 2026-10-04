@@ -267,8 +267,12 @@
   function fmtT(ms) { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; }
   // "World of Warcraft · Frostmourne": the game plus its detail (WoW realm); only the friend
   // side panel and the hover tooltip show the detail, the list row and my status don't
-  const gameLabel = f => (GAMES[f.game] ? GAMES[f.game].name : '') + (f.detail ? ' · ' + f.detail : '');
+  const gameLabel = f => f.game === UNLISTED ? 'A game' : (GAMES[f.game] ? GAMES[f.game].name : '') + (f.detail ? ' · ' + f.detail : '');
+  // A game the server can't name yet (a program someone tagged that isn't on Fraglink's
+  // list): friends just see "Playing a game" (the server sends game_id "unlisted").
+  const UNLISTED = 'unlisted';
   function statusText(f) {
+    if ((f.kind === 'playing' || f.kind === 'fof') && f.game === UNLISTED) return 'Playing a game' + (f.away ? ' (Away)' : '');
     if (f.kind === 'playing' || f.kind === 'fof') return GAMES[f.game].name + (f.away ? ' (Away)' : '');
     if (f.kind === 'online' || f.kind === 'req' || f.kind === 'out') return f.status;
     return 'Offline';
@@ -439,6 +443,7 @@
     h += `<div class="xf-sec s-now"><i class="tri"></i>Now Playing</div>`;
     const np = g.now_playing;
     if (np) { const id = ensureGame(np.game_id, np.name); h += `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(np.name)} · detected via ${esc(String(np.source).replace('_', ' '))}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(np.name)}</span></span><span class="st-live timer" id="session">${fmtT(liveSeconds() * 1000)}</span></div>`; }
+    else if (g.paused) h += `<div class="xf-row st-row fl-muted" title="Hours only count while you're signed in and connected to Fraglink: the server records them as you play."><span class="c-name st-g"><i class="noicon"></i><span class="nm">${realMode() ? 'Offline · hours count again once reconnected' : 'Not tracking · sign in to count hours'}</span></span><span class="st-live"></span></div>`;
     else h += `<div class="xf-row st-row fl-muted"><span class="c-name st-g"><i class="noicon"></i><span class="nm">Not in a game · watching</span></span><span class="st-live"></span></div>`;
     const change = g.last_week_seconds > 0 ? Math.round((g.week_seconds - g.last_week_seconds) / g.last_week_seconds * 100) : null;
     const chg = change === null ? '' : `<em class="${change < 0 ? 'down' : ''}" title="vs all of last week">${change < 0 ? '&#9660;' : '&#9650;'}${Math.abs(change)}%</em>`;
@@ -462,13 +467,14 @@
     if (!sv) return h + `<div class="fl-empty">Server totals unavailable right now, so this shows this PC only.</div>`;
     const local = {}; for (const r of g.top || []) local[r.game_id] = r.total_seconds / 60;
     const rows = (sv.games || []).filter(r => r.display_min > 0 || r.estimated_min > 0).slice(0, 8);
-    if (!rows.length) h += `<div class="fl-empty">Nothing on your account yet. Sessions upload a few minutes after they end.</div>`;
+    if (!rows.length) h += `<div class="fl-empty">Nothing on your account yet. Hours are recorded live while you play.</div>`;
     h += rows.map(r => {
       const id = ensureGame(r.game_id, r.name), est = r.display_min <= 0;
-      // Never show less than this PC already knows (uploads lag a few minutes).
+      // Never show less than this PC already knows (the live session is only saved when it ends).
       const mins = est ? r.estimated_min : Math.max(r.display_min, r.display_tier === 'tracked' ? (local[r.game_id] || 0) : 0);
       const tot = est ? `<span class="est">~${nf(roundEst(Math.floor(mins / 60)))}h</span>` : `${fmtHrs(mins * 60)}h${tierMark(r.display_tier)}`;
-      const tip = `${r.name} · tracked ${nf(r.tracked_min / 60)}h · imported ${nf(r.imported_min / 60)}h · estimated ~${nf(r.estimated_min / 60)}h`;
+      const unl = r.game_id.startsWith('exe:') && r.name === 'Unlisted game';
+      const tip = unl ? 'A program you tagged as a game. Friends see "Playing a game" until it is added to Fraglink\'s game list; its hours stay with it.' : `${r.name} · tracked ${nf(r.tracked_min / 60)}h · imported ${nf(r.imported_min / 60)}h · estimated ~${nf(r.estimated_min / 60)}h`;
       return `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(tip)}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w">${r.minutes_7d ? (r.minutes_7d / 60).toFixed(1) : ''}</span><span class="st-t">${tot}</span></div>`;
     }).join('');
     const o = sv.overall || {};
@@ -942,7 +948,7 @@
     },
     'export': async () => { try { const p = await FLB.exportData(); notice('Export my data', `Saved:<br><code>${p.map(esc).join('</code><br><code>')}</code>`); } catch (e) { toastErr(e); } },
     'open-data': () => FLB.openData().catch(toastErr),
-    'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options. Then your game sessions (game, start, end, time played) are uploaded, and while the app runs your friends see your status and the game you\'re playing now. Friends also see your recent sessions in their Activity Report and your hours this week, unless you turn that off in Options &gt; Connections. <b>Invisible</b> shows you as offline. Program names and paths are never sent.'),
+    'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options. Hours only count while you are signed in and connected: while the app runs it tells the server which game you are in (just the game\'s id) and the server records the time itself. Nothing is tracked or queued offline. Your friends see your status and the game you\'re playing now, named from Fraglink\'s own game list. A program you tagged with <b>This is a game</b> shows as <b>Playing a game</b> to everyone else until it is added to that list; your own name for it stays on this PC. Friends also see your recent sessions in their Activity Report and your hours this week, unless you turn that off in Options &gt; Connections. <b>Invisible</b> shows you as offline. Paths are never sent; the only program names sent are the .exe of a program you tagged as a game.'),
     'add-friend': () => {
       if (!realMode() && TAURI) { state.tab = 'friends'; render(); notice('Add Friend', 'Log in first. Friends need a Fraglink account.'); return; }
       state.tab = 'friends'; state.addFriend = { step: 'search', q: '' }; render();

@@ -25,28 +25,22 @@ fn ids(v: &Value, k: &str) -> Vec<String> {
         .collect()
 }
 
+/// Apps before dev.14 upload their offline queue. Since dev.14 hours only come from
+/// live presence: uploads are acknowledged (so old apps clear their queue and stop
+/// retrying) and nothing is stored.
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn upload_validation_and_idempotency(pool: PgPool) {
+async fn uploads_are_acknowledged_and_dropped(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let web = signup(&app, "s@example.com", "syncer").await;
     let dev = pair(&app, &web).await;
     let t = now() - 3 * 86400;
     let (ok1, ok2) = (uuid(), uuid());
-    let (long, future, notuuid, unknown, backwards, toomuch) =
-        (uuid(), uuid(), "abc".to_string(), uuid(), uuid(), uuid());
-    let mut bad_active = session(&toomuch, "cs2", t + 50000, 100);
-    bad_active["duration_s"] = json!(5000);
     let b = batch(
         games(),
         vec![
             session(&ok1, "cs2", t, 3600),
             session(&ok2, "manual:my-mod", t + 7200, 1800),
-            session(&long, "cs2", t + 10000, 25 * 3600),
-            session(&future, "cs2", now() + 3600, 600),
-            session(&notuuid, "cs2", t + 20000, 60),
-            session(&unknown, "not-listed", t + 30000, 60),
-            json!({ "id": backwards, "game_id": "cs2", "started_at": t + 40000, "ended_at": t + 39000, "duration_s": 0, "idle_trimmed_s": 0 }),
-            bad_active,
+            session(&uuid(), "cs2", now() + 3600, 600),
         ],
     );
     let r = api(
@@ -59,89 +53,18 @@ async fn upload_validation_and_idempotency(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     let v = r.json();
-    assert_eq!(ids(&v, "accepted"), vec![ok1.clone(), ok2.clone()]);
-    let rej = ids(&v, "rejected");
-    assert_eq!(rej.len(), 6, "{v}");
-    let reason = |id: &str| {
-        v["rejected"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|x| x["id"] == id)
-            .unwrap()["reason"]
-            .as_str()
-            .unwrap()
-            .to_string()
-    };
-    assert!(reason(&long).contains("24 hours"));
-    assert!(reason(&future).contains("future"));
-    assert!(reason(&notuuid).contains("UUID"));
-    assert!(reason(&unknown).contains("unknown game"));
-    assert!(reason(&backwards).contains("before it starts"));
-    assert!(reason(&toomuch).contains("active time"));
-
-    // re-upload is idempotent (same ids accepted, no duplicates)
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&dev),
-        Some(batch(games(), vec![session(&ok1, "cs2", t, 3600)])),
-    )
-    .await
-    .json();
-    assert_eq!(ids(&r, "accepted"), vec![ok1.clone()]);
+    assert_eq!(ids(&v, "accepted").len(), 3);
+    assert!(ids(&v, "rejected").is_empty());
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(n, 2);
-
-    // manual game ids are namespaced per user
-    let gid: String = sqlx::query_scalar("SELECT game_id FROM sessions WHERE id = $1::uuid")
-        .bind(&ok2)
+    assert_eq!(n, 0);
+    let g: i64 = sqlx::query_scalar("SELECT count(*) FROM games WHERE id LIKE 'manual:%'")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert!(
-        gid.starts_with("manual:") && gid.ends_with(":my-mod") && gid.len() > 20,
-        "{gid}"
-    );
-
-    // overlapping session from another device is rejected; touching within 60 s is fine
-    let other = pair(&app, &web).await;
-    let (ov, touch) = (uuid(), uuid());
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&other),
-        Some(batch(
-            games(),
-            vec![
-                session(&ov, "cs2", t + 600, 600),
-                session(&touch, "cs2", t + 3600 - 30, 600),
-            ],
-        )),
-    )
-    .await
-    .json();
-    assert_eq!(ids(&r, "accepted"), vec![touch]);
-    assert_eq!(ids(&r, "rejected"), vec![ov]);
-
-    // someone else can't overwrite my session id
-    let web2 = signup(&app, "s2@example.com", "intruder").await;
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&web2),
-        Some(batch(games(), vec![session(&ok1, "cs2", t - 90000, 60)])),
-    )
-    .await
-    .json();
-    assert_eq!(ids(&r, "rejected"), vec![ok1.clone()]);
-
+    assert_eq!(g, 0, "client-sent game names don't create games");
     // no auth, no upload
     assert_eq!(
         api(&app, "POST", "/api/v1/sessions/upload", None, Some(b))
@@ -149,6 +72,27 @@ async fn upload_validation_and_idempotency(pool: PgPool) {
             .status,
         StatusCode::UNAUTHORIZED
     );
+}
+
+/// A session as the server records it from live presence.
+async fn live_session(pool: &PgPool, handle: &str, game: &str, start: i64, secs: i64) {
+    sqlx::query("INSERT INTO games(id, name) VALUES($1, $1) ON CONFLICT (id) DO NOTHING")
+        .bind(game)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source)
+         SELECT gen_random_uuid(), id, $2, to_timestamp($3), to_timestamp($3 + $4), $4::int, 'live'
+         FROM users WHERE handle = $1",
+    )
+    .bind(handle)
+    .bind(game)
+    .bind(start as f64)
+    .bind(secs as f64)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
@@ -176,24 +120,11 @@ async fn tiers_and_rankings(pool: PgPool) {
     let b = signup(&app, "b@example.com", "bob").await;
     let c = signup(&app, "c@example.com", "carol").await;
     let t = now() - 2 * 86400;
+    let _ = (&a, &c);
     // alice: 2h tracked CS2
-    api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&a),
-        Some(batch(games(), vec![session(&uuid(), "cs2", t, 7200)])),
-    )
-    .await;
+    live_session(&pool, "alice", "cs2", t, 7200).await;
     // bob: 1h tracked, plus a huge self-reported counter and a huge estimate
-    api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&b),
-        Some(batch(games(), vec![session(&uuid(), "cs2", t, 3600)])),
-    )
-    .await;
+    live_session(&pool, "bob", "cs2", t, 3600).await;
     let r = api(
         &app,
         "POST",

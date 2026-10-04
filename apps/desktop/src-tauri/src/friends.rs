@@ -82,13 +82,44 @@ pub fn my_presence(app: &AppHandle) -> MyPresence {
         .flatten()
         .as_deref()
         != Some("0");
-    let game = e.now_playing().filter(|_| share).map(|n| GameRef {
-        id: n.game_id,
-        name: n.name,
+    // Only the game id is sent; the server names it from its own list. The game is
+    // sent even when it isn't shared (hidden), because the server records the hours.
+    let tags = if e
+        .now_playing()
+        .is_some_and(|n| n.game_id.starts_with("manual:"))
+    {
+        e.tracker.store.manual_tags().unwrap_or_default()
+    } else {
+        Default::default()
+    };
+    let game = e.now_playing().map(|n| GameRef {
+        id: public_game_id(&n.game_id, &tags),
         started_at: Some(n.started_at),
-        detail: n.detail,
+        detail: n.detail.filter(|_| share),
+        hidden: !share,
     });
     MyPresence { status, game }
+}
+
+/// The id sent for a game: a program the user tagged ("This is a game") goes as
+/// `exe:<program>.exe` so an admin can approve it into the list; its local name
+/// never leaves the PC. Everything else is the list id as detected.
+pub fn public_game_id(
+    id: &str,
+    tags: &std::collections::HashMap<String, (String, String)>,
+) -> String {
+    if id.starts_with("manual:") {
+        let mut exes: Vec<&String> = tags
+            .iter()
+            .filter(|(_, (gid, _))| gid == id)
+            .map(|(exe, _)| exe)
+            .collect();
+        exes.sort();
+        if let Some(exe) = exes.first() {
+            return format!("exe:{}", exe.to_lowercase());
+        }
+    }
+    id.to_string()
 }
 
 /// Toast decision, kept pure for tests.
@@ -214,6 +245,17 @@ pub fn start(app: &AppHandle) {
     }
 }
 
+/// Hours only count while connected (dev.14): the tracker runs only while the
+/// presence socket is up, and the server records the time it sees.
+fn set_live(app: &AppHandle, live: bool) {
+    let st = app.state::<AppState>();
+    let r = st.engine.lock().unwrap().set_live(live);
+    if let Err(e) = r {
+        log::warn!("presence: set_live({live}) failed: {e:#}");
+    }
+    nudge(app);
+}
+
 /// Republish soon (status changed, or a game started/stopped).
 pub fn nudge(app: &AppHandle) {
     app.state::<AppState>()
@@ -296,9 +338,11 @@ fn run(app: &AppHandle) {
         let connected_at = Instant::now();
         log::info!("presence: connected");
         st.friends.connected.store(true, Ordering::SeqCst);
+        set_live(app, true);
         emit(app);
         let reason = session(app, &client, &mut sock);
         st.friends.connected.store(false, Ordering::SeqCst);
+        set_live(app, false);
         emit(app);
         match reason {
             Ok(()) => {
@@ -485,6 +529,18 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tagged_programs_are_sent_by_exe_only() {
+        let mut tags = HashMap::new();
+        tags.insert(
+            "MyIndie.exe".to_string(),
+            ("manual:my-indie".to_string(), "My Indie".to_string()),
+        );
+        assert_eq!(public_game_id("manual:my-indie", &tags), "exe:myindie.exe");
+        assert_eq!(public_game_id("wow", &tags), "wow");
+        assert_eq!(public_game_id("manual:gone", &tags), "manual:gone");
+    }
 
     fn fp(started: bool) -> FriendPresence {
         FriendPresence {

@@ -1,7 +1,8 @@
 //! Optional account sync. Off by default: nothing here touches the network
 //! until the user presses "Sign in to sync" in Options and approves the pairing
-//! code in their browser. Tracking never depends on it; uploads just retry
-//! later when the server can't be reached.
+//! code in their browser. Since 0.2.0-dev.14 hours only count while connected:
+//! the server records them from live presence (friends.rs), so nothing is queued
+//! or uploaded from here. The worker just refreshes the account totals.
 
 use crate::{now, AppState};
 use fraglink_sync::{
@@ -15,8 +16,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 pub const SYNC_EVENT: &str = "fraglink://sync";
-const UPLOAD_EVERY: Duration = Duration::from_secs(5 * 60);
-const BATCH: usize = 200;
+const REFRESH_EVERY: Duration = Duration::from_secs(5 * 60);
 
 pub mod keys {
     pub const SERVER: &str = "sync_server";
@@ -148,14 +148,8 @@ fn emit(app: &AppHandle) {
 
 pub fn view(app: &AppHandle) -> SyncView {
     let st = app.state::<AppState>();
-    let pending = st
-        .engine
-        .lock()
-        .unwrap()
-        .tracker
-        .store
-        .pending_upload_count()
-        .unwrap_or(0);
+    // Nothing waits to upload any more (dev.14: no offline sessions).
+    let pending = 0;
     let pairing = st.sync.pairing.lock().unwrap().clone();
     let pairing_error = st.sync.pairing_error.lock().unwrap().clone();
     SyncView {
@@ -170,7 +164,7 @@ pub fn view(app: &AppHandle) -> SyncView {
     }
 }
 
-/// Called at startup: only starts the upload thread if the user signed in before.
+/// Called at startup: only starts the sync thread if the user signed in before.
 pub fn init(app: &AppHandle) {
     if token(app).is_some() {
         start_worker(app.clone());
@@ -180,7 +174,7 @@ pub fn init(app: &AppHandle) {
     }
 }
 
-/// Ask the worker to upload now (after a session closes, or "Sync now").
+/// Ask the worker to refresh now (after a session closes, or "Sync now").
 pub fn nudge(app: &AppHandle) {
     let st = app.state::<AppState>();
     let tx = st.sync.nudge.lock().unwrap().clone();
@@ -205,15 +199,12 @@ fn start_worker(app: AppHandle) {
             log::info!("sync: worker started");
             while let Some(tok) = token(&app) {
                 let client = Client::new(&server(&app), Some(tok));
-                match upload_pending(&app, &client) {
-                    Ok(n) => {
-                        if n > 0 {
-                            log::info!("sync: uploaded {n} session(s)");
-                        }
+                match client.stats() {
+                    Ok(v) => {
                         set(&app, keys::LAST_OK, &now().to_string());
                         set(&app, keys::LAST_ERROR, "");
-                        let stats = client.stats().ok().map(|v| (now(), v));
-                        *app.state::<AppState>().sync.server_stats.lock().unwrap() = stats;
+                        *app.state::<AppState>().sync.server_stats.lock().unwrap() =
+                            Some((now(), v));
                     }
                     Err(SyncError::Unauthorized) => {
                         log::warn!("sync: the server signed this device out");
@@ -232,7 +223,7 @@ fn start_worker(app: AppHandle) {
                     }
                 }
                 emit(&app);
-                match rx.recv_timeout(UPLOAD_EVERY) {
+                match rx.recv_timeout(REFRESH_EVERY) {
                     Ok(()) => std::thread::sleep(Duration::from_secs(2)), // let a burst of nudges settle
                     Err(RecvTimeoutError::Timeout) => {}
                     Err(RecvTimeoutError::Disconnected) => break,
@@ -250,40 +241,6 @@ fn start_worker(app: AppHandle) {
             .sync
             .worker_running
             .store(false, Ordering::SeqCst);
-    }
-}
-
-/// Upload everything pending in batches. The engine lock is only held while
-/// reading/marking rows, never during network calls.
-fn upload_pending(app: &AppHandle, client: &Client) -> Result<usize, SyncError> {
-    let st = app.state::<AppState>();
-    let mut total = 0;
-    loop {
-        let batch = {
-            let e = st.engine.lock().unwrap();
-            e.tracker
-                .store
-                .pending_upload(BATCH)
-                .map_err(|e| SyncError::Decode(format!("{e:#}")))?
-        };
-        if batch.is_empty() {
-            return Ok(total);
-        }
-        let full = batch.sessions.len() >= BATCH;
-        let res = client.upload(&batch)?;
-        {
-            let e = st.engine.lock().unwrap();
-            let store = &e.tracker.store;
-            let _ = store.mark_uploaded(&res.accepted, now());
-            for r in &res.rejected {
-                log::warn!("sync: server rejected session {}: {}", r.id, r.reason);
-                let _ = store.mark_rejected(&r.id, &r.reason);
-            }
-        }
-        total += res.accepted.len();
-        if !full || res.accepted.is_empty() && res.rejected.is_empty() {
-            return Ok(total);
-        }
     }
 }
 

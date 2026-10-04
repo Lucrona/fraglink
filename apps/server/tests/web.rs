@@ -46,7 +46,17 @@ async fn web_login_dashboard_and_forms(pool: PgPool) {
     assert_eq!(r.status, StatusCode::FORBIDDEN);
 
     // estimate + import via forms; names are HTML-escaped on the dashboard
+    // a name that isn't on the server's list is refused (nobody creates or names games)
     let r = form(&app, "/web/estimate", Some(&cookie), Some(ORIGIN), "game_name=%3Cscript%3Ealert(1)%3C%2Fscript%3E&from_year=2005&to_year=2006&hours_per_week=10").await;
+    assert!(r.location().starts_with("/?err="), "{}", r.location());
+    let r = form(
+        &app,
+        "/web/estimate",
+        Some(&cookie),
+        Some(ORIGIN),
+        "game_name=Counter-Strike+2&from_year=2005&to_year=2006&hours_per_week=10",
+    )
+    .await;
     assert!(r.location().starts_with("/?msg="), "{}", r.location());
     let r = form(
         &app,
@@ -91,8 +101,15 @@ async fn web_login_dashboard_and_forms(pool: PgPool) {
 
     let home = page(&app, "/?msg=%3Cb%3Ehi%3C%2Fb%3E", Some(&cookie)).await;
     assert_eq!(home.status, StatusCode::OK);
-    assert!(home.text.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
     assert!(!home.text.contains("<script>"));
+    let e = page(
+        &app,
+        "/?err=%3Cscript%3Ealert(1)%3C%2Fscript%3E",
+        Some(&cookie),
+    )
+    .await;
+    assert!(e.text.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+    assert!(!e.text.contains("<script>"));
     assert!(home.text.contains("&lt;b&gt;hi&lt;/b&gt;"));
     // "World of Warcraft" matched the known game, shown as Imported, 250.5 h
     assert!(home.text.contains("◆ 250.5h"), "{}", home.text);

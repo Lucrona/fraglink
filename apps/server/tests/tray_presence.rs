@@ -33,13 +33,14 @@ fn quiet(sock: &mut PresenceSocket, ms: u64) {
 }
 
 fn playing(status: &str, game: Option<(&str, &str)>) -> MyPresence {
+    // The second value is what the PC would label the game; it is never sent.
     MyPresence {
         status: status.into(),
-        game: game.map(|(id, name)| GameRef {
+        game: game.map(|(id, _label)| GameRef {
             id: id.into(),
-            name: name.into(),
             started_at: Some(now() - 60),
             detail: None,
+            hidden: false,
         }),
     }
 }
@@ -89,7 +90,7 @@ async fn tray_clients_share_presence(pool: PgPool) {
         });
 
         // bob starts a game: alice sees started=true, then a status change without started
-        sb.send_presence(&playing("online", Some(("steam:570", "Dota 2"))))
+        sb.send_presence(&playing("online", Some(("dota2", "Dota 2"))))
             .unwrap();
         let ev = wait_for(
             &mut sa,
@@ -103,7 +104,7 @@ async fn tray_clients_share_presence(pool: PgPool) {
             (p.handle.as_str(), p.started, p.game_name.as_deref()),
             ("bob_b", true, Some("Dota 2"))
         );
-        sb.send_presence(&playing("away", Some(("steam:570", "Dota 2"))))
+        sb.send_presence(&playing("away", Some(("dota2", "Dota 2"))))
             .unwrap();
         let Event::Presence(p) = wait_for(&mut sa, "away", |e| matches!(e, Event::Presence(_)))
         else {
@@ -111,12 +112,12 @@ async fn tray_clients_share_presence(pool: PgPool) {
         };
         assert_eq!((p.status.as_str(), p.started), ("away", false));
         // resending the same presence is not re-broadcast
-        sb.send_presence(&playing("away", Some(("steam:570", "Dota 2"))))
+        sb.send_presence(&playing("away", Some(("dota2", "Dota 2"))))
             .unwrap();
         quiet(&mut sa, 600);
 
         // invisible: friends see offline, with no game
-        sb.send_presence(&playing("invisible", Some(("steam:570", "Dota 2"))))
+        sb.send_presence(&playing("invisible", Some(("dota2", "Dota 2"))))
             .unwrap();
         let Event::Presence(p) =
             wait_for(&mut sa, "invisible", |e| matches!(e, Event::Presence(_)))
@@ -151,7 +152,7 @@ async fn tray_clients_share_presence(pool: PgPool) {
             bob.friends().unwrap()["incoming"].as_array().unwrap().len(),
             0
         );
-        sb.send_presence(&playing("online", Some(("steam:730", "Counter-Strike 2"))))
+        sb.send_presence(&playing("online", Some(("cs2", "Counter-Strike 2"))))
             .unwrap();
         quiet(&mut sa, 600);
 

@@ -169,13 +169,23 @@ async fn home(
     .bind(uid)
     .fetch_optional(&st.db)
     .await?;
-    let entries: Vec<(Uuid, String, String, String, i32, Option<String>)> = sqlx::query_as(
-        "SELECT h.id, g.name, h.tier, h.source, h.minutes, h.note FROM hours_entries h JOIN games g ON g.id = h.game_id
+    let mut entries: Vec<(Uuid, String, String, String, i32, Option<String>)> = sqlx::query_as(
+        "SELECT h.id, h.game_id, h.tier, h.source, h.minutes, h.note FROM hours_entries h
          WHERE h.user_id = $1 ORDER BY h.created_at DESC",
     )
     .bind(uid)
     .fetch_all(&st.db)
     .await?;
+    {
+        let ids: Vec<String> = entries.iter().map(|e| e.1.clone()).collect();
+        let names = crate::names::public_names(&st, &ids).await?;
+        for e in &mut entries {
+            e.1 = names
+                .get(&e.1)
+                .cloned()
+                .unwrap_or_else(|| crate::names::UNLISTED_TITLE.to_string());
+        }
+    }
     let devices: Vec<(Uuid, Option<String>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
         "SELECT id, device_name, last_used_at FROM auth_tokens WHERE user_id = $1 AND kind = 'device' AND revoked_at IS NULL ORDER BY created_at DESC",
     )
@@ -666,7 +676,7 @@ async fn web_estimate(
         return e.into_response();
     }
     let req = api::EstimateReq {
-        game_id: known_game_id(&f.game_name),
+        game_id: api::known_game_by_name(&st, &f.game_name),
         game_name: Some(f.game_name.clone()),
         eras: vec![Era {
             from_year: f.from_year,
@@ -714,7 +724,7 @@ async fn web_import(
         return e.into_response();
     }
     let req = api::ImportReq {
-        game_id: known_game_id(&f.game_name),
+        game_id: api::known_game_by_name(&st, &f.game_name),
         game_name: Some(f.game_name.clone()),
         minutes: (f.hours * 60.0).round() as i64,
         source: f.source,
@@ -731,15 +741,6 @@ async fn web_import(
 }
 
 /// Typed game names that match a known game (case-insensitive) use its id.
-fn known_game_id(name: &str) -> Option<String> {
-    let n = name.trim().to_lowercase();
-    steam::sigs()
-        .games()
-        .iter()
-        .find(|g| g.name.to_lowercase() == n)
-        .map(|g| g.id.clone())
-}
-
 async fn web_delete_hours(
     State(st): State<AppState>,
     headers: HeaderMap,

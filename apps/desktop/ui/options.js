@@ -174,13 +174,13 @@
     const err = s.pairing_error || s.last_error;
     let h;
     if (s.signed_in) {
-      h = `Signed in as <b>${esc(s.user || '?')}</b> on <code>${esc(s.server)}</code><br>${s.pending} session(s) waiting · last sync ${esc(when(s.last_ok))}
+      h = `Signed in as <b>${esc(s.user || '?')}</b> on <code>${esc(s.server)}</code><br>Hours count while you're connected · last sync ${esc(when(s.last_ok))}
         <div class="btns"><button type="button" data-do="sync-now">Sync now</button><button type="button" data-do="sync-signout">Sign out</button></div>`;
     } else if (s.pairing) {
       h = `In your browser, check the code and approve:<div class="code">${esc(s.pairing.user_code)}</div><span class="hint">Browser didn't open? Go to <code>${esc(s.pairing.verification_uri)}</code></span>
         <div class="btns"><button type="button" data-do="sync-cancel">Cancel</button></div>`;
     } else {
-      h = `Off: everything stays on this PC. Sign in to back up your sessions and see your friends.
+      h = `Off: nothing is tracked. Sign in to count your hours and see your friends.
         <input id="sync-server" maxlength="200" value="${esc(s.server)}" title="Server address" />
         <div class="btns"><button type="button" data-do="sync-signin">Sign in</button></div>`;
     }

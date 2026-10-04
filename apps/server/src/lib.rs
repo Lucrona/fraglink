@@ -12,6 +12,7 @@ pub mod error;
 pub mod friends;
 pub mod games;
 pub mod hours;
+pub mod names;
 pub mod presence;
 pub mod steam;
 pub mod web;

@@ -20,9 +20,12 @@ async fn estimates_replace_and_validate(pool: PgPool) {
         !v["warnings"].as_array().unwrap().is_empty(),
         "overlapping 2007 and >40 h/week multi-year should warn"
     );
-    // "World of Warcraft" typed by name maps to the user's own manual game unless a game_id is sent
+    // a typed name picks the game from the server's list; nobody creates or names games
     let gid = v["game_id"].as_str().unwrap().to_string();
-    assert!(gid.starts_with("manual:"));
+    assert_eq!(gid, "wow");
+    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_name": "My Totally Made Up Game", "eras": [{ "from_year": 2010, "to_year": 2010, "hours_per_week": 1 }] }))).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
+    assert_eq!(r.json()["error"], "unknown_game", "{}", r.text);
 
     // saving again replaces (one estimate per game)
     let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_id": gid, "eras": [{ "from_year": 2010, "to_year": 2010, "hours_per_week": 10 }] }))).await;

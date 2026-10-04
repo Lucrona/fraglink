@@ -1,12 +1,10 @@
-//! End to end: the desktop's local store -> outbox -> fraglink-sync client ->
-//! a real server on a random port -> Postgres. Exactly what the tray app does.
+//! End to end: the desktop's fraglink-sync client pairing against a real server
+//! on a random port, and old-style session uploads being dropped.
 mod common;
 use common::*;
-use fraglink_core::store::Store;
 use fraglink_sync::{Client, PollResult, SyncError};
 use serde_json::json;
 use sqlx::PgPool;
-use std::collections::BTreeMap;
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn desktop_pairs_and_syncs(pool: PgPool) {
@@ -50,61 +48,33 @@ async fn desktop_pairs_and_syncs(pool: PgPool) {
     .await
     .unwrap();
 
-    // 2) local sessions -> outbox -> upload
-    let b = base.clone();
-    let tk = token.clone();
-    let pending_after = tokio::task::spawn_blocking(move || {
-        let dir = tempfile::tempdir().unwrap();
-        let mut s = Store::open(&dir.path().join("fraglink.db")).unwrap();
-        s.upsert_game("cs2", "Counter-Strike 2", "signature", Some(730), 0)
-            .unwrap();
-        let t = chrono::Utc::now().timestamp() - 86400;
-        let d = BTreeMap::new();
-        let u1 = uuid();
-        let a = s
-            .open_session(&u1, "cs2", t, "signature", Some("cs2.exe"), "0.2.0")
-            .unwrap();
-        s.close_session(a, "cs2", t + 3600, 3000, 600, &d).unwrap();
-        let u2 = uuid();
-        let b2 = s
-            .open_session(&u2, "cs2", t + 7200, "signature", Some("cs2.exe"), "0.2.0")
-            .unwrap();
-        s.close_session(b2, "cs2", t + 7200 + 90000, 90000, 0, &d)
-            .unwrap(); // > 24 h: server rejects
-        assert_eq!(s.pending_upload_count().unwrap(), 2);
-
-        let c = Client::new(&b, Some(tk));
-        assert_eq!(c.me().unwrap().handle, "desk");
-        let batch = s.pending_upload(100).unwrap();
-        let body = serde_json::to_string(&batch).unwrap();
-        assert!(!body.contains("cs2.exe"), "exe names never leave the PC");
-        let res = c.upload(&batch).unwrap();
-        assert_eq!(res.accepted, vec![u1.clone()]);
-        assert_eq!(res.rejected.len(), 1);
-        s.mark_uploaded(&res.accepted, chrono::Utc::now().timestamp())
-            .unwrap();
-        for r in &res.rejected {
-            s.mark_rejected(&r.id, &r.reason).unwrap();
-        }
-        // re-running the loop sends nothing
-        let again = s.pending_upload(100).unwrap();
-        assert!(again.is_empty());
-        s.pending_upload_count().unwrap()
-    })
-    .await
-    .unwrap();
-    assert_eq!(pending_after, 0);
-
+    // 2) apps before dev.14 still upload their offline queue: acknowledged (so they
+    // stop retrying) but nothing is stored. Hours come only from live presence.
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/sessions/upload",
+        Some(&token),
+        Some(batch(
+            json!([{ "id": "cs2", "name": "Counter-Strike 2", "steam_appid": 730 }]),
+            vec![session(&uuid(), "cs2", now() - 86400, 3600)],
+        )),
+    )
+    .await;
+    assert_eq!(r.status, axum::http::StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["accepted"].as_array().unwrap().len(), 1);
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(n, 1);
-    let dur: i32 = sqlx::query_scalar("SELECT duration_s FROM sessions")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(dur, 3000);
+    assert_eq!(n, 0, "client-submitted sessions are never stored");
+    let b = base.clone();
+    let tk = token.clone();
+    tokio::task::spawn_blocking(move || {
+        assert_eq!(Client::new(&b, Some(tk)).me().unwrap().handle, "desk");
+    })
+    .await
+    .unwrap();
 
     // 3) signing out revokes the device token
     let b = base.clone();

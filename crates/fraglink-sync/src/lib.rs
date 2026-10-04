@@ -6,7 +6,6 @@
 pub mod presence;
 pub mod secret;
 
-use fraglink_core::outbox::UploadBatch;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -100,18 +99,6 @@ pub enum PollResult {
     },
     /// Code expired or already used: start pairing again.
     Expired,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct UploadResult {
-    pub accepted: Vec<String>,
-    pub rejected: Vec<RejectedSession>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RejectedSession {
-    pub id: String,
-    pub reason: String,
 }
 
 #[derive(Clone)]
@@ -368,11 +355,6 @@ impl Client {
             "/api/v1/me/privacy",
             Some(serde_json::json!({ "share_activity": on })),
         )
-    }
-
-    pub fn upload(&self, batch: &UploadBatch) -> Result<UploadResult, SyncError> {
-        let body = serde_json::to_value(batch).map_err(|e| SyncError::Decode(e.to_string()))?;
-        self.call("POST", "/api/v1/sessions/upload", Some(body))
     }
 
     /// Server-side per-game totals by trust tier (`GET /api/v1/stats`).

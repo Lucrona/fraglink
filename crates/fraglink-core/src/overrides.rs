@@ -1,7 +1,8 @@
 //! Fraglink's own detection rules, checked before every other list (first match
-//! wins). They split games that share an exe by install folder: World of
-//! Warcraft's `_retail_` / `_classic_` / `_classic_beta_` (WoW: Forever) / `_ptr_`
-//! flavours, and Star Citizen's LIVE / PTU / EPTU channels.
+//! wins). They split or merge games that share an exe by install folder: Star
+//! Citizen's LIVE / PTU / EPTU channels are one game. (World of Warcraft follows
+//! Discord's list as-is since 0.2.0-dev.14.) The server also appends the games an
+//! admin approved from "Track this as a game?" answers (`exe:<name>.exe` ids).
 //!
 //! Bundled from `packages/signatures/overrides.json`; the server can publish a
 //! newer copy (`GET /api/v1/games/overrides`) so a renamed beta exe can be fixed
@@ -98,62 +99,23 @@ mod tests {
     }
 
     #[test]
-    fn wow_flavours_by_folder() {
+    fn wow_is_left_to_the_signatures_and_discord_list() {
+        // 0.2.0-dev.14: WoW follows Discord's list as-is, no folder rules of our own.
         let o = Overrides::builtin();
-        let name =
-            |exe: &str, path: &str| o.match_process(exe, Some(path)).map(|r| r.name.as_str());
-        // the user's real install
-        assert_eq!(
-            name(
-                "WowB.exe",
-                r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe"
-            ),
-            Some("World of Warcraft: Forever")
-        );
-        assert_eq!(
-            name(
-                "Wow.exe",
-                r"E:\Battle.net Games\World of Warcraft\_retail_\Wow.exe"
-            ),
-            Some("World of Warcraft")
-        );
-        let base = r"C:\Program Files (x86)\World of Warcraft";
-        let cases = [
-            ("_classic_", "WowClassic.exe", "wow_classic"),
-            ("_classic_era_", "WowClassic.exe", "wow_classic_era"),
+        for (exe, p) in [
             (
-                "_classic_era_ptr_",
-                "WowClassicT.exe",
-                "wow_classic_era_ptr",
+                "Wow.exe",
+                r"E:\Battle.net Games\World of Warcraft\_retail_\Wow.exe",
             ),
-            ("_classic_ptr_", "WowClassicT.exe", "wow_classic_ptr"),
-            ("_anniversary_", "WowClassic.exe", "wow_anniversary"),
-            ("_ptr_", "WowT.exe", "wow_ptr"),
-            ("_xptr_", "WowT.exe", "wow_ptr"),
-            ("_beta_", "WowB.exe", "wow_beta"),
-            ("_beta_", "Wow.exe", "wow_beta"),
-            ("_retail_", "Wow-64.exe", "wow"),
-            ("_classic_beta_", "WowClassicB.exe", "wow_forever"),
-        ];
-        for (dir, exe, want) in cases {
-            let p = format!(r"{base}\{dir}\{exe}");
-            assert_eq!(id(exe, &p).map(|x| x.0).as_deref(), Some(want), "{p}");
+            (
+                "WowB.exe",
+                r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe",
+            ),
+            ("WowClassic.exe", r"C:\WoW\_classic_era_\WowClassic.exe"),
+            ("WowT.exe", r"C:\WoW\_ptr_\WowT.exe"),
+        ] {
+            assert!(o.match_process(exe, Some(p)).is_none(), "{p}");
         }
-        // WowB.exe anywhere else is still WoW: Forever
-        assert_eq!(
-            id("WowB.exe", r"D:\Games\WoWForever\WowB.exe").unwrap().0,
-            "wow_forever"
-        );
-        assert_eq!(o.match_process("WowB.exe", None).unwrap().id, "wow_forever");
-        // a plain Wow.exe outside a flavour folder is left to the other lists
-        assert!(id("Wow.exe", r"C:\Games\Wow.exe").is_none());
-        // other programs in the WoW folders don't match
-        assert!(id(
-            "WowVoiceProxy.exe",
-            &format!(r"{base}\_retail_\WowVoiceProxy.exe")
-        )
-        .is_none());
-        assert!(id("Overwatch.exe", r"C:\Overwatch\_retail_\Overwatch.exe").is_none());
     }
 
     #[test]

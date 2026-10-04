@@ -41,11 +41,20 @@ pub struct Built {
     pub gz: Arc<Vec<u8>>,
     pub games: usize,
     pub updated: String,
+    /// Fraglink id (slug) -> Discord's name, for server-side display names.
+    pub names: Arc<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Default)]
 pub struct GameLists {
     built: RwLock<Option<Built>>,
+    /// Override rule names (id -> name), re-read from disk at most every 5 minutes.
+    override_names: RwLock<
+        Option<(
+            std::time::Instant,
+            Arc<std::collections::HashMap<String, String>>,
+        )>,
+    >,
 }
 
 fn etag_of(b: &[u8]) -> String {
@@ -61,12 +70,22 @@ fn gzip(b: &[u8]) -> std::io::Result<Vec<u8>> {
 }
 
 fn built_from_json(json: Vec<u8>, games: usize, updated: String) -> std::io::Result<Built> {
+    // DetectableDb drops public test builds, so they never get a display name either.
+    let names = DetectableDb::from_json(&json)
+        .map(|db| {
+            db.games()
+                .iter()
+                .map(|g| (g.slug.clone(), g.name.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
     Ok(Built {
         etag: etag_of(&json),
         gz: Arc::new(gzip(&json)?),
         json: Arc::new(json),
         games,
         updated,
+        names: Arc::new(names),
     })
 }
 
@@ -92,6 +111,33 @@ impl GameLists {
 
     fn set(&self, b: Built) {
         *self.built.write().unwrap() = Some(b);
+    }
+
+    /// Discord's name for a Fraglink game id, if it is on the detectable list.
+    pub fn detectable_name(&self, id: &str) -> Option<String> {
+        self.current().and_then(|b| b.names.get(id).cloned())
+    }
+
+    /// Name of an override rule (`star_citizen`), from the server's file or the bundled one.
+    pub fn override_name(&self, data: &Path, id: &str) -> Option<String> {
+        let fresh = |t: &std::time::Instant| t.elapsed() < Duration::from_secs(300);
+        if let Some((t, m)) = self.override_names.read().unwrap().as_ref() {
+            if fresh(t) {
+                return m.get(id).cloned();
+            }
+        }
+        let m: std::collections::HashMap<String, String> =
+            Overrides::from_json(&overrides_json(data))
+                .map(|o| {
+                    o.rules()
+                        .iter()
+                        .map(|r| (r.id.clone(), r.name.clone()))
+                        .collect()
+                })
+                .unwrap_or_default();
+        let m = Arc::new(m);
+        *self.override_names.write().unwrap() = Some((std::time::Instant::now(), m.clone()));
+        m.get(id).cloned()
     }
 }
 
@@ -257,11 +303,43 @@ pub fn overrides_json(data: &Path) -> String {
     overrides::BUILTIN_JSON.to_string()
 }
 
+/// The override file plus the games an admin approved from "Track this as a game?"
+/// answers (`exe:<name>.exe` -> approved name), so every client detects them.
+pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
+    let s = overrides_json(&st.cfg.data_dir);
+    let approved: Vec<(String, String)> =
+        sqlx::query_as("SELECT id, name FROM games WHERE verified AND id LIKE 'exe:%' ORDER BY id")
+            .fetch_all(&st.db)
+            .await?;
+    if approved.is_empty() {
+        return Ok(s);
+    }
+    let mut f: overrides::OverrideFile = match serde_json::from_str(&s) {
+        Ok(f) => f,
+        Err(_) => return Ok(s),
+    };
+    for (id, name) in approved {
+        let exe = id.trim_start_matches("exe:").to_string();
+        if !valid_exe(&exe) || f.rules.iter().any(|r| r.id == id) {
+            continue;
+        }
+        f.rules.push(overrides::Rule {
+            id,
+            name,
+            exes: vec![exe],
+            paths: vec![],
+            channel: None,
+            note: Some("approved game".into()),
+        });
+    }
+    Ok(serde_json::to_string_pretty(&f).unwrap_or(s))
+}
+
 pub async fn overrides(
     State(st): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<Response<Body>> {
-    let s = overrides_json(&st.cfg.data_dir);
+    let s = overrides_with_approved(&st).await?;
     Ok(respond(
         &headers,
         &etag_of(s.as_bytes()),

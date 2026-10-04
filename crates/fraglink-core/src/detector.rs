@@ -360,7 +360,7 @@ mod tests {
         let found = d.detect(&procs, None);
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].game_id, "wow");
-        assert_eq!(found[0].source, DetectSource::Override);
+        assert_eq!(found[0].source, DetectSource::Signature);
         assert_eq!(found[1].game_id, "steam:999999");
         assert_eq!(found[1].name, "Tiny Indie Game");
         assert_eq!(found[1].source, DetectSource::SteamLibrary);
@@ -544,71 +544,65 @@ mod tests {
         assert_eq!(d.detect(&procs, None).len(), 1);
     }
 
-    /// The paths from the 0.2.0-dev.12 brief, against the real bundled lists.
+    /// WoW follows Discord's list as-is (0.2.0-dev.14), against the real bundled lists.
     #[test]
     fn wow_flavours_and_star_citizen_real_paths() {
         let d = det();
         let one = |name: &str, path: &str| {
             let f = d.detect(&[p(1, name, Some(path))], None);
             assert_eq!(f.len(), 1, "{path}: {f:?}");
-            (f[0].game_id.clone(), f[0].name.clone(), f[0].source)
+            (f[0].game_id.clone(), f[0].name.clone())
         };
-        assert_eq!(
-            one(
+        let wow = r"E:\Battle.net Games\World of Warcraft";
+        let cases = [
+            ("_retail_", "Wow.exe", "wow", "World of Warcraft"),
+            ("_ptr_", "Wow.exe", "wow", "World of Warcraft"),
+            ("_beta_", "Wow-64.exe", "wow", "World of Warcraft"),
+            (
+                "_classic_",
+                "WowClassic.exe",
+                "wow_classic",
+                "World of Warcraft Classic",
+            ),
+            (
+                "_classic_era_",
+                "WowClassic.exe",
+                "wow_classic",
+                "World of Warcraft Classic",
+            ),
+            (
+                "_anniversary_",
+                "WowClassic.exe",
+                "wow_classic",
+                "World of Warcraft Classic",
+            ),
+            (
+                "_classic_beta_",
                 "WowB.exe",
-                r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe"
+                "wow_forever",
+                "World of Warcraft: Forever",
             ),
-            (
-                "wow_forever".into(),
-                "World of Warcraft: Forever".into(),
-                DetectSource::Override
+        ];
+        for (dir, exe, id, name) in cases {
+            assert_eq!(
+                one(exe, &format!(r"{wow}\{dir}\{exe}")),
+                (id.to_string(), name.to_string()),
+                "{dir}"
+            );
+        }
+        // World of Warcraft Public Test (WowT.exe) is not tracked
+        assert!(d
+            .detect(
+                &[p(1, "WowT.exe", Some(&format!(r"{wow}\_ptr_\WowT.exe")))],
+                None
             )
-        );
-        assert_eq!(
-            one(
-                "Wow.exe",
-                r"E:\Battle.net Games\World of Warcraft\_retail_\Wow.exe"
-            ),
-            (
-                "wow".into(),
-                "World of Warcraft".into(),
-                DetectSource::Override
-            )
-        );
-        assert_eq!(
-            one(
-                "WowClassic.exe",
-                r"E:\Battle.net Games\World of Warcraft\_classic_era_\WowClassic.exe"
-            )
-            .0,
-            "wow_classic_era"
-        );
-        assert_eq!(
-            one(
-                "WowClassic.exe",
-                r"E:\Battle.net Games\World of Warcraft\_classic_\WowClassic.exe"
-            )
-            .0,
-            "wow_classic"
-        );
-        assert_eq!(
-            one(
-                "WowT.exe",
-                r"E:\Battle.net Games\World of Warcraft\_ptr_\WowT.exe"
-            )
-            .0,
-            "wow_ptr"
-        );
+            .is_empty());
         assert_eq!(
             one(
                 "StarCitizen.exe",
                 r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE\Bin64\StarCitizen.exe"
             ),
-            (
-                "star_citizen".into(),
-                "Star Citizen".into(),
-                DetectSource::Override
-            )
+            ("star_citizen".into(), "Star Citizen".into())
         );
         assert_eq!(
             one(

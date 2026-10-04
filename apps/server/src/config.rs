@@ -24,6 +24,9 @@ pub struct Config {
     pub data_dir: std::path::PathBuf,
     /// `FRAGLINK_DETECTABLE_URL` (default Discord's public detectable list).
     pub detectable_url: String,
+    /// `STEAM_STORE_URL` (default `https://store.steampowered.com`, `off` disables):
+    /// names for Steam games that aren't on our lists.
+    pub steam_store_url: Option<String>,
 }
 
 impl Config {
@@ -56,6 +59,11 @@ impl Config {
                 .into(),
             detectable_url: var("FRAGLINK_DETECTABLE_URL")
                 .unwrap_or_else(|| crate::games::DISCORD_URL.into()),
+            steam_store_url: match var("STEAM_STORE_URL").as_deref() {
+                Some("off") => None,
+                Some(u) => Some(u.trim_end_matches('/').to_string()),
+                None => Some("https://store.steampowered.com".into()),
+            },
         })
     }
 
@@ -72,6 +80,7 @@ impl Config {
             xfire_icons_dir: None,
             data_dir: std::env::temp_dir().join("fraglink-server-tests"),
             detectable_url: "http://127.0.0.1:9/detectable".into(),
+            steam_store_url: None,
         }
     }
 

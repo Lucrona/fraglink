@@ -214,13 +214,18 @@ mod tests {
     #[test]
     fn path_hints_disambiguate_shared_exes() {
         let d = db();
+        // WoW Classic follows Discord's list: every WowClassic.exe is one game
         let era = d
             .match_process(
                 "WowClassic.exe",
                 Some(r"C:\Program Files (x86)\World of Warcraft\_classic_era_\WowClassic.exe"),
             )
             .unwrap();
-        assert_eq!(era.id, "wow_classic_era");
+        assert_eq!(era.id, "wow_classic");
+        // public test builds aren't tracked
+        assert!(d
+            .match_process("WowT.exe", Some(r"C:\WoW\_ptr_\WowT.exe"))
+            .is_none());
         let prog = d
             .match_process(
                 "WowClassic.exe",

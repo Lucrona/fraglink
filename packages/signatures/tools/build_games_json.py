@@ -17,16 +17,12 @@ def g(id, name, exes=(), appids=(), platform="", U=False, path_exes=(), hints=()
                   uncertain=U, **({"note": note} if note else {})))
 
 # ---- Blizzard / Battle.net
-# WoW flavours are split by install folder; overrides.json (checked first) has the same rules
-g("wow", "World of Warcraft", ["Wow.exe", "Wow-64.exe"], platform="battlenet", hints=["/_retail_/"])
-g("wow_classic", "WoW Classic", ["WowClassic.exe", "WowClassic-64.exe"], platform="battlenet", hints=["/_classic_/"])
-g("wow_classic_era", "WoW Classic Era", path_exes=["WowClassic.exe", "WowClassic-64.exe"], platform="battlenet", hints=["/_classic_era_/"])
-g("wow_forever", "World of Warcraft: Forever", ["WowB.exe", "WowB-64.exe"], platform="battlenet", hints=["/_classic_beta_/"])
-g("wow_ptr", "WoW PTR", ["WowT.exe", "WowT-64.exe"], platform="battlenet", path_exes=["Wow.exe", "Wow-64.exe"], hints=["/_ptr_/", "/_xptr_/"])
-g("wow_beta", "WoW Beta", platform="battlenet", path_exes=["Wow.exe", "Wow-64.exe"], hints=["/_beta_/"])
-g("wow_classic_ptr", "WoW Classic PTR", ["WowClassicT.exe"], platform="battlenet", path_exes=["WowClassic.exe"], hints=["/_classic_ptr_/"])
-g("wow_classic_era_ptr", "WoW Classic Era PTR", platform="battlenet", path_exes=["WowClassic.exe", "WowClassicT.exe"], hints=["/_classic_era_ptr_/"])
-g("wow_anniversary", "WoW Classic Anniversary", platform="battlenet", path_exes=["WowClassic.exe"], hints=["/_anniversary_/"])
+# WoW follows Discord's detectable list as-is (0.2.0-dev.14): World of Warcraft (_retail_ /
+# _ptr_ / _beta_ folders), World of Warcraft Classic (WowClassic.exe), World of Warcraft: Forever
+# (WowB.exe). Public test builds (WowT.exe, WowClassicT.exe) are ignored, not tracked.
+g("wow", "World of Warcraft", ["Wow.exe", "Wow-64.exe"], platform="battlenet", hints=["/_retail_/", "/_ptr_/", "/_beta_/"])
+g("wow_classic", "World of Warcraft Classic", ["WowClassic.exe", "WowClassic-64.exe"], platform="battlenet")
+g("wow_forever", "World of Warcraft: Forever", ["WowB.exe", "WowB-64.exe"], platform="battlenet")
 g("star_citizen", "Star Citizen", ["StarCitizen.exe"], platform="rsi")
 g("overwatch2", "Overwatch 2", ["Overwatch.exe"], [2357570], "battlenet")
 g("diablo4", "Diablo IV", ["Diablo IV.exe"], [2344520], "battlenet")
@@ -212,6 +208,7 @@ g("eu4", "Europa Universalis IV", ["eu4.exe"], [236850], "steam")
 G = [x for x in G if x and x["name"]]
 
 IGNORE = [
+    "WowT.exe", "WowT-64.exe", "WowClassicT.exe", "WowClassicT-64.exe",
   # launchers / clients / overlays
   "steam.exe", "steamwebhelper.exe", "steamservice.exe", "gameoverlayui.exe", "gameoverlayui64.exe",
   "EpicGamesLauncher.exe", "EpicWebHelper.exe", "EOSOverlayRenderer-Win64-Shipping.exe",
@@ -250,7 +247,7 @@ NON_GAME = [
   "bash", "zsh", "sh", "systemd", "sshd", "node", "cargo", "rustc", "python3", "Xorg", "Xvfb",
 ]
 
-out = dict(schema=1, version="2026.10.04.1",
+out = dict(schema=1, version="2026.10.05.1",
            note="Fraglink seed signatures. Hand-curated exe names + Steam app ids only; uncertain=true means unverified. Not derived from Discord's detectable list.",
            ignore_exes=sorted(set(IGNORE), key=str.lower), non_game_exes=sorted(set(NON_GAME), key=str.lower), games=G)
 p = pathlib.Path(__file__).resolve().parent.parent / "games.json"

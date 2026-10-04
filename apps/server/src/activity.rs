@@ -77,8 +77,8 @@ pub async fn recent(st: &AppState, me: Uuid) -> ApiResult<Vec<ActivityItem>> {
     }
     let since = Utc::now() - Duration::days(ACTIVITY_DAYS);
     let rows: Vec<SessRow> = sqlx::query_as(
-        "SELECT u.handle, u.display_name, s.game_id, g.name, s.ended_at, s.duration_s::bigint
-         FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN games g ON g.id = s.game_id
+        "SELECT u.handle, u.display_name, s.game_id, NULL::text, s.ended_at, s.duration_s::bigint
+         FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.user_id = ANY($1) AND u.share_activity AND u.deleted_at IS NULL
            AND s.ended_at >= $2 AND s.duration_s >= 60
          ORDER BY s.ended_at DESC LIMIT $3",
@@ -88,7 +88,16 @@ pub async fn recent(st: &AppState, me: Uuid) -> ApiResult<Vec<ActivityItem>> {
     .bind(ACTIVITY_LIMIT)
     .fetch_all(&st.db)
     .await?;
-    for (handle, name, gid, gname, ended, secs) in rows {
+    let gids: Vec<String> = rows.iter().filter_map(|r| r.2.clone()).collect();
+    let names = crate::names::public_names(st, &gids).await?;
+    for (handle, name, gid, _, ended, secs) in rows {
+        let (gid, gname) = match gid {
+            Some(g) => {
+                let (i, n) = crate::names::public_pair(&g, &names);
+                (Some(i), Some(n))
+            }
+            None => (None, None),
+        };
         out.push(ActivityItem {
             kind: "played",
             handle,
@@ -148,8 +157,8 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
         };
         week = Some(secs(week_start(now)).await?.unwrap_or(0));
         d7 = Some(secs(now - Duration::days(7)).await?.unwrap_or(0));
-        top = sqlx::query_scalar(
-            "SELECT coalesce(g.name, s.game_id) FROM sessions s LEFT JOIN games g ON g.id = s.game_id
+        let top_id: Option<String> = sqlx::query_scalar(
+            "SELECT s.game_id FROM sessions s
              WHERE s.user_id = $1 AND s.ended_at > $2
              GROUP BY 1 ORDER BY sum(s.duration_s) DESC LIMIT 1",
         )
@@ -157,6 +166,13 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
         .bind(now - Duration::days(7))
         .fetch_optional(&st.db)
         .await?;
+        if let Some(id) = top_id {
+            top = Some(
+                crate::names::public_name(st, &id)
+                    .await?
+                    .unwrap_or_else(|| crate::names::UNLISTED_TITLE.to_string()),
+            );
+        }
     }
     Ok(FriendSummary {
         handle: p.handle,

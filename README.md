@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
 <p align="center"><b>PLAY. CONNECT. TRACK.</b><br>A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
-<sub>Early development · current pre-release <b>0.2.0-dev.13</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
+<sub>Early development · current pre-release <b>0.2.0-dev.14</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 
@@ -20,11 +20,11 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 <br><sub>The main window with the side panel (Activity Report and installed games, green update arrow in the title bar), and with a friend selected. Browser preview of the dev.11 UI with sample data.</sub>
 </p>
 
-## What works today (0.2.0-dev.13)
+## What works today (0.2.0-dev.14)
 
-- **Game detection like Discord's:** about 10,000 Windows games from Discord's public detectable list (refreshed daily through the Fraglink server, with a bundled copy for offline use), Fraglink's own signatures and folder rules (every WoW version and Star Citizen channel), installed Steam games, and a "Track <name> as a game?" question for an unlisted program that runs full screen for 5 minutes. Read-only: no injection, no memory reading.
+- **Game detection like Discord's:** about 10,000 Windows games from Discord's public detectable list (refreshed daily through the Fraglink server, with a bundled copy for offline use; WoW follows Discord's entries and Public Test builds are skipped), Fraglink's own signatures and folder rules (Star Citizen channels), installed Steam games, and a "Track <name> as a game?" question for an unlisted program that runs full screen for 5 minutes. Read-only: no injection, no memory reading.
 - **WoW realm:** friends see the realm you're on ("World of Warcraft · Frostmourne") in their side panel and your hover tooltip.
-- **Honest hours:** hours count all the time a game is running, like Steam: no idle trimming and no minimum session length. Sessions survive crashes. Sessions sync to your account when you're signed in and stay local otherwise.
+- **Honest hours:** hours count all the time a game is running, like Steam: no idle trimming and no minimum session length. Hours count while you're signed in and connected: the server records them live, so there's nothing to upload and nothing is tracked offline. Game names come from the server's list; a game you tagged yourself shows to friends as "Playing a game" until it's approved into the list.
 - **Accounts in the client:** log in with username (or email) and password, or **Create Account** right in the main window. Change your email, password or display name, or delete your account, from Options › Account.
 - **Friends:** search users and send requests, accept or decline, remove or block. Live status (Online / Away / Invisible) and the game each friend is playing, how long they've been playing and their hours this week. Friend tooltips, native right-click menus, sign-on toasts.
 - **Side panel:** an **Activity Report** of what your friends played recently, your installed games with **Launch** links, or details of the friend you click (click empty space or press Esc to go back). Drag its edge to make it wider. Friends can turn off sharing their hours in Options › Privacy.

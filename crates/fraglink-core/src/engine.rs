@@ -197,11 +197,24 @@ impl Engine {
         // Like Steam, every session counts: since 0.2.0-dev.9 there's no idle cutoff
         // and since dev.10 no minimum length and no "pause tracking". The old
         // idle_threshold_min, min_session_min and paused settings are ignored.
+        // (The tracker's pause is now only "offline", see `set_live`.)
         self.tracker.cfg.min_session_s = 0;
-        if self.tracker.is_paused() {
-            self.tracker.set_paused(false)?;
-        }
         Ok(())
+    }
+
+    /// Since 0.2.0-dev.14 hours only count while the app is connected live to the
+    /// server (which records the time itself). Offline, nothing is tracked locally
+    /// either, so the PC never shows hours the server didn't see.
+    pub fn set_live(&mut self, live: bool) -> Result<Vec<TrackerEvent>> {
+        if self.tracker.is_paused() == !live {
+            return Ok(vec![]);
+        }
+        self.tracker.set_paused(!live)
+    }
+
+    /// False while offline (not connected to the server): nothing is tracked.
+    pub fn is_live(&self) -> bool {
+        !self.tracker.is_paused()
     }
 
     /// Reload manual tags and exclusions into the detector.
@@ -645,6 +658,44 @@ mod tests {
     }
 
     /// End-to-end on the simulated environment with virtual time.
+    #[test]
+    fn nothing_is_tracked_offline() {
+        std::env::set_var("FRAGLINK_STEAM_DIR", "/nonexistent-steam-dir");
+        let clock = Arc::new(AtomicU64::new(0));
+        let c = clock.clone();
+        let env = SimEnv::new("cs2.exe:600", Arc::new(move || c.load(Ordering::SeqCst))).unwrap();
+        let mut e = Engine::new(
+            Store::open_in_memory().unwrap(),
+            Box::new(env),
+            fixed_offset_day_fn(36000),
+        )
+        .unwrap();
+        e.set_live(false).unwrap();
+        assert!(!e.is_live());
+        let t0 = 1_790_020_000;
+        for t in (0..=200u64).step_by(5) {
+            clock.store(t, Ordering::SeqCst);
+            e.step(t0 + t as i64).unwrap();
+        }
+        assert!(e.now_playing().is_none(), "offline: no session");
+        assert_eq!(e.glance(t0 + 200).unwrap().total_seconds, 0);
+        assert!(e.glance(t0 + 200).unwrap().paused);
+        // connected: tracking starts; settings changes don't flip it
+        e.set_live(true).unwrap();
+        e.apply_settings().unwrap();
+        for t in (205..=400u64).step_by(5) {
+            clock.store(t, Ordering::SeqCst);
+            e.step(t0 + t as i64).unwrap();
+        }
+        assert_eq!(e.now_playing().unwrap().game_id, "cs2");
+        // the connection drops: the session ends at once
+        e.set_live(false).unwrap();
+        e.apply_settings().unwrap();
+        assert!(e.now_playing().is_none() && !e.is_live());
+        let total = e.glance(t0 + 400).unwrap().total_seconds;
+        assert!((150..=200).contains(&total), "{total}");
+    }
+
     #[test]
     fn simulated_run_end_to_end() {
         std::env::set_var("FRAGLINK_STEAM_DIR", "/nonexistent-steam-dir");

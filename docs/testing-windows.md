@@ -78,3 +78,13 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - Friend playing WoW (retail or Forever): the friends list row and their status show just **World of Warcraft** (no realm). Hover them: the tooltip says **Playing: World of Warcraft · <realm>**. Click them: the side panel shows **World of Warcraft · <realm>**.
 - You playing WoW: your own status box shows **Playing World of Warcraft** without the realm.
 - Everything else from the dev.12 list still applies.
+
+## Live-only hours, server names, WoW list (0.2.0-dev.14)
+
+- dev.13 installed: it updates itself to dev.14. Help > About shows 0.2.0-dev.14.
+- Signed in and connected, start a game: it shows under Now Playing and friends see it. Quit it: the hours appear in **My Account** right away (no upload delay).
+- Pull the network cable (or sign out) while a game runs: Now Playing says **Offline · hours count again once reconnected** (signed out: **Not tracking · sign in to count hours**) and no time is added. Reconnect: tracking resumes within a few seconds.
+- Tag an unlisted program ("Track this as a game?" > Yes, or Fraglink > This is a game…) and run it: you see your own name for it; a friend sees **Playing a game** in the list, tooltip, side panel and Activity Report, and on the website. After `fraglink-server approve-game <exe> "<Name>"` on the server, restart the game: friends see the approved name and its earlier hours show under it.
+- Options > Privacy > "Show my game to my friends" off: friends see you Online with no game; your hours still go up.
+- WoW: retail shows **World of Warcraft**, Classic (`_classic_`, `_classic_era_`, anniversary) shows **World of Warcraft Classic**, `WowB.exe` shows **World of Warcraft: Forever**. A PTR build (`WowT.exe`) isn't tracked. The realm still shows in the friend tooltip and side panel only.
+

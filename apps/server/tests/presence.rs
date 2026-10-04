@@ -328,3 +328,123 @@ async fn silent_client_times_out_to_offline(pool: PgPool) {
     );
     drop(ca);
 }
+
+/// dev.14: names come from the server, unknown games are "a game" until an admin
+/// approves them, hidden games count but aren't shown, and hours are only what the
+/// server saw live.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn server_names_and_live_sessions(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let served = app.clone();
+    tokio::spawn(async move { axum::serve(listener, served).await.unwrap() });
+    let a = signup(&app, "a@example.com", "alice").await;
+    let b = signup(&app, "b@example.com", "bob").await;
+    befriend(&app, &a, &b, "bob", "alice").await;
+    let mut ca = Client::connect(&base, &a).await;
+    let mut cb = Client::connect(&base, &b).await;
+    let backdate = |mins: i64| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                "UPDATE presence SET session_started_at = now() - make_interval(mins => $1)
+                 WHERE user_id = (SELECT id FROM users WHERE handle = 'alice')",
+            )
+            .bind(mins as i32)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    };
+
+    // a client-sent name is ignored: the list name is shown
+    ca.presence("online", Some(("wow", "Totally Not WoW")))
+        .await;
+    let m = cb.expect("presence").await;
+    assert_eq!(
+        (m["game_id"].as_str(), m["game_name"].as_str()),
+        (Some("wow"), Some("World of Warcraft"))
+    );
+    backdate(10).await;
+
+    // a tagged program nobody approved: "a game", and its label never leaves the PC
+    ca.presence("online", Some(("exe:MyThing.exe", "My Secret Label")))
+        .await;
+    let m = cb.expect("presence").await;
+    assert_eq!(
+        (m["game_id"].as_str(), m["game_name"].as_str()),
+        (Some("unlisted"), Some("a game"))
+    );
+    assert!(!m.to_string().contains("Secret") && !m.to_string().contains("mything"));
+    let l = api(&app, "GET", "/api/v1/friends", Some(&b), None)
+        .await
+        .json();
+    assert_eq!(l["friends"][0]["presence"]["game_name"], "a game");
+    // switching games closed the WoW session the server saw (~10 minutes)
+    let rows: Vec<(String, i32, String)> =
+        sqlx::query_as("SELECT game_id, duration_s, source FROM sessions ORDER BY started_at")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!((rows[0].0.as_str(), rows[0].2.as_str()), ("wow", "live"));
+    assert!((595..=605).contains(&rows[0].1), "{rows:?}");
+    backdate(20).await;
+
+    // an admin approves it: same id, the hours stay attached, the name shows
+    fraglink_server::names::approve(&pool, "mything.exe", "My Thing")
+        .await
+        .unwrap();
+    ca.presence("online", Some(("wow", ""))).await; // closes 20 min of exe:mything.exe
+    cb.expect("presence").await;
+    ca.presence("online", Some(("exe:mything.exe", "whatever")))
+        .await;
+    let m = cb.expect("presence").await;
+    assert_eq!(
+        (m["game_id"].as_str(), m["game_name"].as_str()),
+        (Some("exe:mything.exe"), Some("My Thing"))
+    );
+    let stats = api(&app, "GET", "/api/v1/stats", Some(&a), None)
+        .await
+        .json();
+    let s = stats.to_string();
+    assert!(
+        s.contains("My Thing") && s.contains("World of Warcraft"),
+        "{s}"
+    );
+    // ...and approved programs are handed to every app as detection rules
+    let o = api(&app, "GET", "/api/v1/games/overrides", None, None).await;
+    assert!(
+        o.text.contains("exe:mything.exe") && o.text.contains("mything.exe"),
+        "{}",
+        o.text
+    );
+
+    // "Share what I'm playing" off: time still counts, friends see no game
+    ca.send(
+        json!({ "type": "presence", "status": "online", "game": { "id": "wow", "hidden": true } }),
+    )
+    .await;
+    let m = cb.expect("presence").await;
+    assert!(m["game_id"].is_null() && m["game_name"].is_null(), "{m}");
+    backdate(5).await;
+    ca.presence("online", None).await; // stop playing (friends see no change)
+    let mut n = 0i64;
+    for _ in 0..30 {
+        n = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE game_id = 'wow'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        if n == 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(n, 2, "the hidden WoW time was recorded too");
+
+    // the activity feed uses public names only
+    let feed = api(&app, "GET", "/api/v1/friends/activity", Some(&b), None).await;
+    assert!(!feed.text.contains("Secret"), "{}", feed.text);
+}

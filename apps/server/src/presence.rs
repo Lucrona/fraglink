@@ -14,7 +14,7 @@ use crate::AppState;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -106,12 +106,17 @@ pub enum ServerMsg {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GameRef {
     pub id: String,
-    pub name: String,
+    /// Ignored since 0.2.0-dev.14 (the server names games); older apps still send it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// Unix seconds.
     pub started_at: Option<i64>,
     /// e.g. the WoW realm; optional (older clients don't send it).
     #[serde(default)]
     pub detail: Option<String>,
+    /// "Show my game to my friends" is off: record the hours, show nobody (dev.14 apps).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 /// Client → server.
@@ -200,14 +205,28 @@ type Row = (
     Option<String>,
     Option<DateTime<Utc>>,
     DateTime<Utc>,
+    bool,
 );
 
+/// `presence.game_name` holds the server's public name (NULL = unlisted), never a
+/// client-sent one, and `game_id` the user's own (private) id.
 fn to_view(r: Row) -> PresenceView {
-    let (status, game_id, game_name, game_detail, started, heartbeat) = r;
+    let (status, game_id, game_name, game_detail, started, heartbeat, hidden) = r;
     let stale = (Utc::now() - heartbeat).num_seconds() > IDLE_TIMEOUT_SECS as i64;
     if status == "invisible" || status == "offline" || stale {
         return PresenceView::offline();
     }
+    let (game_id, game_name, game_detail, started) = match (game_id, game_name) {
+        (Some(_), _) if hidden => (None, None, None, None),
+        (Some(id), Some(name)) => (Some(id), Some(name), game_detail, started),
+        (Some(_), None) => (
+            Some(crate::names::UNLISTED_ID.to_string()),
+            Some(crate::names::UNLISTED_NAME.to_string()),
+            None,
+            started,
+        ),
+        (None, _) => (None, None, None, None),
+    };
     PresenceView {
         status,
         game_id,
@@ -219,7 +238,7 @@ fn to_view(r: Row) -> PresenceView {
 
 /// What friends are allowed to see of `user` right now.
 pub async fn visible_presence(st: &AppState, user: Uuid) -> ApiResult<Option<PresenceView>> {
-    let r: Option<Row> = sqlx::query_as("SELECT status, game_id, game_name, game_detail, session_started_at, heartbeat_at FROM presence WHERE user_id = $1")
+    let r: Option<Row> = sqlx::query_as("SELECT status, game_id, game_name, game_detail, session_started_at, heartbeat_at, game_hidden FROM presence WHERE user_id = $1")
         .bind(user)
         .fetch_optional(&st.db)
         .await?;
@@ -231,8 +250,8 @@ pub async fn visible_presence_many(
     users: &[Uuid],
 ) -> ApiResult<HashMap<Uuid, PresenceView>> {
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>, Option<DateTime<Utc>>, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT user_id, status, game_id, game_name, game_detail, session_started_at, heartbeat_at FROM presence WHERE user_id = ANY($1)",
+    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>, Option<DateTime<Utc>>, DateTime<Utc>, bool)> = sqlx::query_as(
+        "SELECT user_id, status, game_id, game_name, game_detail, session_started_at, heartbeat_at, game_hidden FROM presence WHERE user_id = ANY($1)",
     )
     .bind(users)
     .fetch_all(&st.db)
@@ -241,8 +260,8 @@ pub async fn visible_presence_many(
         .iter()
         .map(|u| (*u, PresenceView::offline()))
         .collect();
-    for (u, s, gid, gname, gdetail, started, hb) in rows {
-        m.insert(u, to_view((s, gid, gname, gdetail, started, hb)));
+    for (u, s, gid, gname, gdetail, started, hb, hidden) in rows {
+        m.insert(u, to_view((s, gid, gname, gdetail, started, hb, hidden)));
     }
     Ok(m)
 }
@@ -256,7 +275,58 @@ fn clean(s: &str, max: usize) -> String {
         .to_string()
 }
 
+/// Live sessions shorter than this aren't kept.
+pub const MIN_LIVE_SECS: i64 = 30;
+/// A session that lost its connection ends this long after the last heartbeat
+/// (clients ping every 30 s).
+const HEARTBEAT_GRACE_SECS: i64 = 45;
+/// Same cap as uploaded sessions had (the sessions table checks it).
+const MAX_SESSION_SECS: i64 = 24 * 3600;
+
+/// When a session that was last confirmed at `heartbeat` ends if it ends `now`.
+fn session_end(now: DateTime<Utc>, heartbeat: DateTime<Utc>) -> DateTime<Utc> {
+    now.min(heartbeat + chrono::Duration::seconds(HEARTBEAT_GRACE_SECS))
+}
+
+/// Keep `start..end` of play the server watched live (split into <= 24 h rows).
+pub async fn record_live_session(
+    st: &AppState,
+    user: Uuid,
+    game_id: &str,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> ApiResult<()> {
+    if (end - start).num_seconds() < MIN_LIVE_SECS {
+        return Ok(());
+    }
+    crate::names::ensure_game_row(st, game_id).await?;
+    let mut from = start;
+    while from < end {
+        let to = end.min(from + chrono::Duration::seconds(MAX_SESSION_SECS));
+        sqlx::query(
+            "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source)
+             VALUES($1, $2, $3, $4, $5, $6, 'live')",
+        )
+        .bind(Uuid::new_v4())
+        .bind(user)
+        .bind(game_id)
+        .bind(from)
+        .bind(to)
+        .bind((to - from).num_seconds() as i32)
+        .execute(&st.db)
+        .await?;
+        from = to;
+    }
+    Ok(())
+}
+
 /// Store a new presence and push it to online friends if what they see changed.
+///
+/// Hours (0.2.0-dev.14): the only time recorded is what the server observes here.
+/// A game counts from the first presence update that names it until the update
+/// that drops or changes it, the user goes offline, or the connection is lost
+/// (then until the last heartbeat). The game id is the client's; its name is the
+/// server's own ([`crate::names`]).
 pub async fn set(
     st: &AppState,
     user: Uuid,
@@ -269,46 +339,65 @@ pub async fn set(
         _ => "online",
     };
     let game = game.filter(|_| status != "offline").and_then(|g| {
-        let id = clean(&g.id, 120);
-        let name = clean(&g.name, 120);
+        let id = crate::names::canonical_id(user, &clean(&g.id, 120))?;
         let detail = g
             .detail
             .as_deref()
             .map(|d| clean(d, 64))
             .filter(|d| !d.is_empty());
-        (!id.is_empty()).then_some((
-            id,
-            if name.is_empty() {
-                "a game".to_string()
-            } else {
-                name
-            },
-            g.started_at,
-            detail,
-        ))
+        Some((id, detail, g.hidden))
     });
+    let now = Utc::now();
     let before = visible_presence(st, user)
         .await?
         .unwrap_or_else(PresenceView::offline);
-    let started_at = game
-        .as_ref()
-        .and_then(|g| g.2)
-        .and_then(|t| Utc.timestamp_opt(t, 0).single())
-        .map(|t| t.min(Utc::now()));
+    let prev: Option<(Option<String>, Option<DateTime<Utc>>, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT game_id, session_started_at, heartbeat_at FROM presence WHERE user_id = $1",
+    )
+    .bind(user)
+    .fetch_optional(&st.db)
+    .await?;
+    let (prev_game, prev_start, prev_hb) = match prev {
+        Some((Some(g), Some(s), hb)) => (Some(g), Some(s), hb),
+        Some((_, _, hb)) => (None, None, hb),
+        None => (None, None, now),
+    };
+    let live = (now - prev_hb).num_seconds() <= IDLE_TIMEOUT_SECS as i64;
+    let new_id = game.as_ref().map(|g| g.0.clone());
+    let continuing = live && prev_game.is_some() && prev_game == new_id;
+    if let (Some(pg), Some(ps), false) = (&prev_game, prev_start, continuing) {
+        record_live_session(st, user, pg, ps, session_end(now, prev_hb)).await?;
+    }
+    let started_at = match (&new_id, continuing) {
+        (Some(_), true) => prev_start,
+        (Some(_), false) => Some(now),
+        (None, _) => None,
+    };
+    let public = match &new_id {
+        Some(id) => {
+            let n = crate::names::public_name(st, id).await?;
+            if n.is_none() {
+                crate::names::lookup_steam_name(st, id);
+            }
+            n
+        }
+        None => None,
+    };
     sqlx::query(
-        "INSERT INTO presence(user_id, status, game_id, game_name, session_started_at, game_detail, heartbeat_at, updated_at)
-         VALUES($1, $2, $3, $4, $5, $6, now(), now())
+        "INSERT INTO presence(user_id, status, game_id, game_name, session_started_at, game_detail, game_hidden, heartbeat_at, updated_at)
+         VALUES($1, $2, $3, $4, $5, $6, $7, now(), now())
          ON CONFLICT (user_id) DO UPDATE SET status = excluded.status, game_id = excluded.game_id,
              game_name = excluded.game_name, session_started_at = excluded.session_started_at,
-             game_detail = excluded.game_detail,
+             game_detail = excluded.game_detail, game_hidden = excluded.game_hidden,
              heartbeat_at = now(), updated_at = now()",
     )
     .bind(user)
     .bind(status)
-    .bind(game.as_ref().map(|g| g.0.clone()))
-    .bind(game.as_ref().map(|g| g.1.clone()))
+    .bind(&new_id)
+    .bind(&public)
     .bind(started_at)
-    .bind(game.as_ref().and_then(|g| g.3.clone()))
+    .bind(game.as_ref().and_then(|g| g.1.clone()))
+    .bind(game.as_ref().is_some_and(|g| g.2))
     .execute(&st.db)
     .await?;
     let after = visible_presence(st, user)
@@ -332,9 +421,22 @@ async fn heartbeat(st: &AppState, user: Uuid) -> ApiResult<()> {
     Ok(())
 }
 
-/// At startup nobody is connected yet.
+/// At startup nobody is connected yet: keep the sessions that were open (up to
+/// their last heartbeat) and mark everyone offline.
 pub async fn reset_all(st: &AppState) -> ApiResult<()> {
-    sqlx::query("UPDATE presence SET status = 'offline', game_id = NULL, game_name = NULL, game_detail = NULL, session_started_at = NULL WHERE status <> 'offline'")
+    let open: Vec<(Uuid, String, DateTime<Utc>, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT user_id, game_id, session_started_at, heartbeat_at FROM presence
+         WHERE game_id IS NOT NULL AND session_started_at IS NOT NULL",
+    )
+    .fetch_all(&st.db)
+    .await?;
+    let now = Utc::now();
+    for (user, game, start, hb) in open {
+        if let Err(e) = record_live_session(st, user, &game, start, session_end(now, hb)).await {
+            tracing::warn!("keeping open session of {user} failed: {}", e.message);
+        }
+    }
+    sqlx::query("UPDATE presence SET status = 'offline', game_id = NULL, game_name = NULL, game_detail = NULL, session_started_at = NULL, game_hidden = false WHERE status <> 'offline' OR game_id IS NOT NULL")
         .execute(&st.db)
         .await?;
     Ok(())

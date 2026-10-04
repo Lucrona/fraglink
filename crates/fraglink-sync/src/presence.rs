@@ -15,13 +15,16 @@ use tungstenite::{Message, WebSocket};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GameRef {
+    /// Game id only: the server names games from its own list (0.2.0-dev.14).
     pub id: String,
-    pub name: String,
-    /// Unix seconds.
+    /// Unix seconds (informational; the server times sessions itself).
     pub started_at: Option<i64>,
     /// Shown after the name, e.g. the WoW realm (servers before 0.2.0-dev.12 ignore it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// Count the time but don't show the game to friends ("Share what I'm playing" off).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 /// What this client publishes. `invisible` is stored but friends see offline.
@@ -198,11 +201,12 @@ mod tests {
         assert_eq!(p.game_detail.as_deref(), Some("Frostmourne"));
         let g = GameRef {
             id: "wow".into(),
-            name: "World of Warcraft".into(),
             started_at: None,
             detail: None,
+            hidden: false,
         };
-        assert!(!serde_json::to_string(&g).unwrap().contains("detail"));
+        let js = serde_json::to_string(&g).unwrap();
+        assert!(!js.contains("detail") && !js.contains("hidden") && !js.contains("name"));
     }
 
     #[test]

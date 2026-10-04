@@ -5,14 +5,16 @@
 > A lawyer needs to review it before Fraglink is offered to the public, especially for the
 > Australian Privacy Act, GDPR/UK GDPR and COPPA. Items marked **TBD** aren't decided yet.
 
-Last updated: 26 September 2026 · Operator: **TBD** (who runs the public server) · Contact: **TBD**
+Last updated: 5 October 2026 · Operator: **TBD** (who runs the public server) · Contact: **TBD**
 
 ## The short version
 
-- The Fraglink tray app works **fully offline**. It records which games you play and for how long,
-  on your PC. Nothing is sent anywhere unless you sign in.
-- If you sign in, your **game sessions**, your **friends** and your **current status and game**
+- Hours only count while you're **signed in and connected**. The Fraglink server records your play
+  time from the live connection; nothing is tracked or queued offline. Signed out, nothing is sent.
+- If you sign in, your **play time**, your **friends** and your **current status and game**
   are stored on the Fraglink server so they work across devices and your friends can see them.
+- Game names come from the server's own list. A game you named yourself shows to others as
+  "Playing a game" until it's added to that list.
 - We don't sell data, show ads, use analytics or tracking scripts, or share your data with anyone
   except where listed below.
 - You can **export everything** and **delete your account** at any time. Deletion is immediate.
@@ -34,7 +36,7 @@ screenshots, read chat or window contents, or log keystrokes. That's also why it
 alongside anti-cheat software.
 
 **What it stores on your PC** (a SQLite file in `%APPDATA%\gg.fraglink.desktop\`): games it has
-seen, play sessions (start, end, active time), daily totals, games you tagged or
+seen, play sessions while you were connected (start, end, active time), daily totals, games you tagged or
 excluded, a local activity list and your settings. If you sign in, it also stores your username,
 the server address and a sign-in token that Windows DPAPI encrypts.
 
@@ -45,16 +47,19 @@ update pings.
 
 Signing in is optional. You start it in **Options → Sync** and approve a pairing code in your browser.
 
-**What the tray uploads:**
+**What the tray sends:**
 
 | Data | Why |
 |---|---|
-| Finished game sessions: a random session id, the game's id and name, its Steam app id if known, start and end time, active seconds, an idle field that is always 0 since dev.9, app version | So your hours work across PCs and appear on your profile and stats |
-| While the app is running: your status (online, away or invisible) and the game you're playing right now (id, name, start time), plus a keep-alive message every 30 seconds (Away after 10 minutes without input) | So your friends can see you're online and what you're playing |
+| While the app is running: your status (online, away or invisible) and the id of the game you're playing right now (for a program you tagged as a game, its .exe name), plus a keep-alive message every 30 seconds (Away after 10 minutes without input) | So your friends can see you're online and what you're playing, and so the server can record your play time |
+| Play time the server observed from that connection: game id, start and end time | So your hours work across PCs and appear on your profile and stats. Nothing is recorded while you're offline |
 | Your recently played games (last 7 days) and hours this week, worked out from the sessions above | Shown only to your friends in their Activity Report and friend details. Turn it off in **Options → Privacy** |
 
-**Never uploaded:** program names or paths, your list of running programs, idle timestamps,
-anything about non-game apps, or sessions for games you excluded.
+**Never uploaded:** install paths, your list of running programs, idle timestamps, anything
+about non-game apps, names you typed for games, or anything for games you excluded. The only
+program names sent are the .exe names of programs you tagged as games. Those games show to
+everyone else as "Playing a game" until we add them to Fraglink's game list after a manual review;
+once added, their hours show under the listed name.
 
 ## 3. Your account on the server
 
@@ -67,7 +72,7 @@ When you create an account we store:
 - **Sign-in tokens**, stored only as hashes. Website sign-ins expire after 30 days. Tray (device)
   tokens last until you sign out in the tray or revoke the device on the website. For each device
   we keep its name (for example "Fraglink on DESKTOP-1"), when it was created and when it was last used.
-- **Game data:** your uploaded sessions, hours you **Imported** yourself (for example WoW `/played`,
+- **Game data:** your play sessions (recorded by the server while you're connected), hours you **Imported** yourself (for example WoW `/played`,
   plus an optional note of up to 140 characters) and **Estimated** hours from the history calculator
   (the years and hours per week you entered). The website labels these tiers ● Tracked,
   ◆ Imported and ~ Estimated. Imported and Estimated hours never count towards rankings.
@@ -86,7 +91,8 @@ account is yours. We never see your Steam password. Unlinking Steam on its own i
   address-book or contacts upload.
 - We store friend requests, friendships (with the date they were accepted) and your **block list**.
 - **Friends can see:** your username, display name, when you became friends, and your presence,
-  meaning online, away or offline plus the game you're playing right now and since when.
+  meaning online, away or offline plus the game you're playing right now and since when
+  (named from Fraglink's own list, or "a game" if it isn't on the list yet).
   Non-friends see none of this.
 - **Invisible:** if you pick *Invisible*, the server stores that choice but shows you to everyone
   as **offline**, with no game.
@@ -128,8 +134,8 @@ signed in. There are no analytics, advertising or third-party cookies, and no tr
   Backups: **TBD** (how long database backups are kept once hosting exists).
 - **Correct:** you can delete individual imported or estimated entries and exclude games in the
   tray. Changing your display name isn't built yet (**TBD**).
-- **Stop syncing:** sign out in the tray. Sessions already uploaded stay until you delete them or
-  your account.
+- **Stop syncing:** sign out in the tray. Nothing is tracked while signed out. Sessions already
+  recorded stay until you delete them or your account.
 - If Fraglink ever shuts down we'll give at least **90 days' notice** and keep a working export
   available during that time.
 

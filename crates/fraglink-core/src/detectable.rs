@@ -91,8 +91,18 @@ pub struct DMatch<'a> {
     pub pattern: &'a str,
 }
 
+/// Public test / PTR builds on Discord's list ("World of Warcraft Public Test") are
+/// not tracked: their entries are dropped when the list is built and when it is loaded.
+pub fn is_test_build(name: &str) -> bool {
+    let n = name.to_lowercase();
+    n.contains("public test")
+        || n.split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|w| w == "ptr")
+}
+
 impl DetectableDb {
-    pub fn from_file(f: DetectableFile) -> Self {
+    pub fn from_file(mut f: DetectableFile) -> Self {
+        f.games.retain(|g| !is_test_build(&g.name));
         let mut by_exe: HashMap<String, Vec<(u32, String)>> = HashMap::new();
         for (i, g) in f.games.iter().enumerate() {
             for e in &g.exes {
@@ -291,7 +301,7 @@ pub fn build_from_discord(
             }
         }
         let name = a.name.trim().to_string();
-        if exes.is_empty() || name.is_empty() || a.id.is_empty() {
+        if exes.is_empty() || name.is_empty() || a.id.is_empty() || is_test_build(&name) {
             continue;
         }
         let slug = if let Some(s) = slugs.get(&a.id) {
@@ -336,6 +346,27 @@ pub fn build_from_discord(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn public_test_builds_are_skipped() {
+        use super::*;
+        assert!(is_test_build("World of Warcraft Public Test"));
+        assert!(is_test_build("Some Game (PTR)"));
+        assert!(!is_test_build("World of Warcraft"));
+        assert!(!is_test_build("Captain Ptron"));
+        let db = DetectableDb::bundled();
+        assert!(
+            db.by_slug("wow_ptr").is_none(),
+            "Public Test entry dropped on load"
+        );
+        assert!(db.by_slug("wow").is_some() && db.by_slug("wow_classic").is_some());
+        let raw = br#"[{"id":"1","name":"World of Warcraft Public Test","executables":[{"name":"wowt-64.exe","os":"win32"}]},
+                       {"id":"2","name":"Brawl","executables":[{"name":"brawl.exe","os":"win32"}]}]"#;
+        let (f, _) =
+            build_from_discord(raw, &SignatureDb::builtin(), &BTreeMap::new(), "x").unwrap();
+        assert_eq!(f.games.len(), 1);
+        assert_eq!(f.games[0].name, "Brawl");
+    }
+
     use super::*;
 
     const RAW: &str = r#"[

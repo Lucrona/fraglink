@@ -405,8 +405,9 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
                 }
             });
         sqlx::query(
-            "INSERT INTO games(id, name, steam_appid, steam_icon_hash) VALUES($1, $2, $3, $4)
+            "INSERT INTO games(id, name, steam_appid, steam_icon_hash, verified) VALUES($1, $2, $3, $4, true)
              ON CONFLICT (id) DO UPDATE SET steam_appid = COALESCE(games.steam_appid, excluded.steam_appid),
+               name = CASE WHEN games.verified THEN games.name ELSE excluded.name END, verified = true,
                steam_icon_hash = CASE WHEN games.steam_appid IS NULL OR games.steam_appid = excluded.steam_appid
                                       THEN COALESCE(excluded.steam_icon_hash, games.steam_icon_hash)
                                       ELSE games.steam_icon_hash END",

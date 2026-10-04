@@ -754,6 +754,8 @@ pub fn run() {
                 engine.prompt_after_secs = s;
             }
             let recovered = engine.tracker.recover()?;
+            // dev.14: nothing is tracked until the presence socket connects (friends.rs).
+            engine.set_live(false)?;
             log::info!(
                 "Fraglink {} starting: data={} env={} signatures={} ({}) recovered={}",
                 env!("CARGO_PKG_VERSION"),

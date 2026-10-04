@@ -7,21 +7,23 @@ use std::io::Read;
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn zip_export_has_csvs_and_json(pool: PgPool) {
-    let app = fraglink_server::router(state(pool));
+    let app = fraglink_server::router(state(pool.clone()));
     let t = signup(&app, "z@example.com", "zipper").await;
-    let dev = pair(&app, &t).await;
+    let _dev = pair(&app, &t).await;
+    // Sessions come from live presence now; put one in directly.
     let sid = uuid();
-    api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&dev),
-        Some(batch(
-            json!([{ "id": "cs2", "name": "Counter-Strike 2", "steam_appid": 730 }]),
-            vec![session(&sid, "cs2", now() - 7200, 3600)],
-        )),
+    sqlx::query("INSERT INTO games(id, name, steam_appid, verified) VALUES('cs2', 'Counter-Strike 2', 730, true), ('exe:quake.exe', 'Quake, \"Arena\"', NULL, true)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source, client_version)
+         SELECT $1::uuid, id, 'cs2', now() - interval '2 hours', now() - interval '1 hour', 3600, 'live', '0.2.0-test' FROM users WHERE handle = 'zipper'",
     )
-    .await;
+    .bind(&sid)
+    .execute(&pool)
+    .await
+    .unwrap();
     api(
         &app,
         "POST",
@@ -30,7 +32,7 @@ async fn zip_export_has_csvs_and_json(pool: PgPool) {
         Some(json!({ "game_id": "cs2", "minutes": 6000 })),
     )
     .await;
-    api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_name": "Quake, \"Arena\"", "eras": [{ "from_year": 2000, "to_year": 2001, "hours_per_week": 5 }] }))).await;
+    api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_id": "exe:quake.exe", "eras": [{ "from_year": 2000, "to_year": 2001, "hours_per_week": 5 }] }))).await;
 
     let r = api(&app, "GET", "/api/v1/export.zip", Some(&t), None).await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
@@ -69,7 +71,10 @@ async fn zip_export_has_csvs_and_json(pool: PgPool) {
         .nth(1)
         .unwrap()
         .starts_with(&format!("{sid},cs2,Counter-Strike 2,")));
-    assert!(sessions.contains(",3600,0,tracked,0.2.0-test,"));
+    assert!(
+        sessions.contains(",3600,0,tracked,0.2.0-test,"),
+        "{sessions}"
+    );
     let games = read(&mut z, "games.csv");
     let cs2 = games.lines().find(|l| l.starts_with("cs2,")).unwrap();
     assert!(

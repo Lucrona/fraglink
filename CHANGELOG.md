@@ -5,6 +5,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.14] - 2026-10-05
+
+Test update (builds report `0.2.0-14`). Needs the dev.14 server (deployed the same day).
+
+### Changed
+- **Hours only count while you're connected.** The Fraglink server now records play time itself from the
+  live presence connection (game start, game stop, connection lost; a connection silent for 2½ minutes ends
+  at its last heartbeat + 45 s). The app no longer tracks anything while offline or signed out, keeps no
+  offline queue and no longer uploads sessions. Session uploads from older apps are acknowledged (so they
+  clear their queue) but nothing from them is stored. Existing sessions and hours are untouched.
+- **Game names come from the server.** The app sends only a game id; the server names it from Discord's
+  detectable list, Fraglink's rules and signatures, Steam store names and games an admin approved. Any name a
+  client sends is ignored. Unknown ids show as **Playing a game** (presence `game_id` `unlisted`, name
+  `a game`; "Unlisted game" in stats). Typed game names on the website and in the hours API must match a
+  listed game; nobody can create or rename games.
+- **"Track this as a game?" / "This is a game…" programs** are sent as `exe:<program>.exe` and show to
+  everyone else as **Playing a game** (friends list, tooltip, side panel, Activity Report, website) until an
+  admin approves them (`fraglink-server approve-game <exe> <name>`). Your own label only shows on your PC.
+  Approved games keep the hours already recorded and show under the approved name; they're also handed to
+  every app as detection rules.
+- **"Show my game to my friends" off** still counts the time (the game is sent marked hidden); friends see no game.
+- **World of Warcraft follows Discord's list:** World of Warcraft (retail, incl. `_ptr_` / `_beta_` folders),
+  World of Warcraft Classic and World of Warcraft: Forever (`WowB.exe`). Discord's "Public Test" / PTR entries
+  are skipped and not tracked. Fraglink's own WoW folder rules (PTR, Beta, Classic Era, Classic PTR,
+  Anniversary splits) are removed; the `wow` id is unchanged. The realm still shows in the friend side panel
+  and tooltip.
+- Reconnecting after a server restart or a full server uses exponential backoff with jitter and honours
+  `Retry-After`.
+
+### Server
+- Migration `0010`: `games.verified` (approved/known names) and `presence.game_hidden`.
+- Admin commands: `fraglink-server suggestions`, `approve-game <exe> <name>`, `unapprove-game <exe>`.
+
 ## [0.2.0-dev.13] - 2026-10-05
 
 Test update (builds report `0.2.0-13`).

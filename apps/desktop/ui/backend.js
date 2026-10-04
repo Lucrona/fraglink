@@ -124,7 +124,7 @@
     hide: () => ok(),
     quit: () => ok(),
     scale: () => ok(),
-    syncStatus: () => ok({ ...sync, pending: 3 }),
+    syncStatus: () => ok({ ...sync, pending: 0 }),
     syncSignIn: (server) => { sync.server = server; sync.pairing = { user_code: 'KXRT-7QPM', verification_uri: server + '/pair', verification_uri_complete: server + '/pair?code=KXRT-7QPM', expires_at: now() + 600 }; return ok(); },
     syncCancel: () => { sync.pairing = null; return ok(); },
     syncNow: () => ok(),
@@ -203,7 +203,7 @@
     friends: [
       { handle: 'nova', display_name: 'Nova', since: iso(90 * 86400), presence: { status: 'online', game_id: 'steam:570', game_name: 'Dota 2', session_started_at: iso(38 * 60) } },
       { handle: 'grimm', display_name: 'Grimm', since: iso(40 * 86400), presence: { status: 'away', game_id: null, game_name: null } },
-      { handle: 'kestrel', display_name: 'Kestrel', since: iso(12 * 86400), presence: { status: 'online', game_id: null, game_name: null } },
+      { handle: 'kestrel', display_name: 'Kestrel', since: iso(12 * 86400), presence: { status: 'online', game_id: 'unlisted', game_name: 'a game', session_started_at: iso(12 * 60) } },
       { handle: 'pixelmoth', display_name: 'PixelMoth', since: iso(5 * 86400), presence: { status: 'offline', game_id: null, game_name: null } },
     ],
     incoming: [{ handle: 'oldmate', display_name: 'Old Mate', created_at: iso(3600) }],
