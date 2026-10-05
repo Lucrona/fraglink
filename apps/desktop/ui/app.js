@@ -166,7 +166,7 @@
   const SERVERS = ['66.150.14.9:27015', '[EU] Nordic Frag #2', 'Kel\u2019Thuzad (US-PvP)', 'Freedom (Hero)', 'Antonia Bayle', 'Official 24/7 Bridge', 'Operation Hastings', 'Dustbowl Night Owls'];
   let FRIENDS = [
     { id: 'curm', name: 'curmudgeon', kind: 'playing', game: 'cs', server: SERVERS[0], info: 'de_dust2 · 18/20', av: '#6d6d6d', week: 11.4, total: 812 },
-    { id: 'dizz', name: 'diZZ_Spinner', kind: 'playing', game: 'wow', server: SERVERS[2], info: 'Lvl 60 Rogue · Stormwind', av: '#b8860b', week: 23.1, total: 503 },
+    { id: 'dizz', name: 'diZZ_Spinner', kind: 'playing', game: 'wow', server: SERVERS[2], info: 'Lvl 60 Rogue · Stormwind', detail: 'Frostmourne', av: '#b8860b', week: 23.1, total: 503 },
     { id: 'shar', name: 'sharpe_', kind: 'playing', game: 'coh', server: SERVERS[3], info: 'Atlas Park · lvl 32', av: '#1e4fb8', week: 7.8, total: 390 },
     { id: 'tool', name: 'tooTALL', kind: 'playing', game: 'eq2', server: SERVERS[4], info: 'Qeynos Harbor', av: '#c89a20', week: 15.0, total: 720 },
     { id: 'rift', name: 'Riftwalker', kind: 'off', last: '20 minutes ago', status: 'Online', av: '#3a7a3a', week: 4.2, total: 260 },
@@ -265,9 +265,10 @@
   const CS = makeScroller($('#chat-log'), false);
   function fmtH(h) { return h.toFixed(1) + ' h'; }
   function fmtT(ms) { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; }
-  // "World of Warcraft · Frostmourne": the game plus its detail (WoW realm); only the friend
-  // side panel and the hover tooltip show the detail, the list row and my status don't
-  const gameLabel = f => f.game === UNLISTED ? 'A game' : (GAMES[f.game] ? GAMES[f.game].name : '') + (f.detail ? ' · ' + f.detail : '');
+  // The WoW realm gets its own labelled row ("Realm  Frostmourne") in the side panel and
+  // tooltip, like the classic client; gameLabel is just the game's name.
+  const gameLabel = f => f.game === UNLISTED ? 'A game' : (GAMES[f.game] ? GAMES[f.game].name : '');
+  const realmOf = f => f.game !== UNLISTED && f.detail ? String(f.detail) : '';
   // A game the server can't name yet (a program someone tagged that isn't on Fraglink's
   // list): friends just see "Playing a game" (the server sends game_id "unlisted").
   const UNLISTED = 'unlisted';
@@ -544,6 +545,7 @@
       else if (playing) {
         const mins = sessionMinutes(f);
         h += `<div class="sf-lbl">Playing Game</div><div class="act"><i class="gi">${friendGameIcon(f.game)}</i><div><b>${esc(gameLabel(f))}</b>${mins != null ? `<br><span class="sf-for">Playing for ${esc(fmtMins(mins))}</span>` : f.server ? '<br>' + esc(f.server) : ''}${!f.real && f.info ? `<br><span style="color:var(--cyan)">${esc(f.info)}</span>` : ''}</div></div>`;
+        if (realmOf(f)) h += `<div class="sf-kv"><span>Realm</span><b>${esc(realmOf(f))}</b></div>`;
       }
       else h += `<div class="sf-lbl">Status</div><div>${esc(statusText(f))}${f.last ? ' · last online ' + esc(f.last) : ''}</div>`;
       if (f.kind !== 'req' && f.kind !== 'out') h += weekHtml(f);
@@ -1108,7 +1110,7 @@
     const user = f.handle || f.name, nick = f.handle && f.name !== f.handle ? f.name : '';
     let h = L('Username:', user) + L('Nickname:', nick);
     if (f.kind === 'playing' || f.kind === 'fof') {
-      h += L('Playing:', GAMES[f.game] && gameLabel(f));
+      h += L('Playing:', GAMES[f.game] && gameLabel(f)) + L('Realm:', realmOf(f));
       if (f.real) h += L('Session:', f.server);
       else if (/^[\d.]+:\d+$/.test(f.server || '')) h += L('Server:', f.info) + L('IP:', f.server);
       else h += L('Server:', f.server);

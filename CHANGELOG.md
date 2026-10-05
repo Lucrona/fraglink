@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 - **Your realm on hover:** while you play World of Warcraft, hovering your status at the top of the main
   window shows the game with your realm, e.g. "Playing World of Warcraft: Forever · Frostmourne".
+- **Friends' realm on its own line:** the friend side panel shows the game under "Playing Game" and then a
+  separate **Realm** row (e.g. "Realm  Frostmourne"), like the classic client; the friend tooltip adds a
+  "Realm:" line. Nothing is shown when there is no realm.
 
 ## [0.2.0-dev.16] - 2026-10-05
 

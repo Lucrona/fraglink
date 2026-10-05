@@ -791,3 +791,5 @@ body.sig-only { background: #000; } body.sig-only #desktop, body.sig-only #taskb
 
 /* disable fi/fl ligatures in bundled Tahoma clone */
 *{font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0;}
+.sf-kv { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0 2px; }
+.sf-kv b { font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
