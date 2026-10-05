@@ -48,3 +48,25 @@ To rotate the key, edit that file and `systemctl reload caddy` (old links and co
 The site block itself is in `/etc/caddy/Caddyfile` (`beta.playfraglink.com { ... import beta_gate ... }`).
 
 Deploy: `python3 build.py`, then copy `dist/` into `/var/www/fraglink-beta/`.
+
+## Admin section (`/admin`)
+
+Staff tools for owner/admin/moderator accounts (`users.role`; see `apps/server/src/admin.rs`).
+Caddy serves `/admin` with HTTP status 404 for everyone:
+
+```
+	@admin path /admin /admin/ /admin.html
+	handle @admin {
+		root * /var/www/fraglink-beta
+		rewrite * /admin.html
+		header Cache-Control "no-store"
+		file_server {
+			status 404
+		}
+	}
+```
+
+The page shows the normal "Not found" panel; `app.js` asks `GET /api/v1/admin/me` and only for staff
+loads `assets/admin.js`. All checks happen on the server: every `/api/v1/admin/*` endpoint returns
+404 to non-staff (and to cookie sessions), 403 when the role is too low, and writes `admin_audit`.
+The site banner comes from `GET /api/v1/announcement` (public).

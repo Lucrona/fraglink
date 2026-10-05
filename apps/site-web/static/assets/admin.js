@@ -252,7 +252,7 @@ async function server() {
       ${card("Disk", bytes(dk.used), "of " + bytes(dk.total) + " · database " + bytes(s.database_bytes), pct(dk.used, dk.total))}
       ${card("Version", esc(s.version), "server up " + up(s.process_uptime_s) + " · system " + up(s.system_uptime_s))}
     </div></section>
-    <div class="split" style="margin-top:14px"><section class="panel"><h2>Recent server warnings and errors (48 h)</h2>${s.errors == null ? `<div class="body empty">The journal isn't readable by the server.</div>` : s.errors.length ? `<pre class="log">${esc(s.errors.join("\n"))}</pre>` : `<div class="body empty">None.</div>`}</section>
+    <div class="split" style="margin-top:14px"><section class="panel"><h2>Recent server warnings and errors (48 h)</h2>${s.errors == null ? `<div class="body empty">The journal isn't readable by the server.</div>` : s.errors.length ? `<pre class="log">${esc(s.errors.map(l => l.replace(/ \S+ fraglink-server\[\d+\]: \S+Z /, "  ")).join("\n"))}</pre>` : `<div class="body empty">None.</div>`}</section>
     <section class="panel"><h2>Services</h2>${s.services.map(v => `<div class="fr"><i class="dot ${v.state === "active" ? "online" : "away"}"></i><div class="who mono">${esc(v.name)}</div><span class="${v.state === "active" ? "" : "pill bad"}">${esc(v.state)}</span></div>`).join("")}</section></div>`;
   };
   await draw();

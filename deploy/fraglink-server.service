@@ -23,6 +23,8 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
 ReadWritePaths=/var/lib/fraglink
+# Admin > Server tab shows recent warnings from the journal
+SupplementaryGroups=systemd-journal
 # ~0.14 MB per presence socket; 1G covers the FRAGLINK_MAX_WS cap (3500) with headroom.
 MemoryMax=1G
 # One fd per socket; the 1024 default capped us at ~1,000 online users.

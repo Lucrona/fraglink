@@ -77,6 +77,22 @@ changed with `FRAGLINK_APP_ICON_CDN` and `FRAGLINK_STEAM_ICON_CDN`. To force a r
 cache directory. The desktop app never contacts third-party image hosts; without a server icon it
 uses the exe icon or a generic glyph.
 
+## Staff and the admin section
+
+- Roles live in `users.role` (`owner`, `admin`, `moderator`, NULL for everyone else). Exactly one owner
+  (migration 0011 made `lucrona` the owner); the owner can't be removed, demoted or banned and is the only
+  one who adds/removes admins or transfers ownership. Admins can do everything else; moderators get game
+  approvals, user search, ban/unban and hours review.
+- The website's `/admin` (private preview: `https://beta.playfraglink.com/admin`) uses `/api/v1/admin/*`.
+  Every endpoint checks the role on the server; non-staff get 404. Every change goes to `admin_audit`
+  (`SELECT actor_handle, action, target, before, after, created_at FROM admin_audit ORDER BY id DESC`).
+- Game edits (`game_overrides`: name, hidden, extra exe names, uploaded icon in
+  `/var/lib/fraglink/icon-custom/`) sit on top of the daily games list, so refreshes don't undo them.
+- Banned accounts (`users.banned_at`) can't sign in, their tokens are revoked and their profile is hidden.
+- The Server tab reads the journal; the unit runs with `SupplementaryGroups=systemd-journal`
+  (`/etc/systemd/system/fraglink-server.service.d/journal.conf` on the VPS, and in `deploy/`).
+- The CLI still works: `fraglink-server suggestions | approve-game <exe> <name> | unapprove-game <exe>`.
+
 ## Domain and HTTPS
 
 - DNS (Cloudflare, DNS only): `A playfraglink.com` and `A www.playfraglink.com` → `119.42.54.86`.
