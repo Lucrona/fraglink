@@ -120,7 +120,7 @@ function renderHeader() {
   if (u) {
     right.innerHTML = `<form class="find" role="search"><input class="search" type="search" name="q" placeholder="Find a player" aria-label="Find a player" autocomplete="off"></form>
       <div class="who-menu"><button type="button" aria-haspopup="true"><span class="mini-av">${initial(u.display_name || u.handle)}</span>${esc(u.handle)} ▾</button>
-      <div class="menu" role="menu"><a href="/u/${encodeURIComponent(u.handle)}">My profile</a><a href="/friends">Friends</a><a href="/settings">Account settings</a><hr><button type="button" data-logout>Sign out</button></div></div>`;
+      <div class="menu" role="menu"><a href="/u/${encodeURIComponent(u.handle)}">My profile</a><a href="/friends">Friends</a><a href="/settings">Account settings</a>${u.staff_role ? '<a href="/admin">Admin</a>' : ""}<hr><button type="button" data-logout>Sign out</button></div></div>`;
     const wm = $(".who-menu", right);
     $("button", wm).addEventListener("click", e => { e.stopPropagation(); wm.classList.toggle("open"); });
     document.addEventListener("click", () => wm.classList.remove("open"));
@@ -470,13 +470,44 @@ pages.settings = async () => {
   });
 };
 
+/* ---------- site banner (staff announcements) ---------- */
+async function banner() {
+  try {
+    const r = await fetch(API + "/announcement");
+    if (!r.ok) return;
+    const a = (await r.json()).announcement;
+    if (!a || sessionStorage.getItem("fl_ann_closed") === String(a.id)) return;
+    const d = document.createElement("div");
+    d.className = "announce " + (a.style === "warning" ? "warning" : "info");
+    const link = a.link ? ` <a href="${esc(a.link)}"${a.link.startsWith("http") ? ' rel="noopener"' : ""}>More</a>` : "";
+    d.innerHTML = `<div class="wrap"><span>${esc(a.message)}${link}</span><button type="button" aria-label="Dismiss">×</button></div>`;
+    $("button", d).addEventListener("click", () => { sessionStorage.setItem("fl_ann_closed", String(a.id)); d.remove(); });
+    const flag = $(".preview-flag") || $(".top");
+    flag.after(d);
+  } catch (e) { /* no banner */ }
+}
+
+/* ---------- admin (staff only; the page itself is a 404 for everyone else) ---------- */
+pages.admin = async () => {
+  if (!token()) return;
+  let who;
+  try { who = await api("/admin/me", { keepSession: true }); } catch (e) { return; }
+  document.title = "Admin · Fraglink";
+  window.FL = { api, esc, $, $$, hours, dur, since, fullDate, token, me, showErr, showOk, icon, loadIcons, initial, API };
+  const s = document.createElement("script");
+  s.src = "/assets/admin.js?v=" + (document.querySelector('script[src*="app.js"]').src.split("v=")[1] || "");
+  s.onload = () => window.FLAdmin(who);
+  document.head.appendChild(s);
+};
+
 /* ---------- boot ---------- */
 document.addEventListener("DOMContentLoaded", () => {
   renderHeader();
   const y = $("#year"); if (y) y.textContent = new Date().getFullYear();
+  banner();
   const f = pages[document.body.dataset.page];
   if (f) Promise.resolve(f()).catch(e => { console.error(e); });
   // keep the header in sync with the real account (handle/display name changes)
-  if (token() && document.body.dataset.page !== "settings") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email }); renderHeader(); }).catch(() => { if (!token()) renderHeader(); });
+  if (token() && document.body.dataset.page !== "settings") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null }); renderHeader(); }).catch(() => { if (!token()) renderHeader(); });
 });
 })();

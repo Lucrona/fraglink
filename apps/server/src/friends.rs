@@ -53,7 +53,7 @@ pub struct FriendsList {
 
 pub async fn find_by_handle(st: &AppState, handle: &str) -> ApiResult<Person> {
     let h = handle.trim().trim_start_matches('@');
-    sqlx::query_as::<_, Person>("SELECT id, handle, display_name FROM users WHERE lower(handle) = lower($1) AND deleted_at IS NULL")
+    sqlx::query_as::<_, Person>("SELECT id, handle, display_name FROM users WHERE lower(handle) = lower($1) AND deleted_at IS NULL AND banned_at IS NULL")
         .bind(h)
         .fetch_optional(&st.db)
         .await?
@@ -324,7 +324,7 @@ pub async fn list(st: &AppState, me: Uuid) -> ApiResult<FriendsList> {
     let rows: Vec<Row> = sqlx::query_as(
         "SELECT u.id, u.handle, u.display_name, f.status, f.requested_by, f.created_at, f.accepted_at
          FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END
-         WHERE (f.user_a = $1 OR f.user_b = $1) AND u.deleted_at IS NULL
+         WHERE (f.user_a = $1 OR f.user_b = $1) AND u.deleted_at IS NULL AND u.banned_at IS NULL
          ORDER BY lower(u.handle)",
     )
     .bind(me)

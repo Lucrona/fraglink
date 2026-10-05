@@ -58,9 +58,22 @@ pub fn list_name(st: &AppState, id: &str) -> Option<String> {
 pub async fn public_names(st: &AppState, ids: &[String]) -> ApiResult<HashMap<String, String>> {
     let mut out = HashMap::new();
     let mut rest = Vec::new();
+    let ov = crate::game_overrides::current(st).await?;
+    let mut hidden = HashSet::new();
     for id in ids {
-        if out.contains_key(id) || rest.contains(id) {
+        if out.contains_key(id) || rest.contains(id) || hidden.contains(id) {
             continue;
+        }
+        // staff edits win over every list: hidden = unlisted for everyone
+        if let Some(o) = ov.get(id) {
+            if o.hidden {
+                hidden.insert(id.clone());
+                continue;
+            }
+            if let Some(n) = &o.name {
+                out.insert(id.clone(), n.clone());
+                continue;
+            }
         }
         match list_name(st, id) {
             Some(n) => {

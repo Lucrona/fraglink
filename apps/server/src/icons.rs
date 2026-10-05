@@ -121,7 +121,7 @@ fn cache_dir(st: &AppState) -> PathBuf {
     st.cfg.data_dir.join("icon-cache")
 }
 
-fn key(id: &str) -> String {
+pub fn key(id: &str) -> String {
     let h = Sha256::digest(id.as_bytes());
     h[..12].iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -264,6 +264,11 @@ pub async fn get(st: &AppState, id: &str, size: u32) -> Option<Vec<u8>> {
         return None;
     }
     let k = key(id);
+    // an icon uploaded by staff comes first
+    let custom = crate::game_overrides::custom_icon_dir(st).join(format!("{k}-{size}.png"));
+    if let Ok(b) = std::fs::read(&custom) {
+        return Some(b);
+    }
     let dir = cache_dir(st);
     let file = dir.join(format!("{k}-{size}.png"));
     if let Ok(b) = std::fs::read(&file) {
@@ -292,6 +297,12 @@ pub async fn get(st: &AppState, id: &str, size: u32) -> Option<Vec<u8>> {
 /// True when this server has (or can look for) an official icon for `id`.
 pub async fn available(st: &AppState, id: &str) -> bool {
     let k = key(id);
+    if crate::game_overrides::custom_icon_dir(st)
+        .join(format!("{k}-32.png"))
+        .exists()
+    {
+        return true;
+    }
     let dir = cache_dir(st);
     if dir.join(format!("{k}-32.png")).exists() {
         return true;

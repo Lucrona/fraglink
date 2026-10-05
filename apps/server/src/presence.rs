@@ -133,7 +133,16 @@ pub enum ClientMsg {
 /// In-process fan-out of messages to connected sockets (one process, see decisions D19).
 #[derive(Default)]
 pub struct Hub {
-    conns: Mutex<HashMap<Uuid, Vec<(u64, mpsc::UnboundedSender<ServerMsg>)>>>,
+    conns: Mutex<
+        HashMap<
+            Uuid,
+            Vec<(
+                u64,
+                mpsc::UnboundedSender<ServerMsg>,
+                Arc<tokio::sync::Notify>,
+            )>,
+        >,
+    >,
     next: AtomicU64,
     /// Sockets accepted or being upgraded (includes ones not yet in `conns`).
     live: AtomicUsize,
@@ -160,21 +169,26 @@ impl Hub {
     pub fn live_sockets(&self) -> usize {
         self.live.load(Ordering::SeqCst)
     }
-    fn add(&self, user: Uuid, tx: mpsc::UnboundedSender<ServerMsg>) -> u64 {
+    fn add(
+        &self,
+        user: Uuid,
+        tx: mpsc::UnboundedSender<ServerMsg>,
+        kill: Arc<tokio::sync::Notify>,
+    ) -> u64 {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         self.conns
             .lock()
             .unwrap()
             .entry(user)
             .or_default()
-            .push((id, tx));
+            .push((id, tx, kill));
         id
     }
     /// Remove a connection; returns true if it was the user's last one.
     fn remove(&self, user: Uuid, id: u64) -> bool {
         let mut c = self.conns.lock().unwrap();
         if let Some(v) = c.get_mut(&user) {
-            v.retain(|(i, _)| *i != id);
+            v.retain(|(i, _, _)| *i != id);
             if v.is_empty() {
                 c.remove(&user);
                 return true;
@@ -185,10 +199,23 @@ impl Hub {
     }
     pub fn send(&self, user: Uuid, msg: ServerMsg) {
         if let Some(v) = self.conns.lock().unwrap().get(&user) {
-            for (_, tx) in v {
+            for (_, tx, _) in v {
                 let _ = tx.send(msg.clone());
             }
         }
+    }
+    /// Drop every socket of `user` (banned, password reset): their writers end and
+    /// close the sockets.
+    pub fn kick(&self, user: Uuid) {
+        if let Some(v) = self.conns.lock().unwrap().get(&user) {
+            for (_, _, kill) in v {
+                kill.notify_one();
+            }
+        }
+    }
+    /// Users with at least one live socket.
+    pub fn online_users(&self) -> usize {
+        self.conns.lock().unwrap().len()
     }
     pub fn is_online(&self, user: Uuid) -> bool {
         self.conns.lock().unwrap().contains_key(&user)
@@ -462,7 +489,8 @@ async fn connection(st: AppState, a: AuthUser, socket: WebSocket) {
     let handle = a.user.handle.clone();
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<ServerMsg>();
-    let conn_id = st.hub.add(user, tx.clone());
+    let kill = Arc::new(tokio::sync::Notify::new());
+    let conn_id = st.hub.add(user, tx.clone(), kill.clone());
 
     let writer = tokio::spawn(async move {
         while let Some(m) = rx.recv().await {
@@ -483,11 +511,13 @@ async fn connection(st: AppState, a: AuthUser, socket: WebSocket) {
     }
 
     loop {
-        let next = tokio::time::timeout(
-            Duration::from_secs(st.cfg.presence_idle_secs),
-            stream.next(),
-        )
-        .await;
+        let next = tokio::select! {
+            n = tokio::time::timeout(
+                Duration::from_secs(st.cfg.presence_idle_secs),
+                stream.next(),
+            ) => n,
+            _ = kill.notified() => break, // signed out by staff
+        };
         let msg = match next {
             Ok(Some(Ok(m))) => m,
             _ => break, // timeout, error or closed

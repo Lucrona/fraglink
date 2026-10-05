@@ -418,7 +418,10 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         sqlx::query_as("SELECT id, name FROM games WHERE verified AND id LIKE 'exe:%' ORDER BY id")
             .fetch_all(&st.db)
             .await?;
-    if approved.is_empty() {
+    let ov = crate::game_overrides::current(st).await?;
+    let extra: Vec<&crate::game_overrides::GameOverride> =
+        ov.values().filter(|o| !o.extra_exes.is_empty()).collect();
+    if approved.is_empty() && extra.is_empty() {
         return Ok(s);
     }
     let mut f: overrides::OverrideFile = match serde_json::from_str(&s) {
@@ -437,6 +440,38 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
             paths: vec![],
             channel: None,
             note: Some("approved game".into()),
+        });
+    }
+    // extra exe names added by staff: onto the game's own rule, or a rule of their own
+    let mut extra = extra;
+    extra.sort_by(|a, b| a.game_id.cmp(&b.game_id));
+    for o in extra {
+        let exes: Vec<String> = o
+            .extra_exes
+            .iter()
+            .filter(|e| valid_exe(e))
+            .cloned()
+            .collect();
+        if let Some(r) = f.rules.iter_mut().find(|r| r.id == o.game_id) {
+            for e in exes {
+                if !r.exes.iter().any(|x| x.eq_ignore_ascii_case(&e)) {
+                    r.exes.push(e);
+                }
+            }
+            continue;
+        }
+        let name = o
+            .name
+            .clone()
+            .or_else(|| crate::names::list_name(st, &o.game_id))
+            .unwrap_or_else(|| o.game_id.clone());
+        f.rules.push(overrides::Rule {
+            id: o.game_id.clone(),
+            name,
+            exes,
+            paths: vec![],
+            channel: None,
+            note: Some("extra exe names".into()),
         });
     }
     Ok(serde_json::to_string_pretty(&f).unwrap_or(s))

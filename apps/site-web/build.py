@@ -7,7 +7,7 @@ DIST = os.path.join(HERE, "dist")
 shutil.rmtree(DIST, ignore_errors=True)
 shutil.copytree(os.path.join(HERE, "static"), DIST)
 h = hashlib.sha256()
-for f in ("site.css", "app.js"):
+for f in ("site.css", "app.js", "admin.js"):
     h.update(open(os.path.join(HERE, "static", "assets", f), "rb").read())
 v = h.hexdigest()[:10]
 layout = open(os.path.join(HERE, "layout.html")).read()

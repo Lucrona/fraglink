@@ -138,7 +138,8 @@ pub async fn user_for_token(
         "SELECT t.id, t.kind, u.id, u.email, u.handle, u.display_name
          FROM auth_tokens t JOIN users u ON u.id = t.user_id
          WHERE t.token_hash = $1 AND t.revoked_at IS NULL
-           AND (t.expires_at IS NULL OR t.expires_at > now()) AND u.deleted_at IS NULL",
+           AND (t.expires_at IS NULL OR t.expires_at > now()) AND u.deleted_at IS NULL
+           AND u.banned_at IS NULL",
     )
     .bind(hash_token(token))
     .fetch_optional(&state.db)
@@ -337,8 +338,8 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
             "Too many failed sign-ins. Try again in 15 minutes.",
         ));
     }
-    let row: Option<(Uuid, String, String, String, String)> = sqlx::query_as(
-        "SELECT id, email, handle, display_name, password_hash FROM users
+    let row: Option<(Uuid, String, String, String, String, bool)> = sqlx::query_as(
+        "SELECT id, email, handle, display_name, password_hash, banned_at IS NOT NULL FROM users
          WHERE ((lower(email) = $1 AND email <> '') OR lower(handle) = $1) AND deleted_at IS NULL
          ORDER BY (lower(handle) = $1) DESC LIMIT 1",
     )
@@ -346,8 +347,8 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
     .fetch_optional(&state.db)
     .await?;
     let pw = password.to_string();
-    let (user, hash) = match row {
-        Some((id, email, handle, display_name, hash)) => (
+    let (user, hash, banned) = match row {
+        Some((id, email, handle, display_name, hash, banned)) => (
             Some(User {
                 id,
                 email,
@@ -355,14 +356,20 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
                 display_name,
             }),
             hash,
+            banned,
         ),
-        None => (None, dummy_hash().to_string()),
+        None => (None, dummy_hash().to_string(), false),
     };
     // Argon2 is CPU-heavy: keep it off the async workers.
     let ok = tokio::task::spawn_blocking(move || verify_password(&pw, &hash))
         .await
         .map_err(AppError::internal)?;
     match (user, ok) {
+        (Some(_), true) if banned => Err(AppError::new(
+            StatusCode::FORBIDDEN,
+            "account_banned",
+            "This account has been suspended.",
+        )),
         (Some(u), true) => Ok(u),
         _ => {
             record_failure(state, &key);

@@ -236,7 +236,7 @@ async fn user_search(
     );
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT u.handle, u.display_name FROM users u
-         WHERE u.deleted_at IS NULL AND u.id <> $1
+         WHERE u.deleted_at IS NULL AND u.banned_at IS NULL AND u.id <> $1
            AND (lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2 OR (u.email <> '' AND lower(u.email) = $3))
            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker = u.id AND b.blocked = $1) OR (b.blocker = $1 AND b.blocked = u.id))
          ORDER BY (lower(u.handle) = $3) DESC, lower(u.handle) LIMIT 20",
@@ -275,14 +275,18 @@ async fn me(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
     .bind(a.user.id)
     .fetch_one(&st.db)
     .await?;
-    let (verified, share): (bool, bool) =
-        sqlx::query_as("SELECT email_verified, share_activity FROM users WHERE id = $1")
+    let (verified, share, role): (bool, bool, Option<String>) =
+        sqlx::query_as("SELECT email_verified, share_activity, role FROM users WHERE id = $1")
             .bind(a.user.id)
             .fetch_one(&st.db)
             .await?;
     let mut user = json!(a.user);
     user["email_verified"] = json!(verified);
     user["share_activity"] = json!(share);
+    if role.is_some() {
+        // staff see the Admin link on the website
+        user["staff_role"] = json!(role);
+    }
     Ok(Json(
         json!({ "user": user, "token_kind": a.kind, "linked_accounts": linked }),
     ))

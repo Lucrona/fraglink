@@ -5,11 +5,13 @@
 #![allow(clippy::type_complexity)]
 
 pub mod activity;
+pub mod admin;
 pub mod api;
 pub mod auth;
 pub mod config;
 pub mod error;
 pub mod friends;
+pub mod game_overrides;
 pub mod games;
 pub mod hours;
 pub mod icons;
@@ -45,6 +47,8 @@ pub struct AppState {
     pub sigs: Arc<fraglink_core::signatures::SignatureDb>,
     /// Detection lists served to the desktop app.
     pub games: Arc<games::GameLists>,
+    /// Staff edits to games (see `game_overrides`).
+    pub overrides: Arc<game_overrides::OverrideCache>,
 }
 
 impl AppState {
@@ -60,6 +64,7 @@ impl AppState {
             limits: Arc::new(Mutex::new(HashMap::new())),
             sigs: Arc::new(fraglink_core::signatures::SignatureDb::builtin()),
             games: Arc::new(games::GameLists::default()),
+            overrides: Arc::new(game_overrides::OverrideCache::default()),
         }
     }
 
@@ -106,10 +111,12 @@ pub fn client_ip(headers: &axum::http::HeaderMap) -> String {
 
 /// The whole HTTP surface.
 pub fn router(state: AppState) -> Router {
+    admin::mark_started();
     Router::new()
         .merge(api::routes())
         .merge(web::routes())
         .merge(profile::routes())
+        .merge(admin::routes())
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(state)
 }
