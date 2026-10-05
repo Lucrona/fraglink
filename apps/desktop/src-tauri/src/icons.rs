@@ -106,6 +106,22 @@ fn drop_old_icons(cache: &IconCache) {
     let _ = std::fs::write(marker, b"");
 }
 
+/// Games whose server icon was replaced since the last release: the cached copy is
+/// fetched again once (dev.16: Star Citizen's official emblem).
+const REFRESHED_ICONS: (&str, &[&str]) = (".dev16", &["star_citizen"]);
+
+fn drop_refreshed_icons(cache: &IconCache) {
+    let marker = cache.dir().join(REFRESHED_ICONS.0);
+    if marker.exists() {
+        return;
+    }
+    for id in REFRESHED_ICONS.1 {
+        let _ = std::fs::remove_file(cache.png_path(&key(SV, id)));
+    }
+    let _ = std::fs::create_dir_all(cache.dir());
+    let _ = std::fs::write(marker, b"");
+}
+
 /// Resolve icons as `data:` URLs (None = use the generic icon). Priority for every
 /// game, installed or not: 1) the official icon from the Fraglink server, 2) Steam's
 /// local library icon, 3) the local exe icon, 4) generic. Server answers are cached
@@ -114,6 +130,7 @@ pub fn resolve(app: &AppHandle, ids: &[String], remote: bool) -> HashMap<String,
     let sim = app.state::<AppState>().sim;
     let cache = cache(app);
     drop_old_icons(&cache);
+    drop_refreshed_icons(&cache);
     let srcs = sources(app, ids);
     let now = SystemTime::now();
     let mut out: HashMap<String, Option<String>> = HashMap::new();

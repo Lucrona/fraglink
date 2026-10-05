@@ -29,6 +29,9 @@ Test update (builds report `0.2.0-16`). No server change needed.
   results stay on your PC.
 - **Star Citizen** now shows as installed when the RSI Launcher installed it (found from the launcher's
   own settings and the `Roberts Space Industries` folders). Launch opens the RSI Launcher.
+- **Star Citizen's icon** is now the official Star Citizen emblem.
+- Under the games list a hint explains what to do when a game is missing: launch it once, or click
+  Scan for games.
 - The MSI (for managed installs) is unchanged.
 
 ## [0.2.0-dev.15] - 2026-10-05

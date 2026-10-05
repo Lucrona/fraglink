@@ -72,7 +72,7 @@
     <section data-page="games" hidden>
       <div class="detect"><div class="bar"><b id="det-bar"></b></div><span id="det-msg">Detecting games…</span><select id="g-sort" title="Sort games"><option value="az">A–Z</option><option value="most">Most played</option><option value="recent">Recently played</option></select><button type="button" data-do="detect">Detect Games</button><button type="button" data-do="scan" title="Look through your game folders for installed games (stays on this PC)">Scan for games</button></div>
       <div class="games-split">
-        <div class="tree" id="tree" tabindex="0"></div>
+        <div class="tree-col"><div class="tree" id="tree" tabindex="0"></div><p class="hint tree-hint">Not seeing a game? Launch it once, or click <a data-do="scan" class="hint-link">Scan for games</a>.</p></div>
         <div class="gd-col">
           <fieldset id="gd" class="gd"><legend id="gd-name">Select Game</legend>
             <div class="gd-head"><i class="gd-icon" id="gd-icon"></i><div><b id="gd-title">Select a game on the left</b><small id="gd-src"></small></div></div>
