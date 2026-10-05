@@ -11,6 +11,7 @@ pub mod detector;
 pub mod engine;
 pub mod env;
 pub mod export;
+pub mod folderscan;
 pub mod icons;
 pub mod installs;
 pub mod libraries;

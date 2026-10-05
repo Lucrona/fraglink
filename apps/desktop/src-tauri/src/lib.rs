@@ -832,6 +832,7 @@ pub fn run() {
             }
             sync::init(&handle);
             gamelist::start(&handle);
+            commands::start_first_folder_scan(&handle);
             start_tracker(handle);
             Ok(())
         })
@@ -854,6 +855,7 @@ pub fn run() {
             commands::open_options,
             commands::games_catalog,
             commands::detect_games,
+            commands::scan_games,
             commands::launch_game,
             commands::pick_game_exe,
             commands::open_website,

@@ -8,11 +8,16 @@
 //! * **Ubisoft Connect:** `HKLM\SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs\<id>`
 //!   (`InstallDir`) and `Uplay Install <id>` Uninstall entries.
 //! * **Xbox / Microsoft Store:** folders under `<drive>:\XboxGames\<game>\Content`.
+//! * **RSI Launcher (Star Citizen):** `<root>\StarCitizen\<LIVE|PTU|EPTU|…>\Bin64\StarCitizen.exe`,
+//!   with roots from the launcher's Uninstall entry (its parent folder), install paths
+//!   mentioned in `%APPDATA%\rsilauncher` (settings and logs) and the usual
+//!   `<drive>:\Program Files\Roberts Space Industries` / `<drive>:\Roberts Space Industries`.
 //! * **Anything else:** an Uninstall entry is kept only when [`resolve`] can tie
 //!   it to a signature (same name, or one of its exes in the install folder).
 //!
 //! `FRAGLINK_UNINSTALL_JSON` (a JSON array of entries), `FRAGLINK_BNET_PRODUCT_DB`
-//! and `FRAGLINK_XBOX_DIR` stand in for the registry and fixed paths in tests.
+//! `FRAGLINK_XBOX_DIR` and `FRAGLINK_RSI_ROOTS` (`;`-separated) stand in for the registry
+//! and fixed paths in tests.
 
 use crate::libraries::{
     file_name, make_prefix, prefix_is_safe, InstalledGame, Launcher, LibraryIndex,
@@ -276,10 +281,145 @@ pub fn add_uninstall_entries(idx: &mut LibraryIndex, entries: &[UninstallEntry])
             idx.battlenet_exe = Some(exe.to_string_lossy().into_owned());
             continue;
         }
+        if is_rsi_launcher(e) {
+            let dir = e.install_location.trim().trim_matches('"');
+            if !dir.is_empty() {
+                let d = Path::new(dir);
+                idx.rsi_launcher_exe =
+                    Some(d.join("RSI Launcher.exe").to_string_lossy().into_owned());
+                if let Some(parent) = d.parent() {
+                    idx.rsi_roots.push(parent.to_string_lossy().into_owned());
+                }
+            }
+            continue;
+        }
         if let Some(g) = classify_uninstall(e) {
             add_entry(idx, g);
         }
     }
+}
+
+fn is_rsi_launcher(e: &UninstallEntry) -> bool {
+    let n = e.display_name.trim().to_ascii_lowercase();
+    n == "rsi launcher"
+        || (n.contains("rsi launcher")
+            && e.publisher.to_ascii_lowercase().contains("cloud imperium"))
+}
+
+/// Star Citizen release channels, most used first.
+const RSI_CHANNELS: &[&str] = &["LIVE", "PTU", "EPTU", "TECH-PREVIEW", "HOTFIX"];
+
+/// Add Star Citizen if `<root>\StarCitizen\<channel>\Bin64\StarCitizen.exe` exists under any root
+/// (first root and channel found wins; the whole `StarCitizen` folder counts as the game).
+pub fn add_rsi(idx: &mut LibraryIndex, roots: &[String]) {
+    let mut seen = std::collections::HashSet::new();
+    for root in roots {
+        let root = root.trim().trim_matches('"').trim_end_matches(['\\', '/']);
+        if root.is_empty() || !seen.insert(root.to_ascii_lowercase()) {
+            continue;
+        }
+        let base = Path::new(root);
+        // a root may be the StarCitizen folder itself
+        let sc = if base
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case("StarCitizen"))
+        {
+            base.to_path_buf()
+        } else {
+            base.join("StarCitizen")
+        };
+        for ch in RSI_CHANNELS {
+            let dir = sc.join(ch);
+            if !dir.join("Bin64").join("StarCitizen.exe").is_file() {
+                continue;
+            }
+            let sc_s = sc.to_string_lossy().into_owned();
+            if let Some(mut g) = game(Launcher::Rsi, "StarCitizen".into(), "Star Citizen", &sc_s) {
+                g.install_dir = dir.to_string_lossy().into_owned();
+                g.launch_exe = Some("Bin64\\StarCitizen.exe".into());
+                g.sig_id = Some("star_citizen".into());
+                idx.insert(g);
+                return;
+            }
+        }
+    }
+}
+
+/// Install folders mentioned in the RSI Launcher's settings and logs: every
+/// `X:\...\StarCitizen` path in its small text files gives the folder above it.
+pub fn rsi_roots_from_text(text: &str) -> Vec<String> {
+    let t = text.replace("\\\\", "\\");
+    let lower = t.to_ascii_lowercase();
+    let mut out: Vec<String> = vec![];
+    let mut from = 0;
+    while let Some(i) = lower[from..].find("starcitizen") {
+        let at = from + i;
+        from = at + 11;
+        // must be a whole folder name: preceded by a separator
+        if at == 0 || !matches!(t.as_bytes()[at - 1], b'\\' | b'/') {
+            continue;
+        }
+        // …and followed by a separator or the end of the string (not `StarCitizen.exe`)
+        if !matches!(
+            t.as_bytes().get(at + 11),
+            None | Some(b'\\' | b'/' | b'"' | b'\'' | b'\n' | b'\r' | b' ' | b',')
+        ) {
+            continue;
+        }
+        // walk back to the drive letter ("C:\") on the same line / string
+        let head = &t[..at - 1];
+        let start = head
+            .rfind(['"', '\n', '\r', '\'', '\t', ',', '='])
+            .map_or(0, |k| k + 1);
+        let cand = head[start..].trim_start();
+        let Some(drive) = cand.find(":\\").or_else(|| cand.find(":/")) else {
+            continue;
+        };
+        if drive == 0 || !cand.as_bytes()[drive - 1].is_ascii_alphabetic() {
+            continue;
+        }
+        let root = cand[drive - 1..]
+            .trim_end_matches(['\\', '/'])
+            .replace('/', "\\");
+        if !root.is_empty() && !out.iter().any(|r| r.eq_ignore_ascii_case(&root)) {
+            out.push(root);
+        }
+    }
+    out
+}
+
+/// Text files under `%APPDATA%\rsilauncher` (settings, logs), max 4 MB each, two levels deep.
+fn rsi_launcher_texts(dir: &Path) -> Vec<String> {
+    let mut out = vec![];
+    let mut dirs = vec![(dir.to_path_buf(), 0)];
+    while let Some((d, depth)) = dirs.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if depth < 2 {
+                    dirs.push((p, depth + 1));
+                }
+                continue;
+            }
+            let ext = p
+                .extension()
+                .and_then(|x| x.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            if !matches!(ext.as_str(), "json" | "log" | "txt" | "") {
+                continue;
+            }
+            if e.metadata().is_ok_and(|m| m.len() <= 4_000_000) {
+                if let Ok(b) = std::fs::read(&p) {
+                    out.push(String::from_utf8_lossy(&b).into_owned());
+                }
+            }
+        }
+    }
+    out
 }
 
 pub fn add_product_db(idx: &mut LibraryIndex, bytes: &[u8]) {
@@ -343,6 +483,39 @@ pub fn load_into(idx: &mut LibraryIndex) {
             idx.battlenet_exe = Some(d.into());
         }
     }
+    // RSI Launcher / Star Citizen
+    let mut roots = std::mem::take(&mut idx.rsi_roots);
+    if let Ok(r) = std::env::var("FRAGLINK_RSI_ROOTS") {
+        roots.extend(r.split(';').map(str::to_string));
+    } else if cfg!(windows) {
+        if let Some(app) = std::env::var_os("APPDATA") {
+            for t in rsi_launcher_texts(&Path::new(&app).join("rsilauncher")) {
+                roots.extend(rsi_roots_from_text(&t));
+            }
+        }
+        for l in b'C'..=b'Z' {
+            let d = l as char;
+            for r in [
+                format!(r"{d}:\Program Files\Roberts Space Industries"),
+                format!(r"{d}:\Roberts Space Industries"),
+                format!(r"{d}:\Games\Roberts Space Industries"),
+                format!(r"{d}:\RSI"),
+            ] {
+                if Path::new(&r).is_dir() {
+                    roots.push(r);
+                }
+            }
+        }
+        if idx.rsi_launcher_exe.is_none() {
+            let d = r"C:\Program Files\Roberts Space Industries\RSI Launcher\RSI Launcher.exe";
+            if Path::new(d).exists() {
+                idx.rsi_launcher_exe = Some(d.into());
+            }
+        }
+    }
+    add_rsi(idx, &roots);
+    idx.rsi_roots = roots;
+
     if let Ok(d) = std::env::var("FRAGLINK_XBOX_DIR") {
         add_xbox_dir(idx, Path::new(&d));
     } else if cfg!(windows) {
@@ -750,5 +923,81 @@ mod tests {
         assert_eq!(strip_locale("wow_enus"), "wow");
         assert_eq!(strip_locale("wow_classic"), "wow_classic");
         assert_eq!(uid_from_uninstall(r#""C:\ProgramData\Battle.net\Agent\Blizzard Uninstaller.exe" --lang=enUS --uid=diablo3_enus --displayname="Diablo III""#).as_deref(), Some("diablo3_enus"));
+    }
+
+    #[test]
+    fn rsi_launcher_star_citizen() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Roberts Space Industries");
+        let exe = root.join("StarCitizen/LIVE/Bin64/StarCitizen.exe");
+        std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        std::fs::write(&exe, b"MZ").unwrap();
+        std::fs::create_dir_all(root.join("StarCitizen/PTU/Bin64")).unwrap(); // no exe
+        let launcher_dir = root.join("RSI Launcher");
+        let e = UninstallEntry {
+            key: "RSI Launcher".into(),
+            display_name: "RSI Launcher 2.3.1".into(),
+            publisher: "Cloud Imperium Games".into(),
+            install_location: launcher_dir.to_string_lossy().into(),
+            ..Default::default()
+        };
+        let mut idx = LibraryIndex::default();
+        add_uninstall_entries(&mut idx, &[e]);
+        assert!(idx.games().is_empty(), "the launcher is not a game");
+        assert_eq!(idx.rsi_roots, vec![root.to_string_lossy().to_string()]);
+        let roots = idx.rsi_roots.clone();
+        add_rsi(&mut idx, &roots);
+        let g = &idx.games()[0];
+        assert_eq!(
+            (g.store, g.key.as_str(), g.sig_id.as_deref()),
+            (Launcher::Rsi, "StarCitizen", Some("star_citizen"))
+        );
+        assert!(g.install_dir.ends_with("LIVE"));
+        // the running game maps to this install
+        assert!(idx.game_for_path(&exe.to_string_lossy()).is_some());
+        // Options > Games: installed, from the RSI Launcher, launched through it
+        let sigs = SignatureDb::builtin();
+        let cat = crate::catalog::build(
+            &sigs,
+            &crate::steam::SteamIndex::default(),
+            &idx,
+            &[],
+            &Default::default(),
+        );
+        let e = cat.iter().find(|e| e.id == "star_citizen").unwrap();
+        assert!(e.installed && e.can_launch);
+        assert_eq!(e.source, "rsi");
+        match crate::catalog::launch_for(e, &idx) {
+            Some(crate::catalog::Launch::Exe { path, .. }) => {
+                assert!(path.ends_with("RSI Launcher.exe"), "{path}")
+            }
+            other => panic!("{other:?}"),
+        }
+        // without the launcher: the game exe
+        idx.rsi_launcher_exe = None;
+        match crate::catalog::launch_for(e, &idx) {
+            Some(crate::catalog::Launch::Exe { path, .. }) => {
+                assert!(path.ends_with("StarCitizen.exe"), "{path}")
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn rsi_roots_from_launcher_files() {
+        let json = r#"{"library":{"defaults":[{"id":"SC","channelId":"LIVE","installDir":"D:\\Games\\Roberts Space Industries\\StarCitizen\\LIVE"}]}}"#;
+        assert_eq!(
+            rsi_roots_from_text(json),
+            vec![r"D:\Games\Roberts Space Industries".to_string()]
+        );
+        let log = "[info] launching E:/RSI/StarCitizen/PTU/Bin64/StarCitizen.exe\n[info] C:\\Program Files\\Roberts Space Industries\\StarCitizen\\LIVE ok";
+        assert_eq!(
+            rsi_roots_from_text(log),
+            vec![
+                r"E:\RSI".to_string(),
+                r"C:\Program Files\Roberts Space Industries".to_string()
+            ]
+        );
+        assert!(rsi_roots_from_text("StarCitizenFan wrote: no paths here").is_empty());
     }
 }

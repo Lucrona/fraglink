@@ -26,6 +26,10 @@ pub enum Launcher {
     Ea,
     Ubisoft,
     Xbox,
+    /// Star Citizen from the RSI Launcher (Roberts Space Industries).
+    Rsi,
+    /// Found by "Scan for games" (a game folder on disk, see `folderscan.rs`).
+    Folder,
     /// Found through a Windows "Uninstall" entry that matches the signature list.
     Windows,
 }
@@ -39,6 +43,8 @@ impl Launcher {
             Launcher::Ea => "ea",
             Launcher::Ubisoft => "ubisoft",
             Launcher::Xbox => "xbox",
+            Launcher::Rsi => "rsi",
+            Launcher::Folder => "scan",
             Launcher::Windows => "windows",
         }
     }
@@ -64,6 +70,9 @@ pub struct InstalledGame {
 impl InstalledGame {
     /// Stable Fraglink id when no signature matches (`epic:<AppName>`, `gog:<id>`).
     pub fn fallback_id(&self) -> String {
+        if self.store == Launcher::Folder {
+            return self.key.clone(); // already the detector's id
+        }
         format!("{}:{}", self.store.as_str(), self.key)
     }
 }
@@ -193,6 +202,10 @@ pub struct LibraryIndex {
     games: Vec<InstalledGame>,
     /// Full path of `Battle.net.exe`, if found.
     pub battlenet_exe: Option<String>,
+    /// Full path of `RSI Launcher.exe`, if found.
+    pub rsi_launcher_exe: Option<String>,
+    /// Folders that may hold `StarCitizen\<channel>` (from the RSI Launcher's own data).
+    pub rsi_roots: Vec<String>,
 }
 
 impl LibraryIndex {

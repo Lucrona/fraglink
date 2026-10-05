@@ -218,6 +218,7 @@ pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Set
         settings: {
             let mut s = e.tracker.store.all_settings().map_err(err)?;
             s.retain(|k, _| !crate::sync::keys::HIDDEN.contains(&k.as_str()));
+            s.remove(fraglink_core::folderscan::CACHE_KEY);
             s
         },
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
@@ -854,6 +855,71 @@ pub async fn detect_games(app: AppHandle) -> Vec<catalog::Entry> {
     }
     crate::refresh_tray(&app);
     catalog_now(&state)
+}
+
+static SCANNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// "Scan for games": walk the usual game folders (background priority, bounded,
+/// never holding the engine lock while reading the disk) and cache what matches.
+/// Local only. Returns None when a scan is already running.
+pub(crate) fn run_folder_scan(app: &AppHandle) -> Option<usize> {
+    use std::sync::atomic::Ordering;
+    if SCANNING.swap(true, Ordering::SeqCst) {
+        return None;
+    }
+    let state = app.state::<AppState>();
+    let roots = state.engine.lock().unwrap().folder_scan_roots();
+    fraglink_core::folderscan::background_priority();
+    let started = std::time::Instant::now();
+    let (exes, dirs) = fraglink_core::folderscan::walk_exes(
+        &roots,
+        &fraglink_core::folderscan::ScanOpts::default(),
+    );
+    log::info!(
+        "folder scan: {} roots, {} folders in {:.1}s",
+        roots.len(),
+        dirs,
+        started.elapsed().as_secs_f32()
+    );
+    let n = state
+        .engine
+        .lock()
+        .unwrap()
+        .apply_folder_scan(&exes, dirs, now());
+    SCANNING.store(false, Ordering::SeqCst);
+    crate::refresh_tray(app);
+    let _ = app.emit("games-changed", ());
+    Some(n)
+}
+
+/// First start: one background folder scan after the app has settled.
+pub(crate) fn start_first_folder_scan(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if state.sim || state.engine.lock().unwrap().folder_scan_cache().is_some() {
+        return;
+    }
+    let app = app.clone();
+    std::thread::Builder::new()
+        .name("folder-scan".into())
+        .spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(45));
+            run_folder_scan(&app);
+        })
+        .ok();
+}
+
+/// Options > Games "Scan for games".
+#[tauri::command]
+pub async fn scan_games(app: AppHandle) -> CmdResult<Vec<catalog::Entry>> {
+    if app.state::<AppState>().sim {
+        return Ok(catalog_now(&app.state::<AppState>()));
+    }
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || run_folder_scan(&a))
+        .await
+        .map_err(err)?
+        .ok_or("A scan is already running.")?;
+    Ok(catalog_now(&app.state::<AppState>()))
 }
 
 /// Start an installed game (Steam/Epic via their launchers, else its exe).

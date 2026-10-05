@@ -40,6 +40,7 @@ code { font: 10px Consolas, monospace; word-break: break-all; }
 .detect { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .detect .bar { width: 120px; height: 14px; border: 1px solid #bcbcbc; background: #e6e6e6; border-radius: 2px; overflow: hidden; }
 .detect .bar b { display: block; height: 100%; width: 0; background: linear-gradient(#a8e89a, #37b01f 50%, #2c9a17); transition: width .25s; }
+.detect select { max-width: 120px; }
 .detect span { flex: 1; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tree { height: 170px; overflow: auto; border: 1px solid #828790; padding: 2px 0; margin-bottom: 8px; outline: none; }
 .tree .node { padding: 1px 4px; white-space: nowrap; cursor: default; }

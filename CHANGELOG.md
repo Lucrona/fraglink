@@ -18,6 +18,17 @@ Test update (builds report `0.2.0-16`). No server change needed.
 - **Updates** use the same window ("Updating Fraglink…") and restart Fraglink as before; nothing to click.
 - **Announcements:** while signed in, a message from the Fraglink team (the website's banner) shows once as
   a small notification; click it to open its link.
+- **Options > Games** lists only your games: installed ones, plus games you played on this PC before.
+  The long "Not installed" list is gone. A new sort menu offers A–Z, Most played and Recently played,
+  and remembers your choice.
+- **Scan for games:** on first start Fraglink looks through your game folders once, in the background at
+  low priority (`Games` folders on every fixed drive, game folders under Program Files and your
+  launchers' library folders), and adds the games it recognises to Installed games. Run it again any
+  time with the new **Scan for games** button in Options > Games. It only reads file and folder names,
+  skips Windows and system folders, ignores launchers and test builds (PTR / Public Test), and the
+  results stay on your PC.
+- **Star Citizen** now shows as installed when the RSI Launcher installed it (found from the launcher's
+  own settings and the `Roberts Space Industries` folders). Launch opens the RSI Launcher.
 - The MSI (for managed installs) is unchanged.
 
 ## [0.2.0-dev.15] - 2026-10-05

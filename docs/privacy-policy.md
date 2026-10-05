@@ -24,10 +24,17 @@ Last updated: 5 October 2026 Â· Operator: **TBD** (who runs the public server) Â
 **What it reads** (read-only, about every 5 seconds):
 
 - The list of running programs (name, full path, process id), which it compares against a list of known games.
-- Steam's current game id and library files, Epic Games install manifests and GOG Galaxy's install
-  list. It uses these only to recognise games you installed through them.
+- Steam's current game id and library files, and the install lists of other game launchers (Epic
+  Games, GOG Galaxy, Battle.net, EA app, Ubisoft Connect, Xbox, the RSI Launcher, the Windows list
+  of installed programs). It uses these only to recognise games you installed through them.
+- **Scan for games:** once, in the background on first start (and again when you press "Scan for
+  games" in Options > Games), it looks through the folders games usually live in (for example
+  `Games` folders and game folders under Program Files on your fixed drives, and your launchers'
+  library folders) for game programs it recognises. It only looks at folder and file names, not
+  file contents, and skips Windows, system and user-profile folders. The list of games it finds is
+  kept on your PC and is never uploaded.
 - How long it's been since you last touched the keyboard or mouse (one number from Windows), only
-  to show you as Away after 10 minutes, like Discord. It never records which keys you press or
+  to show you as Away after 10 minutes. It never records which keys you press or
   where you click, and it doesn't change your playtime: hours count all the time a game is running,
   like Steam.
 

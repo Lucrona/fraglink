@@ -383,20 +383,89 @@ impl Engine {
         let mut libs = crate::libraries::LibraryIndex::load();
         crate::installs::resolve(&mut libs, &self.detector.sigs);
         self.detector.libs = libs;
+        self.merge_folder_scan();
         {
             use crate::libraries::Launcher::*;
             let c = |l| self.detector.libs.count(l);
             log::info!(
-                "libraries: {} Epic, {} GOG, {} Battle.net, {} EA, {} Ubisoft, {} Xbox, {} other installs",
+                "libraries: {} Epic, {} GOG, {} Battle.net, {} EA, {} Ubisoft, {} Xbox, {} RSI, {} other installs, {} from the folder scan",
                 c(Epic),
                 c(Gog),
                 c(Battlenet),
                 c(Ea),
                 c(Ubisoft),
                 c(Xbox),
-                c(Windows)
+                c(Rsi),
+                c(Windows),
+                c(Folder)
             );
         }
+    }
+
+    /// The cached "Scan for games" results, if a scan ever ran.
+    pub fn folder_scan_cache(&self) -> Option<crate::folderscan::ScanCache> {
+        self.tracker
+            .store
+            .get_setting(crate::folderscan::CACHE_KEY)
+            .ok()
+            .flatten()
+            .and_then(|t| serde_json::from_str(&t).ok())
+    }
+
+    fn merge_folder_scan(&mut self) {
+        if let Some(c) = self.folder_scan_cache() {
+            let d = &mut self.detector;
+            crate::folderscan::merge_into(&mut d.libs, &d.steam, &d.sigs, &c.found);
+        }
+    }
+
+    /// Folders for the scan: the usual game folders plus Steam libraries and the
+    /// folders launchers install into.
+    pub fn folder_scan_roots(&self) -> Vec<std::path::PathBuf> {
+        use std::path::{Path, PathBuf};
+        let mut extra: Vec<PathBuf> = vec![];
+        for l in &self.detector.steam.libraries {
+            extra.push(l.join("steamapps").join("common"));
+        }
+        for g in self.detector.libs.games() {
+            if g.store == crate::libraries::Launcher::Folder {
+                continue;
+            }
+            if let Some(p) = Path::new(&g.install_dir).parent() {
+                extra.push(p.to_path_buf());
+            }
+        }
+        extra.extend(self.detector.libs.rsi_roots.iter().map(PathBuf::from));
+        crate::folderscan::default_roots(&extra)
+    }
+
+    /// Classify the exes a folder walk found, cache the result and add it to the
+    /// install list. Returns the number of games found.
+    pub fn apply_folder_scan(&mut self, exes: &[String], dirs: usize, now: i64) -> usize {
+        let found = crate::folderscan::classify(&self.detector, exes);
+        let cache = crate::folderscan::ScanCache {
+            at: now,
+            dirs,
+            found,
+        };
+        if let Ok(t) = serde_json::to_string(&cache) {
+            let _ = self
+                .tracker
+                .store
+                .set_setting(crate::folderscan::CACHE_KEY, &t);
+        }
+        self.detector
+            .libs
+            .retain(|g| g.store != crate::libraries::Launcher::Folder);
+        self.merge_folder_scan();
+        log::info!(
+            "folder scan: {} exes in {} folders, {} games ({} new to the install list)",
+            exes.len(),
+            dirs,
+            cache.found.len(),
+            self.detector.libs.count(crate::libraries::Launcher::Folder)
+        );
+        cache.found.len()
     }
 
     /// One poll of the environment. Call every [`DEFAULT_POLL_SECS`].

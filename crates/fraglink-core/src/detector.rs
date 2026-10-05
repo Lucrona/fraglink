@@ -155,6 +155,19 @@ impl Detector {
         (g.fallback_id(), g.name.clone())
     }
 
+    /// How an exe on disk would be classified if it were running (folder scan).
+    pub fn classify_file(&self, path: &str) -> Option<Detection> {
+        let name = std::path::Path::new(path)
+            .file_name()?
+            .to_string_lossy()
+            .into_owned();
+        self.classify(&ProcInfo {
+            pid: 0,
+            name,
+            path: Some(path.to_string()),
+        })
+    }
+
     fn classify(&self, p: &ProcInfo) -> Option<Detection> {
         let exe_l = p.name.to_lowercase();
         if self.excluded_exes.contains(&exe_l) {
@@ -681,5 +694,50 @@ mod tests {
         );
         assert_eq!(t[0].game_id, "steam:999999");
         assert_eq!(t[0].name, "Tiny Indie Game");
+    }
+
+    /// The server's detectable list (dev.15 shape: `starcitizen.exe` only) matches the
+    /// RSI Launcher's install path, with and without the RSI install in the library list.
+    #[test]
+    fn star_citizen_from_server_list_and_rsi_install() {
+        let json = br#"{"v":1,"updated":"2026-10-04T17:35:24Z","games":[{"i":"452295596917784577","s":"star_citizen","n":"Star Citizen","e":["starcitizen.exe"]}]}"#;
+        let mut d = Detector::new(SignatureDb::builtin(), SteamIndex::default());
+        d.overrides = crate::overrides::Overrides::default();
+        d.detectable =
+            std::sync::Arc::new(crate::detectable::DetectableDb::from_json(json).unwrap());
+        let path =
+            r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE\Bin64\StarCitizen.exe";
+        let m = d
+            .detectable
+            .match_process("StarCitizen.exe", Some(path))
+            .unwrap();
+        assert_eq!(m.game.slug, "star_citizen");
+        let ids = |d: &Detector| {
+            d.detect(
+                &[ProcInfo {
+                    pid: 1,
+                    name: "StarCitizen.exe".into(),
+                    path: Some(path.into()),
+                }],
+                None,
+            )
+            .into_iter()
+            .map(|x| x.game_id)
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&d), vec!["star_citizen".to_string()]);
+        d.libs.insert(InstalledGame {
+            store: Launcher::Rsi,
+            key: "StarCitizen".into(),
+            name: "Star Citizen".into(),
+            install_dir: r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE".into(),
+            launch_exe: Some(r"Bin64\StarCitizen.exe".into()),
+            prefix: crate::libraries::make_prefix(
+                r"C:\Program Files\Roberts Space Industries\StarCitizen",
+            ),
+            sig_id: Some("star_citizen".into()),
+            launch_code: None,
+        });
+        assert_eq!(ids(&d), vec!["star_citizen".to_string()]);
     }
 }

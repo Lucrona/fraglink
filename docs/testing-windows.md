@@ -97,7 +97,7 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - A program you tagged yourself ("This is a game…") shows the icon from its exe; anything without one shows the generic game symbol.
 - `%APPDATA%\gg.fraglink.desktop\icons`: old icon files are cleared on the first start; official icons are cached as `sv_*.png`.
 
-## One-click installer, announcements (0.2.0-dev.16)
+## One-click installer, announcements, games list (0.2.0-dev.16)
 
 - dev.15 installed: it updates itself to dev.16 (startup or Help > Check for Updates). The update window is the dark Fraglink window saying **Updating Fraglink…**, then Fraglink restarts by itself. Help > About shows 0.2.0-dev.16.
 - Fresh install (Apps & features > Fraglink > Uninstall first, or another Windows user): run `Fraglink_0.2.0-16_x64-setup.exe`. After SmartScreen (*More info > Run anyway*) there are **no questions and no UAC prompt**: a small borderless dark window (logo, "PLAY. CONNECT. TRACK.", **Installing Fraglink…**, blue progress bar on a dark track) closes after a few seconds and Fraglink opens at its sign-in screen.
@@ -107,4 +107,7 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - Uninstall from Apps & features: the usual uninstaller page (with "Delete the application data") removes the app and both shortcuts.
 - `Fraglink_0.2.0-16_x64-setup.exe /S` installs silently (no window, Fraglink is not started).
 - Announcement: with an active banner on the website (Admin > Announcements), a signed-in app shows it once as a bottom-right notification within ~20 s of start (or within 15 min); clicking it opens the link if there is one. It doesn't come back after a restart.
+- Options > Games: the tree shows **Installed games** and (if any) **Played before**; there is no "Not installed" section. The sort menu (A–Z / Most played / Recently played) reorders both and is remembered after closing and reopening Options.
+- Scan for games: about 45 s after the first start of dev.16 the log (`%APPDATA%\gg.fraglink.desktop\logs`) shows `folder scan: … folders in …s` and `folder scan: … games`; the PC stays responsive meanwhile. Games outside Steam/Epic/GOG/Battle.net/EA/Ubisoft/Xbox (e.g. a standalone game in `D:\Games`, `E:\Battle.net Games`) appear under Installed games with the source "found in your game folders" and can be launched. Press **Scan for games**: the message says "Scanning your game folders…", then "Found N installed games". Launchers, PTR / Public Test builds and uninstallers are not listed.
+- Star Citizen installed with the RSI Launcher (any drive/folder): it appears under Installed games with "RSI Launcher"; Launch opens the RSI Launcher. Starting Star Citizen (LIVE or PTU) still shows "Playing Star Citizen".
 

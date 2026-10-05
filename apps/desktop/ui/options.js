@@ -11,7 +11,7 @@
   const pending = new Map();
   let st = null, catalog = null, gsel = null, detecting = false;
   const fail = e => alert(String(e && e.message || e));
-  const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '', detectable: '' };
+  const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', rsi: 'RSI Launcher', scan: 'found in your game folders', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '', detectable: '' };
   const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
   // Dark and Phoenix skins get the dark 2013 look; Classic and Stream keep the plain system look.
@@ -48,6 +48,7 @@
       else el.value = v;
     });
     scaleBox();
+    $('#g-sort').value = sortBy;
     $('#about').innerHTML = [
       ['Version', `Fraglink ${esc(st.version)}${st.sim ? ' <span class="bad">(simulation mode)</span>' : ''}`],
       ['Data folder', `<code>${esc(st.data_dir)}</code>`],
@@ -60,6 +61,7 @@
 
   document.addEventListener('change', e => {
     const t = e.target;
+    if (t.id === 'g-sort') { sortBy = SORTS.includes(t.value) ? t.value : 'az'; localStorage.setItem('fl_games_sort', sortBy); renderTree(); return; }
     if (t.id === 'share-activity') {
       FLB.setShareActivity(t.checked).then(() => { $('#share-msg').textContent = t.checked ? 'Friends can see your recent games and hours this week.' : 'Friends only see what you are playing right now.'; })
         .catch(err => { t.checked = !t.checked; $('#share-msg').textContent = String(err); });
@@ -91,14 +93,23 @@
   /* ---- Games tab ---- */
   const staged = (id, key, orig) => pending.has(key + id) ? pending.get(key + id) : orig;
   const isEx = g => staged(g.id, 'exclude:', g.excluded ? '1' : '0') === '1';
-  let open = { inst: true, not: false };
+  let open = { inst: true, played: true };
+  // Sort: A–Z (default), most played, recently played; remembered on this PC.
+  const SORTS = ['az', 'most', 'recent'];
+  let sortBy = SORTS.includes(localStorage.getItem('fl_games_sort')) ? localStorage.getItem('fl_games_sort') : 'az';
+  const byName = (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+  const sorted = arr => arr.slice().sort(sortBy === 'most' ? (a, b) => (b.total_seconds || 0) - (a.total_seconds || 0) || byName(a, b)
+    : sortBy === 'recent' ? (a, b) => (b.last_played || 0) - (a.last_played || 0) || byName(a, b) : byName);
+  // Played or detected here before (stats or an exclusion), though not found installed now.
+  const played = g => !g.installed && ((g.total_seconds || 0) > 0 || !!g.last_played || g.excluded || g.source === 'tracked' || g.source === 'manual');
+  const shown = () => catalog ? catalog.filter(g => g.installed || played(g)) : [];
   function renderTree() {
     const t = $('#tree');
     if (!catalog) { t.innerHTML = ''; return; }
-    const inst = catalog.filter(g => g.installed), not = catalog.filter(g => !g.installed);
+    const inst = sorted(catalog.filter(g => g.installed)), prev = sorted(catalog.filter(played));
     const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}" title="${esc(SOURCES[g.source] ?? g.source)}">${iconHtml(g.id)}<span>${esc(g.name)}</span></div>`;
     const node = (k, label, arr) => `<div class="node" data-node="${k}"><span class="tw">${open[k] ? '−' : '+'}</span>${label} (${arr.length})</div>` + (open[k] ? arr.map(leaf).join('') : '');
-    t.innerHTML = node('inst', 'Installed games', inst) + node('not', 'Not installed', not);
+    t.innerHTML = node('inst', 'Installed games', inst) + (prev.length ? node('played', 'Played before', prev) : '');
   }
   // Same icon order as everywhere: server, Steam, exe, then the generic icon.
   const icons = {};
@@ -106,7 +117,7 @@
   const iconHtml = id => `<i class="gi">${icons[id] ? `<img src="${icons[id]}" alt="">` : GENERIC}</i>`;
   async function loadIcons() {
     if (!catalog || !FLB.gameIcons) return;
-    const ids = catalog.map(g => g.id).filter(id => !(id in icons));
+    const ids = shown().map(g => g.id).filter(id => !(id in icons)).slice(0, 60);
     if (!ids.length) return;
     try { const m = await FLB.gameIcons(ids, false); for (const id of ids) icons[id] = m && m[id] || null; renderTree(); renderDetail(); } catch (e) { console.warn('icons', e); }
   }
@@ -114,7 +125,7 @@
     const g = catalog && catalog.find(x => x.id === gsel);
     $('#gd-name').textContent = 'Select Game';
     $('#gd-title').textContent = g ? g.name : 'Select a game on the left';
-    $('#gd-src').textContent = g ? (g.installed ? 'Installed' : 'Not installed') + (SOURCES[g.source] ? ' · ' + SOURCES[g.source] : '') : '';
+    $('#gd-src').textContent = g ? (g.installed ? 'Installed' : 'Played before') + (SOURCES[g.source] ? ' · ' + SOURCES[g.source] : '') : '';
     $('#gd-icon').innerHTML = g ? iconHtml(g.id) : '';
     $$('#gd input, #gd button').forEach(x => { x.disabled = !g; });
     $('#gd-path').value = g ? staged(g.id, 'game_path:', g.game_path || '') : '';
@@ -124,18 +135,21 @@
     const mode = g ? staged(g.id, 'detect_mode:', (st.settings || {})['detect_mode:' + g.id] || 'auto') : 'auto';
     $('#gd-auto').checked = mode !== 'manual'; $('#gd-manual').checked = mode === 'manual';
   }
-  async function detect() {
+  async function detect(scan) {
     if (detecting) return; detecting = true;
     const bar = $('#det-bar'); let p = 0; bar.style.width = '0';
-    $('#det-msg').textContent = 'Detecting games…';
-    const tick = setInterval(() => { p = Math.min(90, p + 7); bar.style.width = p + '%'; }, 120);
+    $('#det-msg').textContent = scan === true ? 'Scanning your game folders…' : 'Detecting games…';
+    $$('[data-do=detect], [data-do=scan]').forEach(b => { b.disabled = true; });
+    const tick = setInterval(() => { p = Math.min(90, p + (scan === true ? 1 : 7)); bar.style.width = p + '%'; }, scan === true ? 400 : 120);
     try {
-      catalog = await FLB.detectGames();
+      catalog = await (scan === true && FLB.scanGames ? FLB.scanGames() : FLB.detectGames());
       const n = catalog.filter(g => g.installed).length;
-      $('#det-msg').textContent = `Found ${n} installed game${n === 1 ? '' : 's'} (${catalog.length} known).`;
-    } catch (e) { $('#det-msg').textContent = 'Detection failed: ' + e; catalog = catalog || []; }
+      $('#det-msg').textContent = `Found ${n} installed game${n === 1 ? '' : 's'}.`;
+    } catch (e) { $('#det-msg').textContent = (scan === true ? 'Scan failed: ' : 'Detection failed: ') + e; catalog = catalog || []; }
     clearInterval(tick); bar.style.width = '100%'; detecting = false;
-    if (!gsel && catalog.length) { const f = catalog.find(x => x.id === params.get('game')) || catalog.find(x => x.installed) || catalog[0]; gsel = f.id; }
+    $$('[data-do=detect], [data-do=scan]').forEach(b => { b.disabled = false; });
+    const list = shown();
+    if ((!gsel || !list.some(x => x.id === gsel)) && list.length) { const f = list.find(x => x.id === params.get('game')) || list.find(x => x.installed) || list[0]; gsel = f.id; }
     renderTree(); renderDetail(); loadIcons();
   }
   async function loadCands() {
@@ -237,7 +251,8 @@
     advanced: () => { $('#adv').hidden = !$('#adv').hidden; },
     export: async () => { try { const p = await FLB.exportData(); $('#export-msg').innerHTML = 'Saved: <code>' + p.map(esc).join('</code>, <code>') + '</code>'; } catch (e) { fail(e); } },
     'open-data': () => FLB.openData().catch(fail),
-    detect,
+    detect: () => detect(),
+    scan: () => detect(true),
     browse: async () => { if (!gsel) return; try { const p = await FLB.pickExe(); if (p) { $('#gd-path').value = p; pending.set('game_path:' + gsel, p); pending.set('detect_mode:' + gsel, 'manual'); $('#gd-manual').checked = true; $('#apply').disabled = false; } } catch (e) { fail(e); } },
     'add-manual': () => { $('#manual').hidden = !$('#manual').hidden; if (!$('#manual').hidden) loadCands(); },
     'man-refresh': loadCands,

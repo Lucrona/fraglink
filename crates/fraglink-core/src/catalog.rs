@@ -29,6 +29,9 @@ pub struct Entry {
     pub launch_args: String,
     pub excluded: bool,
     pub can_launch: bool,
+    /// Tracked play time on this PC (seconds) and the last session's end, for sorting.
+    pub total_seconds: i64,
+    pub last_played: Option<i64>,
 }
 
 /// A folder in normal Windows form for Options > Games: real casing (asked from the
@@ -137,6 +140,8 @@ pub fn build(
             launch_args: set(ARGS_KEY, &g.id).unwrap_or_default(),
             excluded: row.is_some_and(|r| r.excluded),
             can_launch: false,
+            total_seconds: row.map_or(0, |r| r.total_seconds),
+            last_played: row.and_then(|r| r.last_played),
         });
         seen_ids.insert(g.id.clone());
     }
@@ -167,6 +172,8 @@ pub fn build(
             launch_args: set(ARGS_KEY, &id).unwrap_or_default(),
             excluded: rows.get(id.as_str()).is_some_and(|r| r.excluded),
             can_launch: false,
+            total_seconds: rows.get(id.as_str()).map_or(0, |r| r.total_seconds),
+            last_played: rows.get(id.as_str()).and_then(|r| r.last_played),
             id,
         });
     }
@@ -196,6 +203,8 @@ pub fn build(
             launch_args: set(ARGS_KEY, &r.id).unwrap_or_default(),
             excluded: r.excluded,
             can_launch: false,
+            total_seconds: r.total_seconds,
+            last_played: r.last_played,
         });
     }
     for e in &mut out {
@@ -275,7 +284,26 @@ pub fn launch_for(e: &Entry, libs: &LibraryIndex) -> Option<Launch> {
                     return Some(Launch::Url(format!("uplay://launch/{id}/0")));
                 }
             }
-            Launcher::Gog | Launcher::Ea | Launcher::Xbox | Launcher::Windows => {
+            Launcher::Rsi => {
+                // through the RSI Launcher (it logs in and patches first), else the game exe
+                if let Some(rsi) = &libs.rsi_launcher_exe {
+                    return Some(Launch::Exe {
+                        path: rsi.clone(),
+                        args: vec![],
+                    });
+                }
+                if let Some(x) = &l.launch_exe {
+                    return Some(Launch::Exe {
+                        path: exe_path(x),
+                        args,
+                    });
+                }
+            }
+            Launcher::Gog
+            | Launcher::Ea
+            | Launcher::Xbox
+            | Launcher::Folder
+            | Launcher::Windows => {
                 if let Some(x) = &l.launch_exe {
                     return Some(Launch::Exe {
                         path: exe_path(x),
