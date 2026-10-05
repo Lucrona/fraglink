@@ -237,7 +237,14 @@ async fn requests_accepts_and_blocks_are_pushed(pool: PgPool) {
     .await;
     assert_eq!(ca.expect("friend_accepted").await["handle"], "bob");
     // on accept, each side gets the other's current presence
-    let p = cb.expect("presence").await;
+    // (a slow runner may deliver an earlier presence update first; the game must follow)
+    let mut p = cb.expect("presence").await;
+    for _ in 0..3 {
+        if p["game_id"].as_str().is_some() {
+            break;
+        }
+        p = cb.expect("presence").await;
+    }
     assert_eq!(
         (p["handle"].as_str(), p["game_id"].as_str()),
         (Some("alice"), Some("cs2"))
