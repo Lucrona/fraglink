@@ -1236,7 +1236,10 @@
     if (btn.disabled) { btn.querySelector('span').textContent = 'Offline'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
     const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? np.name : '';
     const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? 'Playing ' + game : 'Online';
-    btn.querySelector('span').textContent = txt; btn.title = 'Status: ' + txt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
+    // hover: the game with its detail (WoW realm), e.g. "Playing World of Warcraft: Forever · Frostmourne"
+    const detail = game && np.detail ? ' · ' + np.detail : '';
+    const tipTxt = detail && txt.includes(game) ? txt.replace(game, game + detail) : txt;
+    btn.querySelector('span').textContent = txt; btn.title = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();
     $('#username').textContent = (realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name) + statusLabel();
     if ($('#px-user') && $('#px-user').textContent === '(Offline)') $('#px-user').textContent = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;

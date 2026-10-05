@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+- **Your realm on hover:** while you play World of Warcraft, hovering your status at the top of the main
+  window shows the game with your realm, e.g. "Playing World of Warcraft: Forever · Frostmourne".
+
 ## [0.2.0-dev.16] - 2026-10-05
 
 Test update (builds report `0.2.0-16`). No server change needed.

@@ -105,7 +105,7 @@
       const top = games.filter(g => !g.excluded).map(g => ({ game_id: g.id, name: g.name, seven_day_seconds: Math.round((seven[g.id] || 0) * 3600) + (g.id === 'wow' ? active : 0), total_seconds: g.total_seconds + (g.id === 'wow' ? active : 0), tier: 'tracked', last_played: g.last_played }))
         .sort((a, b) => b.seven_day_seconds - a.seven_day_seconds || b.total_seconds - a.total_seconds).slice(0, 5);
       return ok({
-        now_playing: paused ? null : { game_id: 'wow', name: 'World of Warcraft', session_id: 6, started_at: t0, active_seconds: active, idle_trimmed_seconds: 0, idle: false, source: 'signature' },
+        now_playing: paused ? null : { game_id: 'wow', name: 'World of Warcraft', session_id: 6, started_at: t0, active_seconds: active, idle_trimmed_seconds: 0, idle: false, source: 'signature', detail: 'Frostmourne' },
         paused, today: day(), today_seconds: 5760 + active, today_by_game: [], week_seconds: 13.5 * 3600 + active, last_week_seconds: 11.4 * 3600,
         seven_day_seconds: 13.5 * 3600 + active, last_7_days: [6, 5, 4, 3, 2, 1, 0].map(i => ({ day: day(i), seconds: i === 0 ? 5760 + active : (i % 3) * 3600 })),
         streak_days: 6, total_seconds: games.reduce((a, g) => a + g.total_seconds, 0), top, games_tracked: games.length,
