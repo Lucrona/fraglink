@@ -64,6 +64,8 @@
       sideWidth: (width) => inv('set_side_width', { width: Number(width) }),
       friendsActivity: () => inv('friends_activity'),
       friendSummary: (handle) => inv('friend_summary', { handle }),
+      // 0.2.0-dev.17: the friend side panel's Stats and Recent (GET /api/v1/users/{handle}/profile)
+      friendProfile: (handle) => inv('friend_profile', { handle }),
       setShareActivity: (on) => inv('set_share_activity', { on: !!on }),
       // 0.2.0-dev.10
       checkUpdates: () => inv('check_for_updates'),
@@ -173,7 +175,9 @@
       { kind: 'played', handle: 'Krakatoa', display_name: 'Krakatoa', game_id: 'wow', game_name: 'World of Warcraft', at: iso(5 * 3600), duration_s: 3 * 3600 + 40 * 60 },
       { kind: 'played', handle: 'nyx0', display_name: 'nyx0', game_id: 'hl2', game_name: 'Half-Life 2', at: iso(26 * 3600), duration_s: 48 * 60 },
     ] }),
-    friendSummary: (h) => ok({ handle: h, shares_activity: true, week_seconds: (h.length * 7919 % 20 + 3) * 3600 + 1260, last_7d_seconds: (h.length * 7919 % 20 + 5) * 3600, top_game_7d: null }),
+    friendSummary: (h) => { const x = hist(h); return ok({ handle: h, shares_activity: x.shares, week_seconds: x.shares ? x.week * 3600 : null, last_7d_seconds: x.shares ? x.week * 3600 : null, top_game_7d: x.shares ? x.top : null }); },
+    friendProfile: (h) => { const x = hist(h); return ok({ handle: h, history_visible: x.shares, shares_activity: x.shares, overall: { total_min: x.shares ? x.total * 60 : 0, minutes_7d: x.shares ? x.week * 60 : 0 },
+      games: x.shares ? x.games.map(([game_id, name, hours, daysAgo]) => ({ game_id, name, listed: true, total_min: Math.round(hours * 60), minutes_7d: daysAgo < 7 ? 60 : 0, last_played_at: iso(daysAgo * 86400 + 3600) })) : [], recent: [] }); },
     setShareActivity: (on) => { settings.share_activity_mock = on ? '1' : '0'; return ok({ share_activity: on }); },
     checkUpdates: () => new Promise(r => setTimeout(() => r({ result: 'up_to_date', version: 'preview' }), 700)),
     autoAway: () => ok(new URLSearchParams(location.search).get('away') === '1'),
@@ -201,8 +205,18 @@
   ];
   const iso = (s) => new Date((now() - s) * 1000).toISOString();
   const muted = [];
+  // sample play history per friend: [game id, name, total hours, days since last played]
+  const HIST = {
+    dizz_spinner: { week: 23.1, total: 503, top: 'World of Warcraft', games: [['wow', 'World of Warcraft', 488.6, 0], ['wc3', 'Warcraft III', 12.4, 2], ['hl2', 'Half-Life 2', 2.0, 9]] },
+    riftwalker: { week: 4.2, total: 260, top: 'Battlefield 2', games: [['bf2', 'Battlefield 2', 140.5, 1], ['steam:553850', 'Helldivers 2', 62.0, 4], ['quake3', 'Quake III Arena', 9.5, 20]] },
+    pixelmoth: { week: 6.3, total: 1210, top: 'Counter-Strike 2', games: [['cs2', 'Counter-Strike 2', 1150.2, 1], ['steam:1145350', 'Hades II', 41.0, 3], ['minecraft', 'Minecraft', 18.8, 12]] },
+    grimm: { shares: false },
+  };
+  const hist = h => { const x = HIST[h.toLowerCase()] || { week: (h.length * 7919 % 20 + 3), total: h.length * 37, top: 'Dota 2', games: [['steam:570', 'Dota 2', h.length * 30, 0]] }; return { shares: true, ...x }; };
   const mockFriends = {
     friends: [
+      { handle: 'diZZ_Spinner', display_name: 'Dizz', since: iso(400 * 86400), presence: { status: 'online', game_id: 'wow', game_name: 'World of Warcraft', game_detail: 'Frostmourne', session_started_at: iso(48 * 60 + 12) } },
+      { handle: 'riftwalker', display_name: 'Riftwalker', since: iso(220 * 86400), presence: { status: 'online', game_id: null, game_name: null } },
       { handle: 'nova', display_name: 'Nova', since: iso(90 * 86400), presence: { status: 'online', game_id: 'steam:570', game_name: 'Dota 2', session_started_at: iso(38 * 60) } },
       { handle: 'grimm', display_name: 'Grimm', since: iso(40 * 86400), presence: { status: 'away', game_id: null, game_name: null } },
       { handle: 'kestrel', display_name: 'Kestrel', since: iso(12 * 86400), presence: { status: 'online', game_id: 'unlisted', game_name: 'a game', session_started_at: iso(12 * 60) } },

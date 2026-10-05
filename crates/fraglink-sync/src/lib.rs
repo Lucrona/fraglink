@@ -348,6 +348,13 @@ impl Client {
         self.call("GET", &format!("/api/v1/friends/{handle}/summary"), None)
     }
 
+    /// A user's profile (`GET /api/v1/users/{handle}/profile`): total hours, games with
+    /// their last-played dates and recent sessions (history only for friends who share it).
+    /// The friend side panel uses it for Stats and Recent. `handle` must already be validated.
+    pub fn user_profile(&self, handle: &str) -> Result<serde_json::Value, SyncError> {
+        self.call("GET", &format!("/api/v1/users/{handle}/profile"), None)
+    }
+
     /// Whether friends may see your recent play history and weekly hours.
     pub fn set_share_activity(&self, on: bool) -> Result<serde_json::Value, SyncError> {
         self.call(

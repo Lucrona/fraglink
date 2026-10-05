@@ -367,3 +367,43 @@ body.skin-dark .side-scroll .ar-row + .side-sec, body.skin-dark .side-scroll .ar
 .side-scroll .sf-kv { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0 2px; }
 .side-scroll .sf-kv span { color: #8ea3c8; }
 .side-scroll .sf-kv b { color: #fff; font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 0.2.0-dev.17: friend info panel. Header, then sections under the same heading bars as the
+   Activity Report; label/value rows; one line per item (clipped with an ellipsis, never wrapped). */
+.side-scroll .sf-head { display: flex; align-items: center; gap: 7px; padding: 1px 0 8px; }
+.side-scroll .sf-av { flex: none; width: 34px; height: 34px; box-sizing: border-box; border: 1px solid #000; border-radius: 2px;
+  background: linear-gradient(rgba(255,255,255,.14), rgba(0,0,0,.25)), var(--av, #3a4150); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  color: #dfe5ee; font: bold 16px/32px var(--font); font-style: normal; text-align: center; text-shadow: 0 1px 0 #000; }
+.side-scroll .sf-id { min-width: 0; flex: 1; line-height: 14px; }
+.side-scroll .sf-head .sf-name { font-size: 12px; line-height: 15px; margin: 0; }
+.side-scroll .sf-head .sf-user { font-size: 10px; line-height: 13px; color: #7f8ba0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-scroll .sf-st { display: flex; align-items: center; gap: 4px; color: #c9d3e3; font-size: 10px; line-height: 13px; white-space: nowrap; overflow: hidden; }
+.side-scroll .sf-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #5f6670; box-shadow: inset 0 -1px 1px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.6); }
+.side-scroll .sf-dot.on, .side-scroll .sf-dot.game { background: #4fc24f; } .side-scroll .sf-dot.away { background: #e8b83a; }
+body.skin-dark .side-scroll .side-sec { margin-top: 0; }
+body.skin-dark .side-scroll * + .side-sec { margin-top: 9px; }
+body.skin-dark .side-scroll .sf-head + .side-sec { margin-top: 0; }
+.side-scroll .sf-game { display: flex; align-items: center; gap: 7px; padding: 3px 0 5px; }
+.side-scroll .sf-game .sf-gi { flex: none; width: 32px; height: 32px; display: block; }
+.side-scroll .sf-game .sf-gi > * { width: 32px !important; height: 32px !important; display: block; image-rendering: auto; }
+.side-scroll .sf-gn { min-width: 0; flex: 1; line-height: 14px; }
+.side-scroll .sf-gn b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: #fff; overflow: hidden; overflow-wrap: anywhere; }
+/* a value that doesn't fit beside its label moves to the next line (right-aligned) instead of
+   being cut short; only a value longer than the whole row gets an ellipsis */
+.side-scroll .sf-kv { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 4px; margin: 0; padding: 1px 0; line-height: 15px; }
+.side-scroll .sf-kv span { flex: none; color: #8ea3c8; white-space: nowrap; }
+.side-scroll .sf-kv b { flex: none; max-width: 100%; margin-left: auto; color: #fff; font-weight: normal; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-scroll .sf-timer { color: #9fd0ff; font-variant-numeric: tabular-nums; }
+.side-scroll .sf-rec { display: flex; align-items: center; gap: 4px; padding: 2px 0; line-height: 15px; }
+.side-scroll .sf-rec .gi { flex: none; }
+.side-scroll .sf-rec .gi > * { width: 16px; height: 16px; display: block; }
+.side-scroll .sf-rec span { flex: 1; min-width: 0; color: #e6e9ee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-scroll .sf-rec em { flex: none; color: #8ea3c8; font-style: normal; white-space: nowrap; }
+.side-scroll .sf-note { margin: 2px 0; color: #8e98a8; line-height: 1.35; }
+.side-scroll .sf-foot { display: flex; flex-direction: column; align-items: stretch; gap: 5px; margin-top: 12px; padding-top: 9px; border-top: 1px solid #1d2c4a; }
+.side-scroll .sf-foot .dk-btn { width: 100%; height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-scroll .sf-foot .sf-small { align-self: center; margin-top: 1px; font-size: 10px; font-weight: normal; color: #8fb4e8; text-decoration: underline; cursor: pointer; }
+.side-scroll .sf-foot .sf-small:hover { color: #cfe2ff; }
+/* a little more room for names at the default 180 px panel width */
+body.skin-dark .side-scroll .gs-vp { padding-left: 6px; padding-right: 6px; }
+body.skin-dark .side-scroll .side-sec { margin-left: -6px; margin-right: -6px; }

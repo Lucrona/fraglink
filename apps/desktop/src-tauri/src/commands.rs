@@ -482,6 +482,13 @@ pub async fn friend_summary(app: AppHandle, handle: String) -> CmdResult<serde_j
     account_call(app, move |c| c.friend_summary(&h)).await
 }
 
+/// Side panel friend details: total hours and recent games (the friend's profile).
+#[tauri::command]
+pub async fn friend_profile(app: AppHandle, handle: String) -> CmdResult<serde_json::Value> {
+    let h = clean_handle(&handle)?;
+    account_call(app, move |c| c.user_profile(&h)).await
+}
+
 /// Connections > Tracking: share recent play history and weekly hours with friends.
 #[tauri::command]
 pub async fn set_share_activity(app: AppHandle, on: bool) -> CmdResult<serde_json::Value> {

@@ -867,6 +867,7 @@ pub fn run() {
             commands::popup_menu,
             commands::friends_activity,
             commands::friend_summary,
+            commands::friend_profile,
             commands::set_share_activity,
             commands::sync_login,
             commands::sync_signup,

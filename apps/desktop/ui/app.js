@@ -12,7 +12,7 @@
   // `win`: the page IS the window (Tauri, or ?win=1 for browser previews/screenshots)
   if (TAURI || new URLSearchParams(location.search).get('win') === '1') document.body.classList.add('win');
   // live local data from the tracker
-  const LIVE = { glance: null, activity: [], fetchedAt: 0, settings: null, friends: null, server: null, friendAct: null, summaries: {} };
+  const LIVE = { glance: null, activity: [], fetchedAt: 0, settings: null, friends: null, server: null, friendAct: null, summaries: {}, profiles: {} };
 
 
   /* ---------------- skinned scrollbars (drawn in DOM so they match the classic skin everywhere) ---------------- */
@@ -165,15 +165,15 @@
   }
   const SERVERS = ['66.150.14.9:27015', '[EU] Nordic Frag #2', 'Kel\u2019Thuzad (US-PvP)', 'Freedom (Hero)', 'Antonia Bayle', 'Official 24/7 Bridge', 'Operation Hastings', 'Dustbowl Night Owls'];
   let FRIENDS = [
-    { id: 'curm', name: 'curmudgeon', kind: 'playing', game: 'cs', server: SERVERS[0], info: 'de_dust2 · 18/20', av: '#6d6d6d', week: 11.4, total: 812 },
-    { id: 'dizz', name: 'diZZ_Spinner', kind: 'playing', game: 'wow', server: SERVERS[2], info: 'Lvl 60 Rogue · Stormwind', detail: 'Frostmourne', av: '#b8860b', week: 23.1, total: 503 },
+    { id: 'curm', name: 'curmudgeon', kind: 'playing', game: 'cs', server: SERVERS[0], info: 'de_dust2 · 18/20', av: '#6d6d6d', week: 11.4, total: 812, recent: [['cs', 790.2], ['rust', 21.8]] },
+    { id: 'dizz', name: 'diZZ_Spinner', kind: 'playing', game: 'wow', server: SERVERS[2], info: 'Lvl 60 Rogue · Stormwind', detail: 'Frostmourne', av: '#b8860b', week: 23.1, total: 503, recent: [['wow', 488.6], ['wc3', 12.4], ['hl2', 2.0]] },
     { id: 'shar', name: 'sharpe_', kind: 'playing', game: 'coh', server: SERVERS[3], info: 'Atlas Park · lvl 32', av: '#1e4fb8', week: 7.8, total: 390 },
     { id: 'tool', name: 'tooTALL', kind: 'playing', game: 'eq2', server: SERVERS[4], info: 'Qeynos Harbor', av: '#c89a20', week: 15.0, total: 720 },
-    { id: 'rift', name: 'Riftwalker', kind: 'off', last: '20 minutes ago', status: 'Online', av: '#3a7a3a', week: 4.2, total: 260 },
+    { id: 'rift', name: 'Riftwalker', kind: 'off', last: '20 minutes ago', status: 'Online', av: '#3a7a3a', week: 4.2, total: 260, recent: [['bf2', 140.5], ['hd2', 62.0], ['q3', 9.5]] },
     { id: 'nyx', name: 'nyx0', kind: 'off', last: '5 hours ago', status: 'Away', av: '#6a3a8a', week: 1.1, total: 88 },
     { id: 'abby', name: 'Abbey', kind: 'fof', game: 'aa', server: SERVERS[5], info: 'via tooTALL · Bridge', av: '#b0172a', week: 0, total: 0 },
     { id: 'jj', name: 'JJ_toasty', kind: 'fof', game: 'bfv', server: SERVERS[6], info: 'via curmudgeon · Hue', av: '#7a1a1a', week: 0, total: 0 },
-    { id: 'kr', name: 'Krakatoa', kind: 'off', last: '2 hours ago', av: '#444', week: 6.3, total: 402 },
+    { id: 'kr', name: 'Krakatoa', kind: 'off', last: '2 hours ago', av: '#444', week: 6.3, total: 402, recent: [['wow', 380.2], ['d2', 22.0]] },
     { id: 'mo', name: 'mothball', kind: 'off', last: 'yesterday', av: '#444', week: 0.5, total: 97 },
     { id: 'pz', name: 'Pz_Kpfw', kind: 'off', last: '3 days ago', av: '#444', week: 0, total: 1210 },
     { id: 'lu', name: 'lumen', kind: 'off', last: '1 week ago', av: '#444', week: 0, total: 55 },
@@ -536,27 +536,7 @@
     if (signedOut() && !state.detectRun) { el.innerHTML = offlineSide(); return; }
     // A selected group heading only highlights the row; the panel keeps its default content.
     const f = friendsNow().find(x => x.id === state.sel);
-    if (f) {
-      // Classic style: big name, username, Profile link, then status or the game
-      const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';
-      let h = `<div class="sf-name">${esc(f.name)}</div><div class="sf-user">Username: ${H}</div><a data-action="friend-profile" data-handle="${H}">Profile</a><div class="sep"></div>`;
-      if (f.kind === 'req') h += `<div>Wants to be your friend.</div><a data-action="friend-accept" data-handle="${H}">Accept</a> · <a data-action="friend-decline" data-handle="${H}">Decline</a> · <a data-action="friend-block" data-handle="${H}">Block</a>`;
-      else if (f.kind === 'out') h += `<div>Friend request sent. They'll show up here once they accept.</div><a data-action="friend-remove" data-handle="${H}">Cancel request</a>`;
-      else if (playing) {
-        const mins = sessionMinutes(f);
-        h += `<div class="sf-lbl">Playing Game</div><div class="act"><i class="gi">${friendGameIcon(f.game)}</i><div><b>${esc(gameLabel(f))}</b>${mins != null ? `<br><span class="sf-for">Playing for ${esc(fmtMins(mins))}</span>` : f.server ? '<br>' + esc(f.server) : ''}${!f.real && f.info ? `<br><span style="color:var(--cyan)">${esc(f.info)}</span>` : ''}</div></div>`;
-        if (realmOf(f)) h += `<div class="sf-kv"><span>Realm</span><b>${esc(realmOf(f))}</b></div>`;
-      }
-      else h += `<div class="sf-lbl">Status</div><div>${esc(statusText(f))}${f.last ? ' · last online ' + esc(f.last) : ''}</div>`;
-      if (f.kind !== 'req' && f.kind !== 'out') h += weekHtml(f);
-      if (f.kind === 'fof') { const m = mutualOf(f); h += `<div class="sep"></div><h4>Mutual Friends <small>(${m.length})</small></h4><ul class="games">${m.map(x => `<li><i class="noicon"></i><span>${esc(x)}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>`; }
-      if (f.real && (f.kind === 'playing' || f.kind === 'online' || f.kind === 'off')) {
-        const muted = (LIVE.friends.muted || []).includes(f.handle.toLowerCase());
-        h += `<div class="sep"></div><div><span style="color:#8ea3c8">Friends since:</span> <b>${f.since ? esc(new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })) : '?'}</b></div><a data-action="friend-mute" data-handle="${H}" data-mute="${muted ? 0 : 1}">${muted ? 'Unmute' : 'Mute'} pop-ups</a>`;
-      }
-      el.innerHTML = h;
-      return;
-    }
+    if (f) { el.innerHTML = friendPanelHtml(f); return; }
     // Nothing selected (classic layout): Activity Report, then the games on this PC with Launch links.
     el.innerHTML = activityReportHtml() + installedHtml();
   }
@@ -585,29 +565,103 @@
     const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
     return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
   }
-  // minutes in the current session: real friends from presence, sample friends get a stable stand-in
-  function sessionMinutes(f) {
-    if (f.real) { const t = f.presence && f.presence.session_started_at; return t ? (Date.now() - Date.parse(t)) / 60000 : null; }
-    let h = 0; for (const c of f.id) h = (h * 31 + c.charCodeAt(0)) % 997; return 20 + h % 160;
+  /* Friend info panel (dev.17). Top to bottom: header (avatar, name, username, status),
+     Playing Game (icon, name, Realm and a live "Playing for" timer), Stats, Recent, then
+     the buttons. Empty rows and sections are left out. Real friends use presence plus the
+     server's friend summary and profile; sample friends (browser preview) their own fields. */
+  const sampleStart = {};
+  function sessionStart(f) {
+    if (f.real) { const t = f.presence && Date.parse(f.presence.session_started_at); return t || null; }
+    if (!sampleStart[f.id]) { let h = 0; for (const c of f.id) h = (h * 31 + c.charCodeAt(0)) % 997; sampleStart[f.id] = Date.now() - (20 + h % 160) * 60000 - h % 60 * 1000; }
+    return sampleStart[f.id];
   }
-  function weekHtml(f) {
-    if (!f.real) return `<div class="sf-week"><span>This week:</span> <b>${esc(String(f.week ?? 0))} h</b></div>`;
-    const s = LIVE.summaries[f.handle];
-    if (!s) { loadSummary(f.handle); return '<div class="sf-week"><span>This week:</span> …</div>'; }
-    if (s.err) return '';
-    if (s.week_seconds == null) return `<div class="sf-week"><span>This week:</span> <em>not shared</em></div>`;
-    return `<div class="sf-week"><span>This week:</span> <b>${(s.week_seconds / 3600).toFixed(1)} h</b></div>`;
+  // val is HTML (already escaped); plain values also get a title so a clipped value can be read
+  const kv = (label, val) => val ? `<div class="sf-kv"><span>${label}</span><b${/</.test(val) ? '' : ` title="${val}"`}>${val}</b></div>` : '';
+  const sfSec = title => `<div class="side-sec"><h4>${title}</h4></div>`;
+  const hrsText = sec => sec == null ? '' : fmtHrs(sec) + 'h';
+  function avatarHtml(f) {
+    const n = String(f.name || f.handle || '?'); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0;
+    const ch = (n.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase();
+    return `<i class="sf-av" style="--av:hsl(${h % 360} 28% 34%)">${esc(ch)}</i>`;
   }
-  const summaryAt = {};
+  function friendStatus(f) {
+    const playing = f.kind === 'playing' || f.kind === 'fof';
+    if (playing) return f.away ? ['away', 'In game · Away'] : ['game', 'In game'];
+    if (f.kind === 'online') return f.status === 'Away' ? ['away', 'Away'] : ['on', 'Online'];
+    if (f.kind === 'req') return ['off', 'Friend request'];
+    if (f.kind === 'out') return ['off', 'Request sent'];
+    return ['off', 'Offline'];
+  }
+  // Stats and recent games, or null while nothing has loaded yet.
+  function friendHistory(f) {
+    if (!f.real) {
+      const rec = (f.recent || []).map(([g, h]) => ({ id: g, name: GAMES[g] ? GAMES[g].name : g, sec: h * 3600 }));
+      return { week: f.week != null ? f.week * 3600 : null, total: f.total ? f.total * 3600 : null, top: f.top || (rec[0] && rec[0].name) || '', recent: rec.slice(0, 3) };
+    }
+    const s = LIVE.summaries[f.handle], p = LIVE.profiles[f.handle];
+    loadSummary(f.handle); loadProfile(f.handle); // each refreshes at most once a minute
+    if ((!s || s.err) && (!p || p.err)) return s && p ? { private: false, none: true } : null;
+    const ps = p && !p.err ? p : null, ss = s && !s.err ? s : null;
+    if ((ss && ss.week_seconds == null && !ss.shares_activity) || (ps && ps.history_visible === false)) return { private: true };
+    const games = (ps && ps.games) || [];
+    const top = (ss && ss.top_game_7d) || ([...games].sort((a, b) => (b.minutes_7d || 0) - (a.minutes_7d || 0)).filter(g => g.minutes_7d > 0)[0] || {}).name || '';
+    const recent = games.filter(g => g.last_played_at && g.total_min > 0).sort((a, b) => Date.parse(b.last_played_at) - Date.parse(a.last_played_at)).slice(0, 3)
+      .map(g => ({ id: g.listed === false ? 'unlisted' : g.game_id, name: g.listed === false ? 'A game' : g.name, sec: g.total_min * 60 }));
+    return { week: ss ? ss.week_seconds : null, total: ps && ps.overall ? ps.overall.total_min * 60 : null, top, recent };
+  }
+  function friendPanelHtml(f) {
+    const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';
+    const [dot, stText] = friendStatus(f);
+    const since = f.since ? 'Friends since ' + new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    let h = `<div class="sf-head" title="${esc(since)}">${avatarHtml(f)}<div class="sf-id"><div class="sf-name">${esc(f.name)}</div>${f.handle || f.real ? `<div class="sf-user">${H}</div>` : ''}<div class="sf-st"><i class="sf-dot ${dot}"></i>${esc(stText)}</div></div></div>`;
+    if (f.kind === 'req') return h + `<p class="sf-note">Wants to be your friend.</p><div class="sf-foot"><button class="dk-btn" data-action="friend-accept" data-handle="${H}">Accept</button><button class="dk-btn" data-action="friend-decline" data-handle="${H}">Decline</button><a class="sf-small" data-action="friend-block" data-handle="${H}">Block</a></div>`;
+    if (f.kind === 'out') return h + `<p class="sf-note">Friend request sent. They'll show up here once they accept.</p><div class="sf-foot"><a class="sf-small" data-action="friend-remove" data-handle="${H}">Cancel request</a></div>`;
+    if (playing) {
+      const t0 = sessionStart(f);
+      h += sfSec('Playing Game') + `<div class="sf-game"><i class="gi sf-gi">${friendGameIcon(f.game)}</i><div class="sf-gn"><b title="${esc(gameLabel(f))}">${esc(gameLabel(f))}</b></div></div>`;
+      h += kv('Realm', esc(realmOf(f)));
+      h += kv('Playing for', t0 ? `<span class="sf-timer" data-start="${t0}">${fmtT(Date.now() - t0)}</span>` : '');
+    }
+    if (f.kind === 'off' && f.last) h += kv('Last online', esc(f.last));
+    if (f.kind === 'fof') {
+      const m = mutualOf(f);
+      h += sfSec(`Mutual Friends <small>(${m.length})</small>`) + `<ul class="games">${m.map(x => `<li><i class="noicon"></i><span>${esc(x)}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>`;
+    } else {
+      const s = friendHistory(f);
+      if (!s) h += sfSec('Stats') + '<p class="sf-note">Loading…</p>';
+      else if (s.private) h += sfSec('Stats') + `<p class="sf-note">${esc(f.name)} keeps their play history private.</p>`;
+      else if (!s.none) {
+        const rows = kv('This week', hrsText(s.week)) + kv('Total on Fraglink', s.total ? hrsText(s.total) : '') + kv('Top game', esc(s.top || ''));
+        if (rows) h += sfSec('Stats') + rows;
+        if (s.recent && s.recent.length) h += sfSec('Recent') + s.recent.map(r => { const id = ensureGame(r.id, r.name); return `<div class="sf-rec" title="${esc(r.name)} · ${esc(hrsText(r.sec))}"><i class="gi">${friendGameIcon(id)}</i><span>${esc(r.name.replace(/:.*/, ''))}</span><em>${esc(hrsText(r.sec))}</em></div>`; }).join('');
+      }
+    }
+    // Footer: View Profile, Message on Discord (only when the friend has Discord linked), Mute pop-ups
+    h += `<div class="sf-foot"><button class="dk-btn" data-action="friend-profile" data-handle="${H}">View Profile</button>`;
+    if (f.discord) h += `<button class="dk-btn" data-action="chat">Message on Discord</button>`;
+    if (f.real && (f.kind === 'playing' || f.kind === 'online' || f.kind === 'off')) {
+      const muted = (LIVE.friends.muted || []).includes(f.handle.toLowerCase());
+      h += `<a class="sf-small" data-action="friend-mute" data-handle="${H}" data-mute="${muted ? 0 : 1}">${muted ? 'Unmute' : 'Mute'} pop-ups</a>`;
+    }
+    return h + '</div>';
+  }
+  const summaryAt = {}, profileAt = {};
   function loadSummary(h) {
     if (!FLB.friendSummary || (summaryAt[h] && Date.now() - summaryAt[h] < 60000)) return;
     summaryAt[h] = Date.now();
-    FLB.friendSummary(h).then(s => { LIVE.summaries[h] = s; renderSide(); }).catch(() => { LIVE.summaries[h] = { err: true }; });
+    FLB.friendSummary(h).then(s => { LIVE.summaries[h] = s; renderSide(); }).catch(() => { LIVE.summaries[h] = { err: true }; renderSide(); });
+  }
+  function loadProfile(h) {
+    if (profileAt[h] && Date.now() - profileAt[h] < 60000) return;
+    profileAt[h] = Date.now();
+    if (!FLB.friendProfile) { LIVE.profiles[h] = { err: true }; return; }
+    FLB.friendProfile(h).then(p => { LIVE.profiles[h] = p || { err: true }; renderSide(); }).catch(() => { LIVE.profiles[h] = { err: true }; renderSide(); });
   }
   async function refreshActivity() {
     if (!FLB.friendsActivity || (TAURI && !realMode())) { if (TAURI) LIVE.friendAct = { items: [] }; return; }
     try { LIVE.friendAct = await FLB.friendsActivity(); } catch (e) { LIVE.friendAct = LIVE.friendAct || { items: [] }; }
     for (const k in summaryAt) delete summaryAt[k];
+    for (const k in profileAt) delete profileAt[k];
     renderSide();
   }
   /* Drag the info panel's outer edge to make it wider (height follows the window). */
@@ -1359,6 +1413,7 @@
   function clock() {
     $('#clock').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const s = $('#session'); if (s) s.textContent = fmtT(liveSeconds() * 1000);
+    $$('.sf-timer').forEach(t => { t.textContent = fmtT(Date.now() - +t.dataset.start); });
   }
   setInterval(clock, 1000);
   document.addEventListener('input', e => { if (e.target.id === 'add-handle') { state.addFriend.q = e.target.value; $('#add-search').disabled = !e.target.value.trim(); } });

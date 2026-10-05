@@ -11,6 +11,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Friends' realm on its own line:** the friend side panel shows the game under "Playing Game" and then a
   separate **Realm** row (e.g. "Realm  Frostmourne"), like the classic client; the friend tooltip adds a
   "Realm:" line. Nothing is shown when there is no realm.
+- **Cleaner friend side panel:** clicking a friend shows, top to bottom: a header (avatar, display name,
+  username, status dot and text), **Playing Game** (bigger game icon and name, then the **Realm** row for
+  WoW and a live **Playing for** timer), **Stats** (This week, Total on Fraglink, Top game), **Recent**
+  (their last 3 games with hours) and **View Profile** with a small **Mute pop-ups** link underneath.
+  Sections use the same heading bars as the Activity Report, rows are a muted label with the value on
+  the right, and a row or section with nothing to show is left out. "Friends since" moved to the
+  header's tooltip. A friend who keeps their play history private shows a one-line note instead of
+  Stats. Stats and Recent come from the friend's profile (the same data as their page on
+  playfraglink.com) and refresh at most once a minute. A **Message on Discord** button appears only
+  for friends with Discord linked (nobody yet).
 
 ## [0.2.0-dev.16] - 2026-10-05
 
