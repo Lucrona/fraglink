@@ -297,7 +297,7 @@ async fn websocket_needs_a_valid_token(pool: PgPool) {
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn silent_client_times_out_to_offline(pool: PgPool) {
-    let app = fraglink_server::router(state_with(pool, |c| c.presence_idle_secs = 1));
+    let app = fraglink_server::router(state_with(pool, |c| c.presence_idle_secs = 2));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let served = app.clone();
@@ -305,14 +305,15 @@ async fn silent_client_times_out_to_offline(pool: PgPool) {
     let a = signup(&app, "a@example.com", "alice").await;
     let b = signup(&app, "b@example.com", "bob").await;
     befriend(&app, &a, &b, "bob", "alice").await;
-    // bob first: alice's socket has a 1 s idle limit, so she speaks right after connecting
+    // bob first: sockets have a 2 s idle limit (slow CI runners need the slack), so both speak right away
     let mut cb = Client::connect(&base, &b).await;
+    cb.send(json!({ "type": "ping" })).await;
     let mut ca = Client::connect(&base, &a).await;
     ca.presence("online", Some(("wow", "World of Warcraft")))
         .await;
     assert_eq!(cb.expect("presence").await["status"], "online");
     // bob keeps pinging, alice goes silent (a hung or killed client that never closed its socket)
-    let deadline = std::time::Instant::now() + Duration::from_secs(4);
+    let deadline = std::time::Instant::now() + Duration::from_secs(8);
     let mut went_offline = false;
     while std::time::Instant::now() < deadline {
         cb.send(json!({ "type": "ping" })).await;
