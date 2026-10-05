@@ -561,15 +561,25 @@ pub fn toast_payload(state: State<'_, AppState>) -> Option<ToastPayload> {
 
 #[tauri::command]
 pub async fn toast_clicked(app: AppHandle) {
-    windows::show_main(&app);
-    let kind = app
+    let (kind, link) = app
         .state::<AppState>()
         .pending_toast
         .lock()
         .unwrap()
         .as_ref()
-        .map(|t| t.kind.clone())
+        .map(|t| (t.kind.clone(), t.game_id.clone()))
         .unwrap_or_default();
+    if kind.starts_with("news:") {
+        // staff announcement: open its link (https only), else just close
+        if link.starts_with("https://") {
+            let _ = tauri_plugin_opener::open_url(link, None::<&str>);
+        }
+        if let Some(w) = app.get_webview_window("toast") {
+            let _ = w.close();
+        }
+        return;
+    }
+    windows::show_main(&app);
     if let Some(h) = kind
         .strip_prefix("friend:")
         .or_else(|| kind.strip_prefix("request:"))

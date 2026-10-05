@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.16] - 2026-10-05
+
+Test update (builds report `0.2.0-16`). No server change needed.
+
+### Changed
+- **One-click install.** The setup no longer shows a wizard: no welcome, licence, folder or shortcut
+  pages. It installs just for you (no admin prompt) into `%LOCALAPPDATA%\Fraglink`, adds Desktop and
+  Start menu shortcuts, shows a small dark Fraglink window ("Installing Fraglink…" and a progress bar,
+  the same look as the startup window) and then opens Fraglink at its sign-in screen. Running it
+  again updates the install in place. The uninstaller in Windows Apps & features is unchanged.
+- **Updates** use the same window ("Updating Fraglink…") and restart Fraglink as before; nothing to click.
+- **Announcements:** while signed in, a message from the Fraglink team (the website's banner) shows once as
+  a small notification; click it to open its link.
+- The MSI (for managed installs) is unchanged.
+
 ## [0.2.0-dev.15] - 2026-10-05
 
 Test update (builds report `0.2.0-15`). Needs the dev.15 server (deployed the same day).

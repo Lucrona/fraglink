@@ -154,7 +154,7 @@ the entries say what changing them would cost.
 - The window stays frameless with a custom drag region. Resizing uses Tauri's `startResizeDragging` from thin edge strips and a corner grip; Windows can also resize frameless windows from the edge natively.
 - Options uses the native title bar, like a normal Windows settings dialog, so resizing and moving need no custom code. Settings are staged and written on OK or Apply. `set_setting` broadcasts `fraglink://settings` so the main window picks up skin changes.
 - Stats and Activity stay hidden behind the `FEATURES` flag; the vertical tab strip shows only Friends.
-- A true one-click installer isn't available with Tauri's NSIS options without replacing the whole template, so the wizard stays (per user, no admin, "Run Fraglink" on the finish page) with Fraglink branding images.
+- ~~A true one-click installer isn't available with Tauri's NSIS options without replacing the whole template, so the wizard stays.~~ Since 0.2.0-dev.16 we do replace the template (`apps/desktop/src-tauri/installer/installer.nsi`, a copy of Tauri 2.11's with small changes): the installer always runs passive (no pages), restyles the progress page as a borderless 300x330 splash (art in `installer/splash-*.bmp` per DPI, NSIS's own progress bar unthemed with our colours, our own status label), updates an existing install in place and starts the app. Chosen over a separate bootstrapper exe because the Tauri updater, uninstaller, registry keys and MSI migration all keep working unchanged. When bumping the Tauri CLI, diff its `installer.nsi` against ours.
 
 ## D30. "Split Orbit" logo and a closer copy of the classic dark client layout
 

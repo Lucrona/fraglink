@@ -24,6 +24,8 @@ pub mod keys {
     pub const USER: &str = "sync_user";
     pub const LAST_OK: &str = "sync_last_ok";
     pub const LAST_ERROR: &str = "sync_last_error";
+    /// Id of the last staff announcement shown as a toast.
+    pub const ANNOUNCEMENT_SEEN: &str = "announcement_seen";
     /// Settings the webview must never see.
     pub const HIDDEN: &[&str] = &[TOKEN];
 }
@@ -47,6 +49,7 @@ pub struct SyncShared {
     /// Latest `/api/v1/stats` response (per-game totals by tier). None when
     /// signed out or the last fetch failed: the Stats tab then uses local data.
     server_stats: Mutex<Option<(i64, serde_json::Value)>>,
+    announcements_running: AtomicBool,
 }
 
 #[derive(Debug, Serialize)]
@@ -169,6 +172,7 @@ pub fn init(app: &AppHandle) {
     if token(app).is_some() {
         start_worker(app.clone());
         crate::friends::start(app);
+        start_announcements(app.clone());
     } else {
         log::info!("sync: not signed in; no network activity");
     }
@@ -276,7 +280,75 @@ fn finish_sign_in(app: &AppHandle, token: &str, handle: &str) {
     log::info!("sync: signed in as {handle}");
     start_worker(app.clone());
     crate::friends::start(app);
+    start_announcements(app.clone());
     emit(app);
+}
+
+/// Staff announcements (the website's banner) as a one-time toast: checked shortly after
+/// start and every 15 minutes while signed in. Each announcement shows once.
+fn start_announcements(app: AppHandle) {
+    let st = app.state::<AppState>();
+    if st.sim || st.sync.announcements_running.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(20));
+        loop {
+            if let Some(t) = token(&app) {
+                let c = Client::new(&server(&app), Some(t));
+                match c.announcement() {
+                    Ok(v) => {
+                        if let Some(toast) = announcement_toast(
+                            &v,
+                            setting(&app, keys::ANNOUNCEMENT_SEEN).as_deref(),
+                        ) {
+                            set(
+                                &app,
+                                keys::ANNOUNCEMENT_SEEN,
+                                toast.kind.trim_start_matches("news:"),
+                            );
+                            crate::windows::show_toast(&app, toast);
+                        }
+                    }
+                    Err(e) => log::debug!("announcement: {e}"),
+                }
+            }
+            std::thread::sleep(Duration::from_secs(15 * 60));
+        }
+    });
+}
+
+/// The toast for `GET /api/v1/announcement`'s answer, unless there is none or it was seen.
+/// `game_id` carries the optional https link (opened when the toast is clicked).
+pub fn announcement_toast(
+    v: &serde_json::Value,
+    seen: Option<&str>,
+) -> Option<crate::ToastPayload> {
+    let a = v.get("announcement")?;
+    let id = a.get("id")?.as_i64()?.to_string();
+    let msg: String = a
+        .get("message")?
+        .as_str()?
+        .trim()
+        .chars()
+        .take(200)
+        .collect();
+    if msg.is_empty() || seen == Some(id.as_str()) {
+        return None;
+    }
+    let link = a
+        .get("link")
+        .and_then(|l| l.as_str())
+        .filter(|l| l.starts_with("https://") && l.len() <= 300)
+        .unwrap_or_default();
+    Some(crate::ToastPayload {
+        kind: format!("news:{id}"),
+        title: "Fraglink".into(),
+        line: msg,
+        game_id: link.to_string(),
+        game: String::new(),
+        icon: Some(String::new()),
+    })
 }
 
 /// Username + password sign-in (or account creation when `create`). Blocking: call off the UI thread.
@@ -401,6 +473,19 @@ pub fn sign_out(app: &AppHandle) {
 #[cfg(test)]
 mod server_default_tests {
     use super::*;
+
+    #[test]
+    fn announcement_toast_shows_once_and_keeps_only_https_links() {
+        let v = serde_json::json!({"announcement": {"id": 7, "message": " Server maintenance at 10 PM ", "style": "info", "link": "https://playfraglink.com/news"}});
+        let t = announcement_toast(&v, None).unwrap();
+        assert_eq!(t.kind, "news:7");
+        assert_eq!(t.line, "Server maintenance at 10 PM");
+        assert_eq!(t.game_id, "https://playfraglink.com/news");
+        assert!(announcement_toast(&v, Some("7")).is_none());
+        let v = serde_json::json!({"announcement": {"id": 8, "message": "hi", "link": "javascript:alert(1)"}});
+        assert_eq!(announcement_toast(&v, Some("7")).unwrap().game_id, "");
+        assert!(announcement_toast(&serde_json::json!({"announcement": null}), None).is_none());
+    }
     #[test]
     fn legacy_localhost_migrates_unless_signed_in() {
         assert_eq!(pick_server(None, false), DEFAULT_SERVER);

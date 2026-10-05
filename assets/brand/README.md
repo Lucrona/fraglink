@@ -23,4 +23,4 @@ SVGs, so no font file ships with Fraglink. Saira is licensed under the
 **SIL Open Font License, Version 1.1** (see `Saira-OFL.txt`). The OFL allows
 using the font in logos and artwork; the outlined wordmark is artwork, not a
 font, so it is not itself covered by the OFL.
-- `gen_icons.py` (app icons, silver tile) and `gen_installer.py` (NSIS sidebar/header BMPs) regenerate the artwork.
+- `gen_icons.py` (app icons, silver tile) and `gen_installer.py` (one-click installer splash `splash-*.bmp` and the uninstaller header BMP) regenerate the artwork.

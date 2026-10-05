@@ -406,6 +406,12 @@ impl Client {
         Ok(())
     }
 
+    /// The current staff announcement (`GET /api/v1/announcement`):
+    /// `{announcement: {id, message, style, link, ends_at} | null}`.
+    pub fn announcement(&self) -> Result<serde_json::Value, SyncError> {
+        self.call("GET", "/api/v1/announcement", None)
+    }
+
     /// Which games the server has an official icon for (`GET /api/v1/games/icons`):
     /// `{id: {icon_path: "/icons/games/32/<id>.png", ...}}`.
     pub fn game_icons(&self, ids: &[String]) -> Result<serde_json::Value, SyncError> {

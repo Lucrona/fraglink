@@ -10,6 +10,14 @@
   function show(p) {
     if (!p) return;
     const icon = p.icon && /^data:image\/png;base64,/.test(p.icon) ? `<img class="gi-img" src="${p.icon}" alt="">` : GENERIC;
+    const news = /^news:/.test(p.kind || '');
+    if (news) {
+      // staff announcement (the website's banner), shown once
+      body.innerHTML = `<i class="gi"><img class="gi-img" src="favicon-32.png" alt=""></i><div><b>${esc(p.title)}</b> ${esc(p.line)}${p.game_id ? '<br><a class="more" href="#">More</a>' : ''}</div>`;
+      el.hidden = false; el.classList.remove('out');
+      clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 15000);
+      return;
+    }
     if (/^track:/.test(p.kind || '')) return ask(p, icon);
     const friend = /^(friend|request):/.test(p.kind || '');
     // plain one-liner: "<name> logged on" / "<name> started playing <game>"

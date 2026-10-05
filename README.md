@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
 <p align="center"><b>PLAY. CONNECT. TRACK.</b><br>A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
-<sub>Early development · current pre-release <b>0.2.0-dev.15</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
+<sub>Early development · current pre-release <b>0.2.0-dev.16</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 
@@ -20,7 +20,7 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 <br><sub>The main window with the side panel (Activity Report and installed games, green update arrow in the title bar), and with a friend selected. Browser preview of the dev.11 UI with sample data.</sub>
 </p>
 
-## What works today (0.2.0-dev.15)
+## What works today (0.2.0-dev.16)
 
 - **Improved game detection:** a much bigger, more accurate games list of about 10,000 Windows games (downloaded from our server and refreshed daily, with a bundled copy for offline use; WoW Public Test builds are skipped), Fraglink's own signatures and folder rules (Star Citizen channels), installed Steam games, and a "Track <name> as a game?" question for an unlisted program that runs full screen for 5 minutes. Read-only: no injection, no memory reading.
 - **WoW realm:** friends see the realm you're on ("World of Warcraft · Frostmourne") in their side panel and your hover tooltip.
@@ -28,6 +28,7 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 - **Accounts in the client:** log in with username (or email) and password, or **Create Account** right in the main window. Change your email, password or display name, or delete your account, from Options › Account.
 - **Friends:** search users and send requests, accept or decline, remove or block. Live status (Online / Away / Invisible) and the game each friend is playing, how long they've been playing and their hours this week. Friend tooltips, native right-click menus, sign-on toasts.
 - **Side panel:** an **Activity Report** of what your friends played recently, your installed games with **Launch** links, or details of the friend you click (click empty space or press Esc to go back). Drag its edge to make it wider. Friends can turn off sharing their hours in Options › Privacy.
+- **One-click install:** the setup asks nothing. It installs just for you (no admin prompt) into `%LOCALAPPDATA%\Fraglink` with Desktop and Start menu shortcuts, shows a small dark Fraglink window with a progress bar, and opens Fraglink at its sign-in screen. Uninstall from Windows **Apps & features**.
 - **Updates like Discord's:** a small "Checking for updates…" window at startup installs a new build before the client opens, then finds your installed games. While Fraglink runs it checks every hour and downloads quietly; a small green arrow in the title bar (and a dot on the tray icon) restarts into it. **Help › Check for Updates** and the tray menu check on demand. Updates are signature-checked before they install.
 - **Status menu:** Online, Away, Invisible, custom status and recent statuses. Automatic **Away** after 10 minutes without input, like Discord ("World of Warcraft (Away)" in a game). **Looking to Play** and **Music Status** are in the menu as early placeholders.
 - **Options:** a dark Options window with a two-column Games tab (install folder and the exe Fraglink found), a **Connections** tab (Steam, Battle.net, Spotify and Discord, shown as "coming soon" for now), and a **Text size** setting.
@@ -92,8 +93,8 @@ Stats and Activity views exist in the code but are hidden for now. They return w
 <p align="center">
 <img src="docs/images/app-icon.png" alt="Fraglink app icon" width="128">
 &nbsp;&nbsp;
-<img src="docs/images/installer.png" alt="Installer sidebar and header art" width="420">
-<br><sub>The silver app icon and the dark installer art (sidebar with the "PLAY. CONNECT. TRACK." slogan, and the header). The logo is "Split Orbit": an original italic F with a split orbit ring (sources in <a href="assets/brand/">assets/brand/</a>).</sub>
+<img src="docs/images/installer.png" alt="The one-click installer" width="300">
+<br><sub>The silver app icon and the one-click installer (no questions: a small dark window with the "PLAY. CONNECT. TRACK." slogan and a progress bar, then Fraglink starts). The logo is "Split Orbit": an original italic F with a split orbit ring (sources in <a href="assets/brand/">assets/brand/</a>).</sub>
 </p>
 
 ## Privacy stance
@@ -186,7 +187,7 @@ The tray menu has **Open data folder**, **Open logs folder** and **Export my dat
 
 ## Releases and updates
 
-Pre-releases are on the [releases page](https://github.com/Lucrona/fraglink/releases) (an NSIS `.exe`, which installs per user with no admin prompt, and an `.msi`). From dev.6 the client updates itself: updates are signed and checked before they install. The installers themselves are **not code-signed yet**, so Windows SmartScreen will warn ("Windows protected your PC"). Click **More info → Run anyway**. CI also builds installers on every push to `main` (Actions artifacts `fraglink-windows-installers-<sha>`).
+Pre-releases are on the [releases page](https://github.com/Lucrona/fraglink/releases) (a one-click NSIS `.exe`, which installs per user with no admin prompt and starts Fraglink, and an `.msi` for managed installs). From dev.6 the client updates itself: updates are signed and checked before they install. The installers themselves are **not code-signed yet**, so Windows SmartScreen will warn ("Windows protected your PC"). Click **More info → Run anyway**. CI also builds installers on every push to `main` (Actions artifacts `fraglink-windows-installers-<sha>`).
 
 ## Window notes
 

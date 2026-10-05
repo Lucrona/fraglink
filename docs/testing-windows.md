@@ -97,3 +97,14 @@ Open *Tools → Options → Games* and press **Detect Games**. Every game instal
 - A program you tagged yourself ("This is a game…") shows the icon from its exe; anything without one shows the generic game symbol.
 - `%APPDATA%\gg.fraglink.desktop\icons`: old icon files are cleared on the first start; official icons are cached as `sv_*.png`.
 
+## One-click installer, announcements (0.2.0-dev.16)
+
+- dev.15 installed: it updates itself to dev.16 (startup or Help > Check for Updates). The update window is the dark Fraglink window saying **Updating Fraglink…**, then Fraglink restarts by itself. Help > About shows 0.2.0-dev.16.
+- Fresh install (Apps & features > Fraglink > Uninstall first, or another Windows user): run `Fraglink_0.2.0-16_x64-setup.exe`. After SmartScreen (*More info > Run anyway*) there are **no questions and no UAC prompt**: a small borderless dark window (logo, "PLAY. CONNECT. TRACK.", **Installing Fraglink…**, blue progress bar on a dark track) closes after a few seconds and Fraglink opens at its sign-in screen.
+- Check: `%LOCALAPPDATA%\Fraglink\fraglink.exe` exists; **Fraglink** shortcuts on the Desktop and in Start > Fraglink; Apps & features lists Fraglink 0.2.0-16 (publisher Lucrona).
+- At 125 %, 150 % and 200 % display scaling the window is sharp and proportionally bigger (not blurry or cut off).
+- Run the setup again while Fraglink is running: it closes Fraglink, updates in place without asking, and starts it again.
+- Uninstall from Apps & features: the usual uninstaller page (with "Delete the application data") removes the app and both shortcuts.
+- `Fraglink_0.2.0-16_x64-setup.exe /S` installs silently (no window, Fraglink is not started).
+- Announcement: with an active banner on the website (Admin > Announcements), a signed-in app shows it once as a bottom-right notification within ~20 s of start (or within 15 min); clicking it opens the link if there is one. It doesn't come back after a restart.
+
