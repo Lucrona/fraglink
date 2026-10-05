@@ -552,13 +552,13 @@
       const what = x.kind === 'playing' ? `started playing ${g}` : `played ${g} for ${esc(fmtMins(Math.round((x.duration_s || 0) / 60)))}`;
       return `<div class="ar-row" title="${esc(new Date(x.at).toLocaleString())}"><i class="gi">${friendGameIcon(id)}</i><div><b>${esc(x.display_name || x.handle)}</b> ${what}<small>${esc(agoText(x.at))}</small></div></div>`;
     }).join('');
-    return `<div class="side-sec"><h4>Activity Report</h4><a class="side-more" data-action="activity-more">View More</a></div>${rows}`;
+    return `<div class="side-sec"><h4>Activity Report</h4><a class="side-more" data-action="activity-more" title="View more of your friends' activity">More</a></div>${rows}`;
   }
   function installedHtml() {
     const inst = (CATALOG || []).filter(g => g.installed && !g.excluded);
     const games = CATALOG === null ? '<li><span>Looking for games…</span></li>'
       : inst.map(g => { const id = ensureGame(g.id, g.name); return `<li title="${esc(g.game_path || g.detect_path || '')}"><i class="gi">${gameIcon(id)}</i><span>${esc(g.name)}</span>${g.can_launch ? `<a data-action="launch" data-game="${esc(g.id)}">Launch</a>` : ''}</li>`; }).join('') || '<li><span>No games found on this PC yet.</span></li>';
-    return `<div class="side-sec"><h4>${inst.length} Installed Game${inst.length === 1 ? '' : 's'}</h4><a data-action="detect-games" class="side-more side-detect">Detect Games</a></div><ul class="games launch">${games}</ul>`;
+    return `<div class="side-sec"><h4>${inst.length} Installed Game${inst.length === 1 ? '' : 's'}</h4><a data-action="detect-games" class="side-more side-detect" title="Detect Games: look for installed games on this PC">Detect</a></div><ul class="games launch">${games}</ul>`;
   }
   function fmtMins(m) { m = Math.max(0, Math.round(m)); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; }
   function agoText(iso) {
@@ -1289,7 +1289,7 @@
     const btn = $('#status-btn'), np = LIVE.glance && LIVE.glance.now_playing, custom = SET().custom_status || '';
     const customOn = SET().custom_on === '1' && custom;
     btn.disabled = signedOut();
-    if (btn.disabled) { btn.querySelector('span').textContent = 'Offline'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
+    if (btn.disabled) { btn.querySelector('span').textContent = 'Offline'; btn.dataset.user = '(Offline)'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
     const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? np.name : '';
     const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? 'Playing ' + game : 'Online';
     // hover: the game with its detail (WoW realm), e.g. "Playing World of Warcraft: Forever · Frostmourne"
@@ -1297,8 +1297,10 @@
     const tipTxt = detail && txt.includes(game) ? txt.replace(game, game + detail) : txt;
     btn.querySelector('span').textContent = txt; btn.title = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();
-    $('#username').textContent = (realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name) + statusLabel();
-    if ($('#px-user') && $('#px-user').textContent === '(Offline)') $('#px-user').textContent = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
+    const me = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
+    $('#username').textContent = me + statusLabel();
+    if ($('#px-user')) $('#px-user').textContent = me;
+    btn.dataset.user = me; // dark skin: keeps the username's room in the status row
   }
   function useCustom(v) {
     v = String(v || '').trim().slice(0, 60);

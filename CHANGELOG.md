@@ -21,6 +21,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Stats. Stats and Recent come from the friend's profile (the same data as their page on
   playfraglink.com) and refresh at most once a minute. A **Message on Discord** button appears only
   for friends with Discord linked (nobody yet).
+- **Your status uses the whole row:** the status under the banner (e.g. "Playing World of Warcraft: Forever")
+  now takes all the room right of your name instead of a fixed 190 px box, so it only ends in "…" when it
+  really doesn't fit. A very long username is shortened at about half the row. Hovering still shows the
+  full status with your realm.
+- **Side panel headings fit:** the links in the "Activity Report" and "N Installed Games" heading bars
+  are now **More** and **Detect** (the full wording is in their tooltips), so the headings are no longer
+  cut off at the default panel width. A heading that still doesn't fit ends in "…".
 
 ## [0.2.0-dev.16] - 2026-10-05
 

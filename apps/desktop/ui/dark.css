@@ -407,3 +407,17 @@ body.skin-dark .side-scroll .sf-head + .side-sec { margin-top: 0; }
 /* a little more room for names at the default 180 px panel width */
 body.skin-dark .side-scroll .gs-vp { padding-left: 6px; padding-right: 6px; }
 body.skin-dark .side-scroll .side-sec { margin-left: -6px; margin-right: -6px; }
+/* dev.17: side panel heading links are short ("More", "Detect") so "Activity Report" and
+   "N Installed Games" fit at the default 180 px; a title that still doesn't fit ends in "…" */
+body.skin-dark .side-scroll .side-sec { gap: 4px; }
+body.skin-dark .side-scroll .side-sec h4 { flex: 1 1 auto; }
+body.skin-dark .side-scroll .side-sec .side-more { flex: none; }
+/* dev.17: own status row. The status button spans the whole row after the username: an
+   invisible copy of the name (data-user) holds its place, so the status text gets every pixel
+   that's left and only ends in "…" when it really doesn't fit. A very long username is capped
+   at 45% of the row (same cap on both, so they line up). Only the text is clickable, as before. */
+body.skin-dark .xf-identity #px-user { display: inline-block; max-width: 45%; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+body.skin-dark .xf-status { left: 13px; right: 7px; width: auto; pointer-events: none; }
+body.skin-dark .st-btn { display: flex; align-items: center; padding: 0; }
+body.skin-dark .st-btn::before { content: attr(data-user); flex: none; max-width: 45%; margin-right: 8px; visibility: hidden; font-weight: bold; white-space: nowrap; overflow: hidden; }
+body.skin-dark .st-btn span { flex: 1 1 0; min-width: 0; padding-right: 20px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto; }
