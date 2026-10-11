@@ -63,7 +63,7 @@
       // 0.2.0-dev.9
       popup: (items, x, y) => inv('popup_menu', { items, x: x == null ? null : Number(x), y: y == null ? null : Number(y) }),
       sideWidth: (width) => inv('set_side_width', { width: Number(width) }),
-      friendsActivity: () => inv('friends_activity'),
+      friendsActivity: () => inv('friends_activity', { tz: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) { return null; } })() }),
       friendSummary: (handle) => inv('friend_summary', { handle }),
       // 0.2.0-dev.17: the friend side panel's Stats and Recent (GET /api/v1/users/{handle}/profile)
       friendProfile: (handle) => inv('friend_profile', { handle }),

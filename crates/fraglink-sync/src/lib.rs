@@ -356,9 +356,21 @@ impl Client {
         )
     }
 
-    /// Friends' recent activity for the side panel (`GET /api/v1/friends/activity`).
-    pub fn friends_activity(&self) -> Result<serde_json::Value, SyncError> {
-        self.call("GET", "/api/v1/friends/activity", None)
+    /// Friends' recent activity for the side panel (`GET /api/v1/friends/activity`): one
+    /// line per friend per game per day. `tz` (IANA name, e.g. "Australia/Sydney") splits days.
+    pub fn friends_activity(&self, tz: Option<&str>) -> Result<serde_json::Value, SyncError> {
+        let tz: String = tz
+            .unwrap_or("")
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || "/_-+".contains(*c))
+            .take(64)
+            .collect::<String>()
+            .replace('+', "%2B");
+        if tz.is_empty() {
+            self.call("GET", "/api/v1/friends/activity", None)
+        } else {
+            self.call("GET", &format!("/api/v1/friends/activity?tz={tz}"), None)
+        }
     }
 
     /// A friend's current game and hours this week (`GET /api/v1/friends/{handle}/summary`).

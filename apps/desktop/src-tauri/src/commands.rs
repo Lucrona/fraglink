@@ -471,8 +471,8 @@ pub async fn popup_menu(
 
 /// Side panel "Activity Report": friends' recent sessions and what they're playing now.
 #[tauri::command]
-pub async fn friends_activity(app: AppHandle) -> CmdResult<serde_json::Value> {
-    account_call(app, |c| c.friends_activity()).await
+pub async fn friends_activity(app: AppHandle, tz: Option<String>) -> CmdResult<serde_json::Value> {
+    account_call(app, move |c| c.friends_activity(tz.as_deref())).await
 }
 
 /// Side panel friend details: current game, hours this week.
