@@ -303,8 +303,6 @@ fn put_setting(app: &AppHandle, k: &str, v: &str) {
 /// "Looking to Play" is a preset custom status (shown with the Online status).
 pub const LOOKING: &str = "Looking to Play";
 
-const TRAY_SKINS: &[(&str, &str)] = &[("dark", "Dark"), ("classic", "Classic Silver")];
-
 /// The classic tray menu: Launch >, Skin >, Status >, Log Off..., Exit.
 type Item = Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>;
 fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
@@ -351,28 +349,6 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         None::<&str>,
     )?));
     let launch = Submenu::with_id_and_items(app, "launch", "Launch", true, &refs(&launch))?;
-    // Skin
-    let cur = get_setting(app, "skin").unwrap_or_else(|| "dark".into());
-    let mut skins: Vec<Item> = Vec::new();
-    for (id, label) in TRAY_SKINS {
-        skins.push(Box::new(CheckMenuItem::with_id(
-            app,
-            format!("skin:{id}"),
-            *label,
-            true,
-            cur == *id,
-            None::<&str>,
-        )?));
-    }
-    skins.push(Box::new(PredefinedMenuItem::separator(app)?));
-    skins.push(Box::new(MenuItem::with_id(
-        app,
-        "more_skins",
-        "More Skins...",
-        true,
-        None::<&str>,
-    )?));
-    let skin = Submenu::with_id_and_items(app, "skin", "Skin", true, &refs(&skins))?;
     // Status
     let status = get_setting(app, keys::STATUS).unwrap_or_else(|| "online".into());
     let custom = get_setting(app, "custom_status").unwrap_or_default();
@@ -415,13 +391,6 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             looking,
             None::<&str>,
         )?),
-        Box::new(MenuItem::with_id(
-            app,
-            "st:music",
-            "Music Status (coming soon)",
-            false,
-            None::<&str>,
-        )?),
     ];
     let hist: Vec<&String> = hist.iter().filter(|h| h.as_str() != LOOKING).collect();
     if !hist.is_empty() {
@@ -440,7 +409,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     }
     let status = Submenu::with_id_and_items(app, "status", "Status", true, &refs(&st))?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let logoff = MenuItem::with_id(app, "logoff", "Log Off...", true, None::<&str>)?;
+    let logoff = MenuItem::with_id(app, "logoff", "Sign Out", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Fraglink", true, None::<&str>)?;
     let sep0 = PredefinedMenuItem::separator(app)?;
@@ -450,9 +419,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         let upd = MenuItem::with_id(app, "update", "Restart to Update", true, None::<&str>)?;
         return Menu::with_items(
             app,
-            &[
-                &open, &upd, &sep0, &launch, &skin, &status, &sep, &logoff, &exit,
-            ],
+            &[&open, &upd, &sep0, &launch, &status, &sep, &logoff, &exit],
         );
     }
     let chk = MenuItem::with_id(
@@ -464,9 +431,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     )?;
     Menu::with_items(
         app,
-        &[
-            &open, &sep0, &launch, &skin, &status, &sep, &chk, &logoff, &exit,
-        ],
+        &[&open, &sep0, &launch, &status, &sep, &chk, &logoff, &exit],
     )
 }
 
@@ -623,9 +588,6 @@ fn on_menu(app: &AppHandle, id: &str) {
                 let _ = app2.emit("fraglink://catalog", ());
             });
         }
-        "more_skins" => {
-            tauri::async_runtime::spawn(commands::open_website("skins".into()));
-        }
         "st:reset" => {
             put_setting(app, "custom_on", "0");
             set_status(app, "online");
@@ -641,10 +603,6 @@ fn on_menu(app: &AppHandle, id: &str) {
                 put_setting(app, "custom_on", "1");
                 set_status(app, "online");
             }
-        }
-        s if s.starts_with("skin:") => {
-            put_setting(app, "skin", &s[5..]);
-            refresh_tray(app);
         }
         s if s.starts_with("launch:") => {
             let id = s[7..].to_string();
@@ -791,21 +749,19 @@ pub fn run() {
                     let (x, y) = s.split_once(',')?;
                     Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
                 });
-            // 0.2.0-dev.2: the dark resizable window becomes the default skin once
-            // (earlier builds saved "classic" on every start).
+            // 0.2.0-dev.20: Dark is the only skin; anyone still on Classic Silver moves to it.
             if engine
                 .tracker
                 .store
-                .get_setting("ui_rev")
+                .get_setting(fraglink_core::engine::keys::SKIN)
                 .ok()
                 .flatten()
-                .is_none()
+                .is_some_and(|s| s != "dark")
             {
                 let _ = engine
                     .tracker
                     .store
                     .set_setting(fraglink_core::engine::keys::SKIN, "dark");
-                let _ = engine.tracker.store.set_setting("ui_rev", "2");
             }
             let main_size = engine
                 .tracker

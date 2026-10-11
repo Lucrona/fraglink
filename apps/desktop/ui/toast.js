@@ -65,8 +65,7 @@
         playing: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'wow', game: 'World of Warcraft', detail: 'Frostmourne', avatar_color: 0, avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#b0632a"/><circle cx="32" cy="25" r="12" fill="#f1d9c0"/><path d="M10 64c2-15 12-22 22-22s20 7 22 22z" fill="#2b2f3a"/></svg>'), icon: q.get('icon') || '' } })[t]); return; }
     try {
       const st = await window.FL.settings();
-      const skin = st.settings.skin || 'classic';
-      document.body.className = 'toast-page skin-' + skin;
+      document.body.className = 'toast-page skin-dark';
       document.documentElement.style.setProperty('--z', st.settings.zoom || '1.5');
     } catch (e) {}
     show(await T.core.invoke('toast_payload'));

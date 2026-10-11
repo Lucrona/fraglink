@@ -230,7 +230,7 @@
 
   /* ---------------- state ---------------- */
   const state = {
-    skin: params.get('skin') || localStorage.getItem('fl-skin') || 'dark',
+    skin: 'dark',
     tab: ({ hours: 'stats', profile: 'stats' })[params.get('tab')] || params.get('tab') || 'friends',
     collapsed: { online: false, fof: false, off: false },
     sel: null, sort: { key: 'name', dir: 1 }, hoursSort: { key: 'week', dir: -1 },
@@ -242,20 +242,10 @@
   $$('[data-tab]').forEach(b => { if (!tabOn(b.dataset.tab)) b.remove(); });
 
   /* ---------------- skins ---------------- */
-  // Dark (the 2013-style resizable window) is the default; Classic Silver is a
-  // fixed-size alternative. Phoenix/StreamEngine CSS is kept but not offered.
-  const SKINS = ['dark', 'classic', 'phoenix', 'stream'];
-  function applySkin(s, persist = true) {
-    if (!SKINS.includes(s)) s = 'dark';
-    const changed = s !== state.skin;
-    state.skin = s;
-    document.body.classList.remove(...SKINS.map(k => 'skin-' + k));
-    document.body.classList.add('skin-' + s);
-    try { localStorage.setItem('fl-skin', s); } catch (e) {}
-    // the OS window switches between resizable (dark) and fixed (chassis skins)
-    if (TAURI) (persist ? FLB.set('skin', s) : Promise.resolve()).then(() => { if (changed || persist) FLB.scale(currentZoom(), $('#app').classList.contains('side-open')); }).catch(() => {});
-    $$('.skin-opt').forEach(b => b.classList.toggle('checked', b.dataset.skin === s));
-    $$('input[name=skin]').forEach(r => { r.checked = r.value === s; });
+  // Dark is the only skin (0.2.0-dev.20 removed Classic Silver).
+  function applySkin() {
+    state.skin = 'dark';
+    document.body.classList.add('skin-dark');
     render();
   }
 
@@ -422,12 +412,12 @@
     else if (us) rows = us.length ? us.map(u => { const r = relationOf(u.handle); return `<tr class="${u.handle === sel ? 'sel' : ''}" data-action="add-pick" data-handle="${esc(u.handle)}"><td>${esc(u.handle)}</td><td>${esc(u.display_name || u.handle)}${r ? ` <em class="af-rel">${REL_TAG[r]}</em>` : ''}</td></tr>`; }).join('') : `<tr class="af-note"><td colspan="2">${esc(A.err || A.self || 'No users found. Check the spelling, or try part of their name.')}</td></tr>`;
     const n = us ? us.length : 0, rel = sel ? relationOf(sel) : '', canAdd = sel && rel !== 'friend' && rel !== 'out' && !A.busy;
     return `<div class="af-dlg" role="dialog" aria-label="Add Friend"><div class="af-title"><span>Add Friend</span><button type="button" class="af-x" data-action="add-cancel" data-tip="Close">×</button></div><div class="af-body">
-      <label for="add-handle">Search by name, email, or username:</label>
+      <label for="add-handle">Search by nickname, username or email:</label>
       <input id="add-handle" maxlength="60" autocomplete="off" spellcheck="false" value="${esc(A.q)}" />
       <div class="af-ex">(Example: Jo, Jo Doe, or jo@doe.com)</div>
       <div class="af-btns"><button class="af-b" type="button" data-action="add-cancel">Cancel</button><button class="af-b" type="button" id="add-search" data-action="add-friend-go"${A.q.trim() ? '' : ' disabled'}>Search</button></div>
       <div class="af-h"><span>Search Results (select one):</span><span>${us ? `${n} User${n === 1 ? '' : 's'} Found` : ''}</span></div>
-      <div class="af-tw"><table class="af-t"><tr><th>Username</th><th>Display Name</th></tr>${rows}</table></div>
+      <div class="af-tw"><table class="af-t"><tr><th>Username</th><th>Nickname</th></tr>${rows}</table></div>
       <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">${esc(A.msg)}</textarea>
       <div id="add-msg" class="${A.bad ? 'bad' : ''}">${esc(A.out || '')}</div>
       <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${canAdd ? '' : ' disabled'}${rel === 'friend' || rel === 'out' ? ` data-tip="${REL_TAG[rel]}"` : ''}>${A.busy ? 'Adding…' : rel === 'in' ? 'Accept' : 'Add Friend'}</button></div>
@@ -1065,8 +1055,6 @@
     if (k === 'text_size') applyTextSize(v);
     if (['show_offline', 'show_fof', 'always_on_top', 'share_game', 'custom_status', 'hidden_groups', 'custom_groups', 'custom_on', 'status_history'].includes(k)) { syncMenus(); syncStatus(); render(); }
     if (k.startsWith('game_path:') || k.startsWith('launch_args:')) loadCatalog();
-    if (k === 'skin' && v !== state.skin) applySkin(v, false);
-    else if (k === 'zoom' && state.skin !== 'dark') setZoom(v);
   });
 
   /* ---- games dialog: "this is a game" + exclusions ---- */
@@ -1218,7 +1206,7 @@
     'toggle-offline': () => { saveSetting('show_offline', setOn('show_offline') ? '0' : '1'); syncMenus(); render(); },
     'toggle-fof': () => { saveSetting('show_fof', setOn('show_fof') ? '0' : '1'); syncMenus(); render(); },
     'show-groups': () => { saveSetting('hidden_groups', '[]'); render(); },
-    'help-contents': () => notice('Fraglink Help', '<ul class="fl-ul"><li><b>Friends list</b>: click a group heading to fold or unfold it (Fraglink remembers), hover a friend for details, right-click a heading to add a custom group or hide the category (Tools &gt; Friends &gt; Show Hidden Categories brings it back).</li><li><b>Info panel</b>: the arrow on the right edge. It shows your games with <b>Launch</b> links, or details for the friend or group you selected.</li><li><b>Status</b>: the box under the banner. While you play, it shows the game automatically.</li><li><b>Games</b>: Options &gt; Games lists what Fraglink found; set paths and launch options there, or add a game by hand.</li><li><b>Privacy</b>: see Options &gt; Privacy for what friends can see.</li></ul>'),
+    'help-contents': () => notice('Fraglink Help', '<ul class="fl-ul"><li><b>Friends list</b>: click the arrow beside a group heading (or double-click the heading) to fold or unfold it (Fraglink remembers), hover a friend for details, right-click a heading to add a custom group or hide the category (Tools &gt; Friends &gt; Show Hidden Categories brings it back).</li><li><b>Info panel</b>: the arrow on the right edge. It shows your games with <b>Launch</b> links, or details for the friend or group you selected.</li><li><b>Status</b>: the box under the banner. While you play, it shows the game automatically.</li><li><b>Games</b>: Options &gt; Games lists what Fraglink found; set paths and launch options there, or add a game by hand.</li><li><b>Nickname</b>: click your own name to change the name friends see. Your username stays the same.</li><li><b>Privacy</b>: see Options &gt; Privacy for what friends can see.</li></ul>'),
     'my-stats': () => { const u = realMode() && LIVE.friends.me; if (TAURI && FLB.openWebsite) FLB.openWebsite(u ? 'u/' + u : '').catch(toastErr); else notice('My Stats', LATER); },
     'custom-status-go': () => { useCustom($('#custom-status').value); $('#notice').hidden = true; },
     'add-group-go': () => { const v = ($('#group-name').value || '').trim().slice(0, 30); if (v) saveSetting('custom_groups', JSON.stringify([...new Set([...jsonList('custom_groups'), v])]));
@@ -1249,8 +1237,6 @@
     $('#menu-signout').disabled = !realMode();
   }
   document.addEventListener('click', e => {
-    const skin = e.target.closest('.skin-opt'); if (skin) { applySkin(skin.dataset.skin); closeMenus(); return; }
-    const zo = e.target.closest('.zoom-opt'); if (zo) { setZoom(zo.dataset.zoom); closeMenus(); return; }
     const th = e.target.closest('.theme-opt'); if (th) { applyTheme(th.dataset.theme); saveSetting('theme', th.dataset.theme); closeMenus(); return; }
     const a = e.target.closest('[data-action]');
     if (a && !a.closest('#toast')) { closeMenus(); const fn = actions[a.dataset.action]; if (fn) { e.preventDefault(); fn(a); } return; }
@@ -1384,12 +1370,12 @@
       const items = [{ id: 'profile', label: `View ${f.name}'s Profile` }];
       if (join) items.push({ id: 'join', label: 'Join Game' });
       if (friendRow) {
-        items.push({ id: 'fav', label: fav ? 'Remove from Favorites' : 'Add to Favorites' });
+        items.push({ id: 'fav', label: fav ? 'Remove from Favourites' : 'Add to Favourites' });
         const sub = groups.map((g, i) => ({ id: 'move:' + i, label: g, checked: cur === g }));
         if (cur) sub.push({ id: 'move:-', label: '(No group)' });
         if (sub.length) sub.push({ sep: true });
-        sub.push({ id: 'add-group', label: 'Add Custom Group...' });
-        items.push({ label: 'Move to Group', items: sub }, { sep: true }, { id: 'remove', label: 'Remove Friend...' }, { id: 'block', label: 'Block User...' });
+        sub.push({ id: 'add-group', label: 'Add Custom Group…' });
+        items.push({ label: 'Move to Group', items: sub }, { sep: true }, { id: 'remove', label: 'Remove Friend…' }, { id: 'block', label: 'Block User…' });
       }
       showMenu(items, e.clientX, e.clientY, id => {
         if (id === 'profile') actions['friend-profile']({ dataset: { handle: key } });
@@ -1404,7 +1390,7 @@
     const s = e.target.closest('[data-sec]'); if (!s) return;
     e.preventDefault(); const k = s.dataset.sec;
     state.sel = 'g:' + k; render();
-    const items = [{ id: 'add-group', label: 'Add Custom Group...' }, { id: 'hide', label: 'Hide Category' }];
+    const items = [{ id: 'add-group', label: 'Add Custom Group…' }, { id: 'hide', label: 'Hide Category' }];
     if (k.startsWith('c:')) items.push({ id: 'del-group', label: 'Delete Group' });
     showMenu(items, e.clientX, e.clientY, id => {
       if (id === 'add-group') addGroup(null);
@@ -1480,7 +1466,7 @@
     if (st !== myStatus) { myStatus = st; FLB.set('status', st).catch(() => {}); }
     syncStatus();
   }
-  // Status menu (native): Online, Away, Invisible, Looking to Play, Music Status, ─, Set Custom Status..., Reset Status
+  // Status menu (native): Online, Away, Invisible, Looking to Play, ─, Set Custom Status..., Reset Status
   function statusMenu(btn) {
     if (!btn || btn.disabled) return;
     const custom = SET().custom_status || '', customOn = SET().custom_on === '1' && custom;
@@ -1491,9 +1477,8 @@
       { id: 'away', label: 'Away', checked: myStatus === 'away' },
       { id: 'invisible', label: 'Invisible', checked: myStatus === 'invisible' },
       { id: 'looking', label: LOOKING, checked: on && customOn && custom === LOOKING },
-      { id: 'music', label: 'Music Status (coming soon)', disabled: true },
       { sep: true },
-      { id: 'custom', label: 'Set Custom Status...' },
+      { id: 'custom', label: 'Set Custom Status…' },
     ];
     if (hist.length) items.push({ label: 'Recent Statuses', items: hist.map((x, i) => ({ id: 'h:' + i, label: x, checked: on && customOn && custom === x })) });
     items.push({ id: 'reset', label: 'Reset Status' });
@@ -1535,7 +1520,7 @@
   // frameless dark window: edges and the bottom-right grip resize the OS window
   document.addEventListener('mousedown', e => {
     const r = e.target.closest('[data-resize]');
-    if (r && TAURI && e.button === 0 && state.skin === 'dark') { e.preventDefault(); e.stopPropagation(); FLB.resize(r.dataset.resize); }
+    if (r && TAURI && e.button === 0) { e.preventDefault(); e.stopPropagation(); FLB.resize(r.dataset.resize); }
   }, true);
   window.addEventListener('resize', () => { LS.update(); SS.update(); });
   document.addEventListener('mousedown', e => {
@@ -1561,7 +1546,6 @@
   function currentZoom() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--z')) || 1; }
   function setZoom(z) {
     z = String(z); document.documentElement.style.setProperty('--z', z); $('#zoom').value = ['1', '1.5', '2'].includes(z) ? z : '2';
-    $$('.zoom-opt').forEach(b => b.classList.toggle('checked', b.dataset.zoom === z));
     if (TAURI) FLB.scale(z, $('#app').classList.contains('side-open')).catch(() => {});
     layout(); LS.update();
   }
@@ -1593,12 +1577,11 @@
     let st = null;
     try { st = await FLB.settings(); LIVE.settings = st; } catch (e) {}
     const saved = st && st.settings || {};
-    if (TAURI && saved.skin) state.skin = params.get('skin') || saved.skin;
     if (['online', 'away', 'invisible'].includes(saved.status)) myStatus = saved.status;
     applyTheme(saved.theme); syncMenus(); syncStatus();
     for (const k of jsonList('collapsed_groups')) state.collapsed[k] = true;
     setZoom(params.get('zoom') || (TAURI ? (saved.zoom || '1.5') : (document.body.classList.contains('compare') ? 1 : 2)));
-    applySkin(state.skin);
+    applySkin();
     clock();
     { const sw = TAURI ? +saved.side_w : +(params.get('sidew') || localStorage.getItem('fl-side-w')); if (sw) setSideW(sw, false); }
     applyTextSize(saved.text_size || params.get('text') || 'normal');

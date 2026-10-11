@@ -7,8 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 - Hovering a friend (or a button) showed two tooltips at once on Windows; now there's only the dark one, and cut-off text shows its full version there.
+- Menu labels lost a space in some places ("Check forUpdates", "Always onTop", "SignOut"); they read properly now.
+- Long side panel headings such as "Friends of Friends Playing" wrap instead of being cut off.
 
 ### Changed
+- **One look:** the Classic Silver skin is gone and everyone uses the dark look (Tools > Skin is removed; the colour choice under Tools > Theme stays).
+- Tidier wording: the Add Friend results list "Nickname", the tray says "Sign Out" like the main menu, Help > Contents explains the newer features, and the unused "Music Status (coming soon)" entry and the old nickname box in Options > General are gone (change your nickname by clicking your name or in Options > Account).
 - **Friends list back to the classic look:** a friend's game icon sits in front of their name while they play (a blank space otherwise); pictures stay in the side panel, next to your own name and in pop-ups.
 
 ### Added

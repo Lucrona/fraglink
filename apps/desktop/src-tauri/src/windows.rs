@@ -7,11 +7,7 @@ use tauri::{
     WebviewWindowBuilder, Window, WindowEvent,
 };
 
-/// Classic chassis size in CSS px (the prototype's 290x381), and with the side panel open.
-pub const BASE_W: f64 = 290.0;
-pub const SIDE_W: f64 = 468.0;
-pub const BASE_H: f64 = 381.0;
-/// Dark skin: resizable window. Minimum = default = 333x555, like the 2013-era
+/// Main window: resizable. Minimum = default = 333x555, like the 2013-era
 /// client this layout follows; +12 px for the info-panel nub on the right.
 pub const DARK_MIN_W: f64 = 345.0;
 pub const DARK_MIN_H: f64 = 555.0;
@@ -64,28 +60,6 @@ const TOAST_W: f64 = 226.0;
 // window is transparent and the toast sits at its bottom, as tall as its text.
 const TOAST_H: f64 = 100.0;
 
-pub fn zoom(app: &AppHandle) -> f64 {
-    let state = app.state::<AppState>();
-    let e = state.engine.lock().unwrap();
-    e.tracker
-        .store
-        .get_setting(keys::ZOOM)
-        .ok()
-        .flatten()
-        .and_then(|z| z.parse::<f64>().ok())
-        .unwrap_or(1.5)
-        .clamp(1.0, 2.0)
-}
-
-/// Current skin ("dark" by default). Only "dark" gets a resizable window;
-/// the chassis skins are drawn at a fixed size.
-pub fn is_dark(app: &AppHandle) -> bool {
-    let state = app.state::<AppState>();
-    let e = state.engine.lock().unwrap();
-    let skin = e.tracker.store.get_setting(keys::SKIN).ok().flatten();
-    skin.is_none_or(|s| s == "dark")
-}
-
 /// A "1"/"0" checkbox setting from Options.
 pub fn flag(app: &AppHandle, key: &str) -> bool {
     let state = app.state::<AppState>();
@@ -135,19 +109,13 @@ fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
         .expect("main window config");
     let b = WebviewWindowBuilder::from_config(app, &cfg)?;
     *app.state::<AppState>().side_open.lock().unwrap() = false;
-    let w = if is_dark(app) {
-        let (bw, bh) = dark_base(app);
-        let tz = text_zoom(app);
-        b.inner_size(bw.max(DARK_MIN_W * tz), bh.max(DARK_MIN_H * tz))
-            .min_inner_size(DARK_MIN_W * tz, DARK_MIN_H * tz)
-            .resizable(true)
-            .build()?
-    } else {
-        let z = zoom(app);
-        b.inner_size(BASE_W * z, BASE_H * z)
-            .resizable(false)
-            .build()?
-    };
+    let (bw, bh) = dark_base(app);
+    let tz = text_zoom(app);
+    let w = b
+        .inner_size(bw.max(DARK_MIN_W * tz), bh.max(DARK_MIN_H * tz))
+        .min_inner_size(DARK_MIN_W * tz, DARK_MIN_H * tz)
+        .resizable(true)
+        .build()?;
     if flag(app, "always_on_top") {
         let _ = w.set_always_on_top(true);
     }
@@ -259,30 +227,22 @@ pub fn persist_main_pos(app: &AppHandle) {
     }
 }
 
-/// Fit the main window to the skin: dark = resizable (remembered size, the info
-/// panel adds width); chassis skins = fixed size scaled by `z`.
-pub fn resize_main(app: &AppHandle, z: f64, side_open: bool) {
+/// Fit the main window: resizable, remembered size; the open info panel adds width.
+pub fn resize_main(app: &AppHandle, side_open: bool) {
     let Some(w) = app.get_webview_window("main") else {
         return;
     };
     *app.state::<AppState>().side_open.lock().unwrap() = side_open;
-    if is_dark(app) {
-        let side = if side_open { side_extra(app) } else { 0.0 };
-        let tz = text_zoom(app);
-        let (bw, bh) = dark_base(app);
-        let (bw, bh) = (bw.max(DARK_MIN_W * tz), bh.max(DARK_MIN_H * tz));
-        let _ = w.set_resizable(true);
-        let _ = w.set_min_size(Some(Size::Logical(LogicalSize::new(
-            DARK_MIN_W * tz + side,
-            DARK_MIN_H * tz,
-        ))));
-        let _ = w.set_size(LogicalSize::new(bw + side, bh));
-    } else {
-        let width = if side_open { SIDE_W } else { BASE_W };
-        let _ = w.set_min_size(None::<Size>);
-        let _ = w.set_resizable(false);
-        let _ = w.set_size(LogicalSize::new(width * z, BASE_H * z));
-    }
+    let side = if side_open { side_extra(app) } else { 0.0 };
+    let tz = text_zoom(app);
+    let (bw, bh) = dark_base(app);
+    let (bw, bh) = (bw.max(DARK_MIN_W * tz), bh.max(DARK_MIN_H * tz));
+    let _ = w.set_resizable(true);
+    let _ = w.set_min_size(Some(Size::Logical(LogicalSize::new(
+        DARK_MIN_W * tz + side,
+        DARK_MIN_H * tz,
+    ))));
+    let _ = w.set_size(LogicalSize::new(bw + side, bh));
 }
 
 /// Open (or focus) the Options window: its own resizable window with the same
@@ -347,7 +307,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             let sf = window.scale_factor().unwrap_or(1.0);
             let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
             // ignore minimised (0x0) and chassis-skin sizes
-            if w >= DARK_MIN_W - 1.0 && h >= DARK_MIN_H - 1.0 && is_dark(app) {
+            if w >= DARK_MIN_W - 1.0 && h >= DARK_MIN_H - 1.0 {
                 let open = *app.state::<AppState>().side_open.lock().unwrap();
                 let side = if open { side_extra(app) } else { 0.0 };
                 let st = app.state::<AppState>();
@@ -383,9 +343,7 @@ pub fn show_toast(app: &AppHandle, mut payload: ToastPayload) {
         if app.get_webview_window("toast").is_some() {
             return;
         }
-        // the dark skin's popup is drawn at 1x; the chassis skins follow their scale
-        let z = if is_dark(app) { 1.0 } else { zoom(app) };
-        let (w, h) = (TOAST_W * z, TOAST_H * z);
+        let (w, h) = (TOAST_W, TOAST_H);
         let mut builder =
             WebviewWindowBuilder::new(app, "toast", WebviewUrl::App("toast.html".into()))
                 .title("Fraglink")

@@ -14,8 +14,8 @@
   const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', rsi: 'RSI Launcher', scan: 'found in your game folders', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '', detectable: '' };
   const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
-  // Dark and Phoenix skins get the dark 2013 look; Classic and Stream keep the plain system look.
-  const applyTheme = skin => document.body.classList.toggle('dark', skin === 'dark' || skin === 'phoenix');
+  // Options always uses the dark look (Dark is the only skin since 0.2.0-dev.20).
+  const applyTheme = () => document.body.classList.add('dark');
 
   function show(page) {
     page = PAGES[page] || page;
@@ -33,11 +33,11 @@
     const s = st.settings || {};
     const cur = {
       autostart: st.autostart ? '1' : '0', start_minimized: on(s, 'start_minimized', '0'), minimize_to_tray: on(s, 'minimize_to_tray', '0'),
-      show_offline: on(s, 'show_offline'), show_fof: on(s, 'show_fof'), nickname: s.nickname || '', language: s.language || 'en-AU',
+      show_offline: on(s, 'show_offline'), show_fof: on(s, 'show_fof'), language: s.language || 'en-AU',
       toasts: on(s, 'toasts'), friend_toasts: on(s, 'friend_toasts'), friend_toasts_logon: on(s, 'friend_toasts_logon'), connection_alerts: on(s, 'connection_alerts', '0'), friend_toasts_dnd: on(s, 'friend_toasts_dnd'),
       share_game: on(s, 'share_game'), share_profile: on(s, 'share_profile'), share_fof: on(s, 'share_fof'),
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
-      skin: ['dark', 'classic'].includes(s.skin) ? s.skin : 'dark', zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
+      zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
       theme: s.theme || 'blue', always_on_top: on(s, 'always_on_top', '0'),
       text_size: ['normal', 'large', 'larger'].includes(s.text_size) ? s.text_size : 'normal',
     };
@@ -47,7 +47,6 @@
       else if (el.type === 'radio') el.checked = el.value === v;
       else el.value = v;
     });
-    scaleBox();
     $('#g-sort').value = sortBy;
     $('#about').innerHTML = [
       ['Version', `Fraglink ${esc(st.version)}${st.sim ? ' <span class="bad">(simulation mode)</span>' : ''}`],
@@ -57,7 +56,6 @@
       ['Found on this PC', `${st.steam_apps} Steam, ${st.epic_apps || 0} Epic, ${st.gog_apps || 0} GOG games`],
     ].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('') + '<b></b><span><button type="button" data-do="open-data">Open data folder</button></span>';
   }
-  function scaleBox() { const r = $('input[name=skin]:checked'); $('#scale-box').hidden = !r || r.value !== 'classic'; }
 
   document.addEventListener('change', e => {
     const t = e.target;
@@ -69,7 +67,7 @@
     }
     const el = t.closest('[data-key]');
     $('#apply').disabled = false;
-    if (el) { pending.set(el.dataset.key, value(el)); if (el.name === 'skin') scaleBox(); return; }
+    if (el) { pending.set(el.dataset.key, value(el)); return; }
     if (!gsel) return;
     if (t.id === 'gd-path') pending.set('game_path:' + gsel, t.value.trim());
     else if (t.id === 'gd-args') pending.set('launch_args:' + gsel, t.value.trim());
@@ -303,13 +301,13 @@
     try { st = await FLB.settings(); load(); } catch (e) { fail(e); }
     if (FLB.tauri) document.body.classList.add('tauri');
     const ts = st && st.settings && st.settings.text_size; if (ts) document.body.style.zoom = { large: 1.1, larger: 1.2 }[ts] || '';
-    applyTheme((st && st.settings && st.settings.skin) || params.get('skin') || 'dark');
+    applyTheme();
     renderDetail();
     show(params.get('page') || 'general');
     if (FLB.on) {
       FLB.on('fraglink://sync', () => { if (!$('section[data-page=account]').hidden) renderSync(); });
       FLB.on('fraglink://options-page', p => show(p));
-      FLB.on('fraglink://settings', ([k, v]) => { if (k === 'skin') applyTheme(v); if (k === 'text_size') document.body.style.zoom = { large: 1.1, larger: 1.2 }[v] || ''; });
+      FLB.on('fraglink://settings', ([k, v]) => { if (k === 'text_size') document.body.style.zoom = { large: 1.1, larger: 1.2 }[v] || ''; });
     }
   })();
 })();

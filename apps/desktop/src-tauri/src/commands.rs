@@ -345,13 +345,13 @@ pub fn set_setting(
     }
     if key == "text_size" {
         let open = *state.side_open.lock().unwrap();
-        windows::resize_main(&app, windows::zoom(&app), open);
+        windows::resize_main(&app, open);
     }
     // let the other windows (main <-> Options) follow the change
     let _ = app.emit("fraglink://settings", (&key, &value));
     if matches!(
         key.as_str(),
-        "skin" | "status_history" | "custom_status" | "custom_on"
+        "status_history" | "custom_status" | "custom_on"
     ) || key.starts_with("exclude:")
         || key.starts_with("game_path:")
     {
@@ -384,7 +384,7 @@ pub fn set_side_width(app: AppHandle, state: State<'_, AppState>, width: f64) ->
         .map_err(err)?;
     let open = *state.side_open.lock().unwrap();
     if open {
-        windows::resize_main(&app, windows::zoom(&app), true);
+        windows::resize_main(&app, true);
     }
     Ok(())
 }
@@ -549,16 +549,9 @@ pub fn set_window_scale(
     zoom: f64,
     side_open: bool,
 ) -> CmdResult<()> {
-    let z = zoom.clamp(1.0, 2.0);
-    state
-        .engine
-        .lock()
-        .unwrap()
-        .tracker
-        .store
-        .set_setting(keys::ZOOM, &z.to_string())
-        .map_err(err)?;
-    windows::resize_main(&app, z, side_open);
+    // `zoom` scaled the old fixed-size skin; the window now only follows the info panel
+    let _ = (zoom, state);
+    windows::resize_main(&app, side_open);
     Ok(())
 }
 

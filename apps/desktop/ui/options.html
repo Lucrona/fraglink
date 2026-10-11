@@ -18,9 +18,6 @@
   </nav>
   <main class="op-body">
     <section data-page="general">
-      <fieldset><legend>Profile</legend>
-        <label class="row">Nickname <input type="text" data-key="nickname" maxlength="32" placeholder="shown to friends (later)" /></label>
-      </fieldset>
       <fieldset><legend>Startup</legend>
         <label><input type="checkbox" data-key="autostart" /> Launch Fraglink when Windows starts</label>
         <label><input type="checkbox" data-key="start_minimized" /> Start minimised in the system tray</label>
@@ -94,19 +91,12 @@
     </section>
 
     <section data-page="appearance" hidden>
-      <fieldset><legend>Skin</legend>
-        <label><input type="radio" name="skin" data-key="skin" value="dark" /> Dark (default, resizable)</label>
-        <label><input type="radio" name="skin" data-key="skin" value="classic" /> Classic Silver (fixed size)</label>
-      </fieldset>
       <fieldset><legend>Theme</legend>
         <label class="row">Accent colour <select data-key="theme"><option value="blue">Cobalt</option><option value="crimson">Crimson</option><option value="emerald">Emerald</option><option value="graphite">Graphite</option></select></label>
       </fieldset>
-      <fieldset id="scale-box"><legend>Classic Silver size</legend>
-        <label class="row">Scale <select data-key="zoom"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
-      </fieldset>
       <fieldset><legend>Text size</legend>
         <label class="row">Text size <select data-key="text_size"><option value="normal">Normal</option><option value="large">Large</option><option value="larger">Larger</option></select></label>
-        <span class="hint">Scales the whole main window (Dark skin).</span>
+        <span class="hint">Scales the whole main window.</span>
       </fieldset>
       <fieldset><legend>Window</legend>
         <label><input type="checkbox" data-key="always_on_top" /> Keep the main window on top</label>
