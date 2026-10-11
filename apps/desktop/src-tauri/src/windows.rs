@@ -365,12 +365,13 @@ pub fn show_toast(app: &AppHandle, mut payload: ToastPayload) {
         payload.icon = crate::icons::one(app, &payload.game_id, false);
     }
     // friend / request toasts: the friend's picture (from the cached friends list)
-    if let Some(h) = payload
+    let friend = payload
         .kind
         .strip_prefix("friend:")
         .or_else(|| payload.kind.strip_prefix("request:"))
-    {
-        crate::avatars::fill_toast(app, h, &mut payload);
+        .map(str::to_owned);
+    if let Some(h) = friend {
+        crate::avatars::fill_toast(app, &h, &mut payload);
     }
     *app.state::<AppState>().pending_toast.lock().unwrap() = Some(payload.clone());
     if app.get_webview_window("toast").is_some() {
