@@ -268,7 +268,8 @@
   // The WoW realm gets its own labelled row ("Realm  Frostmourne") in the side panel and
   // tooltip, like the classic client; gameLabel is just the game's name.
   const gameLabel = f => f.game === UNLISTED ? 'A game' : (GAMES[f.game] ? GAMES[f.game].name : '');
-  const realmOf = f => f.game !== UNLISTED && f.detail ? String(f.detail) : '';
+  const SHOW_REALM = false; // realm detection on the back burner (dev.18); true brings the rows back
+  const realmOf = f => SHOW_REALM && f.game !== UNLISTED && f.detail ? String(f.detail) : '';
   // A game the server can't name yet (a program someone tagged that isn't on Fraglink's
   // list): friends just see "Playing a game" (the server sends game_id "unlisted").
   const UNLISTED = 'unlisted';
@@ -635,7 +636,7 @@
     if (playing) {
       const t0 = sessionStart(f);
       h += sfSec('Playing Game') + `<div class="sf-game"><i class="gi sf-gi">${friendGameIcon(f.game)}</i><div class="sf-gn"><b title="${esc(gameLabel(f))}">${esc(gameLabel(f))}</b></div></div>`;
-      h += kv('Realm', esc(realmOf(f)));
+      if (realmOf(f)) h += kv('Realm', esc(realmOf(f)));
       h += kv('Playing for', t0 ? `<span class="sf-timer" data-start="${t0}">${fmtT(Date.now() - t0)}</span>` : '');
     }
     if (f.kind === 'off' && f.last) h += kv('Last online', esc(f.last));
@@ -1332,7 +1333,7 @@
     const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? np.name : '';
     const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? 'Playing ' + game : 'Online';
     // hover: the game with its detail (WoW realm), e.g. "Playing World of Warcraft: Forever · Frostmourne"
-    const detail = game && np.detail ? ' · ' + np.detail : '';
+    const detail = SHOW_REALM && game && np.detail ? ' · ' + np.detail : '';
     const tipTxt = detail && txt.includes(game) ? txt.replace(game, game + detail) : txt;
     btn.querySelector('span').textContent = txt; btn.title = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();

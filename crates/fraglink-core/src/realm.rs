@@ -13,6 +13,10 @@
 //! modern clients never write it; it is only a last resort for old installs without
 //! character folders.
 
+/// Realm detection is on the back burner (dev.18): it was not reliable enough, so the
+/// app neither reads nor shows realms. Flip to bring it back.
+pub const ENABLED: bool = false;
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;

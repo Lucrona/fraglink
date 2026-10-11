@@ -141,23 +141,14 @@ async fn presence_fans_out_to_friends_only(pool: PgPool) {
         .await;
     cb.quiet(500).await;
 
-    // the realm (game detail) arrives as a plain update, not a new "started"
+    // the realm (game detail) is dropped for now (dev.18): nothing changes for friends
     ca.send(json!({ "type": "presence", "status": "online", "game": { "id": "wow", "name": "World of Warcraft", "started_at": 1_790_000_000i64, "detail": "Frostmourne\u{7}" } }))
         .await;
-    let m = cb.expect("presence").await;
-    assert_eq!(
-        (m["game_detail"].as_str(), m["started"].as_bool()),
-        (Some("Frostmourne"), Some(false))
-    );
+    cb.quiet(500).await;
     let l = api(&app, "GET", "/api/v1/friends", Some(&b), None)
         .await
         .json();
-    assert_eq!(l["friends"][0]["presence"]["game_detail"], "Frostmourne");
-    // an older client without the field clears it
-    ca.presence("online", Some(("wow", "World of Warcraft")))
-        .await;
-    let m = cb.expect("presence").await;
-    assert!(m["game_detail"].is_null());
+    assert!(l["friends"][0]["presence"]["game_detail"].is_null());
 
     // bob's REST list shows it too
     let l = api(&app, "GET", "/api/v1/friends", Some(&b), None)

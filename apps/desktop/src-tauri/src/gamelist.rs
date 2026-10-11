@@ -70,8 +70,9 @@ fn load_cache(app: &AppHandle, f: &Files) {
             Err(err) => log::warn!("overrides cache unusable: {err:#}"),
         }
     }
-    if let Some(n) = std::fs::read(&f.realms)
-        .ok()
+    if let Some(n) = fraglink_core::realm::ENABLED
+        .then(|| std::fs::read(&f.realms).ok())
+        .flatten()
         .and_then(|b| fraglink_core::realm::known_realms_from_bytes(&b))
     {
         log::info!("wow realm list: {} names from cache", n.len());
@@ -152,6 +153,9 @@ fn refresh(app: &AppHandle, f: &Files) -> Result<(), String> {
     }
     // real WoW realm names, to check WTF\Account folder names against (optional:
     // older servers don't have it, and the folder heuristic works without it)
+    if !fraglink_core::realm::ENABLED {
+        return Ok(());
+    }
     match c.fetch_list(REALMS_PATH, read_etag(&f.realms_etag, &f.realms).as_deref()) {
         Ok(None) => {}
         Ok(Some((body, etag))) => match fraglink_core::realm::known_realms_from_bytes(&body) {

@@ -282,6 +282,9 @@ impl Engine {
 
     /// Start / re-check / drop the Config.wtf watch of each running WoW flavour.
     fn update_details(&mut self, running: &[(String, Option<String>)]) {
+        if !crate::realm::ENABLED {
+            return;
+        }
         let mut changed = false;
         self.realms.retain(|id, w| {
             let keep = running.iter().any(|(g, _)| g == id);
@@ -623,6 +626,7 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
+    #[ignore = "realm detection disabled (realm::ENABLED)"]
     fn wow_realm_is_the_game_detail() {
         std::env::set_var("FRAGLINK_STEAM_DIR", "/nonexistent-steam-dir");
         let dir = tempfile::tempdir().unwrap();

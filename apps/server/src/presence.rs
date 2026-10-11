@@ -428,7 +428,8 @@ pub async fn set(
     .bind(&new_id)
     .bind(&public)
     .bind(started_at)
-    .bind(game.as_ref().and_then(|g| g.1.clone()))
+    // WoW realm (game_detail) is ignored for now: detection wasn't reliable (dev.18)
+    .bind(None::<String>)
     .bind(game.as_ref().is_some_and(|g| g.2))
     .execute(&st.db)
     .await?;

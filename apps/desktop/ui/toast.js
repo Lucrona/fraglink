@@ -1,6 +1,7 @@
 /* Bottom-right toast window: "You / a friend started playing X", with the game's own icon. */
 (() => {
   'use strict';
+  const SHOW_REALM = false; // realm (toast detail line) hidden for now, dev.18
   const T = window.__TAURI__;
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const el = document.getElementById('toast'), body = document.getElementById('toast-body');
@@ -27,7 +28,7 @@
     // icon (game, or a letter avatar for a friend with no game), bold name, one line, then a dim line (realm / @username)
     const lead = p.game_id || !friend ? `<i class="gi">${icon}</i>` : avatar(p.title);
     const req = /^request:/.test(p.kind || '');
-    const sub = req ? p.game : (p.detail || '');
+    const sub = req ? p.game : (SHOW_REALM ? p.detail || '' : '');
     body.innerHTML = `${lead}<div class="tx"><b>${esc(p.title)}</b><span class="ln">${esc(p.line)}${!req && p.game ? ` <span class="g">${esc(p.game)}</span>` : ''}</span>` +
       `${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
     el.hidden = false; el.classList.remove('out');

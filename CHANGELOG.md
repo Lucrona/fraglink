@@ -6,8 +6,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Added
-- **WoW realm from the character folders:** WoW stopped writing `realmName` to `WTF\Config.wtf` in patch 5.4.1, so for every WoW flavour Fraglink now takes the realm from the folders WoW keeps under `WTF\Account\<account>\<realm>\<character>\`: the realm whose character was played most recently, across all accounts. `SavedVariables`, number-only folders and folders without characters are skipped. It checks when the game starts, when `Config.wtf` changes, and every 3 minutes while you play. `realmName` is only used when there are no character folders.
-- **Real WoW realm names:** the server now keeps Blizzard's realm lists (Retail, Classic and Classic Era; US, EU, Korea, Taiwan), refreshed daily, and the app downloads them along with the game lists. When the realm comes from the character folders, a folder that matches a real realm name wins over other folders; realms not on the list (such as beta realms) still work as before. Server: `GET /api/v1/games/wow-realms` (ETag-cached).
   beta doesn't), Fraglink takes the realm from the character folders WoW keeps under
   `WTF\Account\<account>\<realm>\<character>\`: the realm whose character was played most recently,
   across all accounts. `SavedVariables`, number-only folders and folders without characters are skipped.
@@ -30,6 +28,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   someone who asked you, the button says Accept.
 
 ### Changed
+
+- **WoW realm hidden for now:** realm detection wasn't reliable enough, so the app no longer reads or shows the realm (side panel, tooltips, your status and pop-ups), and the server no longer passes one on to friends.
 - **Bigger Add Friend window:** about 25% larger, with the friends list's text size, a taller results list
   (about 6 rows), roomier buttons and padding, and the list behind it dimmed a bit more.
 - **Side panel height like the classic client:** the info panel now starts just under the main window's title
