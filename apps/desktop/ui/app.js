@@ -1553,6 +1553,7 @@
     if (params.get('check') === '1') actions['check-updates']();
     if (params.get('modal') === 'options') openOptions();
     if (params.get('modal') === 'about') actions.about();
+    if (params.get('menu') && params.get('menu') !== 'status') setTimeout(() => { const m = $(`.xf-menu[data-menu="${params.get('menu')}"]`); if (m) { m.classList.add('open'); const sub = params.get('sub') && m.querySelectorAll('.has-sub')[+params.get('sub')]; if (sub) sub.classList.add('force'); } }, 300); // preview
     if (params.get('menu') === 'status') setTimeout(() => statusMenu($('#status-btn')), 300);
     if (params.get('modal') === 'games') openGames(true);
   })();

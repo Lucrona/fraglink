@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Changed
+- **Dark menus:** in the dark skin, the Fraglink, Tools and Help menus and their submenus are now dark grey with light text and a blue highlight, like the right-click menu. Classic Silver is unchanged.
 - **Resizable friends list columns:** drag the dividers between Name, Status and Game Info to make a column wider or narrower; Game Info takes the remaining space. Your widths are remembered, and double-clicking a divider puts them back. Text that doesn't fit ends in "…"; hover to see all of it.
 - **Group headings explain themselves:** click Friends of Friends Playing, Friend Requests or Friends Offline to highlight it and see a short description in the side panel. Friends Online keeps the normal Activity view. Fold a group with its arrow or by double-clicking the heading; click empty space to go back.
 

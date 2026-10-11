@@ -480,3 +480,15 @@ body.skin-dark .xf-app.side-open .dk-grip { bottom: calc(var(--side-bot) + 1px);
 .fl-flash::before { content: none; }
 /* dev.19: selected group heading -> its description in the side panel */
 .grp-help { padding: 6px 8px; color: #b8c2d2; font-size: 11px; line-height: 15px; }
+/* dev.19: menu bar dropdowns (Fraglink / Tools / Help + submenus) in the dark right-click menu style */
+body.skin-dark .xf-dropdown { min-width: 150px; padding: 2px; background: #1b1d22; border: 1px solid #000; box-shadow: 2px 2px 6px rgba(0,0,0,.6); }
+body.skin-dark .xf-dropdown button, body.skin-dark .xf-dropdown .has-sub { color: #e6e9ee; font: 11px var(--font); padding: 3px 14px 3px 20px; cursor: pointer; }
+body.skin-dark .xf-dropdown button:hover:not(:disabled), body.skin-dark .xf-dropdown .has-sub:hover { background: var(--dk-blue2, #1f4f9e); color: #fff; }
+body.skin-dark .xf-dropdown button:disabled { color: #6f7580; background: none; cursor: default; }
+body.skin-dark .xf-dropdown hr { border: 0; border-top: 1px solid #3a3e46; margin: 2px 0; }
+body.skin-dark .xf-dropdown .has-sub b { color: #9aa3b2; font-size: 8px; }
+body.skin-dark .xf-dropdown .has-sub:hover > b { color: #fff; }
+body.skin-dark .xf-dropdown .sub { top: -3px; left: 100%; }
+body.skin-dark .xf-dropdown u { text-decoration-color: currentColor; }
+.xf-dropdown .has-sub.force > .sub { display: block; }
+body.skin-dark .xf-dropdown .has-sub.force { background: var(--dk-blue2, #1f4f9e); color: #fff; }
