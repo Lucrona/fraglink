@@ -11,6 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   across all accounts. `SavedVariables`, number-only folders and folders without characters are skipped.
   It checks when the game starts and every 3 minutes while you play; a realm in Config.wtf still wins.
 - **Retire a game (website admin):** staff can retire any game entry. It keeps its name, icon and every hour
+- **Retire only some programs (website admin):** Retire lists the game's programs with checkboxes (all ticked by default) and asks before going ahead. Untick some to detach just the ticked ones: each gets a fresh entry in Game approvals and the game stays live with the rest.
+- **Game status (website admin):** Edit Game has a Status section: Live / Beta / Test / Early Access / Ended, an expected end or launch date, a note, and when it was last checked and by whom. Saving is logged in the audit log; the games table shows a tag for anything not Live. Server CLI for scheduled checks: `fraglink-server game-status <id> --lifecycle beta --ends 2026-12-01 --note "..." --by "Fraglink check"`. Server: migration `0013_game_status`.
   recorded so far and shows as a normal past game on profiles, but its program is detached: the next time
   someone plays it, the time goes to a new entry (named after the program) that starts from zero and waits
   in Game approvals. Logged in the audit log; "Undo retire" works while the new entry has no hours yet.

@@ -61,6 +61,10 @@ async fn main() -> anyhow::Result<()> {
 ///   fraglink-server suggestions             list "Track this as a game?" answers
 ///   fraglink-server approve-game <exe> <name>   publish a program under a name
 ///   fraglink-server unapprove-game <exe>        show it as "Playing a game" again
+///   fraglink-server game-status <id> [--lifecycle live|beta|test|early_access|ended]
+///       [--ends|--launches|--date YYYY-MM-DD|none] [--note TEXT] [--by NAME]
+///       update a game's status and stamp "last checked" (default by "Fraglink check");
+///       with no options it prints the current status
 async fn admin(args: &[String]) -> anyhow::Result<()> {
     let url =
         std::env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL is not set"))?;
@@ -88,7 +92,52 @@ async fn admin(args: &[String]) -> anyhow::Result<()> {
             let n = fraglink_server::names::unapprove(&db, exe).await?;
             println!("updated {n} game(s)");
         }
-        _ => anyhow::bail!("usage: fraglink-server [suggestions | approve-game <exe> <name> | unapprove-game <exe>]"),
+        ["game-status", id, opts @ ..] => {
+            let id = id.to_string();
+            if opts.is_empty() {
+                let s = fraglink_server::game_status::get_db(&db, &id)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e.message))?;
+                println!("{}", s.map(|v| v.to_string()).unwrap_or_else(|| "(no status)".into()));
+                return Ok(());
+            }
+            let mut u = fraglink_server::game_status::Update {
+                checked_by: Some("Fraglink check".into()),
+                ..Default::default()
+            };
+            let mut it = opts.iter();
+            while let Some(k) = it.next() {
+                let v = it
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("{k} needs a value"))?
+                    .to_string();
+                match *k {
+                    "--lifecycle" => u.lifecycle = Some(v),
+                    "--ends" | "--launches" | "--date" => u.date = Some(v),
+                    "--note" => u.note = Some(v),
+                    "--by" => u.checked_by = Some(v),
+                    _ => anyhow::bail!("unknown option {k}"),
+                }
+            }
+            let by = u.checked_by.clone().unwrap_or_default();
+            let before = fraglink_server::game_status::get_db(&db, &id)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.message))?;
+            let after = fraglink_server::game_status::set(&db, &id, u)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+            sqlx::query(
+                "INSERT INTO admin_audit(actor_handle, action, target, before, after) VALUES($1, 'game.status', $2, $3, $4)",
+            )
+            .bind(&by)
+            .bind(&id)
+            .bind(before)
+            .bind(&after)
+            .execute(&db)
+            .await?;
+            println!("{id}: {after}");
+        }
+        _ => anyhow::bail!("usage: fraglink-server [suggestions | approve-game <exe> <name> | unapprove-game <exe> | game-status <id> [--lifecycle L] [--ends YYYY-MM-DD] [--note TEXT] [--by NAME]]"),
     }
     Ok(())
 }

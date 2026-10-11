@@ -431,7 +431,8 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         .filter(|o| !o.hidden)
         .filter_map(|o| o.name.as_ref().map(|n| (&o.game_id, n)))
         .collect();
-    if approved.is_empty() && extra.is_empty() && renamed.is_empty() {
+    let detached = crate::retire::detached_exes(st).await?;
+    if approved.is_empty() && extra.is_empty() && renamed.is_empty() && detached.is_empty() {
         return Ok(s);
     }
     let mut f: overrides::OverrideFile = match serde_json::from_str(&s) {
@@ -439,6 +440,26 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         Err(_) => return Ok(s),
     };
     apply_renames(st, &mut f, renamed);
+    // partly retired games: the detached programs get rules of their own (new entries)
+    for (game, exe) in &detached {
+        for r in f.rules.iter_mut().filter(|r| &r.id == game) {
+            r.exes.retain(|x| !x.eq_ignore_ascii_case(exe));
+        }
+        let id = format!("exe:{exe}");
+        if valid_exe(exe) && !f.rules.iter().any(|r| r.id == id) {
+            f.rules.insert(
+                0,
+                overrides::Rule {
+                    id,
+                    name: crate::names::UNLISTED_TITLE.into(),
+                    exes: vec![exe.clone()],
+                    paths: vec![],
+                    channel: None,
+                    note: Some(format!("detached from {game}")),
+                },
+            );
+        }
+    }
     for (id, name) in approved {
         let exe = id.trim_start_matches("exe:").to_string();
         if !valid_exe(&exe) || f.rules.iter().any(|r| r.id == id) {

@@ -12,6 +12,7 @@ pub mod config;
 pub mod error;
 pub mod friends;
 pub mod game_overrides;
+pub mod game_status;
 pub mod games;
 pub mod hours;
 pub mod icons;

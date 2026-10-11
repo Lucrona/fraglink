@@ -37,6 +37,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/games/{id}", get(game_detail).post(game_save))
         .route("/api/v1/admin/games/{id}/retire", post(game_retire))
         .route("/api/v1/admin/games/{id}/unretire", post(game_unretire))
+        .route("/api/v1/admin/games/{id}/status", post(game_status_save))
         .route(
             "/api/v1/admin/games/{id}/icon",
             post(game_icon_upload).delete(game_icon_delete),
@@ -417,18 +418,21 @@ async fn game_info(st: &AppState, id: &str) -> ApiResult<Option<Value>> {
         .or_else(|| row.as_ref().map(|r| r.0.clone()))
         .unwrap_or_default();
     let public = names::public_name(st, id).await?;
-    let retired: Option<(String, DateTime<Utc>)> =
-        sqlx::query_as("SELECT successor_id, retired_at FROM game_retirements WHERE game_id = $1")
-            .bind(id)
-            .fetch_optional(&st.db)
-            .await?;
+    let retired: Option<(String, DateTime<Utc>, Vec<String>, bool)> = sqlx::query_as(
+        "SELECT successor_id, retired_at, exes, partial FROM game_retirements WHERE game_id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
     let retired_from: Option<String> =
         sqlx::query_scalar("SELECT game_id FROM game_retirements WHERE successor_id = $1")
             .bind(id)
             .fetch_optional(&st.db)
             .await?;
     Ok(Some(json!({
-        "retired": retired.map(|(s, at)| json!({ "successor": s, "at": at })),
+        "retired": retired.map(|(s, at, exes, partial)| json!({ "successor": s, "at": at, "exes": exes, "partial": partial })),
+        "exes": crate::retire::all_exes(st, id).await?,
+        "status": crate::game_status::get(st, id).await?,
         "retired_from": retired_from,
         "id": id,
         "name": base_name,
@@ -452,7 +456,15 @@ async fn games_search(
     if q.is_empty() {
         // edited games first, then the most played
         let mut e: Vec<String> = ov.keys().cloned().collect();
+        e.extend(
+            sqlx::query_scalar::<_, String>(
+                "SELECT game_id FROM game_status UNION SELECT game_id FROM game_retirements",
+            )
+            .fetch_all(&st.db)
+            .await?,
+        );
         e.sort();
+        e.dedup();
         ids.extend(e);
         let top: Vec<String> = sqlx::query_scalar(
             "SELECT game_id FROM sessions WHERE started_at > now() - interval '30 days'
@@ -608,17 +620,47 @@ async fn game_save(
 
 /// Retire: freeze this entry (name, icon, hours stay) and record future play of its
 /// program under a new `exe:` entry that goes to game approvals.
+#[derive(Deserialize, Default)]
+struct RetireBody {
+    /// Programs to detach; empty / missing = all of them (the whole entry retires).
+    #[serde(default)]
+    exes: Vec<String>,
+}
+
 async fn game_retire(
     State(st): State<AppState>,
     s: Staff,
     Path(id): Path<String>,
+    body: Option<Json<RetireBody>>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
     if !valid_game_id(&id) || id.starts_with("manual:") || game_info(&st, &id).await?.is_none() {
         return Err(AppError::not_found());
     }
-    if crate::retire::current(&st).await?.contains_key(&id) {
+    let already: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM game_retirements WHERE game_id = $1)")
+            .bind(&id)
+            .fetch_one(&st.db)
+            .await?;
+    if already {
         return Err(bad("already_retired", "This game is already retired."));
+    }
+    let all = crate::retire::all_exes(&st, &id).await?;
+    let mut pick: Vec<String> = body
+        .map(|b| b.0.exes)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| e.trim().to_lowercase())
+        .collect();
+    pick.dedup();
+    if let Some(e) = pick.iter().find(|e| !all.contains(e)) {
+        return Err(bad(
+            "unknown_exe",
+            &format!("{e} isn't one of this game's programs."),
+        ));
+    }
+    if !pick.is_empty() && pick.len() < all.len() {
+        return retire_partly(st, s, id, pick).await;
     }
     let Some(exe) = crate::retire::successor_exe(&st, &id).await? else {
         return Err(bad(
@@ -652,11 +694,12 @@ async fn game_retire(
         .unwrap_or_else(|| id.clone());
     let mut tx = st.db.begin().await?;
     sqlx::query(
-        "INSERT INTO game_retirements(game_id, successor_id, retired_by) VALUES($1, $2, $3)",
+        "INSERT INTO game_retirements(game_id, successor_id, retired_by, exes) VALUES($1, $2, $3, $4)",
     )
     .bind(&id)
     .bind(&successor)
     .bind(s.user.id)
+    .bind(&all)
     .execute(&mut *tx)
     .await?;
     sqlx::query(
@@ -690,6 +733,80 @@ async fn game_retire(
     Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
 }
 
+/// Detach only some programs: each gets a new `exe:<name>` entry (unapproved, in Game
+/// approvals); the game itself stays live with its other programs.
+async fn retire_partly(
+    st: AppState,
+    s: Staff,
+    id: String,
+    exes: Vec<String>,
+) -> ApiResult<Json<Value>> {
+    let ids: Vec<String> = exes.iter().map(|e| format!("exe:{e}")).collect();
+    if ids.contains(&id) {
+        return Err(bad(
+            "is_program",
+            "This entry is a program's own entry; take the approval back instead.",
+        ));
+    }
+    let used: Option<String> = sqlx::query_scalar(
+        "SELECT g FROM unnest($1::text[]) g WHERE EXISTS(SELECT 1 FROM sessions WHERE game_id = g)
+             OR EXISTS(SELECT 1 FROM game_retirements WHERE successor_id = g) LIMIT 1",
+    )
+    .bind(&ids)
+    .fetch_optional(&st.db)
+    .await?;
+    if let Some(u) = used {
+        return Err(bad(
+            "successor_taken",
+            &format!(
+                "{} already has its own entry with hours; it can't start fresh.",
+                u.trim_start_matches("exe:")
+            ),
+        ));
+    }
+    let name = names::public_name(&st, &id)
+        .await?
+        .unwrap_or_else(|| id.clone());
+    let sugg: String = name.chars().take(80).collect();
+    let mut tx = st.db.begin().await?;
+    sqlx::query(
+        "INSERT INTO game_retirements(game_id, successor_id, retired_by, exes, partial) VALUES($1, $2, $3, $4, true)",
+    )
+    .bind(&id)
+    .bind(&ids[0])
+    .bind(s.user.id)
+    .bind(&exes)
+    .execute(&mut *tx)
+    .await?;
+    for (exe, sid) in exes.iter().zip(&ids) {
+        sqlx::query("INSERT INTO games(id, name, verified) VALUES($1, $2, false) ON CONFLICT (id) DO NOTHING")
+            .bind(sid)
+            .bind(names::UNLISTED_TITLE)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "INSERT INTO game_suggestions(exe, name, reports) VALUES($1, $2, 1)
+             ON CONFLICT ((lower(exe)), (lower(name))) DO UPDATE SET status = 'new', last_at = now()",
+        )
+        .bind(exe)
+        .bind(&sugg)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    crate::retire::reload(&st).await?;
+    audit(
+        &st,
+        &s,
+        "game.retire",
+        &id,
+        json!({ "retired": false }),
+        json!({ "retired": "partly", "exes": exes, "new_entries": ids, "name": name }),
+    )
+    .await?;
+    Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
+}
+
 /// Undo a retirement, only while the new entry has no hours (nothing would be lost).
 async fn game_unretire(
     State(st): State<AppState>,
@@ -697,33 +814,46 @@ async fn game_unretire(
     Path(id): Path<String>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
-    let Some(successor) = crate::retire::current(&st).await?.get(&id).cloned() else {
+    let row: Option<(String, Vec<String>, bool)> = sqlx::query_as(
+        "SELECT successor_id, exes, partial FROM game_retirements WHERE game_id = $1",
+    )
+    .bind(&id)
+    .fetch_optional(&st.db)
+    .await?;
+    let Some((successor, exes, partial)) = row else {
         return Err(bad("not_retired", "This game isn't retired."));
     };
-    let used: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE game_id = $1)")
-        .bind(&successor)
-        .fetch_one(&st.db)
-        .await?;
+    let mut new_ids = vec![successor.clone()];
+    if partial {
+        new_ids = exes.iter().map(|e| format!("exe:{e}")).collect();
+    }
+    let used: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE game_id = ANY($1))")
+            .bind(&new_ids)
+            .fetch_one(&st.db)
+            .await?;
     if used {
         return Err(bad(
             "successor_has_hours",
             "The new entry already has hours, so this can't be undone safely.",
         ));
     }
-    let exe = successor.trim_start_matches("exe:").to_string();
     let mut tx = st.db.begin().await?;
     sqlx::query("DELETE FROM game_retirements WHERE game_id = $1")
         .bind(&id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("DELETE FROM game_suggestions WHERE lower(exe) = lower($1) AND status = 'new'")
-        .bind(&exe)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM games WHERE id = $1 AND NOT verified AND NOT EXISTS (SELECT 1 FROM sessions WHERE game_id = $1)")
-        .bind(&successor)
-        .execute(&mut *tx)
-        .await?;
+    for sid in &new_ids {
+        let exe = sid.trim_start_matches("exe:");
+        sqlx::query("DELETE FROM game_suggestions WHERE lower(exe) = lower($1) AND status = 'new'")
+            .bind(exe)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM games WHERE id = $1 AND NOT verified AND NOT EXISTS (SELECT 1 FROM sessions WHERE game_id = $1)")
+            .bind(sid)
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     crate::retire::reload(&st).await?;
     audit(
@@ -1937,4 +2067,50 @@ mod tests {
         assert_ne!(p, temp_password());
         assert_eq!(strip_ansi("\u{1b}[2mx\u{1b}[0m WARN y"), "x WARN y");
     }
+}
+
+#[derive(Deserialize)]
+struct StatusBody {
+    lifecycle: String,
+    /// `YYYY-MM-DD` or empty
+    #[serde(default)]
+    date: Option<String>,
+    #[serde(default)]
+    note: Option<String>,
+    /// also stamp "last checked: now, by me"
+    #[serde(default)]
+    checked: bool,
+}
+
+/// Edit Game > Status: lifecycle, expected end/launch date, note (and "checked").
+async fn game_status_save(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Json(b): Json<StatusBody>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    if !valid_game_id(&id) || game_info(&st, &id).await?.is_none() {
+        return Err(AppError::not_found());
+    }
+    let upd = crate::game_status::Update {
+        lifecycle: Some(b.lifecycle),
+        date: Some(b.date.unwrap_or_default()),
+        note: Some(b.note.unwrap_or_default()),
+        checked_by: b.checked.then(|| s.user.handle.clone()),
+    };
+    let before = crate::game_status::get(&st, &id).await?;
+    let after = crate::game_status::set(&st.db, &id, upd)
+        .await
+        .map_err(|e| bad("bad_status", &e))?;
+    audit(
+        &st,
+        &s,
+        "game.status",
+        &id,
+        before.unwrap_or(Value::Null),
+        after,
+    )
+    .await?;
+    Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
 }

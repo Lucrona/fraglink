@@ -458,3 +458,104 @@ async fn retire_and_unretire_a_game(pool: PgPool) {
     .unwrap();
     assert_eq!(acts, ["game.retire", "game.unretire"]);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn retire_some_programs_and_game_status(pool: PgPool) {
+    sqlx::query(
+        "INSERT INTO game_overrides(game_id, extra_exes) VALUES('wow_forever', '{wowf2.exe}')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let owner = signup(&app, "o@example.com", "olive").await;
+    set_role(&pool, "olive", Some("owner")).await;
+    let p = "/api/v1/admin/games/wow_forever";
+    let g = api(&app, "GET", p, Some(&owner), None).await.json();
+    let exes: Vec<String> = serde_json::from_value(g["exes"].clone()).unwrap();
+    assert!(
+        exes.contains(&"wowb.exe".to_string()) && exes.contains(&"wowf2.exe".to_string()),
+        "{exes:?}"
+    );
+    let bad = api(
+        &app,
+        "POST",
+        &format!("{p}/retire"),
+        Some(&owner),
+        Some(json!({ "exes": ["nope.exe"] })),
+    )
+    .await;
+    assert_eq!(bad.status, StatusCode::BAD_REQUEST);
+    let r = api(
+        &app,
+        "POST",
+        &format!("{p}/retire"),
+        Some(&owner),
+        Some(json!({ "exes": ["wowf2.exe"] })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["retired"]["partial"], true);
+    // the game itself stays live; the program gets a rule of its own
+    assert_eq!(
+        fraglink_server::retire::effective_id(&st, "wow_forever")
+            .await
+            .unwrap(),
+        "wow_forever"
+    );
+    let ov = api(&app, "GET", "/api/v1/games/overrides", None, None)
+        .await
+        .json();
+    let rules = ov["rules"].as_array().unwrap();
+    assert!(rules
+        .iter()
+        .any(|r| r["id"] == "exe:wowf2.exe" && r["exes"][0] == "wowf2.exe"));
+    assert!(!rules.iter().any(|r| r["id"] == "wow_forever"
+        && r["exes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e == "wowf2.exe")));
+    let u = api(&app, "POST", &format!("{p}/unretire"), Some(&owner), None).await;
+    assert_eq!(u.status, StatusCode::OK, "{}", u.text);
+
+    // status
+    let s = api(&app, "POST", &format!("{p}/status"), Some(&owner), Some(json!({ "lifecycle": "beta", "date": "2026-12-01", "note": "ends with launch", "checked": true }))).await;
+    assert_eq!(s.status, StatusCode::OK, "{}", s.text);
+    let v = s.json();
+    assert_eq!(v["status"]["lifecycle"], "beta");
+    assert_eq!(v["status"]["date"], "2026-12-01");
+    assert_eq!(v["status"]["checked_by"], "olive");
+    let e = api(
+        &app,
+        "POST",
+        &format!("{p}/status"),
+        Some(&owner),
+        Some(json!({ "lifecycle": "soon" })),
+    )
+    .await;
+    assert_eq!(e.status, StatusCode::BAD_REQUEST);
+    // the weekly routine (CLI path): keeps the note, stamps its own name
+    let after = fraglink_server::game_status::set(
+        &pool,
+        "wow_forever",
+        fraglink_server::game_status::Update {
+            lifecycle: Some("Early Access".into()),
+            checked_by: Some("Fraglink check".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(after["lifecycle"], "early_access");
+    assert_eq!(after["note"], "ends with launch");
+    assert_eq!(after["checked_by"], "Fraglink check");
+    let acts: Vec<String> = sqlx::query_scalar(
+        "SELECT action FROM admin_audit WHERE target = 'wow_forever' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(acts, ["game.retire", "game.unretire", "game.status"]);
+}

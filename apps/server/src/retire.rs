@@ -19,7 +19,7 @@ pub struct RetireCache {
 /// Re-read every retirement (after a retire / unretire).
 pub async fn reload(st: &AppState) -> ApiResult<Map> {
     let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT game_id, successor_id FROM game_retirements")
+        sqlx::query_as("SELECT game_id, successor_id FROM game_retirements WHERE NOT partial")
             .fetch_all(&st.db)
             .await?;
     let m: Map = Arc::new(rows.into_iter().collect());
@@ -61,4 +61,44 @@ pub async fn successor_exe(st: &AppState, id: &str) -> ApiResult<Option<String>>
         .get(id)
         .and_then(|o| o.extra_exes.iter().find(|e| crate::games::valid_exe(e)))
         .map(|e| e.to_lowercase()))
+}
+
+/// Every plain exe name the server knows for `id` (signatures / detectable list, staff
+/// extra exes), lower-case, in order, de-duplicated. `exe:<name>` ids are their own exe.
+pub async fn all_exes(st: &AppState, id: &str) -> ApiResult<Vec<String>> {
+    let mut out: Vec<String> = vec![];
+    if let Some(exe) = id.strip_prefix("exe:") {
+        out.push(exe.to_lowercase());
+    }
+    for (exes, _) in crate::games::rename_patterns(st, id) {
+        out.extend(
+            exes.into_iter()
+                .filter(|e| crate::games::valid_exe(e))
+                .map(|e| e.to_lowercase()),
+        );
+    }
+    if let Some(o) = crate::game_overrides::current(st).await?.get(id) {
+        out.extend(
+            o.extra_exes
+                .iter()
+                .filter(|e| crate::games::valid_exe(e))
+                .map(|e| e.to_lowercase()),
+        );
+    }
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|e| seen.insert(e.clone()));
+    Ok(out)
+}
+
+/// Programs detached from a still-live game by a partial retirement: `(game id, exe)`.
+/// Each is served as a rule of its own (`exe:<name>`) in the overrides list.
+pub async fn detached_exes(st: &AppState) -> ApiResult<Vec<(String, String)>> {
+    let rows: Vec<(String, Vec<String>)> =
+        sqlx::query_as("SELECT game_id, exes FROM game_retirements WHERE partial ORDER BY game_id")
+            .fetch_all(&st.db)
+            .await?;
+    Ok(rows
+        .into_iter()
+        .flat_map(|(g, es)| es.into_iter().map(move |e| (g.clone(), e)))
+        .collect())
 }
