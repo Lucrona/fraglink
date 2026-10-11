@@ -514,3 +514,4 @@ body.skin-dark .nick-dlg input { background: #121418; color: #e2e6ea; border: 1p
 body.skin-dark .nick-dlg input:focus { outline: none; border-color: #3d7fd6; }
 body.skin-dark .nick-foot .msg.bad { color: #ff8a80; }
 body.skin-dark .sf-user { opacity: .7; }
+body.skin-dark .sf-head .sf-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; line-height: 1.15; }

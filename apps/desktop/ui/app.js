@@ -986,7 +986,8 @@
     notice('Change Nickname', `<div class="nick-dlg"><p>Your nickname is the name friends see in Fraglink and on the website. Your username <b>@${esc(me)}</b> stays the same.</p>
       <label>Nickname <input type="text" id="nick-in" maxlength="32" value="${esc(cur)}" spellcheck="false"></label>
       <small>Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave it empty to use your username.</small>
-      <div class="nick-foot"><span id="nick-msg" class="msg"></span><button class="hw" type="button" id="nick-save">Save</button></div></div>`);
+      <div class="nick-foot"><span id="nick-msg" class="msg"></span></div></div>`);
+    $('#notice .dlg-foot').innerHTML = `<button class="hw" type="button" id="nick-save">Save</button> <button class="hw" data-action="notice-close" type="button">Cancel</button>`;
     const inp = $('#nick-in'); inp.focus(); inp.select();
     const save = async () => {
       const b = $('#nick-save'), m = $('#nick-msg'); b.disabled = true; m.className = 'msg'; m.textContent = 'Saving…';
@@ -994,7 +995,7 @@
         const r = await FLB.setNickname(inp.value);
         if (realMode()) LIVE.meNick = r.display_name; else ME.nick = r.display_name;
         syncStatus(); $('#notice').hidden = true;
-        flash(r.changes_left == null ? `Your nickname is ${r.display_name}.` : `Your nickname is now ${r.display_name}. ${r.changes_left} more change${r.changes_left === 1 ? '' : 's'} today.`);
+        flash(`Nickname changed to ${r.display_name}.`);
       } catch (e) { m.className = 'msg bad'; m.textContent = String(e && e.message || e); b.disabled = false; }
     };
     $('#nick-save').addEventListener('click', save);
@@ -1004,6 +1005,7 @@
   // a nickname changed in Options (or on the website) shows up when the window is next focused
   addEventListener('focus', () => { if (realMode()) { LIVE.meAvFor = null; syncStatus(); } });
   function notice(title, html) {
+    const foot = $('#notice .dlg-foot'); foot.innerHTML = `<button class="hw" data-action="notice-close" type="button">OK</button>`;
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false; placeDlg($('#notice'));
   }
   // In-window dialogs open centred near the top and can then be dragged by their title bar.
