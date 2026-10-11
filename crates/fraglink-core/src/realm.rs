@@ -1,15 +1,17 @@
 //! World of Warcraft realm, shown as the game detail ("World of Warcraft · Frostmourne").
 //!
-//! Every WoW flavour keeps its settings next to the exe, in
-//! `<flavour folder>\WTF\Config.wtf`, with a line `SET realmName "Frostmourne"`.
-//! The file is read when that WoW starts and again whenever its modification
-//! time or size changes (checked on the normal 5 s poll). No game hooks and no
-//! memory reads: just a small text file the game itself writes.
+//! WoW names the realm in the folders it keeps per character,
+//! `<flavour folder>\WTF\Account\<account>\<realm>\<character>\`. That is the
+//! primary source for every flavour: the realm whose character folder changed most
+//! recently, preferring folder names that are real realms (the server's daily copy of
+//! Blizzard's realm lists, see [`set_known_realms`]); folders not on the list (beta or
+//! private realms) still count when nothing better is there. The scan runs when the
+//! game is detected, whenever `Config.wtf` changes, and at most every [`SCAN_EVERY`]
+//! while playing. No game hooks and no memory reads.
 //!
-//! Some installs (e.g. the Classic beta) never write `realmName`. Then the realm is
-//! taken from the folders WoW keeps per character, `WTF\Account\<account>\<realm>\<character>\`:
-//! the realm whose character folder changed most recently. That scan runs when the game
-//! is detected and then at most every [`SCAN_EVERY`] while playing.
+//! `SET realmName "..."` in `WTF\Config.wtf` was dropped by WoW in patch 5.4.1, so
+//! modern clients never write it; it is only a last resort for old installs without
+//! character folders.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -203,34 +205,31 @@ impl RealmWatch {
         let first = self.stamp.is_none();
         if self.stamp != Some(stamp) {
             self.stamp = Some(stamp);
+            self.scanned = None; // WoW rewrites Config.wtf on logout / realm change
             self.config_realm = stamp.and_then(|_| {
                 let bytes = std::fs::read(&self.path).ok()?;
                 parse_realm(&String::from_utf8_lossy(&bytes))
             });
         }
-        let realm = match &self.config_realm {
-            Some(r) => Some(r.clone()),
-            None => {
-                let due = self
-                    .scanned
-                    .as_ref()
-                    .is_none_or(|(t, _)| t.elapsed() >= SCAN_EVERY);
-                if due {
-                    let found = self.path.parent().and_then(realm_from_accounts);
-                    self.scanned = Some((Instant::now(), found));
-                }
-                self.scanned.as_ref().and_then(|(_, r)| r.clone())
-            }
-        };
+        let due = self
+            .scanned
+            .as_ref()
+            .is_none_or(|(t, _)| t.elapsed() >= SCAN_EVERY);
+        if due {
+            let found = self.path.parent().and_then(realm_from_accounts);
+            self.scanned = Some((Instant::now(), found));
+        }
+        let from_folders = self.scanned.as_ref().and_then(|(_, r)| r.clone());
+        let realm = from_folders.clone().or_else(|| self.config_realm.clone());
         let changed = realm != self.realm;
         if changed || first {
             log::info!(
                 "wow realm from {}{}: {}",
                 self.path.display(),
-                if self.config_realm.is_none() {
+                if from_folders.is_some() {
                     " (account folders)"
                 } else {
-                    ""
+                    " (Config.wtf realmName)"
                 },
                 realm.as_deref().unwrap_or("(none)")
             );
@@ -280,6 +279,7 @@ mod tests {
     }
 
     #[test]
+    /// No character folders (old install): `realmName` is the last resort.
     fn watch_rereads_on_change() {
         let dir = tempfile::tempdir().unwrap();
         let wtf = dir.path().join("_retail_").join("WTF");
@@ -362,10 +362,19 @@ mod tests {
         let mut w = RealmWatch::new(wtf.join("Config.wtf"));
         assert!(w.poll());
         assert_eq!(w.realm.as_deref(), Some("Classic Beta PvE"));
-        // Config.wtf wins once it names a realm
+        // the folders win even over a stale realmName (dropped by WoW in 5.4.1)
         std::fs::write(wtf.join("Config.wtf"), "SET realmName \"Mankrik\"\n").unwrap();
+        assert!(!w.poll());
+        assert_eq!(w.realm.as_deref(), Some("Classic Beta PvE"));
+        // a newer character on the other realm is picked up when Config.wtf changes
+        touch(&acc.join("Classic Beta PvP/Lucro/SavedVariables.lua"), 7200);
+        std::fs::write(
+            wtf.join("Config.wtf"),
+            "SET realmName \"Mankrik\"\nSET x \"1\"\n",
+        )
+        .unwrap();
         assert!(w.poll());
-        assert_eq!(w.realm.as_deref(), Some("Mankrik"));
+        assert_eq!(w.realm.as_deref(), Some("Classic Beta PvP"));
     }
 
     #[test]
