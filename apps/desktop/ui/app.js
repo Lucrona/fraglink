@@ -282,7 +282,7 @@
   function row(f, cls = '') {
     const icon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}${esc(f.name)}</span><span class="c-status">${esc(statusText(f))}</span><span class="c-info">${esc(info)}</span></div>`;
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}<span class="nm" title="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" title="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" title="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
@@ -437,10 +437,31 @@
     if (m.querySelector('.af-tw')) m.querySelector('.af-tw').scrollTop = top;
     if (f === 'add-handle' || f === 'add-msg-text') { const e = $('#' + f); e.focus(); if (pos != null) e.setSelectionRange(pos, pos); }
   }
+  /* dev.19: resizable Name / Status columns (Game Info takes the rest), saved locally. */
+  const COL_MIN = { name: 60, status: 50 }, INFO_MIN = 40;
+  function colWidths() { try { const o = JSON.parse(localStorage.getItem('fl-cols') || 'null'); return o && o.name > 0 && o.status > 0 ? o : null; } catch (e) { return null; } }
+  function startColDrag(e, grip) {
+    const grid = grip.closest('.xf-grid'), head = grid.querySelector('.xf-head');
+    const w = { name: head.querySelector('.c-name').offsetWidth, status: head.querySelector('.c-status').offsetWidth };
+    const col = grip.dataset.col, x0 = e.clientX, start = w[col], total = head.clientWidth;
+    e.preventDefault(); e.stopPropagation(); document.body.classList.add('col-dragging');
+    const move = ev => {
+      const other = col === 'name' ? w.status : w.name;
+      w[col] = Math.max(COL_MIN[col], Math.min(start + ev.clientX - x0, total - other - INFO_MIN));
+      grid.classList.add('cw'); grid.style.setProperty('--cw-name', w.name + 'px'); grid.style.setProperty('--cw-status', w.status + 'px');
+    };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.body.classList.remove('col-dragging'); localStorage.setItem('fl-cols', JSON.stringify(w)); };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+  }
+  document.addEventListener('pointerdown', e => { const g = e.target.closest && e.target.closest('.col-grip'); if (g) startColDrag(e, g); }, true);
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.col-grip')) { e.stopPropagation(); e.preventDefault(); } }, true);
+  document.addEventListener('dblclick', e => { if (e.target.closest && e.target.closest('.col-grip')) { e.stopPropagation(); localStorage.removeItem('fl-cols'); render(); } }, true);
+  if (params.get('cols')) { const [n, s2] = params.get('cols').split(',').map(Number); localStorage.setItem('fl-cols', JSON.stringify({ name: n, status: s2 })); }
   function renderFriends() {
     if (state.detectRun) { list.innerHTML = `<div class="lg"><div class="lg-h">Detecting installed games…</div><p>Looking for games from Steam, Battle.net, Epic, GOG, EA app, Ubisoft Connect and Xbox…</p><div class="det-track"><div class="det-bar" id="fd-bar" style="width:${state.detectPct}%"></div></div><button class="dk-btn" data-action="detect-skip">Skip</button></div>`; return; }
     const s = state.sort;
-    let h = `<div class="xf-grid"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name</span><span class="c-status" data-sort="status">Status</span><span class="c-info">Game Info</span></div>`;
+    const cw = colWidths(), cs = cw ? ` cw" style="--cw-name:${cw.name}px;--cw-status:${cw.status}px` : '';
+    let h = `<div class="xf-grid${cs}"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name<i class="col-grip" data-col="name" title="Drag to resize, double-click to reset"></i></span><span class="c-status" data-sort="status">Status<i class="col-grip" data-col="status" title="Drag to resize, double-click to reset"></i></span><span class="c-info">Game Info</span></div>`;
     if (realMode()) {
       const F = realFriends(), fs = LIVE.friends;
       let note = '';

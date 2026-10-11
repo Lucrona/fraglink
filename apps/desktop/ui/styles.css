@@ -793,3 +793,12 @@ body.sig-only { background: #000; } body.sig-only #desktop, body.sig-only #taskb
 *{font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0;}
 .sf-kv { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0 2px; }
 .sf-kv b { font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* dev.19: resizable friends-list columns (both skins) */
+.xf-head .col-grip { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 2; }
+body.col-dragging, body.col-dragging * { cursor: col-resize !important; user-select: none; }
+.xf-grid .xf-row .c-name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.xf-grid .xf-row .c-name, .xf-grid .xf-row .c-status, .xf-grid .xf-row .c-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-sizing: border-box; }
+.xf-grid.cw .c-name, body .xf-grid.cw .c-name { width: var(--cw-name) !important; flex: none; }
+.xf-grid.cw .c-status, body .xf-grid.cw .c-status { width: var(--cw-status) !important; flex: none; }
+.xf-grid.cw .c-info, body .xf-grid.cw .c-info { width: auto !important; flex: 1 1 0; min-width: 0; }
