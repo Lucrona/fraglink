@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+- **Retire a game (website admin):** staff can retire any game entry. It keeps its name, icon and every hour
+  recorded so far and shows as a normal past game on profiles, but its program is detached: the next time
+  someone plays it, the time goes to a new entry (named after the program) that starts from zero and waits
+  in Game approvals. Logged in the audit log; "Undo retire" works while the new entry has no hours yet.
+  Server: migration `0012_game_retirements`.
+
 ### Fixed
 - **Game renames from the website admin show up in the app:** when staff rename a game, the server now sends
   the new name with its detection rules, so the app shows it for the game you're playing, in Activity and

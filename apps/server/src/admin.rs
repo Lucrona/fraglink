@@ -35,6 +35,8 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/suggestions/undo", post(undo_suggestion))
         .route("/api/v1/admin/games", get(games_search))
         .route("/api/v1/admin/games/{id}", get(game_detail).post(game_save))
+        .route("/api/v1/admin/games/{id}/retire", post(game_retire))
+        .route("/api/v1/admin/games/{id}/unretire", post(game_unretire))
         .route(
             "/api/v1/admin/games/{id}/icon",
             post(game_icon_upload).delete(game_icon_delete),
@@ -415,7 +417,19 @@ async fn game_info(st: &AppState, id: &str) -> ApiResult<Option<Value>> {
         .or_else(|| row.as_ref().map(|r| r.0.clone()))
         .unwrap_or_default();
     let public = names::public_name(st, id).await?;
+    let retired: Option<(String, DateTime<Utc>)> =
+        sqlx::query_as("SELECT successor_id, retired_at FROM game_retirements WHERE game_id = $1")
+            .bind(id)
+            .fetch_optional(&st.db)
+            .await?;
+    let retired_from: Option<String> =
+        sqlx::query_scalar("SELECT game_id FROM game_retirements WHERE successor_id = $1")
+            .bind(id)
+            .fetch_optional(&st.db)
+            .await?;
     Ok(Some(json!({
+        "retired": retired.map(|(s, at)| json!({ "successor": s, "at": at })),
+        "retired_from": retired_from,
         "id": id,
         "name": base_name,
         "public_name": public,
@@ -589,6 +603,138 @@ async fn game_save(
     let m = game_overrides::reload(&st).await?;
     let after = m.get(&id).cloned();
     audit(&st, &s, "game.edit", &id, json!(before), json!(after)).await?;
+    Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
+}
+
+/// Retire: freeze this entry (name, icon, hours stay) and record future play of its
+/// program under a new `exe:` entry that goes to game approvals.
+async fn game_retire(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    if !valid_game_id(&id) || id.starts_with("manual:") || game_info(&st, &id).await?.is_none() {
+        return Err(AppError::not_found());
+    }
+    if crate::retire::current(&st).await?.contains_key(&id) {
+        return Err(bad("already_retired", "This game is already retired."));
+    }
+    let Some(exe) = crate::retire::successor_exe(&st, &id).await? else {
+        return Err(bad(
+            "no_exe",
+            "Fraglink doesn't know a program name for this game, so there is nothing to detach. Add an extra exe name first.",
+        ));
+    };
+    let successor = format!("exe:{exe}");
+    if successor == id {
+        // an approved program: its next entry needs an id of its own
+        return Err(bad(
+            "is_program",
+            "This entry is a program's own entry; take the approval back instead.",
+        ));
+    }
+    let used: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE game_id = $1)
+             OR EXISTS(SELECT 1 FROM game_retirements WHERE successor_id = $1)",
+    )
+    .bind(&successor)
+    .fetch_one(&st.db)
+    .await?;
+    if used {
+        return Err(bad(
+            "successor_taken",
+            &format!("{exe} already has its own entry with hours; it can't start fresh."),
+        ));
+    }
+    let name = names::public_name(&st, &id)
+        .await?
+        .unwrap_or_else(|| id.clone());
+    let mut tx = st.db.begin().await?;
+    sqlx::query(
+        "INSERT INTO game_retirements(game_id, successor_id, retired_by) VALUES($1, $2, $3)",
+    )
+    .bind(&id)
+    .bind(&successor)
+    .bind(s.user.id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO games(id, name, verified) VALUES($1, $2, false) ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(&successor)
+    .bind(names::UNLISTED_TITLE)
+    .execute(&mut *tx)
+    .await?;
+    // shows up in Game approvals, suggested under the old name
+    let sugg: String = name.chars().take(80).collect();
+    sqlx::query(
+        "INSERT INTO game_suggestions(exe, name, reports) VALUES($1, $2, 1)
+         ON CONFLICT ((lower(exe)), (lower(name))) DO UPDATE SET status = 'new', last_at = now()",
+    )
+    .bind(&exe)
+    .bind(&sugg)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    crate::retire::reload(&st).await?;
+    audit(
+        &st,
+        &s,
+        "game.retire",
+        &id,
+        json!({ "retired": false }),
+        json!({ "retired": true, "successor": successor, "exe": exe, "name": name }),
+    )
+    .await?;
+    Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
+}
+
+/// Undo a retirement, only while the new entry has no hours (nothing would be lost).
+async fn game_unretire(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let Some(successor) = crate::retire::current(&st).await?.get(&id).cloned() else {
+        return Err(bad("not_retired", "This game isn't retired."));
+    };
+    let used: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE game_id = $1)")
+        .bind(&successor)
+        .fetch_one(&st.db)
+        .await?;
+    if used {
+        return Err(bad(
+            "successor_has_hours",
+            "The new entry already has hours, so this can't be undone safely.",
+        ));
+    }
+    let exe = successor.trim_start_matches("exe:").to_string();
+    let mut tx = st.db.begin().await?;
+    sqlx::query("DELETE FROM game_retirements WHERE game_id = $1")
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM game_suggestions WHERE lower(exe) = lower($1) AND status = 'new'")
+        .bind(&exe)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM games WHERE id = $1 AND NOT verified AND NOT EXISTS (SELECT 1 FROM sessions WHERE game_id = $1)")
+        .bind(&successor)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    crate::retire::reload(&st).await?;
+    audit(
+        &st,
+        &s,
+        "game.unretire",
+        &id,
+        json!({ "retired": true, "successor": successor }),
+        json!({ "retired": false }),
+    )
+    .await?;
     Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
 }
 

@@ -520,7 +520,7 @@ fn apply_renames(
 
 /// `(exe names, path fragments)` that identify game `id`, from the signatures, else the
 /// detectable list (`folder/game.exe` patterns become exe `game.exe` + path `/folder/`).
-fn rename_patterns(st: &AppState, id: &str) -> Vec<(Vec<String>, Vec<String>)> {
+pub(crate) fn rename_patterns(st: &AppState, id: &str) -> Vec<(Vec<String>, Vec<String>)> {
     if let Some(g) = st.sigs.get(id) {
         let low = |v: &[String]| v.iter().map(|e| e.to_lowercase()).collect::<Vec<_>>();
         let hints = low(&g.path_hints);

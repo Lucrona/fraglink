@@ -103,7 +103,8 @@ async function listGames(q) {
     ${d.games.map(g => {
       const o = g.override || {};
       const flags = (o.name ? `<span class="pill warn">renamed</span>` : "") + (o.hidden ? `<span class="pill bad">hidden</span>` : "") +
-        (o.has_icon ? `<span class="pill">icon</span>` : "") + ((o.extra_exes || []).length ? `<span class="pill">+${o.extra_exes.length} exe</span>` : "");
+        (o.has_icon ? `<span class="pill">icon</span>` : "") + ((o.extra_exes || []).length ? `<span class="pill">+${o.extra_exes.length} exe</span>` : "") +
+        (g.retired ? `<span class="pill bad">retired</span>` : "");
       return `<tr class="click" data-id="${esc(g.id)}"><td class="ic"><img src="${esc(g.icon)}" width="20" height="20" alt="" onerror="this.style.visibility='hidden'"></td>
         <td>${esc(g.public_name || g.name)}${flags}</td><td class="mono dimt">${esc(g.id)}</td><td class="muted">${esc(g.source)}</td>
         <td class="num">${g.players}</td><td class="num">${hrs(g.tracked_min)}</td></tr>`;
@@ -127,7 +128,19 @@ async function editGame(id) {
       <div class="icons-prev"><img src="${esc(g.icon64.replace("/64/", "/16/"))}${bust}" width="16" height="16" alt=""><img src="${esc(g.icon)}${bust}" width="32" height="32" alt=""><img src="${esc(g.icon64)}${bust}" width="64" height="64" alt=""></div>
       <div class="row"><input type="file" id="gicon" accept="image/png,image/jpeg"><button class="btn" id="gup" type="button">Upload</button>${o.has_icon ? `<button class="btn danger" id="gdel" type="button">Remove uploaded icon</button>` : ""}</div>
       <small>PNG or JPEG up to 1 MB, square works best. Stored on our server and resized to 16, 32 and 64 px. Browsers may keep the old icon for a while.</small>
-      <div class="alert" id="imsg" hidden></div></div></div>`;
+      <div class="alert" id="imsg" hidden></div></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+    <div class="f"><label>Retire</label>${g.retired
+      ? `<div>Retired ${esc(day(g.retired.at))}. Play of its program now counts for <a href="#" id="gsucc" class="mono">${esc(g.retired.successor)}</a> (in Game approvals).</div>
+         <div class="row"><button class="btn" id="gunret" type="button">Undo retire</button><span class="dimt">Only while the new entry has no hours.</span></div>`
+      : `<small>Freezes this entry: its name, icon and every hour recorded so far stay, and it shows as a past game on profiles. Its program is detached: the next time someone plays it, it's recorded as a new entry with fresh hours, which goes to Game approvals.</small>
+         <div class="row"><button class="btn danger" id="gret" type="button">Retire this game</button></div>`}
+      ${g.retired_from ? `<div class="dimt">New entry for the retired game <a href="#" id="gfrom" class="mono">${esc(g.retired_from)}</a>.</div>` : ""}
+      <div class="alert" id="rmsg" hidden></div></div></div>`;
+  const ret = $("#gret"), unret = $("#gunret");
+  if (ret) ret.addEventListener("click", () => { if (confirm("Retire " + (g.public_name || g.name || g.id) + "? Its hours are kept; new play starts a new entry.")) act(ret, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/retire", { method: "POST" }); editGame(id); listGames($("#gs").q.value.trim()); }).catch(x => msg($("#rmsg"), x.message)); });
+  if (unret) unret.addEventListener("click", () => act(unret, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/unretire", { method: "POST" }); editGame(id); listGames($("#gs").q.value.trim()); }).catch(x => msg($("#rmsg"), x.message)));
+  for (const [sel, to] of [["#gsucc", g.retired && g.retired.successor], ["#gfrom", g.retired_from]]) { const a = $(sel); if (a) a.addEventListener("click", e => { e.preventDefault(); editGame(to); }); }
   $("#gf").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
     try {

@@ -374,6 +374,11 @@ pub async fn set(
             .filter(|d| !d.is_empty());
         Some((id, detail, g.hidden))
     });
+    // a retired game's program now counts for its successor
+    let game = match game {
+        Some((id, d, h)) => Some((crate::retire::effective_id(st, &id).await?, d, h)),
+        None => None,
+    };
     let now = Utc::now();
     let before = visible_presence(st, user)
         .await?

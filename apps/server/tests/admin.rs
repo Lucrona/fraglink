@@ -413,3 +413,48 @@ async fn games_approvals_hours_banner(pool: PgPool) {
     assert_eq!(r.status, StatusCode::OK);
     assert_eq!(r.json()["accounts"]["total"], 2);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn retire_and_unretire_a_game(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let owner = signup(&app, "o@example.com", "olive").await;
+    set_role(&pool, "olive", Some("owner")).await;
+    let p = "/api/v1/admin/games/wow_forever";
+    let r = api(&app, "POST", &format!("{p}/retire"), Some(&owner), None).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["retired"]["successor"], "exe:wowb.exe");
+    assert_eq!(
+        fraglink_server::retire::effective_id(&st, "wow_forever")
+            .await
+            .unwrap(),
+        "exe:wowb.exe"
+    );
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM game_suggestions WHERE exe = 'wowb.exe' AND status = 'new'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 1);
+    // twice: refused
+    let again = api(&app, "POST", &format!("{p}/retire"), Some(&owner), None).await;
+    assert_eq!(again.status, StatusCode::BAD_REQUEST);
+    // undo while the new entry has no hours
+    let u = api(&app, "POST", &format!("{p}/unretire"), Some(&owner), None).await;
+    assert_eq!(u.status, StatusCode::OK, "{}", u.text);
+    assert!(u.json()["retired"].is_null());
+    assert_eq!(
+        fraglink_server::retire::effective_id(&st, "wow_forever")
+            .await
+            .unwrap(),
+        "wow_forever"
+    );
+    let acts: Vec<String> = sqlx::query_scalar(
+        "SELECT action FROM admin_audit WHERE target = 'wow_forever' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(acts, ["game.retire", "game.unretire"]);
+}

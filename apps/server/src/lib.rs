@@ -18,6 +18,7 @@ pub mod icons;
 pub mod names;
 pub mod presence;
 pub mod profile;
+pub mod retire;
 pub mod steam;
 pub mod web;
 
@@ -49,6 +50,8 @@ pub struct AppState {
     pub games: Arc<games::GameLists>,
     /// Staff edits to games (see `game_overrides`).
     pub overrides: Arc<game_overrides::OverrideCache>,
+    /// Retired games -> successor ids (see `retire`).
+    pub retired: Arc<retire::RetireCache>,
 }
 
 impl AppState {
@@ -65,6 +68,7 @@ impl AppState {
             sigs: Arc::new(fraglink_core::signatures::SignatureDb::builtin()),
             games: Arc::new(games::GameLists::default()),
             overrides: Arc::new(game_overrides::OverrideCache::default()),
+            retired: Arc::new(retire::RetireCache::default()),
         }
     }
 
