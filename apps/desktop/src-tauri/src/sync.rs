@@ -349,6 +349,7 @@ pub fn announcement_toast(
         game: String::new(),
         icon: Some(String::new()),
         detail: String::new(),
+        ..Default::default()
     })
 }
 

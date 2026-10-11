@@ -765,7 +765,7 @@ pub async fn account_info(app: AppHandle) -> CmdResult<serde_json::Value> {
         let u = &v["user"];
         Ok(serde_json::json!({
             "handle": u["handle"], "email": u["email"], "email_verified": u["email_verified"],
-            "share_activity": u["share_activity"],
+            "share_activity": u["share_activity"], "avatar": u["avatar"],
         }))
     })
     .await
@@ -844,6 +844,22 @@ pub async fn game_icons(
     // is kept for older UI builds.
     let _ = friends;
     tauri::async_runtime::spawn_blocking(move || crate::icons::resolve(&app, &ids, true))
+        .await
+        .map_err(err)
+}
+
+/// Profile pictures (uploaded avatars) as data URLs, cached in memory and on disk.
+#[tauri::command]
+pub async fn avatar_images(
+    app: AppHandle,
+    urls: Vec<String>,
+) -> CmdResult<std::collections::HashMap<String, String>> {
+    let urls: Vec<String> = urls
+        .into_iter()
+        .filter(|u| u.len() <= 200)
+        .take(80)
+        .collect();
+    tauri::async_runtime::spawn_blocking(move || crate::avatars::resolve(&app, &urls))
         .await
         .map_err(err)
 }

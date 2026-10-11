@@ -45,6 +45,7 @@
       friendMute: (handle, mute) => inv('friend_mute', { handle, mute }),
       serverStats: () => inv('get_server_stats'),
       gameIcons: (ids, friends) => inv('game_icons', { ids, friends: !!friends }),
+      avatarImages: (urls) => inv('avatar_images', { urls }),
       on: (evt, cb) => T.event.listen(evt, e => cb(e.payload)),
       drag: () => T.window.getCurrentWindow().startDragging(),
       resize: (dir) => T.window.getCurrentWindow().startResizeDragging(dir),
@@ -141,7 +142,7 @@
     friendAdd: (h) => { mockFriends.outgoing.push({ handle: h, display_name: h, created_at: new Date().toISOString() }); return ok('pending'); },
     friendRespond: (h, a) => { const r = mockFriends.incoming.find(x => x.handle === h); mockFriends.incoming = mockFriends.incoming.filter(x => x !== r); if (a && r) mockFriends.friends.push({ handle: h, display_name: r.display_name, since: new Date().toISOString(), presence: { status: 'online' } }); return ok(); },
     friendRemove: (h) => { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.outgoing = mockFriends.outgoing.filter(f => f.handle !== h); return ok(); },
-    accountInfo: () => ok({ handle: 'Lucrona', email: 'lucrona@example.com', email_verified: false, share_activity: settings.share_activity_mock !== '0' }),
+    accountInfo: () => ok({ handle: 'Lucrona', email: 'lucrona@example.com', email_verified: false, share_activity: settings.share_activity_mock !== '0', avatar: { kind: 'upload', color: 0, url_64: '/api/v1/avatars/m/me-64.webp', url_32: '/api/v1/avatars/m/me-32.webp' } }),
     changePassword: (c, n) => c === 'wrong' ? Promise.reject("Your current password isn't right.") : ok({ ok: true, signed_out_other_sessions: 1 }),
     changeEmail: (c, e) => c === 'wrong' ? Promise.reject("Your current password isn't right.") : ok({ ok: true, email: e, email_verified: false }),
     friendBlock: (h, b) => { if (b) { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.blocked.push(h); } else mockFriends.blocked = mockFriends.blocked.filter(x => x !== h); return ok(); },
@@ -153,6 +154,8 @@
       { game_id: 'manual:ut99', name: 'Unreal Tournament', tracked_min: 0, imported_min: 0, estimated_min: 1500 * 60, display_min: 0, display_tier: 'estimated' },
     ], overall: { verified_min: 974 * 60, estimated_min: 1500 * 60, estimated_display: '~1,500h' } } : null),
     // preview: stand-in icons drawn on a canvas (no real game art is bundled)
+    // preview: uploaded pictures stand in as little gradient portraits
+    avatarImages: (urls) => ok(Object.fromEntries(urls.map(u => { const k = /dizz/.test(u) ? ['#d98b3a', '#5a2a12'] : ['#6aa7e8', '#1d2f6b']; return [u, 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${k[0]}"/><stop offset="1" stop-color="${k[1]}"/></linearGradient></defs><rect width="64" height="64" fill="url(#g)"/><circle cx="32" cy="25" r="12" fill="#f1d9c0"/><path d="M10 64c2-15 12-22 22-22s20 7 22 22z" fill="#2b2f3a"/></svg>`)]; }))),
     gameIcons: (ids) => ok(Object.fromEntries(ids.map(id => [id, /^(wc3|manual:)/.test(id) ? null : placeholderIcon(id)]))),
     on: () => ok(() => {}),
     drag: () => ok(),
@@ -216,15 +219,15 @@
   const hist = h => { const x = HIST[h.toLowerCase()] || { week: (h.length * 7919 % 20 + 3), total: h.length * 37, top: 'Dota 2', games: [['steam:570', 'Dota 2', h.length * 30, 0]] }; return { shares: true, ...x }; };
   const mockFriends = {
     friends: [
-      { handle: 'diZZ_Spinner', display_name: 'Dizz', since: iso(400 * 86400), presence: { status: 'online', game_id: 'wow', game_name: 'World of Warcraft', game_detail: 'Frostmourne', session_started_at: iso(48 * 60 + 12) } },
-      { handle: 'riftwalker', display_name: 'Riftwalker', since: iso(220 * 86400), presence: { status: 'online', game_id: null, game_name: null } },
-      { handle: 'nova', display_name: 'Nova', since: iso(90 * 86400), presence: { status: 'online', game_id: 'steam:570', game_name: 'Dota 2', session_started_at: iso(38 * 60) } },
-      { handle: 'grimm', display_name: 'Grimm', since: iso(40 * 86400), presence: { status: 'away', game_id: null, game_name: null } },
-      { handle: 'kestrel', display_name: 'Kestrel', since: iso(12 * 86400), presence: { status: 'online', game_id: 'unlisted', game_name: 'a game', session_started_at: iso(12 * 60) } },
-      { handle: 'pixelmoth', display_name: 'PixelMoth', since: iso(5 * 86400), presence: { status: 'offline', game_id: null, game_name: null } },
+      { handle: 'diZZ_Spinner', display_name: 'Dizz', avatar: { kind: 'upload', color: 0, url_184: '/api/v1/avatars/m/dizz-184.webp', url_64: '/api/v1/avatars/m/dizz-64.webp', url_32: '/api/v1/avatars/m/dizz-32.webp' }, since: iso(400 * 86400), presence: { status: 'online', game_id: 'wow', game_name: 'World of Warcraft', game_detail: 'Frostmourne', session_started_at: iso(48 * 60 + 12) } },
+      { handle: 'riftwalker', display_name: 'Riftwalker', avatar: { kind: 'preset', preset: 3, color: 2 }, since: iso(220 * 86400), presence: { status: 'online', game_id: null, game_name: null } },
+      { handle: 'nova', display_name: 'Nova', avatar: { kind: 'upload', color: 3, url_184: '/api/v1/avatars/m/nova-184.webp', url_64: '/api/v1/avatars/m/nova-64.webp', url_32: '/api/v1/avatars/m/nova-32.webp' }, since: iso(90 * 86400), presence: { status: 'online', game_id: 'steam:570', game_name: 'Dota 2', session_started_at: iso(38 * 60) } },
+      { handle: 'grimm', display_name: 'Grimm', avatar: { kind: 'default', color: 4 }, since: iso(40 * 86400), presence: { status: 'away', game_id: null, game_name: null } },
+      { handle: 'kestrel', display_name: 'Kestrel', avatar: { kind: 'default', color: 1 }, since: iso(12 * 86400), presence: { status: 'online', game_id: 'unlisted', game_name: 'a game', session_started_at: iso(12 * 60) } },
+      { handle: 'pixelmoth', display_name: 'PixelMoth', avatar: { kind: 'preset', preset: 9, color: 5 }, since: iso(5 * 86400), presence: { status: 'offline', game_id: null, game_name: null } },
     ],
-    incoming: [{ handle: 'oldmate', display_name: 'Old Mate', created_at: iso(3600) }],
-    outgoing: [{ handle: 'zed', display_name: 'Zed', created_at: iso(7200) }],
+    incoming: [{ handle: 'oldmate', display_name: 'Old Mate', avatar: { kind: 'default', color: 2 }, created_at: iso(3600) }],
+    outgoing: [{ handle: 'zed', display_name: 'Zed', avatar: { kind: 'default', color: 5 }, created_at: iso(7200) }],
     blocked: [],
   };
   const sync = { signed_in: /[?&]signed=1/.test(location.search), user: /[?&]signed=1/.test(location.search) ? 'Lucrona' : null, server: 'https://playfraglink.com', last_ok: null, last_error: null, pairing: null, pairing_error: null };

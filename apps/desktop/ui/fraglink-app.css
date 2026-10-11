@@ -135,3 +135,12 @@ body.toast-page.skin-dark .xf-toast:hover .toast-head button { opacity: 1; }
 body.toast-page.skin-dark .toast-head button:hover { background: rgba(255,255,255,.1); color: #fff; }
 body.toast-page.skin-dark .toast-body { padding: 9px 22px 10px 10px; gap: 9px; }
 body.toast-page.skin-dark .toast-body .gi, body.toast-page.skin-dark .toast-body .av { border-radius: 4px; overflow: hidden; }
+/* dev.19: friend pictures in pop-ups (website colours); playing: game icon + small picture */
+body.toast-page .toast-body .av.fav { display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #2d4a66; border: 1px solid #303844; border-radius: 4px; color: #d8e0e8cc; font: 15px/1 sans-serif; text-shadow: none; }
+body.toast-page .toast-body .av.fav img { width: 100%; height: 100%; object-fit: cover; display: block; }
+body.toast-page .toast-body .av.fav img.mk { width: 58%; height: auto; opacity: .85; }
+body.toast-page .toast-body .av.c0 { background-color: #2d4a66; } body.toast-page .toast-body .av.c1 { background-color: #3f5a3a; } body.toast-page .toast-body .av.c2 { background-color: #5a3f3a; }
+body.toast-page .toast-body .av.c3 { background-color: #4a3d5e; } body.toast-page .toast-body .av.c4 { background-color: #5e5234; } body.toast-page .toast-body .av.c5 { background-color: #2f5458; }
+body.toast-page .toast-body .av.p { background-image: linear-gradient(135deg, transparent, #14181d); }
+body.toast-page .toast-body .gi.lead-g { position: relative; overflow: visible; }
+body.toast-page.skin-dark .toast-body .gi.lead-g .av.mini { position: absolute; right: -4px; bottom: -4px; width: 15px; height: 15px; margin: 0; border: 1px solid #1a1c21; border-radius: 3px; box-shadow: 0 0 0 1px #1a1c21; }

@@ -280,9 +280,10 @@
     return 'Offline';
   }
   function row(f, cls = '') {
-    const icon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
+    const icon = avatarHtml(f, 16, 'row-av');
+    const gIcon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}<span class="nm" title="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" title="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" title="${esc(info)}">${esc(info)}</span></div>`;
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}<span class="nm" title="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" title="${esc(statusText(f))}">${gIcon}${esc(statusText(f))}</span><span class="c-info" title="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
@@ -343,13 +344,13 @@
     const l = LIVE.friends && LIVE.friends.list; if (!l) return [];
     const out = [];
     for (const f of l.friends || []) {
-      const p = f.presence || {}, name = f.display_name || f.handle, base = { id: 'u:' + f.handle, handle: f.handle, name, real: true, since: f.since, presence: p, week: 0, total: 0 };
+      const p = f.presence || {}, name = f.display_name || f.handle, base = { id: 'u:' + f.handle, handle: f.handle, name, avatar: f.avatar, real: true, since: f.since, presence: p, week: 0, total: 0 };
       if (p.status !== 'offline' && p.game_id) out.push({ ...base, kind: 'playing', game: ensureGame(p.game_id, p.game_name), detail: p.game_detail || '', server: sinceText(p.session_started_at), info: '', away: p.status === 'away' });
       else if (p.status === 'online' || p.status === 'away') out.push({ ...base, kind: 'online', status: p.status === 'away' ? 'Away' : 'Online' });
       else out.push({ ...base, kind: 'off', last: '' });
     }
-    for (const q of l.incoming || []) out.push({ id: 'u:' + q.handle, handle: q.handle, name: q.display_name || q.handle, kind: 'req', status: 'Wants to add you', info: '', real: true, incoming: true });
-    for (const q of l.outgoing || []) out.push({ id: 'u:' + q.handle, handle: q.handle, name: q.display_name || q.handle, kind: 'out', status: 'Request sent', info: '', real: true });
+    for (const q of l.incoming || []) out.push({ id: 'u:' + q.handle, handle: q.handle, avatar: q.avatar, name: q.display_name || q.handle, kind: 'req', status: 'Wants to add you', info: '', real: true, incoming: true });
+    for (const q of l.outgoing || []) out.push({ id: 'u:' + q.handle, handle: q.handle, avatar: q.avatar, name: q.display_name || q.handle, kind: 'out', status: 'Request sent', info: '', real: true });
     return out;
   }
   const friendsNow = () => realMode() ? realFriends() : FRIENDS;
@@ -638,10 +639,28 @@
   const kv = (label, val) => val ? `<div class="sf-kv"><span>${label}</span><b${/</.test(val) ? '' : ` title="${val}"`}>${val}</b></div>` : '';
   const sfSec = title => `<div class="side-sec"><h4>${title}</h4></div>`;
   const hrsText = sec => sec == null ? '' : fmtHrs(sec) + 'h';
-  function avatarHtml(f) {
-    const n = String(f.name || f.handle || '?'); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0;
-    const ch = (n.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase();
-    return `<i class="sf-av" style="--av:hsl(${h % 360} 28% 34%)">${esc(ch)}</i>`;
+  /* Profile pictures (dev.19), drawn like the website: an uploaded picture (fetched and
+     cached by the app), a preset tile, or the Fraglink mark on one of six muted colours. */
+  const AV_GLYPHS = ['\u2694', '\u25C9', '\u25B2', '\u2605', '\u25C6', '\u2726', '\u2663', '\u2699', '\u2620', '\u265B', '\u26A1', '\u271A'];
+  const AVIMG = {}, avAsk = new Set(); let avTimer = 0;
+  function avImg(url) {
+    if (!url) return null;
+    if (AVIMG[url] !== undefined) return AVIMG[url];
+    if (FLB.avatarImages && !avAsk.has(url)) {
+      avAsk.add(url); clearTimeout(avTimer);
+      avTimer = setTimeout(async () => {
+        const ask = [...avAsk].filter(u => AVIMG[u] === undefined); if (!ask.length) return;
+        try { const r = await FLB.avatarImages(ask) || {}; for (const u of ask) AVIMG[u] = r[u] || null; render(); syncStatus(); } catch (e) { for (const u of ask) AVIMG[u] = null; }
+      }, 50);
+    }
+    return null;
+  }
+  function avColor(f) { if (f.avatar && f.avatar.color != null) return f.avatar.color % 6; const n = String(f.handle || f.name || ''); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0; return h % 6; }
+  function avatarHtml(f, size = 48, cls = 'sf-av') {
+    const a = f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
+    if (a.kind === 'upload') { const src = avImg(size > 32 ? a.url_64 : a.url_32); if (src) return `<i class="fav-av ${cls} c${c}" style="${st}"><img src="${src}" alt=""></i>`; }
+    if (a.kind === 'preset') return `<i class="fav-av ${cls} p c${a.preset % 6}" style="${st};font-size:${Math.round(size * .46)}px">${AV_GLYPHS[a.preset % 12]}</i>`;
+    return `<i class="fav-av ${cls} c${c}" style="${st}"><img class="mk" src="brand/v28-mark.svg" alt=""></i>`;
   }
   function friendStatus(f) {
     const playing = f.kind === 'playing' || f.kind === 'fof';
@@ -665,7 +684,7 @@
     const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';
     const [dot, stText] = friendStatus(f);
     const since = f.since ? 'Friends since ' + new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    let h = `<div class="sf-head" title="${esc(since)}">${avatarHtml(f)}<div class="sf-id"><div class="sf-name">${esc(f.name)}</div>${f.handle || f.real ? `<div class="sf-user">${H}</div>` : ''}<div class="sf-st"><i class="sf-dot ${dot}"></i>${esc(stText)}</div></div></div>`;
+    let h = `<div class="sf-head" title="${esc(since)}">${avatarHtml(f, 48)}<div class="sf-id"><div class="sf-name">${esc(f.name)}</div>${f.handle || f.real ? `<div class="sf-user">${H}</div>` : ''}<div class="sf-st"><i class="sf-dot ${dot}"></i>${esc(stText)}</div></div></div>`;
     if (f.kind === 'req') return h + `<p class="sf-note">Wants to be your friend.</p><div class="sf-foot"><button class="dk-btn" data-action="friend-accept" data-handle="${H}">Accept</button><button class="dk-btn" data-action="friend-decline" data-handle="${H}">Decline</button><a class="sf-small" data-action="friend-block" data-handle="${H}">Block</a></div>`;
     if (f.kind === 'out') return h + `<p class="sf-note">Friend request sent. They'll show up here once they accept.</p><div class="sf-foot"><a class="sf-small" data-action="friend-remove" data-handle="${H}">Cancel request</a></div>`;
     if (playing) {
@@ -1390,6 +1409,9 @@
     btn.dataset.st = shownStatus();
     const me = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
     $('#username').textContent = me + statusLabel();
+    if (realMode() && FLB.accountInfo && LIVE.meAvFor !== me) { LIVE.meAvFor = me; FLB.accountInfo().then(a => { LIVE.meAv = a && a.avatar; syncStatus(); }).catch(() => {}); }
+    const meAv = avatarHtml({ handle: me, avatar: realMode() ? LIVE.meAv : ME.avatar }, 16, 'me-av-i');
+    for (const s of ['#me-av', '#px-av']) { const m = $(s); if (m) m.innerHTML = meAv; }
     if ($('#px-user')) $('#px-user').textContent = me;
     btn.dataset.user = me; // dark skin: keeps the username's room in the status row
   }

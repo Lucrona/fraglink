@@ -483,6 +483,29 @@ impl Client {
         Ok(buf)
     }
 
+    /// Download a profile picture the server hosts (`/api/v1/avatars/<user>/<hash>-<px>.webp`,
+    /// max 512 KB). The file name carries a content hash, so a changed picture is a new URL.
+    pub fn fetch_avatar(&self, path: &str) -> Result<Vec<u8>, SyncError> {
+        if !path.starts_with("/api/v1/avatars/")
+            || path.contains("..")
+            || path.contains("//")
+            || path.contains('?')
+            || path.len() > 200
+        {
+            return Err(SyncError::Decode("avatar path not allowed".into()));
+        }
+        let resp = self
+            .send_with_fallback("GET", path, &None)
+            .map_err(|e| SyncError::Network(e.to_string()))?;
+        let mut buf = Vec::new();
+        use std::io::Read;
+        resp.into_reader()
+            .take(512 * 1024)
+            .read_to_end(&mut buf)
+            .map_err(|e| SyncError::Network(e.to_string()))?;
+        Ok(buf)
+    }
+
     /// Conditional GET of a public list (`/api/v1/games/detectable`, `/overrides`):
     /// `Ok(None)` on 304 Not Modified, else the body (gzip or plain JSON, max 16 MB) and its ETag.
     pub fn fetch_list(

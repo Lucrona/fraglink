@@ -7,9 +7,14 @@
   const el = document.getElementById('toast'), body = document.getElementById('toast-body');
   let timer = null;
   const GENERIC = '<svg class="gi-gen" viewBox="0 0 16 16"><rect x=".5" y=".5" width="15" height="15" rx="2" fill="#39414f" stroke="#15191f"/><path d="M4.2 6h7.6c1.3 0 2.2 1 2.2 2.3l-.4 2.4c-.2 1-1.4 1.3-2.1.6L10.3 10H5.7l-1.2 1.3c-.7.7-1.9.4-2.1-.6L2 8.3C2 7 2.9 6 4.2 6z" fill="#aab4c4"/></svg>';
-  function avatar(n) {
-    n = String(n || '?'); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0;
-    return `<i class="av" style="--av:hsl(${h % 360} 28% 34%)">${esc((n.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</i>`;
+  // The friend's picture, drawn like the website: uploaded image (data URL from the app),
+  // preset tile, or the Fraglink mark on one of six muted colours.
+  const GLYPHS = ['\u2694', '\u25C9', '\u25B2', '\u2605', '\u25C6', '\u2726', '\u2663', '\u2699', '\u2620', '\u265B', '\u26A1', '\u271A'];
+  function avatar(p, cls) {
+    const c = (p.avatar_color || 0) % 6, k = cls || '';
+    if (p.avatar && /^data:image\/(webp|png|jpeg|svg\+xml)[;,]/.test(p.avatar)) return `<i class="av fav c${c} ${k}"><img src="${p.avatar}" alt=""></i>`;
+    if (p.avatar_preset != null) return `<i class="av fav p c${p.avatar_preset % 6} ${k}">${GLYPHS[p.avatar_preset % 12]}</i>`;
+    return `<i class="av fav c${c} ${k}"><img class="mk" src="brand/v28-mark.svg" alt=""></i>`;
   }
   function close() { if (T) T.window.getCurrentWindow().close(); else el.hidden = true; }
   function show(p) {
@@ -26,7 +31,8 @@
     if (/^track:/.test(p.kind || '')) return ask(p, icon);
     const friend = /^(friend|request):/.test(p.kind || '');
     // icon (game, or a letter avatar for a friend with no game), bold name, one line, then a dim line (realm / @username)
-    const lead = p.game_id || !friend ? `<i class="gi">${icon}</i>` : avatar(p.title);
+    // playing: the game icon with the friend's picture in its corner; otherwise the picture
+    const lead = !friend ? `<i class="gi">${icon}</i>` : p.game_id ? `<i class="gi lead-g">${icon}${avatar(p, 'mini')}</i>` : avatar(p);
     const req = /^request:/.test(p.kind || '');
     const sub = req ? p.game : (SHOW_REALM ? p.detail || '' : '');
     // Steam-style: bold name / action ("is now playing", "played 1h 33m of") / game name
@@ -54,9 +60,9 @@
       const q = new URLSearchParams(location.search), t = q.get('t') || (q.get('logon') ? 'online' : 'playing');
       show(({ played: { kind: 'friend:you', title: 'You', line: 'played 1h 33m of', game_id: 'wow', game: 'World of Warcraft: Forever - Beta', icon: q.get('icon') || '' },
         long: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'x', game: 'The Elder Scrolls V: Skyrim Special Edition Anniversary Upgrade Bundle Deluxe', icon: '' },
-        online: { kind: 'friend:nova', title: 'Nova', line: 'logged on', game_id: '', game: '' },
-        request: { kind: 'request:riftwalker', title: 'Riftwalker', line: 'wants to be your friend', game_id: '', game: '@riftwalker' },
-        playing: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'wow', game: 'World of Warcraft', detail: 'Frostmourne', icon: q.get('icon') || '' } })[t]); return; }
+        online: { kind: 'friend:nova', title: 'Nova', line: 'logged on', game_id: '', game: '', avatar_color: 3 },
+        request: { kind: 'request:riftwalker', title: 'Riftwalker', line: 'wants to be your friend', game_id: '', game: '@riftwalker', avatar_preset: 3, avatar_color: 2 },
+        playing: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'wow', game: 'World of Warcraft', detail: 'Frostmourne', avatar_color: 0, avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#b0632a"/><circle cx="32" cy="25" r="12" fill="#f1d9c0"/><path d="M10 64c2-15 12-22 22-22s20 7 22 22z" fill="#2b2f3a"/></svg>'), icon: q.get('icon') || '' } })[t]); return; }
     try {
       const st = await window.FL.settings();
       const skin = st.settings.skin || 'classic';

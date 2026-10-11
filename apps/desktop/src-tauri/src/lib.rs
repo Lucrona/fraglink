@@ -4,6 +4,7 @@
 //! downloads public files (updates, the game detection lists in `gamelist.rs`).
 //! The optional account sync (`sync.rs`) only runs after the user signs in.
 
+mod avatars;
 mod commands;
 mod friends;
 mod gamelist;
@@ -29,7 +30,7 @@ use tauri_plugin_autostart::MacosLauncher;
 pub const EVENTS: &str = "fraglink://events";
 pub const TOAST_EVENT: &str = "fraglink://toast";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct ToastPayload {
     pub kind: String,
     pub title: String,
@@ -40,6 +41,11 @@ pub struct ToastPayload {
     pub icon: Option<String>,
     /// Extra line under the text, e.g. the WoW realm (empty when unknown).
     pub detail: String,
+    /// The friend's picture (dev.19): `data:` URL of an uploaded avatar, else drawn by
+    /// the toast from `avatar_color` (0-5) / `avatar_preset` like the website does.
+    pub avatar: Option<String>,
+    pub avatar_color: u8,
+    pub avatar_preset: Option<u8>,
 }
 
 pub struct AppState {
@@ -88,6 +94,7 @@ fn offer_track(app: &AppHandle, c: fraglink_core::detector::Candidate) {
                 game: c.exe.clone(),
                 icon,
                 detail: String::new(),
+                ..Default::default()
             },
         );
     }
@@ -200,6 +207,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 game: name.clone(),
                 icon: None,
                 detail: String::new(),
+                ..Default::default()
             }),
             TrackerEvent::Milestone {
                 game_id,
@@ -213,6 +221,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 game: name.clone(),
                 icon: None,
                 detail: String::new(),
+                ..Default::default()
             }),
             TrackerEvent::Stopped {
                 game_id,
@@ -228,6 +237,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 game: name.clone(),
                 icon: None,
                 detail: String::new(),
+                ..Default::default()
             }),
             _ => None,
         };
@@ -891,6 +901,7 @@ pub fn run() {
             commands::sync_sign_out,
             commands::friends_state,
             commands::game_icons,
+            commands::avatar_images,
             commands::friends_refresh,
             commands::get_server_stats,
             commands::friend_add,
