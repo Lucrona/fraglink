@@ -31,7 +31,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- **Pop-ups laid out like Steam's:** name in bold, then what happened ("is now playing", "played 1h 33m of"), then the game name on its own line in blue, wrapping to two lines before it's cut off. The pop-up grows to fit, so long names like "World of Warcraft: Forever - Beta" show in full.
+- **Smoother pop-ups, laid out like Steam's:** no title bar any more. Each pop-up (friends, your play time, Track-as-game, announcements) is one dark rounded box with a soft shadow that slides and fades in and out. The close × appears when you hover, and a faint Fraglink mark sits in the corner. Inside: the name in bold, then what happened ("is now playing", "played 1h 33m of"), then the game name on its own line in blue, wrapping to two lines before it's cut off. The pop-up grows to fit, so long names like "World of Warcraft: Forever - Beta" show in full.
 - **WoW realm hidden for now:** realm detection wasn't reliable enough, so the app no longer reads or shows the realm (side panel, tooltips, your status and pop-ups), and the server no longer passes one on to friends.
 - **Bigger Add Friend window:** about 25% larger, with the friends list's text size, a taller results list
   (about 6 rows), roomier buttons and padding, and the list behind it dimmed a bit more.

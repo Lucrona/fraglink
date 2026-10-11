@@ -117,3 +117,21 @@ body.toast-page.skin-dark .toast-body small { color: #8ea3c8; font-size: 10px; }
 body.toast-page.skin-dark .xf-toast { top: auto; bottom: 0; height: auto; }
 body.toast-page.skin-dark .toast-body { align-items: flex-start; }
 body.toast-page.skin-dark .toast-body .tx > .g { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+
+/* dev.18: smooth toast, no title bar. One dark rounded box (all toast types); the close X
+   shows on hover, a faint Fraglink mark sits in the bottom-right corner. */
+body.toast-page.skin-dark .xf-toast { left: 4px; right: 4px; bottom: 4px; border: 1px solid #3a3f49; border-radius: 6px;
+  background: linear-gradient(#262a31, #1a1c21); box-shadow: 0 4px 14px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+  animation: flToastIn .28s cubic-bezier(.2,.8,.3,1); }
+body.toast-page.skin-dark .xf-toast.out { animation: flToastOut .3s ease-in forwards; }
+@keyframes flToastIn { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes flToastOut { to { transform: translateY(10px); opacity: 0; } }
+body.toast-page.skin-dark .toast-head { position: absolute; inset: 0; height: auto; padding: 0; background: none; border: 0; pointer-events: none; }
+body.toast-page.skin-dark .toast-head span { display: none; }
+body.toast-page.skin-dark .toast-head img { position: absolute; right: 6px; bottom: 5px; width: 12px; height: 10px; opacity: .18; filter: grayscale(1); }
+body.toast-page.skin-dark .toast-head button { position: absolute; top: 4px; right: 4px; width: 16px; height: 16px; border-radius: 3px; color: #9aa3b2;
+  font: 14px/15px Tahoma, Verdana, sans-serif; opacity: 0; transition: opacity .15s, background .15s; pointer-events: auto; }
+body.toast-page.skin-dark .xf-toast:hover .toast-head button { opacity: 1; }
+body.toast-page.skin-dark .toast-head button:hover { background: rgba(255,255,255,.1); color: #fff; }
+body.toast-page.skin-dark .toast-body { padding: 9px 22px 10px 10px; gap: 9px; }
+body.toast-page.skin-dark .toast-body .gi, body.toast-page.skin-dark .toast-body .av { border-radius: 4px; overflow: hidden; }
