@@ -440,26 +440,6 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         Err(_) => return Ok(s),
     };
     apply_renames(st, &mut f, renamed);
-    // partly retired games: the detached programs get rules of their own (new entries)
-    for (game, exe) in &detached {
-        for r in f.rules.iter_mut().filter(|r| &r.id == game) {
-            r.exes.retain(|x| !x.eq_ignore_ascii_case(exe));
-        }
-        let id = format!("exe:{exe}");
-        if valid_exe(exe) && !f.rules.iter().any(|r| r.id == id) {
-            f.rules.insert(
-                0,
-                overrides::Rule {
-                    id,
-                    name: crate::names::UNLISTED_TITLE.into(),
-                    exes: vec![exe.clone()],
-                    paths: vec![],
-                    channel: None,
-                    note: Some(format!("detached from {game}")),
-                },
-            );
-        }
-    }
     for (id, name) in approved {
         let exe = id.trim_start_matches("exe:").to_string();
         if !valid_exe(&exe) || f.rules.iter().any(|r| r.id == id) {
@@ -505,6 +485,26 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
             channel: None,
             note: Some("extra exe names".into()),
         });
+    }
+    // partly retired games: the detached programs get rules of their own (new entries)
+    for (game, exe) in &detached {
+        for r in f.rules.iter_mut().filter(|r| &r.id == game) {
+            r.exes.retain(|x| !x.eq_ignore_ascii_case(exe));
+        }
+        let id = format!("exe:{exe}");
+        if valid_exe(exe) && !f.rules.iter().any(|r| r.id == id) {
+            f.rules.insert(
+                0,
+                overrides::Rule {
+                    id,
+                    name: crate::names::UNLISTED_TITLE.into(),
+                    exes: vec![exe.clone()],
+                    paths: vec![],
+                    channel: None,
+                    note: Some(format!("detached from {game}")),
+                },
+            );
+        }
     }
     Ok(serde_json::to_string_pretty(&f).unwrap_or(s))
 }
