@@ -566,13 +566,13 @@
       const what = x.kind === 'playing' ? `started playing ${g}` : `played ${g} for ${esc(fmtMins(Math.round((x.duration_s || 0) / 60)))}`;
       return `<div class="ar-row" title="${esc(new Date(x.at).toLocaleString())}"><i class="gi">${friendGameIcon(id)}</i><div><b>${esc(x.display_name || x.handle)}</b> ${what}<small>${esc(agoText(x.at))}</small></div></div>`;
     }).join('');
-    return `<div class="side-sec"><h4>Activity Report</h4><a class="side-more" data-action="activity-more" title="View more of your friends' activity">More</a></div>${rows}`;
+    return `<div class="side-sec"><h4 title="Activity Report">Activity</h4><a class="side-more" data-action="activity-more" title="View more of your friends' activity">More</a></div>${rows}`;
   }
   function installedHtml() {
     const inst = (CATALOG || []).filter(g => g.installed && !g.excluded);
     const games = CATALOG === null ? '<li><span>Looking for games…</span></li>'
       : inst.map(g => { const id = ensureGame(g.id, g.name); return `<li title="${esc(g.game_path || g.detect_path || '')}"><i class="gi">${gameIcon(id)}</i><span>${esc(g.name)}</span>${g.can_launch ? `<a data-action="launch" data-game="${esc(g.id)}">Launch</a>` : ''}</li>`; }).join('') || '<li><span>No games found on this PC yet.</span></li>';
-    return `<div class="side-sec"><h4>${inst.length} Installed Game${inst.length === 1 ? '' : 's'}</h4><a data-action="detect-games" class="side-more side-detect" title="Detect Games: look for installed games on this PC">Detect</a></div><ul class="games launch">${games}</ul>`;
+    return `<div class="side-sec"><h4 title="${inst.length} Installed Game${inst.length === 1 ? '' : 's'}">Installed (${inst.length})</h4><a data-action="detect-games" class="side-more side-detect" title="Detect Games: look for installed games on this PC">Detect</a></div><ul class="games launch">${games}</ul>`;
   }
   function fmtMins(m) { m = Math.max(0, Math.round(m)); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; }
   function agoText(iso) {
@@ -671,7 +671,8 @@
     renderSide();
   }
   /* Drag the info panel's outer edge to make it wider (height follows the window). */
-  const SIDE_MIN = 180, SIDE_MAX = 560;
+  const SIDE_MIN = 140, SIDE_MAX = 560; // 140 = default (dev.18); 180 was the old default
+  const OLD_SIDE_DEFAULT = 180;
   function setSideW(w, save) {
     w = Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, w)));
     document.documentElement.style.setProperty('--side-w', w + 'px');
@@ -1361,7 +1362,7 @@
     requestAnimationFrame(() => { LS.update(); SS.update(); });
   }
 
-  /* Info panel grip: drag the panel's outer edge to widen it (min 180 px). */
+  /* Info panel grip: drag the panel's outer edge to widen it (min 140 px). */
   document.addEventListener('mousedown', e => {
     const g = e.target.closest('#side-grip'); if (!g || e.button !== 0) return;
     e.preventDefault(); e.stopPropagation();
@@ -1443,7 +1444,7 @@
     setZoom(params.get('zoom') || (TAURI ? (saved.zoom || '1.5') : (document.body.classList.contains('compare') ? 1 : 2)));
     applySkin(state.skin);
     clock();
-    { const sw = TAURI ? +saved.side_w : +(params.get('sidew') || localStorage.getItem('fl-side-w')); if (sw) setSideW(sw, false); }
+    { const sw = TAURI ? +saved.side_w : +(params.get('sidew') || localStorage.getItem('fl-side-w')); if (sw && sw !== OLD_SIDE_DEFAULT) setSideW(sw, false); }
     applyTextSize(saved.text_size || params.get('text') || 'normal');
     if (params.get('side') === '1') toggleSide(true);
     if (params.get('sel')) { state.sel = params.get('sel'); render(); }

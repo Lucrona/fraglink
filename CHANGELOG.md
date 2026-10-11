@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+- **Narrower side panel:** the info panel now opens at 140 px instead of 180 px, closer to the classic client's
+  proportion. Its text, heading bars, avatar and game icon are a little smaller and tighter so everything still
+  fits. The headings read "Activity" and "Installed (N)", and game names wrap between words rather than mid-word.
+  You can still drag the edge wider; a width you dragged is remembered, except the old 180 px default, which
+  now opens at the new default.
+
 ## [0.2.0-dev.17] - 2026-10-11
 
 Test update (builds report `0.2.0-17`). Server update: friend search matches part of a name.
