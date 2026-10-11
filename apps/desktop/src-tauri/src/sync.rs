@@ -368,11 +368,41 @@ pub fn password_sign_in(
         Some(email) => client.password_signup(login, password, email, &device_label()),
         None => client.password_login(login, password, &device_label()),
     };
-    let (token, user) = res.map_err(|e| match e {
+    let (token, user) = res.map_err(|e| sign_in_error(e, &base))?;
+    set(app, keys::SERVER, &base);
+    finish_sign_in(app, &token, &user.handle);
+    Ok(())
+}
+
+/// Prefix of the error string the login screen recognises as "ask for a code";
+/// the rest is the ticket for [`mfa_sign_in`].
+pub const MFA_PREFIX: &str = "mfa_required:";
+
+fn sign_in_error(e: SyncError, base: &str) -> String {
+    match e {
+        SyncError::MfaRequired(ticket) => format!("{MFA_PREFIX}{ticket}"),
         SyncError::Unauthorized => "Wrong username or password.".to_string(),
         SyncError::Server { message, .. } if !message.is_empty() => message,
         SyncError::Network(_) => format!("Can't reach {base}. Check your connection."),
         e => e.to_string(),
+    }
+}
+
+/// Second step of a two-step sign-in (authenticator or backup code). Blocking.
+pub fn mfa_sign_in(
+    app: &AppHandle,
+    server_url: &str,
+    ticket: &str,
+    code: &str,
+) -> Result<(), String> {
+    let base = fraglink_sync::normalize_server_url(server_url)
+        .ok_or_else(|| "Enter a server address starting with http:// or https://".to_string())?;
+    let client = Client::new(&base, None);
+    let (token, user) = client.mfa_login(ticket, code).map_err(|e| match e {
+        SyncError::Unauthorized => {
+            "That code isn't right. Try the newest code from your authenticator app.".to_string()
+        }
+        e => sign_in_error(e, &base),
     })?;
     set(app, keys::SERVER, &base);
     finish_sign_in(app, &token, &user.handle);

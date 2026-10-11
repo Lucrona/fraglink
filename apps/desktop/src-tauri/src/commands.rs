@@ -632,6 +632,21 @@ pub async fn sync_login(
     .map_err(err)?
 }
 
+/// Two-step sign-in: the ticket from a `mfa_required:` login error plus a code.
+#[tauri::command]
+pub async fn sync_login_mfa(
+    app: AppHandle,
+    server: String,
+    ticket: String,
+    code: String,
+) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::sync::mfa_sign_in(&app, &server, ticket.trim(), code.trim())
+    })
+    .await
+    .map_err(err)?
+}
+
 /// Create Account: username, password, optional email; signs this PC in.
 #[tauri::command]
 pub async fn sync_signup(

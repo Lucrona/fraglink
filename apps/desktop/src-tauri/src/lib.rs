@@ -885,6 +885,7 @@ pub fn run() {
             commands::quit_app,
             commands::sync_status,
             commands::sync_sign_in,
+            commands::sync_login_mfa,
             commands::sync_cancel,
             commands::sync_now,
             commands::sync_sign_out,

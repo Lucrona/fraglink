@@ -27,6 +27,7 @@
       syncStatus: () => inv('sync_status'),
       syncSignIn: (server) => inv('sync_sign_in', { server }),
       syncLogin: (server, username, password) => inv('sync_login', { server, username, password }),
+      syncLoginMfa: (server, ticket, code) => inv('sync_login_mfa', { server, ticket, code }),
       syncSignup: (server, username, password, email) => inv('sync_signup', { server, username, password, email }),
       friendSearch: (query) => inv('friend_search', { query }),
       syncCancel: () => inv('sync_cancel'),

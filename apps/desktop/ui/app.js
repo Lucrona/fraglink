@@ -368,6 +368,13 @@
         <p>Code: <span class="lg-code">${esc(p.user_code)}</span></p><p class="lg-dim">Browser didn't open? Go to<br>${esc(p.verification_uri)}</p>
         <button class="hw" type="button" data-action="login-cancel">Cancel</button></div>`;
     }
+    else if (state.loginMode === 'mfa') {
+      h += `<b class="lg-lbl">Two-step sign-in</b>
+        <p class="lg-dim">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
+        <label class="lg-lbl" for="lg-code">Code</label>
+        <div class="lg-row"><input id="lg-code" maxlength="16" autocomplete="one-time-code" /><button class="hw" type="button" data-action="mfa-go">Verify</button></div>
+        <div class="af-btns"><button class="hw" type="button" data-action="login-back">Cancel</button></div>`;
+    }
     else if (state.loginMode === 'create') {
       h += `<b class="lg-lbl">Create Account</b>
         <label class="lg-lbl" for="lg-nuser">Username</label><input id="lg-nuser" maxlength="20" autocomplete="off" placeholder="3-20 letters, digits, _ or -" />
@@ -1114,7 +1121,20 @@
       if (!u || !pw) { state.loginErr = 'Enter your username and password.'; render(); return; }
       saveSetting('save_password', $('#lg-save').checked ? '1' : '0'); saveSetting('auto_login', $('#lg-auto').checked ? '1' : '0');
       state.loginErr = ''; state.loginBusy = 'Logging in…'; render();
-      try { await FLB.syncLogin(srvVal(), u, pw); state.loginMode = null; } catch (e) { state.loginErr = String(e && e.message || e); }
+      try { await FLB.syncLogin(srvVal(), u, pw); state.loginMode = null; } catch (e) {
+        const m = String(e && e.message || e);
+        // Two-step sign-in: the server wants a code; keep the ticket and ask for it.
+        if (m.startsWith('mfa_required:')) { state.mfaTicket = m.slice(13); state.mfaServer = srvVal(); state.loginMode = 'mfa'; state.loginErr = ''; state.loginBusy = ''; render(); setTimeout(() => $('#lg-code') && $('#lg-code').focus(), 0); return; }
+        state.loginErr = m;
+      }
+      state.loginBusy = ''; refreshFriends();
+    },
+    'mfa-go': async () => {
+      const c = ($('#lg-code').value || '').trim();
+      if (!c) { state.loginErr = 'Enter the code from your authenticator app.'; render(); return; }
+      state.loginErr = ''; state.loginBusy = 'Checking code…'; render();
+      try { await FLB.syncLoginMfa(state.mfaServer || srvVal(), state.mfaTicket || '', c); state.loginMode = null; state.mfaTicket = null; }
+      catch (e) { const m = String(e && e.message || e); state.loginErr = m; if (/too long|password again/i.test(m)) { state.loginMode = null; state.mfaTicket = null; } }
       state.loginBusy = ''; refreshFriends();
     },
     'signup-go': async () => {
@@ -1126,7 +1146,7 @@
       try { await FLB.syncSignup(srvVal(), u, pw, em); state.loginMode = null; } catch (e) { state.loginErr = String(e && e.message || e); }
       state.loginBusy = ''; refreshFriends();
     },
-    'login-back': () => { state.loginMode = null; state.loginErr = ''; render(); },
+    'login-back': () => { state.loginMode = null; state.mfaTicket = null; state.loginErr = ''; render(); },
     'login-browser': () => { state.loginErr = ''; FLB.syncSignIn(srvVal()).then(refreshFriends).catch(toastErr); },
     'login-cancel': () => FLB.syncCancel().then(refreshFriends).catch(toastErr),
     'register': () => { state.tab = 'friends'; state.loginMode = 'create'; state.loginErr = ''; render(); setTimeout(() => $('#lg-nuser') && $('#lg-nuser').focus(), 0); },
@@ -1490,7 +1510,7 @@
   }
   setInterval(clock, 1000);
   document.addEventListener('input', e => { if (!state.addFriend) return; if (e.target.id === 'add-handle') { state.addFriend.q = e.target.value; $('#add-search').disabled = !e.target.value.trim(); } else if (e.target.id === 'add-msg-text') state.addFriend.msg = e.target.value; });
-  document.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.id === 'lg-pass') actions['login-go'](); else if (e.target.id === 'lg-npass2' || e.target.id === 'lg-email') actions['signup-go'](); });
+  document.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.id === 'lg-pass') actions['login-go'](); else if (e.target.id === 'lg-code') actions['mfa-go'](); else if (e.target.id === 'lg-npass2' || e.target.id === 'lg-email') actions['signup-go'](); });
   setInterval(() => { const t = $('#lg-tmo'); if (t) t.textContent = `Time out in ${Math.max(0, Math.round(+t.dataset.exp - Date.now() / 1000))} secs`; }, 1000);
 
   /* ---------------- boot ---------------- */

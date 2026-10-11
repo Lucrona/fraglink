@@ -50,6 +50,10 @@ pub enum SyncError {
     Network(String),
     #[error("unexpected response: {0}")]
     Decode(String),
+    /// Password was right but the account has two-step sign-in: finish with
+    /// [`Client::mfa_login`] using this ticket and a code (valid 5 minutes).
+    #[error("two-step sign-in code needed")]
+    MfaRequired(String),
 }
 
 impl SyncError {
@@ -278,6 +282,21 @@ impl Client {
             "POST",
             "/api/v1/device/login",
             Some(serde_json::json!({ "login": login, "password": password, "device_name": device_name })),
+        )?;
+        token_and_user(v)
+    }
+
+    /// Second step of a two-step sign-in: the ticket from [`SyncError::MfaRequired`] plus
+    /// a 6-digit authenticator code or a backup code. Returns a device token.
+    pub fn mfa_login(
+        &self,
+        mfa_token: &str,
+        code: &str,
+    ) -> Result<(String, RemoteUser), SyncError> {
+        let v: serde_json::Value = self.call(
+            "POST",
+            "/api/v1/auth/mfa",
+            Some(serde_json::json!({ "mfa_token": mfa_token, "code": code })),
         )?;
         token_and_user(v)
     }
@@ -542,6 +561,12 @@ fn enc(s: &str) -> String {
 
 /// Validate a user-entered server URL (http/https only, no path tricks).
 fn token_and_user(v: serde_json::Value) -> Result<(String, RemoteUser), SyncError> {
+    if v["mfa_required"] == true {
+        let t = v["mfa_token"]
+            .as_str()
+            .ok_or_else(|| SyncError::Decode("missing mfa_token".into()))?;
+        return Err(SyncError::MfaRequired(t.to_string()));
+    }
     let token = v["token"]
         .as_str()
         .ok_or_else(|| SyncError::Decode("missing token".into()))?
