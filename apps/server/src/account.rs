@@ -617,7 +617,7 @@ pub async fn purge_loop(st: AppState) {
 // ------------------------------------------------------------------ per-feature privacy
 
 /// Per-feature visibility switches stored in `users.privacy` (missing key = shown).
-pub const PRIVACY_KEYS: [&str; 7] = [
+pub const PRIVACY_KEYS: [&str; 8] = [
     "now_playing",
     "games",
     "rig",
@@ -625,6 +625,7 @@ pub const PRIVACY_KEYS: [&str; 7] = [
     "location",
     "gaming_style",
     "leaderboards",
+    "name_history",
 ];
 
 /// Whether `key` is shown (true unless explicitly switched off).

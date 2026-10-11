@@ -764,7 +764,8 @@ pub async fn account_info(app: AppHandle) -> CmdResult<serde_json::Value> {
         let v = c.me_raw()?;
         let u = &v["user"];
         Ok(serde_json::json!({
-            "handle": u["handle"], "email": u["email"], "email_verified": u["email_verified"],
+            "handle": u["handle"], "display_name": u["display_name"],
+            "email": u["email"], "email_verified": u["email_verified"],
             "share_activity": u["share_activity"], "avatar": u["avatar"],
         }))
     })
@@ -781,6 +782,13 @@ pub async fn account_change_password(
         return Err("Use a new password of at least 10 characters.".into());
     }
     account_call(app, move |c| c.change_password(&current, &new)).await
+}
+
+/// Options > Account / click your own name: change your nickname.
+#[tauri::command]
+pub async fn account_set_nickname(app: AppHandle, name: String) -> CmdResult<serde_json::Value> {
+    let name: String = name.chars().take(64).collect();
+    account_call(app, move |c| c.set_display_name(name.trim())).await
 }
 
 #[tauri::command]

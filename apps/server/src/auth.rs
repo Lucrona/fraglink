@@ -304,6 +304,20 @@ pub async fn create_user(
     handle: &str,
 ) -> ApiResult<User> {
     validate_signup(email, password, handle)?;
+    // usernames freed by a staff rename stay with their old owner (old links redirect there)
+    let reserved: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM handle_redirects WHERE old_handle = lower($1))",
+    )
+    .bind(handle.trim())
+    .fetch_one(&state.db)
+    .await?;
+    if reserved {
+        return Err(AppError::new(
+            StatusCode::CONFLICT,
+            "taken",
+            "That email or handle is already registered.",
+        ));
+    }
     let hash = hash_password(password)?;
     let user = User {
         id: Uuid::new_v4(),

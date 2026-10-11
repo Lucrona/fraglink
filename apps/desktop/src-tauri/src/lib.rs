@@ -911,6 +911,7 @@ pub fn run() {
             commands::account_info,
             commands::account_change_password,
             commands::account_change_email,
+            commands::account_set_nickname,
             commands::friend_mute,
             commands::track_prompt,
             commands::track_prompt_answer,

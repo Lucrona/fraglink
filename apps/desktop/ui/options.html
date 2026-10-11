@@ -129,6 +129,12 @@
 
     <section data-page="account" hidden>
       <fieldset><legend>Fraglink account (optional)</legend><div id="sync-box" class="sync">Loading…</div></fieldset>
+      <fieldset id="acct-nick" class="acct" hidden><legend>Nickname</legend>
+        <label class="row"><span>Username</span><input type="text" id="nk-user" readonly /></label>
+        <label class="row"><span>Nickname</span><input type="text" id="nk-new" maxlength="32" spellcheck="false" /></label>
+        <div class="acct-foot"><span id="nk-msg" class="msg"></span><button type="button" data-do="nk-change">Save Nickname</button></div>
+        <p class="hint">Your nickname is the name friends see. Up to 32 characters, 3 changes a day; it can't be someone else's name or look like staff. Your username is permanent.</p>
+      </fieldset>
       <fieldset id="acct-pw" class="acct" hidden><legend>Change password</legend>
         <label class="row"><span>Current password</span><input type="password" id="pw-cur" autocomplete="current-password" maxlength="128" /></label>
         <label class="row"><span>New password</span><input type="password" id="pw-new" autocomplete="new-password" maxlength="128" placeholder="at least 10 characters" /></label>

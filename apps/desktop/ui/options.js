@@ -205,10 +205,11 @@
 
   /* ---- Account: change password / email (signed in only) ---- */
   async function renderAccount(signedIn) {
-    $('#acct-pw').hidden = $('#acct-email').hidden = !signedIn;
+    $('#acct-pw').hidden = $('#acct-email').hidden = $('#acct-nick').hidden = !signedIn;
     if (!signedIn || !FLB.accountInfo) return;
     try {
       const a = await FLB.accountInfo();
+      $('#nk-user').value = a.handle ? '@' + a.handle : ''; $('#nk-new').value = a.display_name || a.handle || '';
       $('#em-cur').value = a.email ? a.email + (a.email_verified ? '' : ' (not verified)') : '(none)';
     } catch (e) { $('#em-cur').value = ''; say('em', String(e), true); }
   }
@@ -227,6 +228,15 @@
       const n = r && r.signed_out_other_sessions || 0;
       say('pw', `Password changed.${n ? ` Signed out ${n} other session${n > 1 ? 's' : ''}.` : ''}`);
     } catch (e) { say('pw', errText(e), true); }
+    b.disabled = false;
+  }
+  async function changeNickname() {
+    const b = $('[data-do=nk-change]'); b.disabled = true; say('nk', 'Saving…');
+    try {
+      const r = await FLB.setNickname($('#nk-new').value);
+      $('#nk-new').value = r.display_name;
+      say('nk', r.changes_left == null ? 'Saved.' : `Saved. ${r.changes_left} more change${r.changes_left === 1 ? '' : 's'} today.`);
+    } catch (e) { say('nk', errText(e), true); }
     b.disabled = false;
   }
   async function changeEmail() {
@@ -265,6 +275,7 @@
     'block-remove': async () => { const h = $('#blocked').value; if (!h) return; try { await FLB.friendBlock(h, false); renderBlocked(); } catch (e) { fail(e); } },
     'pw-change': changePassword,
     'em-change': changeEmail,
+    'nk-change': changeNickname,
     'sync-signin': () => FLB.syncSignIn($('#sync-server').value.trim()).then(renderSync).catch(fail),
     'sync-cancel': () => FLB.syncCancel().then(renderSync).catch(fail),
     'sync-now': () => FLB.syncNow().then(() => setTimeout(renderSync, 3000)).catch(fail),

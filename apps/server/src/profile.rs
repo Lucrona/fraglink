@@ -32,7 +32,50 @@ struct DisplayNameReq {
     display_name: String,
 }
 
-/// Change the name shown next to the username (1-32 characters; empty = the username).
+/// Words a nickname may not use (staff titles and the service's own name), unless you're staff.
+const RESERVED: [&str; 12] = [
+    "admin",
+    "administrator",
+    "moderator",
+    "mod",
+    "staff",
+    "fraglink",
+    "official",
+    "support",
+    "owner",
+    "system",
+    "developer",
+    "dev",
+];
+
+/// Nickname changes allowed per 24 hours.
+pub const NICK_CHANGES_PER_DAY: i64 = 3;
+
+/// Whether a nickname looks like a staff title or the service ("Fraglink Support", "[MOD] x").
+pub fn looks_official(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    let compact: String = lower.chars().filter(|c| c.is_alphanumeric()).collect();
+    if compact.contains("fraglink") || compact.contains("admin") || compact.contains("moderator") {
+        return true;
+    }
+    lower
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|w| RESERVED.contains(&w))
+}
+
+/// Clean a requested nickname: no control characters, trimmed, runs of spaces collapsed.
+pub fn clean_nickname(raw: &str) -> String {
+    raw.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Change your nickname (the name people see; 1-32 characters; empty = your username).
+/// At most 3 changes a day; it can't be someone else's username or nickname, or look
+/// like staff. The previous nickname goes to the history ("Previously known as").
 async fn set_display_name(
     State(st): State<AppState>,
     headers: HeaderMap,
@@ -47,13 +90,7 @@ async fn set_display_name(
         20,
         std::time::Duration::from_secs(900),
     )?;
-    let name: String = r
-        .display_name
-        .chars()
-        .filter(|c| !c.is_control())
-        .collect::<String>()
-        .trim()
-        .to_string();
+    let name = clean_nickname(&r.display_name);
     let name = if name.is_empty() {
         a.user.handle.clone()
     } else {
@@ -62,15 +99,94 @@ async fn set_display_name(
     if name.chars().count() > 32 {
         return Err(AppError::bad_request(
             "invalid_display_name",
-            "Display names are up to 32 characters.",
+            "Nicknames are up to 32 characters.",
         ));
     }
+    let (current, role): (String, Option<String>) =
+        sqlx::query_as("SELECT display_name, role FROM users WHERE id = $1")
+            .bind(a.user.id)
+            .fetch_one(&st.db)
+            .await?;
+    if current == name {
+        return Ok(Json(
+            json!({ "display_name": name, "changes_left": Value::Null }),
+        ));
+    }
+    let own_handle = name.eq_ignore_ascii_case(&a.user.handle);
+    if !own_handle && role.is_none() && looks_official(&name) {
+        return Err(AppError::bad_request(
+            "reserved_name",
+            "Nicknames can't look like a staff title or Fraglink itself.",
+        ));
+    }
+    if !own_handle {
+        let taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE id <> $1 AND deleted_at IS NULL
+                             AND (lower(handle) = lower($2) OR lower(display_name) = lower($2)))
+                 OR EXISTS(SELECT 1 FROM handle_redirects WHERE user_id <> $1 AND old_handle = lower($2))",
+        )
+        .bind(a.user.id)
+        .bind(&name)
+        .fetch_one(&st.db)
+        .await?;
+        if taken {
+            return Err(AppError::new(
+                StatusCode::CONFLICT,
+                "name_taken",
+                "Someone already uses that name. Pick another nickname.",
+            ));
+        }
+    }
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM name_history WHERE user_id = $1 AND changed_at > now() - interval '24 hours'",
+    )
+    .bind(a.user.id)
+    .fetch_one(&st.db)
+    .await?;
+    if recent >= NICK_CHANGES_PER_DAY {
+        return Err(AppError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too_many_name_changes",
+            "You can change your nickname 3 times a day. Try again tomorrow.",
+        ));
+    }
+    let mut tx = st.db.begin().await?;
+    sqlx::query("INSERT INTO name_history(user_id, name) VALUES($1, $2)")
+        .bind(a.user.id)
+        .bind(&current)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("UPDATE users SET display_name = $2 WHERE id = $1")
         .bind(a.user.id)
         .bind(&name)
-        .execute(&st.db)
+        .execute(&mut *tx)
         .await?;
-    Ok(Json(json!({ "display_name": name })))
+    tx.commit().await?;
+    crate::sig::forget(&a.user.handle);
+    Ok(Json(json!({
+        "display_name": name,
+        "changes_left": (NICK_CHANGES_PER_DAY - recent - 1).max(0),
+    })))
+}
+
+/// Up to 5 earlier nicknames, newest first, without the current one or repeats.
+pub async fn previous_names(st: &AppState, user: Uuid, current: &str) -> ApiResult<Vec<String>> {
+    let rows: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM name_history WHERE user_id = $1 ORDER BY changed_at DESC, id DESC LIMIT 50",
+    )
+    .bind(user)
+    .fetch_all(&st.db)
+    .await?;
+    let mut out: Vec<String> = Vec::new();
+    for n in rows {
+        if n != current && !out.iter().any(|o| o.eq_ignore_ascii_case(&n)) {
+            out.push(n);
+        }
+        if out.len() == 5 {
+            break;
+        }
+    }
+    Ok(out)
 }
 
 async fn profile(
@@ -170,6 +286,11 @@ async fn profile(
     let show_game = show("now_playing");
     let can_see_games = show("games");
     let can_see_history = is_self || shares;
+    let previous = if show("name_history") {
+        previous_names(&st, p.id, &p.display_name).await?
+    } else {
+        vec![]
+    };
     let hidden = if is_self {
         vec![]
     } else {
@@ -289,6 +410,7 @@ async fn profile(
         "public_profile": public,
         "history_visible": can_see_history,
         "games_visible": can_see_games,
+        "previous_names": previous,
         "privacy": if is_self { crate::account::privacy_view(&privacy) } else { Value::Null },
         "presence": presence,
         "games": games,

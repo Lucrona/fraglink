@@ -508,3 +508,9 @@ body.skin-dark .xf-dropdown .has-sub.force { background: var(--dk-blue2, #1f4f9e
 body.skin-dark #px-av { display: inline-flex; vertical-align: top; margin: 0 5px 0 0; }
 body.skin-dark .st-btn::before { padding-left: 21px; }
 body.skin-dark #px-av { margin-top: -2px; }
+
+/* dev.20: change nickname dialog */
+body.skin-dark .nick-dlg input { background: #121418; color: #e2e6ea; border: 1px solid #3a3f49; border-radius: 3px; }
+body.skin-dark .nick-dlg input:focus { outline: none; border-color: #3d7fd6; }
+body.skin-dark .nick-foot .msg.bad { color: #ff8a80; }
+body.skin-dark .sf-user { opacity: .7; }

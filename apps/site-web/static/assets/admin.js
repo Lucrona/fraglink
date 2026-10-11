@@ -266,12 +266,15 @@ async function userDetail(id) {
     <section class="panel"><h2>Actions</h2><div class="body f">
       ${u.banned_at ? `<button class="btn" id="unban">Unban</button>` : `<label>Ban reason (optional, kept in the audit log)<input type="text" id="reason" maxlength="200"></label><div class="row"><button class="btn danger" id="ban">Ban account</button></div><small>Banned accounts are signed out everywhere, can't sign in, and their profile is hidden.</small>`}
       ${can.reset_password ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="resetpw">Reset password</button></div><small>Makes a temporary password (shown once) and signs the account out everywhere. Send it to the user yourself; email isn't set up yet.</small><div id="pwout"></div>` : ""}
+      ${can.change_handle ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><label>Username<input type="text" id="newhandle" maxlength="20" value="${esc(u.handle)}"></label><div class="row"><button class="btn" id="chhandle">Change username</button></div><small>Users can't change their username themselves. The old one keeps redirecting to them and can't be taken by anyone else. Logged in the audit log.</small>` : ""}
       <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="rmav">Remove picture</button>${can.mfa_reset ? ` <button class="btn" id="mfareset">Reset two-step sign-in</button>` : ""}</div><small>Removing a picture resets it to the default and blocks that exact image. Resetting two-step sign-in lets them sign in with just their password (check it's really them first).</small>
       <div class="alert" id="amsg" hidden></div></div></section>
     <section class="panel"><h2>Signed-in devices</h2>${u.devices.length ? u.devices.map(d => `<div class="fr"><div class="who"><div class="nm">${esc(d.name || (d.kind === "web" ? "Web browser" : "Fraglink desktop"))} <small>${esc(d.kind)}</small></div><div class="gm">signed in ${day(d.created_at)} · last used ${when(d.last_used_at)}</div></div></div>`).join("") : `<div class="body empty">None.</div>`}</section>
   </div></div>`;
   const amsg = $("#amsg");
   const ban = $("#ban"), unban = $("#unban"), reset = $("#resetpw");
+  const chh = $("#chhandle");
+  if (chh) chh.addEventListener("click", () => { const nh = $("#newhandle").value.trim(); if (nh && nh !== u.handle && confirm(`Change username ${u.handle} → ${nh}? Their profile address changes; the old one redirects.`)) act(chh, async () => { await api(`/admin/users/${id}/handle`, { method: "POST", body: { handle: nh } }); userDetail(id); }); });
   if (ban) ban.addEventListener("click", () => { if (confirm("Ban " + u.handle + "?")) act(ban, async () => { await api(`/admin/users/${id}/ban`, { method: "POST", body: { reason: $("#reason").value } }); userDetail(id); }).catch(x => msg(amsg, x.message)); });
   if (unban) unban.addEventListener("click", () => act(unban, async () => { await api(`/admin/users/${id}/unban`, { method: "POST" }); userDetail(id); }));
   const rmav = $("#rmav"), mfar = $("#mfareset");

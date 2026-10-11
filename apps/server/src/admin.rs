@@ -55,6 +55,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/v1/admin/users/{id}/ban", post(ban))
         .route("/api/v1/admin/users/{id}/unban", post(unban))
+        .route("/api/v1/admin/users/{id}/handle", post(change_handle))
         .route("/api/v1/admin/users/{id}/hours", post(adjust_hours))
         .route(
             "/api/v1/admin/users/{id}/sessions/{sid}",
@@ -186,6 +187,7 @@ fn permissions(r: Role) -> Value {
         "audit": admin,
         "avatars": true,
         "mfa_reset": admin,
+        "change_handle": admin,
     })
 }
 
@@ -1239,6 +1241,88 @@ async fn ban(
     )
     .await?;
     Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct HandleReq {
+    handle: String,
+}
+
+/// Change someone's username (admins only; users can't). The old one keeps pointing at
+/// them: old profile links redirect and nobody else can sign up with it.
+async fn change_handle(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+    Json(r): Json<HandleReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let (old, role, _) = target(&st, id).await?;
+    if s.user.id != id {
+        outranks(&s, id, role)?;
+    }
+    let new = r.handle.trim().trim_start_matches('@').to_string();
+    if !(3..=20).contains(&new.len())
+        || !new
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(bad(
+            "invalid_handle",
+            "Usernames are 3-20 characters: letters, digits, _ or -.",
+        ));
+    }
+    if new == old {
+        return Ok(Json(json!({ "handle": new })));
+    }
+    let taken: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE id <> $1 AND lower(handle) = lower($2))
+             OR EXISTS(SELECT 1 FROM handle_redirects WHERE user_id <> $1 AND old_handle = lower($2))",
+    )
+    .bind(id)
+    .bind(&new)
+    .fetch_one(&st.db)
+    .await?;
+    if taken {
+        return Err(AppError::new(
+            StatusCode::CONFLICT,
+            "taken",
+            "That username is taken (or was someone's before).",
+        ));
+    }
+    let mut tx = st.db.begin().await?;
+    // taking back one of your own old names: it stops being a redirect
+    sqlx::query("DELETE FROM handle_redirects WHERE old_handle = lower($1)")
+        .bind(&new)
+        .execute(&mut *tx)
+        .await?;
+    if !old.eq_ignore_ascii_case(&new) {
+        sqlx::query(
+            "INSERT INTO handle_redirects(old_handle, user_id) VALUES(lower($1), $2)
+             ON CONFLICT (old_handle) DO UPDATE SET user_id = EXCLUDED.user_id, created_at = now()",
+        )
+        .bind(&old)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query("UPDATE users SET handle = $2 WHERE id = $1")
+        .bind(id)
+        .bind(&new)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    crate::sig::forget(&old);
+    audit(
+        &st,
+        &s,
+        "user.handle",
+        &format!("user:{new}"),
+        json!({ "handle": old }),
+        json!({ "handle": new }),
+    )
+    .await?;
+    Ok(Json(json!({ "handle": new })))
 }
 
 async fn unban(

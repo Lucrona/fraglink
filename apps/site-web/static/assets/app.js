@@ -369,6 +369,8 @@ pages.profile = async () => {
       : `<div class="narrow alert err">${esc(e.message)}</div>`;
     return;
   }
+  // old username (renamed by staff): show the new address
+  if (p.handle && p.handle.toLowerCase() !== String(handle).toLowerCase()) history.replaceState(null, "", "/u/" + encodeURIComponent(p.handle) + location.search + location.hash);
   if (p.private) {
     root.innerHTML = `<div class="narrow panel"><h2>${esc(p.display_name || p.handle)}</h2><div class="body" style="display:flex;gap:16px;align-items:center">${avatar(p.avatar, 64)}<div><p>This profile is private. Only ${esc(p.display_name || p.handle)}'s friends can see it.</p>
       ${!token() ? `<a class="btn" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in</a>` : p.relation === "none" ? `<button class="btn blue" data-add>+ Add friend</button>` : p.relation === "outgoing" ? `<span class="muted">Friend request sent</span>` : p.relation === "incoming" ? `<a class="btn" href="/friends">Answer friend request</a>` : ""}</div></div></div>`;
@@ -406,7 +408,7 @@ pages.profile = async () => {
   const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div><b>${hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}<div><b>${p.friend_count}</b><span>Friends</span></div></div>`;
   const head = `<section class="ph${bannerG ? "" : " noart"}"${bannerG ? ` style="background:${artBg(bannerG.game_id, bannerG.name)}"` : ""}><div class="inr">
       <div>${avatar(p.avatar, 184)}${report}</div>
-      <div class="who"><h1>${esc(p.display_name || p.handle)}${p.display_name && p.display_name !== p.handle ? ` <small style="font-size:15px;color:#c8d4e0">${esc(p.handle)}</small>` : ""}</h1>
+      <div class="who"><h1>${esc(p.display_name || p.handle)}${p.display_name && p.display_name !== p.handle ? ` <small style="font-size:15px;color:#c8d4e0">@${esc(p.handle)}</small>` : ""}</h1>
       <div class="sub">${sub}</div>${badges}${np}<div class="acts">${actions}</div></div>${kpi}</div></section>`;
 
   const welcome = qs("welcome") && self ? `<div class="alert ok" style="margin-bottom:12px">Welcome to Fraglink. <a href="/download">Download the app</a> and sign in with the same account to start tracking. You can pick a picture in <a href="/settings">Settings</a>.</div>` : "";
@@ -414,7 +416,8 @@ pages.profile = async () => {
 
   const details = `<section class="panel"><h2>Details</h2><div class="body details"><div><dl class="kv">
       <dt>Username</dt><dd>${esc(p.handle)}</dd>
-      ${p.display_name && p.display_name !== p.handle ? `<dt>Display name</dt><dd>${esc(p.display_name)}</dd>` : ""}
+      ${p.display_name && p.display_name !== p.handle ? `<dt>Nickname</dt><dd>${esc(p.display_name)}</dd>` : ""}
+      ${(p.previous_names || []).length ? `<dt>Previously known as</dt><dd>${p.previous_names.map(esc).join(", ")}</dd>` : ""}
       ${main ? `<dt>Main game</dt><dd>${esc(main.name)}</dd>` : ""}
       ${p.gaming_style ? `<dt>Gaming style</dt><dd>${esc(p.gaming_style)}</dd>` : ""}
       ${p.location ? `<dt>Location</dt><dd>${esc(p.location)}</dd>` : ""}
@@ -574,8 +577,8 @@ pages.settings = async () => {
       ${row("Or pick a preset", `<div class="presets">${PRESET_GLYPHS.map((g, i) => `<button type="button" data-preset="${i}" class="${u.avatar.kind === "preset" && u.avatar.preset === i ? "on" : ""}" title="Preset ${i + 1}">${avatar({ kind: "preset", preset: i }, 48)}</button>`).join("")}</div>`, "Your default colour comes from your account.")}
     </div>
     <h3>Account</h3><form data-f="name">${msg}<div class="frm">
-      ${row("Username", `<b>${esc(u.handle)}</b>`, "Friends add you by this name. It can't be changed yet.")}
-      ${row("Display name", `<input class="t" name="display_name" maxlength="32" value="${esc(u.display_name || "")}">`, "Shown on your profile and to friends. Leave empty to use your username.")}
+      ${row("Username", `<b>${esc(u.handle)}</b> <small style="color:#8a96a3">playfraglink.com/u/${esc(u.handle)}</small>`, "Your sign-in name and profile address. It's permanent; ask staff if it really needs changing.")}
+      ${row("Nickname", `<input class="t" name="display_name" maxlength="32" value="${esc(u.display_name || "")}">`, "The name everyone sees, in the app and on the site. Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave empty to use your username.")}
       ${row("Email", `${esc(u.email || "")} ${verified}`)}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
     <h3>About you</h3><form data-f="about">${msg}<div class="frm">
@@ -620,7 +623,7 @@ pages.settings = async () => {
     const sw = (k, label) => `<label style="display:block;margin:3px 0"><input type="checkbox" data-pv="${k}" ${pv[k] !== false ? "checked" : ""}>${label}</label>`;
     return `<h3>Privacy</h3><form data-f="privacy">${msg}<div class="frm">
       ${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""}>Only my friends can see my profile</label>`, "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page lists, and your signature image is switched off.")}
-      ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
+      ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}${sw("name_history", "Previous nicknames (\"Previously known as\")")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
       ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location")}${sw("gaming_style", "Gaming style")}`)}
       ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
       ${row("Your link", `<div class="share"><input class="t" readonly value="${esc(share)}"><button class="btn sm" type="button" data-copy="${esc(share)}">Copy</button></div>`)}
@@ -683,7 +686,7 @@ pages.settings = async () => {
     const f = e.target.closest("form[data-f]"); if (!f) return; e.preventDefault();
     const k = f.dataset.f, v = n => f.elements[n] ? f.elements[n].value : undefined;
     try {
-      if (k === "name") { const r = await api("/me/display_name", { method: "POST", body: { display_name: v("display_name") } }); u.display_name = r.display_name; keep(); renderHeader(); ok(f, "Saved."); }
+      if (k === "name") { const r = await api("/me/display_name", { method: "POST", body: { display_name: v("display_name") } }); u.display_name = r.display_name; keep(); renderHeader(); ok(f, r.changes_left == null ? "Saved." : `Saved. ${r.changes_left} more change${r.changes_left === 1 ? "" : "s"} today.`); }
       else if (k === "about" || k === "rig") {
         const rig = Object.assign({}, u.rig || {}); if (k === "rig") RIG_FIELDS.forEach(([n]) => { rig[n] = v(n); });
         const body = { about: k === "about" ? v("about") : u.about, location: k === "about" ? v("location") : u.location, gaming_style: (k === "about" ? v("gaming_style") : u.gaming_style) || null, rig };

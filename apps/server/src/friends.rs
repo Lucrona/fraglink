@@ -56,11 +56,24 @@ pub struct FriendsList {
 
 pub async fn find_by_handle(st: &AppState, handle: &str) -> ApiResult<Person> {
     let h = handle.trim().trim_start_matches('@');
-    sqlx::query_as::<_, Person>("SELECT id, handle, display_name FROM users WHERE lower(handle) = lower($1) AND deleted_at IS NULL AND banned_at IS NULL")
-        .bind(h)
-        .fetch_optional(&st.db)
-        .await?
-        .ok_or_else(|| AppError::new(StatusCode::NOT_FOUND, "user_not_found", "No Fraglink user with that name."))
+    // an old username (renamed by staff) still finds its owner
+    sqlx::query_as::<_, Person>(
+        "SELECT id, handle, display_name FROM users u
+          WHERE (lower(u.handle) = lower($1)
+                 OR u.id = (SELECT user_id FROM handle_redirects WHERE old_handle = lower($1)))
+            AND deleted_at IS NULL AND banned_at IS NULL
+          ORDER BY lower(u.handle) = lower($1) DESC LIMIT 1",
+    )
+    .bind(h)
+    .fetch_optional(&st.db)
+    .await?
+    .ok_or_else(|| {
+        AppError::new(
+            StatusCode::NOT_FOUND,
+            "user_not_found",
+            "No Fraglink user with that name.",
+        )
+    })
 }
 
 async fn blocked_either(st: &AppState, a: Uuid, b: Uuid) -> ApiResult<(bool, bool)> {

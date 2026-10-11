@@ -166,7 +166,7 @@
   const SERVERS = ['66.150.14.9:27015', '[EU] Nordic Frag #2', 'Kel\u2019Thuzad (US-PvP)', 'Freedom (Hero)', 'Antonia Bayle', 'Official 24/7 Bridge', 'Operation Hastings', 'Dustbowl Night Owls'];
   let FRIENDS = [
     { id: 'curm', name: 'curmudgeon', kind: 'playing', game: 'cs', server: SERVERS[0], info: 'de_dust2 · 18/20', av: '#6d6d6d', week: 11.4, total: 812, recent: [['cs', 790.2], ['rust', 21.8]] },
-    { id: 'dizz', name: 'diZZ_Spinner', kind: 'playing', game: 'wow', server: SERVERS[2], info: 'Lvl 60 Rogue · Stormwind', detail: 'Frostmourne', av: '#b8860b', week: 23.1, total: 503, recent: [['wow', 488.6], ['wc3', 12.4], ['hl2', 2.0]] },
+    { id: 'dizz', name: 'diZZ the Spinner', handle: 'dizz_spinner', kind: 'playing', game: 'wow', server: SERVERS[2], info: 'Lvl 60 Rogue · Stormwind', detail: 'Frostmourne', av: '#b8860b', week: 23.1, total: 503, recent: [['wow', 488.6], ['wc3', 12.4], ['hl2', 2.0]] },
     { id: 'shar', name: 'sharpe_', kind: 'playing', game: 'coh', server: SERVERS[3], info: 'Atlas Park · lvl 32', av: '#1e4fb8', week: 7.8, total: 390 },
     { id: 'tool', name: 'tooTALL', kind: 'playing', game: 'eq2', server: SERVERS[4], info: 'Qeynos Harbor', av: '#c89a20', week: 15.0, total: 720 },
     { id: 'rift', name: 'Riftwalker', kind: 'off', last: '20 minutes ago', status: 'Online', av: '#3a7a3a', week: 4.2, total: 260, recent: [['bf2', 140.5], ['hd2', 62.0], ['q3', 9.5]] },
@@ -684,7 +684,7 @@
     const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';
     const [dot, stText] = friendStatus(f);
     const since = f.since ? 'Friends since ' + new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    let h = `<div class="sf-head" title="${esc(since)}">${avatarHtml(f, 48)}<div class="sf-id"><div class="sf-name">${esc(f.name)}</div>${f.handle || f.real ? `<div class="sf-user">${H}</div>` : ''}<div class="sf-st"><i class="sf-dot ${dot}"></i>${esc(stText)}</div></div></div>`;
+    let h = `<div class="sf-head" title="${esc(since)}">${avatarHtml(f, 48)}<div class="sf-id"><div class="sf-name">${esc(f.name)}</div>${f.handle || f.real ? `<div class="sf-user">@${H}</div>` : ''}<div class="sf-st"><i class="sf-dot ${dot}"></i>${esc(stText)}</div></div></div>`;
     if (f.kind === 'req') return h + `<p class="sf-note">Wants to be your friend.</p><div class="sf-foot"><button class="dk-btn" data-action="friend-accept" data-handle="${H}">Accept</button><button class="dk-btn" data-action="friend-decline" data-handle="${H}">Decline</button><a class="sf-small" data-action="friend-block" data-handle="${H}">Block</a></div>`;
     if (f.kind === 'out') return h + `<p class="sf-note">Friend request sent. They'll show up here once they accept.</p><div class="sf-foot"><a class="sf-small" data-action="friend-remove" data-handle="${H}">Cancel request</a></div>`;
     if (playing) {
@@ -979,6 +979,30 @@
   /* ---------------- dialogs / misc ---------------- */
   // "0.2.0-8" (the MSI-safe build version) reads as "0.2.0-dev.8"
   const devVer = v => String(v || '').replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1-dev.$2');
+  // Change your nickname (the name friends see). The username stays; staff can change that.
+  function openNickname() {
+    if (signedOut() || !FLB.setNickname) return;
+    const me = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name, cur = (realMode() ? LIVE.meNick : ME.nick) || me;
+    notice('Change Nickname', `<div class="nick-dlg"><p>Your nickname is the name friends see in Fraglink and on the website. Your username <b>@${esc(me)}</b> stays the same.</p>
+      <label>Nickname <input type="text" id="nick-in" maxlength="32" value="${esc(cur)}" spellcheck="false"></label>
+      <small>Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave it empty to use your username.</small>
+      <div class="nick-foot"><span id="nick-msg" class="msg"></span><button class="hw" type="button" id="nick-save">Save</button></div></div>`);
+    const inp = $('#nick-in'); inp.focus(); inp.select();
+    const save = async () => {
+      const b = $('#nick-save'), m = $('#nick-msg'); b.disabled = true; m.className = 'msg'; m.textContent = 'Saving…';
+      try {
+        const r = await FLB.setNickname(inp.value);
+        if (realMode()) LIVE.meNick = r.display_name; else ME.nick = r.display_name;
+        syncStatus(); $('#notice').hidden = true;
+        flash(r.changes_left == null ? `Your nickname is ${r.display_name}.` : `Your nickname is now ${r.display_name}. ${r.changes_left} more change${r.changes_left === 1 ? '' : 's'} today.`);
+      } catch (e) { m.className = 'msg bad'; m.textContent = String(e && e.message || e); b.disabled = false; }
+    };
+    $('#nick-save').addEventListener('click', save);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+  }
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#username, #px-user')) openNickname(); });
+  // a nickname changed in Options (or on the website) shows up when the window is next focused
+  addEventListener('focus', () => { if (realMode()) { LIVE.meAvFor = null; syncStatus(); } });
   function notice(title, html) {
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false; placeDlg($('#notice'));
   }
@@ -1408,12 +1432,15 @@
     btn.querySelector('span').textContent = txt; btn.title = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();
     const me = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
-    $('#username').textContent = me + statusLabel();
-    if (realMode() && FLB.accountInfo && LIVE.meAvFor !== me) { LIVE.meAvFor = me; FLB.accountInfo().then(a => { LIVE.meAv = a && a.avatar; syncStatus(); }).catch(() => {}); }
+    // nickname shown, username (permanent) in the hover; click either to change the nickname
+    const nick = (realMode() ? LIVE.meNick : ME.nick) || me;
+    $('#username').textContent = nick + statusLabel();
+    for (const s of ['#username', '#px-user']) { const m = $(s); if (m) { m.title = `@${me} · click to change your nickname`; m.classList.add('nick-edit'); } }
+    if (realMode() && FLB.accountInfo && LIVE.meAvFor !== me) { LIVE.meAvFor = me; FLB.accountInfo().then(a => { LIVE.meAv = a && a.avatar; LIVE.meNick = a && a.display_name || ''; syncStatus(); }).catch(() => {}); }
     const meAv = avatarHtml({ handle: me, avatar: realMode() ? LIVE.meAv : ME.avatar }, 16, 'me-av-i');
     for (const s of ['#me-av', '#px-av']) { const m = $(s); if (m) m.innerHTML = meAv; }
-    if ($('#px-user')) $('#px-user').textContent = me;
-    btn.dataset.user = me; // dark skin: keeps the username's room in the status row
+    if ($('#px-user')) $('#px-user').textContent = nick;
+    btn.dataset.user = nick; // dark skin: keeps the username's room in the status row
   }
   function useCustom(v) {
     v = String(v || '').trim().slice(0, 60);

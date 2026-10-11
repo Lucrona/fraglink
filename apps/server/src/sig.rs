@@ -105,7 +105,7 @@ async fn render_for(st: &AppState, handle: &str) -> ApiResult<Option<Vec<u8>>> {
     );
     let row: Option<Row> = sqlx::query_as(
         "SELECT id, handle, display_name, share_activity, avatar_kind, avatar_hash, privacy, avatar_preset FROM users
-         WHERE lower(handle) = $1 AND public_profile AND deleted_at IS NULL AND banned_at IS NULL AND delete_after IS NULL",
+         WHERE (lower(handle) = $1 OR id = (SELECT user_id FROM handle_redirects WHERE old_handle = $1)) AND public_profile AND deleted_at IS NULL AND banned_at IS NULL AND delete_after IS NULL",
     )
     .bind(handle)
     .fetch_optional(&st.db)

@@ -386,6 +386,16 @@ impl Client {
         self.call("GET", &format!("/api/v1/users/{handle}/profile"), None)
     }
 
+    /// Change your nickname (the name people see). Empty = your username. Returns
+    /// `{display_name, changes_left}`; the server allows 3 changes a day.
+    pub fn set_display_name(&self, name: &str) -> Result<serde_json::Value, SyncError> {
+        self.call(
+            "POST",
+            "/api/v1/me/display_name",
+            Some(serde_json::json!({ "display_name": name })),
+        )
+    }
+
     /// Whether friends may see your recent play history and weekly hours.
     pub fn set_share_activity(&self, on: bool) -> Result<serde_json::Value, SyncError> {
         self.call(
