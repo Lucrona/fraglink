@@ -678,7 +678,7 @@
     if ((!s || s.err) && (!p || p.err)) return s && p ? { private: false, none: true } : null;
     const ps = p && !p.err ? p : null, ss = s && !s.err ? s : null;
     if ((ss && ss.week_seconds == null && !ss.shares_activity) || (ps && ps.history_visible === false)) return { private: true };
-    return { week: ss ? ss.week_seconds : null, total: ps && ps.overall ? ps.overall.total_min * 60 : null };
+    return { week: ss ? ss.week_seconds : null, total: ps && ps.games_visible !== false && ps.overall ? ps.overall.total_min * 60 : null };
   }
   function friendPanelHtml(f) {
     const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';

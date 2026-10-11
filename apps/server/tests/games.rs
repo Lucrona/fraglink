@@ -116,6 +116,19 @@ async fn staff_renames_reach_the_overrides_list(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    // an approved program's own entry, renamed by staff afterwards
+    sqlx::query(
+        "INSERT INTO games(id, name, verified) VALUES('exe:oddgame.exe', 'Odd Game', true)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO game_overrides(game_id, name) VALUES('exe:oddgame.exe', 'Odd Game Renamed')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path().to_path_buf();
     let app = fraglink_server::router(state_with(pool, |c| c.data_dir = d.clone()));
@@ -131,6 +144,13 @@ async fn staff_renames_reach_the_overrides_list(pool: PgPool) {
         .expect("renamed game gets a rule");
     assert_eq!(rule.id, "wow_forever");
     assert_eq!(rule.name, "World of Warcraft: Forever - Beta");
+    let odd = o
+        .match_process("OddGame.exe", None)
+        .expect("approved program rule");
+    assert_eq!(
+        (odd.id.as_str(), odd.name.as_str()),
+        ("exe:oddgame.exe", "Odd Game Renamed")
+    );
     // other games are untouched
     assert!(o
         .match_process(

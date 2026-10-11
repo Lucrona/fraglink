@@ -11,6 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **A fresh website:** a live home page, a new profile page, settings split into tabs, an optional forum signature image, a copy of your data to download, and account deletion (with 7 days to change your mind). You're told by email about new sign-ins once email is switched on, and you can see and sign out your other sessions.
 - **Privacy controls:** profiles are public by default, and you choose what others see: what you're playing now, your games, your activity, your friends, your PC specs, your details and whether you appear on leaderboards, or make the whole profile private.
 
+### Fixed
+- A game renamed on the website now shows its new name in the app even when it was added from a player's suggestion.
+
 ### Changed
 - **Friends' activity grouped per game per day:** the app's Activity Report and the website show "played World of Warcraft for 3h today" instead of one line per session.
 - **Game pictures on the website** come from the game's store art where there is some, with a tidy fallback.

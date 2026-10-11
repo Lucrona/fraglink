@@ -439,7 +439,6 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         Ok(f) => f,
         Err(_) => return Ok(s),
     };
-    apply_renames(st, &mut f, renamed);
     for (id, name) in approved {
         let exe = id.trim_start_matches("exe:").to_string();
         if !valid_exe(&exe) || f.rules.iter().any(|r| r.id == id) {
@@ -454,6 +453,8 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
             note: Some("approved game".into()),
         });
     }
+    // after the approved programs, so a staff rename of an approved `exe:` game wins too
+    apply_renames(st, &mut f, renamed);
     // extra exe names added by staff: onto the game's own rule, or a rule of their own
     let mut extra = extra;
     extra.sort_by(|a, b| a.game_id.cmp(&b.game_id));
