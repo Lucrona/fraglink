@@ -478,3 +478,5 @@ body.skin-dark .xf-app.side-open .dk-grip { bottom: calc(var(--side-bot) + 1px);
 .fl-flash { position: absolute; left: 50%; bottom: 46px; transform: translateX(calc(-50% - var(--af-side, 0px) / 2)); z-index: 26; max-width: 280px; padding: 5px 12px; background: #1b1d22; color: #e6e9ee; border: 1px solid #000; border-left: 3px solid var(--dk-blue1, #4b82d6); box-shadow: 2px 2px 8px rgba(0,0,0,.6); font: 12px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; opacity: 0; transition: opacity .25s; }
 .fl-flash.on { opacity: 1; }
 .fl-flash::before { content: none; }
+/* dev.19: selected group heading -> its description in the side panel */
+.grp-help { padding: 6px 8px; color: #b8c2d2; font-size: 11px; line-height: 15px; }

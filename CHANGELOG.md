@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+- **Group headings explain themselves:** click Friends of Friends Playing, Friend Requests or Friends Offline to highlight it and see a short description in the side panel. Friends Online keeps the normal Activity view. Fold a group with its arrow or by double-clicking the heading; click empty space to go back.
+
 ## [0.2.0-dev.18] - 2026-10-11
 Test update (builds report `0.2.0-18`).
 

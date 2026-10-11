@@ -298,11 +298,11 @@
   }
   const GROUP_NAMES = { online: 'Friends Online', fof: 'Friends of Friends Playing', req: 'Friend Requests', off: 'Friends Offline' };
   const GROUP_HELP = {
-    online: 'Friends who are signed in to Fraglink right now. Friends in a game are listed first, with the game in the Status column.',
-    fof: 'Friends of your friends who are in a game right now. Click one to see their game and the friends you have in common.',
-    req: 'Friend requests you have sent or received. Select one to accept, decline or cancel it.',
-    off: 'Friends who are not signed in. Click a heading to fold or unfold it. Turn this list off with Tools > Friends > Show Offline Friends.',
-    custom: 'A group you made. Moving friends into custom groups comes in a later update; for now it is an empty heading.',
+    online: 'Friends who are on Fraglink right now.',
+    fof: 'People your friends know who are in a game right now. Hover over one to see which friends you have in common.',
+    req: "People who want to be your friend, and requests you've sent.",
+    off: "Friends who aren't on Fraglink right now.",
+    custom: 'A group you made.',
   };
   // The grouped list shared by sample and real friends.
   const groupOf = () => { try { const o = JSON.parse(SET().friend_groups || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
@@ -558,7 +558,14 @@
   function renderSide() {
     const el = SS.vp; requestAnimationFrame(SS.update);
     if (signedOut() && !state.detectRun) { el.innerHTML = offlineSide(); return; }
-    // A selected group heading only highlights the row; the panel keeps its default content.
+    // A selected group heading (not Friends Online): its name and a short description (classic style).
+    // (Friends Online keeps the default view, like the classic client)
+    if (String(state.sel || '').startsWith('g:') && state.sel !== 'g:online') {
+      const k = state.sel.slice(2), cus = k.startsWith('c:');
+      const name = cus ? k.slice(2) : k === 'fof' ? 'Friends of Friends Playing' : GROUP_NAMES[k] || k;
+      el.innerHTML = sfSec(esc(name)) + `<div class="grp-help">${esc(GROUP_HELP[cus ? 'custom' : k] || '')}</div>`;
+      return;
+    }
     const f = friendsNow().find(x => x.id === state.sel);
     if (f) { el.innerHTML = friendPanelHtml(f); return; }
     // Nothing selected (classic layout): Activity Report, then the games on this PC with Launch links.
@@ -1309,7 +1316,10 @@
     try { await (block ? FLB.friendBlock(k, true) : FLB.friendRemove(k)); state.sel = null; refreshFriends(); } catch (e) { toastErr(e); }
   }
   document.addEventListener('mousedown', e => { if (!e.target.closest('#ctx')) hideCtx(); });
-  list.addEventListener('dblclick', e => { const r = e.target.closest('[data-friend]'); if (r) openChat(r.dataset.friend); });
+  list.addEventListener('dblclick', e => {
+    const s = e.target.closest('[data-sec]');
+    if (s && !e.target.closest('.tri')) { const k = s.dataset.sec; state.collapsed[k] = !state.collapsed[k]; saveSetting('collapsed_groups', JSON.stringify(Object.keys(state.collapsed).filter(x => state.collapsed[x]).slice(0, 30))); render(); return; }
+    const r = e.target.closest('[data-friend]'); if (r) openChat(r.dataset.friend); });
   // prototype: single click also opened chat; the app only selects (friends are sample data until M3)
   $('#list').addEventListener('keydown', e => {
     const rows = $$('[data-friend]', list); if (!rows.length) return;
