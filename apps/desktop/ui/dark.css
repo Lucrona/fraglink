@@ -27,7 +27,7 @@ body.skin-dark .xf-win {
   background: linear-gradient(#2a2d33, var(--dk-bg) 90px); border: 1px solid var(--dk-edge);
   box-shadow: inset 0 0 0 1px var(--dk-hi);
 }
-body.skin-dark .xf-app.side-open .xf-win { right: 140px; border-radius: 7px 0 0 7px; border-right-color: #000; }
+body.skin-dark .xf-app.side-open .xf-win { right: 180px; border-radius: 7px 0 0 7px; border-right-color: #000; }
 
 /* ---- header (drag region) ---- */
 body.skin-dark .xf-titlebar { left: 0; right: 0; top: 0; width: auto; height: 24px; background: linear-gradient(#34373e, #0c0d10); border-bottom: 1px solid #000; }
@@ -118,7 +118,7 @@ body.skin-dark .xf-app.side-open .xf-nub { left: auto; right: 174px; z-index: 5;
 body.skin-dark .xf-nub svg { width: 12px; }
 body.skin-dark .xf-nub .nub-body { fill: #2a2d33; stroke: #000; }
 body.skin-dark .xf-nub .nub-arrow { fill: #b8bec8; }
-body.skin-dark .xf-side { left: auto; right: 0; top: 0; bottom: 0; width: 140px; height: auto; z-index: 0; }
+body.skin-dark .xf-side { left: auto; right: 0; top: 0; bottom: 0; width: 180px; height: auto; z-index: 0; }
 body.skin-dark .xf-side-inner { border-radius: 0 7px 7px 0; border-left: 0; background: linear-gradient(#2a2d33, #1b1e24 90px) !important; padding: 0; background: #1b1e24; border: 1px solid #000; box-shadow: inset 0 0 0 1px #33373f; }
 body.skin-dark .side-scroll { left: 4px; right: 4px; top: 4px; bottom: 30px; border: 1px solid #000; border-radius: 0; background: var(--dk-list); }
 body.skin-dark .side-scroll a { color: #5aa2f2; }
@@ -268,7 +268,7 @@ body:not(.skin-dark):not(.skin-phoenix) .about-lock { filter: invert(.85); }
    buttons, labelled update pill), status button + native menu, resizable
    info panel with Activity Report, grey group selection, text size.
    ===================================================================== */
-:root { --side-w: 140px; }
+:root { --side-w: 180px; }
 body.skin-dark .xf-titlebar { height: 28px; }
 body.skin-dark .xf-logo { left: 8px; top: 3px; height: 22px; }
 body.skin-dark .xf-logo-lock { height: 21px; filter: brightness(0) invert(.58) drop-shadow(0 -1px 0 rgba(0,0,0,.95)) drop-shadow(0 1px 0 rgba(255,255,255,.22)); }
@@ -442,24 +442,3 @@ body.skin-dark .st-btn span { flex: 1 1 0; min-width: 0; padding-right: 20px; te
 .af-body .af-t tr[data-action]:hover:not(.sel) td { background: #24272d; }
 .af-body .af-t tr.af-note td { color: #8a93a3; white-space: normal; padding: 6px 4px; }
 .af-body #add-msg { font-size: 10px; margin-top: 4px; } .af-body #add-msg:empty { display: none; }
-
-/* dev.18: narrower info panel (140 px default, about the classic client's proportion): smaller type, slimmer bars */
-body.skin-dark .side-scroll .gs-vp { font-size: 10px; padding-left: 5px; padding-right: 5px; }
-body.skin-dark .side-scroll .side-sec { height: 16px; margin-left: -5px; margin-right: -5px; padding: 0 5px; gap: 4px; }
-body.skin-dark .side-scroll .side-sec h4 { font-size: 10px; line-height: 15px; }
-body.skin-dark .side-scroll .side-more, body.skin-dark .side-scroll .side-sec .side-detect { font-size: 9px; }
-body.skin-dark .side-scroll .ar-row { gap: 4px; padding: 2px 0; line-height: 1.25; }
-body.skin-dark .side-scroll .ar-row small, body.skin-dark .side-scroll .games.launch li a { font-size: 9px; }
-body.skin-dark .side-scroll .games.launch li a { margin-left: 4px; }
-body.skin-dark .side-scroll .sf-head { gap: 5px; padding-bottom: 5px; }
-body.skin-dark .side-scroll .sf-av { width: 28px; height: 28px; font-size: 13px; line-height: 26px; }
-body.skin-dark .side-scroll .sf-head .sf-name { font-size: 11px; line-height: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body.skin-dark .side-scroll .sf-head .sf-user, body.skin-dark .side-scroll .sf-st { font-size: 9px; line-height: 12px; }
-body.skin-dark .side-scroll .sf-game { gap: 5px; }
-body.skin-dark .side-scroll .sf-game .sf-gi, body.skin-dark .side-scroll .sf-game .sf-gi > * { width: 24px !important; height: 24px !important; }
-body.skin-dark .side-scroll .sf-gn { line-height: 12px; }
-body.skin-dark .side-scroll .sf-kv { line-height: 14px; }
-body.skin-dark .side-scroll .sf-foot { margin-top: 6px; padding-top: 6px; }
-body.skin-dark .side-scroll .sf-foot .dk-btn { height: 18px; font-size: 10px; }
-body.skin-dark .side-scroll .games.launch li span { word-break: normal; overflow-wrap: normal; hyphens: none; line-height: 1.2; } /* wrap between words, never mid-word */
-body.skin-dark .side-scroll .games.launch li { gap: 4px; }

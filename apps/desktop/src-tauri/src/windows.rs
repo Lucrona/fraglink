@@ -16,11 +16,9 @@ pub const BASE_H: f64 = 381.0;
 pub const DARK_MIN_W: f64 = 345.0;
 pub const DARK_MIN_H: f64 = 555.0;
 /// The docked info panel adds this much width while it is open.
-pub const DARK_SIDE_W: f64 = 128.0; // the 140px panel takes over the 12px nub strip
+pub const DARK_SIDE_W: f64 = 168.0; // the 180px panel takes over the 12px nub strip
 /// The info panel can be dragged wider (0.2.0-dev.9); its width is remembered.
-/// dev.18: 140 px default (was 180, which is ignored when saved so old installs get the new default).
-pub const SIDE_PANEL_MIN: f64 = 140.0;
-pub const OLD_SIDE_DEFAULT: f64 = 180.0;
+pub const SIDE_PANEL_MIN: f64 = 180.0;
 pub const SIDE_PANEL_MAX: f64 = 560.0;
 
 /// Options > Appearance > Text size: the dark window's content is zoomed by this.
@@ -54,7 +52,7 @@ pub fn side_extra(app: &AppHandle) -> f64 {
         .ok()
         .flatten()
         .and_then(|v| v.parse::<f64>().ok())
-        .filter(|v| v.is_finite() && *v != OLD_SIDE_DEFAULT)
+        .filter(|v| v.is_finite())
         .unwrap_or(SIDE_PANEL_MIN)
         .clamp(SIDE_PANEL_MIN, SIDE_PANEL_MAX);
     (DARK_SIDE_W + (w - SIDE_PANEL_MIN)) * tz
