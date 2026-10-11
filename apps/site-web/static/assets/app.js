@@ -168,7 +168,7 @@ function renderHeader() {
   if (!right) return;
   if (u) {
     right.innerHTML = `<form class="find" role="search"><input class="search" type="search" name="q" placeholder="Find a player" aria-label="Find a player" autocomplete="off"></form>
-      <div class="who-menu"><button type="button" aria-haspopup="true">${avatar(u.avatar, 20, "mini-av")}${esc(u.handle)} ▾</button>
+      <div class="who-menu"><button type="button" aria-haspopup="true">${avatar(u.avatar, 20, "mini-av")}<span title="@${esc(u.handle)}">${esc(u.display_name || u.handle)}</span> ▾</button>
       <div class="menu" role="menu"><a href="/u/${encodeURIComponent(u.handle)}">My profile</a><a href="/friends">Friends</a><a href="/settings">Account settings</a>${u.staff_role ? '<a href="/admin">Admin</a>' : ""}<hr><button type="button" data-logout>Sign out</button></div></div>`;
     const wm = $(".who-menu", right);
     $("button", wm).addEventListener("click", e => { e.stopPropagation(); wm.classList.toggle("open"); });
