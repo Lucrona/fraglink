@@ -6,12 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Added
-- **Profile pictures in the app:** the pictures people pick on the website now show in the friends list, at the top of a friend's side panel, next to your own name and in pop-ups ("logged on" and friend requests show the picture; "is now playing" shows the game with a small picture in its corner). No picture yet? You get the Fraglink mark on a colour, same as on the website. Pictures are kept on your PC so they don't download every time, and a new picture shows as soon as it's changed.
+- **Profile pictures:** upload a picture on the website (or pick one of the presets). It shows on your profile and around the site, and in the app: in the friends list, at the top of a friend's side panel, next to your own name and in pop-ups ("is now playing" shows the game with a small picture in its corner). No picture? You get the Fraglink mark on a colour. Pictures are kept on your PC, and a new one shows as soon as it's changed.
+- **Two-step sign-in:** turn on an authenticator app code in your website settings, with backup codes in case you lose your phone. The app asks for the code (or a backup code) when you sign in.
+- **A fresh website:** a live home page, a new profile page, settings split into tabs, an optional forum signature image, a copy of your data to download, and account deletion (with 7 days to change your mind). You're told by email about new sign-ins once email is switched on, and you can see and sign out your other sessions.
+- **Privacy controls:** profiles are public by default, and you choose what others see: what you're playing now, your games, your activity, your friends, your PC specs, your details and whether you appear on leaderboards, or make the whole profile private.
 
 ### Changed
-- **Dark menus:** in the dark skin, the Fraglink, Tools and Help menus and their submenus are now dark grey with light text and a blue highlight, like the right-click menu. Classic Silver is unchanged.
-- **Resizable friends list columns:** drag the dividers between Name, Status and Game Info to make a column wider or narrower; Game Info takes the remaining space. Your widths are remembered, and double-clicking a divider puts them back. Text that doesn't fit ends in "…"; hover to see all of it.
-- **Group headings explain themselves:** click Friends of Friends Playing, Friend Requests or Friends Offline to highlight it and see a short description in the side panel. Friends Online keeps the normal Activity view. Fold a group with its arrow or by double-clicking the heading; click empty space to go back.
+- **Friends' activity grouped per game per day:** the app's Activity Report and the website show "played World of Warcraft for 3h today" instead of one line per session.
+- **Game pictures on the website** come from the game's store art where there is some, with a tidy fallback.
+- **Dark menus:** in the dark skin, the Fraglink, Tools and Help menus are dark grey with a blue highlight, like the right-click menu.
+- **Resizable friends list columns:** drag the dividers between Name, Status and Game Info. Your widths are remembered; double-click a divider to reset them. Text that doesn't fit ends in "…"; hover to see all of it.
+- **Group headings explain themselves:** click Friends of Friends Playing, Friend Requests or Friends Offline to see a short description in the side panel. Fold a group with its arrow or by double-clicking the heading.
 
 ## [0.2.0-dev.18] - 2026-10-11
 Test update (builds report `0.2.0-18`).
