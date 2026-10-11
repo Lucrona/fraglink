@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.19] - 2026-10-12
+Test update (builds report `0.2.0-19`).
+
 ### Added
 - **Profile pictures:** upload a picture on the website (or pick one of the presets). It shows on your profile and around the site, and in the app: in the friends list, at the top of a friend's side panel, next to your own name and in pop-ups ("is now playing" shows the game with a small picture in its corner). No picture? You get the Fraglink mark on a colour. Pictures are kept on your PC, and a new one shows as soon as it's changed.
 - **Two-step sign-in:** turn on an authenticator app code in your website settings, with backup codes in case you lose your phone. The app asks for the code (or a backup code) when you sign in.
