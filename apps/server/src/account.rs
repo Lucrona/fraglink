@@ -104,6 +104,7 @@ pub async fn me_extra(st: &AppState, uid: Uuid) -> ApiResult<Value> {
         "about": about, "location": location, "gaming_style": style, "rig": rig,
         "public_profile": public, "show_friends": show_friends,
         "privacy": privacy_view(&privacy),
+        "site_url": st.cfg.site_url.trim_end_matches('/'),
         "notify_prefs": notify_defaults(&prefs),
         "delete_after": delete_after, "created_at": created,
         "mfa": mfa::status(st, uid).await?,

@@ -112,6 +112,10 @@ function icon(id, name, cls) {
 
 /* ---------- v2 helpers: avatars, game art, bot check ---------- */
 const PRESET_GLYPHS = ["\u2694", "\u25C9", "\u25B2", "\u2605", "\u25C6", "\u2726", "\u2663", "\u2699", "\u2620", "\u265B", "\u26A1", "\u271A"];
+/* One public base for profile + signature links (server's FRAGLINK_SITE_URL). */
+const siteBase = () => ((me() && me().site_url) || location.origin).replace(/\/$/, "");
+const sigUrl = h => siteBase() + "/api/v1/sig/" + encodeURIComponent(h) + ".png";
+const sigBust = () => "?t=" + Math.floor(Date.now() / 30000);
 function avatar(a, size, extra) {
   a = a || { kind: "default", color: 0 };
   const st = `width:${size}px;height:${size}px`, x = extra || "";
@@ -396,7 +400,7 @@ pages.profile = async () => {
   if (p.member_since) sub += (sub ? " · " : "") + `member since ${fullDate.format(new Date(p.member_since))}`;
   if (p.location) sub += " · " + esc(p.location);
   const badges = (p.linked || []).length ? `<div class="badges">${p.linked.map(l => `<span>${l.provider === "steam" ? "Steam" : l.provider === "discord" ? "Discord" : esc(l.provider)} linked${l.display ? ": " + esc(l.display) : ""}</span>`).join("")}</div>` : "";
-  const np = live ? `<div class="np">${icon(pres.game_id, pres.game_name)}<div><div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8">Now playing</div>
+  const np = live ? `<div class="np">${gameArt(pres.game_id, pres.game_name, "npa")}<div><div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8">Now playing</div>
       <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
   const report = !self && token() && p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : "";
   const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div><b>${hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}<div><b>${p.friend_count}</b><span>Friends</span></div></div>`;
@@ -424,8 +428,8 @@ pages.profile = async () => {
   } else if (!p.games || !p.games.length) {
     games = `<section class="panel"><h2>Games</h2><div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div></section>`;
   } else {
-    const row = g => `<tr><td>${gameArt(g.listed === false && !self ? null : g.game_id, g.name, "sm")}${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
-      <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${lastPlayed(g.last_played_at)}</td></tr>`;
+    const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
+      <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const top = p.games.slice(0, 8), rest = p.games.slice(8);
     games = `<section class="panel"><h2>Games</h2><table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total ▾</th><th class="n hide-sm">Last played</th></tr></thead>
       <tbody>${top.map(row).join("")}</tbody>${rest.length ? `<tbody class="more" hidden>${rest.map(row).join("")}</tbody>` : ""}
@@ -459,11 +463,11 @@ pages.profile = async () => {
   const RIG = [["manufacturer", "Manufacturer"], ["cpu", "Processor"], ["gpu", "Video card"], ["memory", "Memory"], ["storage", "Storage"], ["motherboard", "Motherboard"], ["monitor", "Monitor"], ["headset", "Headset"], ["keyboard", "Keyboard"], ["mouse", "Mouse"], ["mousepad", "Mouse pad"], ["case", "Case"], ["os", "Operating system"]];
   const rig = p.rig ? `<section class="panel"><h2>Gaming rig${self ? ` <a class="more" href="/settings#rig">Edit</a>` : ""}</h2><div class="body"><dl class="rig">${RIG.filter(([k]) => p.rig[k]).map(([k, l]) => `<dt>${l}</dt><dd>${esc(p.rig[k])}</dd>`).join("")}</dl></div></section>`
     : self ? `<section class="panel"><h2>Gaming rig</h2><div class="body empty">Show off your setup. <a href="/settings#rig">Add your gaming rig</a>.</div></section>` : "";
-  const shareUrl = location.origin + "/u/" + encodeURIComponent(p.handle);
+  const shareUrl = siteBase() + "/u/" + encodeURIComponent(p.handle);
   const share = self ? `<section class="panel"><h2>Share your profile</h2><div class="body">${p.public_profile
       ? `<div class="share"><input class="t" readonly value="${esc(shareUrl)}"><button class="btn sm" data-copy="${esc(shareUrl)}">Copy</button></div>
-         <p style="margin:10px 0 4px;color:var(--muted)">Signature image (updates with what you're playing):</p><img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png" alt="Signature" width="460" height="100">
-         <div class="share" style="margin-top:6px"><input class="t" readonly value="${esc("https://playfraglink.com/api/v1/sig/" + encodeURIComponent(p.handle) + ".png")}"><button class="btn sm" data-copy="https://playfraglink.com/api/v1/sig/${esc(encodeURIComponent(p.handle))}.png">Copy</button></div>`
+         <p style="margin:10px 0 4px;color:var(--muted)">Signature image (updates with what you're playing):</p><img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png${sigBust()}" alt="Signature" width="460" height="100">
+         <div class="share" style="margin-top:6px"><input class="t" readonly value="${esc(sigUrl(p.handle))}"><button class="btn sm" data-copy="${esc(sigUrl(p.handle))}">Copy</button></div>`
       : `<span class="empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></span>`}</div></section>` : "";
   const discord = `<section class="panel"><h2>Discord server</h2><div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div></section>`;
 
@@ -610,7 +614,7 @@ pages.settings = async () => {
       try { await api("/me/games/reset", { method: "POST", body: { game_id: tr.dataset.g, password: pw } }); tr.remove(); ok(el, "Hours reset."); } catch (x) { bad(el, x); } });
   }
   function privacyTab() {
-    const share = location.origin + "/u/" + encodeURIComponent(u.handle);
+    const share = siteBase() + "/u/" + encodeURIComponent(u.handle);
     const pv = u.privacy || {};
     const priv = !u.public_profile;
     const sw = (k, label) => `<label style="display:block;margin:3px 0"><input type="checkbox" data-pv="${k}" ${pv[k] !== false ? "checked" : ""}>${label}</label>`;
@@ -620,7 +624,7 @@ pages.settings = async () => {
       ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location")}${sw("gaming_style", "Gaming style")}`)}
       ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
       ${row("Your link", `<div class="share"><input class="t" readonly value="${esc(share)}"><button class="btn sm" type="button" data-copy="${esc(share)}">Copy</button></div>`)}
-      ${!priv ? row("Signature image", `<img class="sigimg" src="/api/v1/sig/${encodeURIComponent(u.handle)}.png?t=${Date.now()}" alt="" width="460" height="100"><div class="share" style="margin-top:6px"><input class="t" readonly value="https://playfraglink.com/api/v1/sig/${esc(encodeURIComponent(u.handle))}.png"></div>`, "Paste the image link into forum signatures. It refreshes about once a minute.") : ""}
+      ${!priv ? row("Signature image", `<img class="sigimg" src="/api/v1/sig/${encodeURIComponent(u.handle)}.png${sigBust()}" alt="" width="460" height="100"><div class="share" style="margin-top:6px"><input class="t" readonly value="${esc(sigUrl(u.handle))}"><button class="btn sm" type="button" data-copy="${esc(sigUrl(u.handle))}">Copy</button></div>`, "Paste the image link into forum signatures. It refreshes within about 30 seconds.") : ""}
       </div></form>`;
   }
   function notificationsTab() {

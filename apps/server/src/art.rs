@@ -157,6 +157,35 @@ async fn resolve(st: &AppState, id: &str) -> Option<Vec<u8>> {
     None
 }
 
+/// Art bytes for a game (override, cache or fresh fetch), or None.
+pub async fn bytes(st: &AppState, id: &str) -> Option<Vec<u8>> {
+    if let Ok(b) = tokio::fs::read(override_path(st, id)).await {
+        return Some(b);
+    }
+    let d = dir(st);
+    let k = key(id);
+    let p = d.join(format!("{k}.jpg"));
+    if fresh(&p, 30 * 86400) {
+        if let Ok(b) = tokio::fs::read(&p).await {
+            return Some(b);
+        }
+    }
+    if fresh(&d.join(format!("{k}.miss")), 86400) {
+        return None;
+    }
+    let _ = std::fs::create_dir_all(&d);
+    match resolve(st, id).await {
+        Some(b) => {
+            let _ = std::fs::write(&p, &b);
+            Some(b)
+        }
+        None => {
+            let _ = std::fs::write(d.join(format!("{k}.miss")), b"");
+            tokio::fs::read(&p).await.ok()
+        }
+    }
+}
+
 pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Response {
     let Some(id) = file
         .strip_suffix(".jpg")
