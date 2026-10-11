@@ -472,7 +472,7 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
                     ToastPayload {
                         kind: format!("friend:{}", p.handle),
                         title: name,
-                        line: "started playing".into(),
+                        line: "is now playing".into(),
                         game_id: p.game_id.clone().unwrap_or_default(),
                         game: p.game_name.clone().unwrap_or_default(),
                         icon: crate::icons::one(app, p.game_id.as_deref().unwrap_or(""), true),

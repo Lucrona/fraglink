@@ -111,3 +111,9 @@ body.toast-page.skin-dark .toast-body .tx b { color: #fff; }
 body.toast-page.skin-dark .toast-body .ln { color: #c9d3e3; }
 body.toast-page.skin-dark .toast-body .g { color: #9fd0ff; }
 body.toast-page.skin-dark .toast-body small { color: #8ea3c8; font-size: 10px; }
+
+/* dev.18: Steam-style friend toast. Name / action / game name in the accent colour on its
+   own line (up to 2 lines, then …); the toast is as tall as its text, anchored bottom. */
+body.toast-page.skin-dark .xf-toast { top: auto; bottom: 0; height: auto; }
+body.toast-page.skin-dark .toast-body { align-items: flex-start; }
+body.toast-page.skin-dark .toast-body .tx > .g { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }

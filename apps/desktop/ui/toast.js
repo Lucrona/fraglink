@@ -29,8 +29,10 @@
     const lead = p.game_id || !friend ? `<i class="gi">${icon}</i>` : avatar(p.title);
     const req = /^request:/.test(p.kind || '');
     const sub = req ? p.game : (SHOW_REALM ? p.detail || '' : '');
-    body.innerHTML = `${lead}<div class="tx"><b>${esc(p.title)}</b><span class="ln">${esc(p.line)}${!req && p.game ? ` <span class="g">${esc(p.game)}</span>` : ''}</span>` +
-      `${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+    // Steam-style: bold name / action ("is now playing", "played 1h 33m of") / game name
+    // on its own accent line (wraps to 2 lines, then …)
+    body.innerHTML = `${lead}<div class="tx"><b>${esc(p.title)}</b><span class="ln">${esc(p.line)}</span>` +
+      `${!req && p.game ? `<span class="g">${esc(p.game)}</span>` : ''}${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
     el.hidden = false; el.classList.remove('out');
     clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 6000);
   }
@@ -48,11 +50,13 @@
   document.getElementById('toast-close').addEventListener('click', e => { e.stopPropagation(); close(); });
   el.addEventListener('click', e => { e.preventDefault(); if (T) T.core.invoke('toast_clicked'); else close(); });
   (async () => {
-    if (!T) { document.body.className = 'toast-page skin-' + (localStorage.getItem('fl-skin') || 'dark'); el.style.cssText = 'inset:auto;right:8px;bottom:8px;width:226px;height:78px;box-sizing:border-box;animation:none'; // preview: native window size
+    if (!T) { document.body.className = 'toast-page skin-' + (localStorage.getItem('fl-skin') || 'dark'); el.style.cssText = 'inset:auto;right:8px;bottom:8px;width:226px;box-sizing:border-box;animation:none'; // preview: native window width, height grows
       const q = new URLSearchParams(location.search), t = q.get('t') || (q.get('logon') ? 'online' : 'playing');
-      show(({ online: { kind: 'friend:nova', title: 'Nova', line: 'logged on', game_id: '', game: '' },
+      show(({ played: { kind: 'friend:you', title: 'You', line: 'played 1h 33m of', game_id: 'wow', game: 'World of Warcraft: Forever - Beta', icon: q.get('icon') || '' },
+        long: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'x', game: 'The Elder Scrolls V: Skyrim Special Edition Anniversary Upgrade Bundle Deluxe', icon: '' },
+        online: { kind: 'friend:nova', title: 'Nova', line: 'logged on', game_id: '', game: '' },
         request: { kind: 'request:riftwalker', title: 'Riftwalker', line: 'wants to be your friend', game_id: '', game: '@riftwalker' },
-        playing: { kind: 'friend:dizz', title: 'Dizz', line: 'started playing', game_id: 'wow', game: 'World of Warcraft', detail: 'Frostmourne', icon: q.get('icon') || '' } })[t]); return; }
+        playing: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'wow', game: 'World of Warcraft', detail: 'Frostmourne', icon: q.get('icon') || '' } })[t]); return; }
     try {
       const st = await window.FL.settings();
       const skin = st.settings.skin || 'classic';

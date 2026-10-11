@@ -60,7 +60,9 @@ pub fn side_extra(app: &AppHandle) -> f64 {
     (DARK_SIDE_W + (w - SIDE_PANEL_MIN)) * tz
 }
 const TOAST_W: f64 = 226.0;
-const TOAST_H: f64 = 78.0;
+// Tall enough for the Steam-style 3-line toast with a 2-line game name (dev.18); the
+// window is transparent and the toast sits at its bottom, as tall as its text.
+const TOAST_H: f64 = 100.0;
 
 pub fn zoom(app: &AppHandle) -> f64 {
     let state = app.state::<AppState>();
