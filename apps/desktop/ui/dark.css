@@ -442,3 +442,15 @@ body.skin-dark .st-btn span { flex: 1 1 0; min-width: 0; padding-right: 20px; te
 .af-body .af-t tr[data-action]:hover:not(.sel) td { background: #24272d; }
 .af-body .af-t tr.af-note td { color: #8a93a3; white-space: normal; padding: 6px 4px; }
 .af-body #add-msg { font-size: 10px; margin-top: 4px; } .af-body #add-msg:empty { display: none; }
+
+/* dev.18: the info panel is inset vertically like the classic client's: it starts under the title bar
+   and stops just above the window's bottom edge (measured from the classic client: ~23 px / ~20 px at 1x).
+   The main window keeps all four rounded corners; the strips above and below the panel are see-through. */
+:root { --side-top: 24px; --side-bot: 20px; }
+body.skin-dark .xf-side { top: var(--side-top); bottom: var(--side-bot); }
+body.skin-dark .xf-app.side-open .xf-win { border-radius: 7px; border-right-color: var(--dk-edge); }
+body.skin-dark .xf-app.side-open .side-grip { top: 0; bottom: 0; }
+body.skin-dark .xf-app.side-open .dk-edges [data-resize=East] { top: var(--side-top); bottom: var(--side-bot); }
+body.skin-dark .xf-app.side-open .dk-edges [data-resize=NorthEast] { display: none; }
+body.skin-dark .xf-app.side-open .dk-edges [data-resize=SouthEast] { bottom: var(--side-bot); }
+body.skin-dark .xf-app.side-open .dk-grip { bottom: calc(var(--side-bot) + 1px); }

@@ -15,7 +15,9 @@ pub const BASE_H: f64 = 381.0;
 /// client this layout follows; +12 px for the info-panel nub on the right.
 pub const DARK_MIN_W: f64 = 345.0;
 pub const DARK_MIN_H: f64 = 555.0;
-/// The docked info panel adds this much width while it is open.
+/// The docked info panel adds this much width while it is open. The window keeps its full height;
+/// the panel itself is inset vertically in CSS (under the title bar, above the bottom edge, dev.18),
+/// and the transparent window shows nothing in the strips above and below it.
 pub const DARK_SIDE_W: f64 = 168.0; // the 180px panel takes over the 12px nub strip
 /// The info panel can be dragged wider (0.2.0-dev.9); its width is remembered.
 pub const SIDE_PANEL_MIN: f64 = 180.0;

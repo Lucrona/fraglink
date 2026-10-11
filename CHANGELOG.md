@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+- **Side panel height like the classic client:** the info panel now starts just under the main window's title
+  bar and stops a little above its bottom edge, instead of running the full height of the window. The main
+  window keeps all four rounded corners. Width is unchanged (180 px, still draggable).
+
 ## [0.2.0-dev.17] - 2026-10-11
 
 Test update (builds report `0.2.0-17`). Server update: friend search matches part of a name.
