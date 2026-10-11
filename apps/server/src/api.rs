@@ -228,8 +228,9 @@ async fn user_search(
     if q.is_empty() || q.len() > 64 {
         return Ok(Json(json!({ "users": [] })));
     }
+    // Substring match on handle and display name ("doe" finds "Jo Doe"); prefix and exact hits rank first.
     let like = format!(
-        "{}%",
+        "%{}%",
         q.replace('\\', "\\\\")
             .replace('%', "\\%")
             .replace('_', "\\_")
@@ -239,7 +240,9 @@ async fn user_search(
          WHERE u.deleted_at IS NULL AND u.banned_at IS NULL AND u.id <> $1
            AND (lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2 OR (u.email <> '' AND lower(u.email) = $3))
            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker = u.id AND b.blocked = $1) OR (b.blocker = $1 AND b.blocked = u.id))
-         ORDER BY (lower(u.handle) = $3) DESC, lower(u.handle) LIMIT 20",
+         ORDER BY (lower(u.handle) = $3 OR lower(u.display_name) = $3) DESC,
+                  (left(lower(u.handle), length($3)) = $3 OR left(lower(u.display_name), length($3)) = $3) DESC,
+                  lower(u.handle) LIMIT 20",
     )
     .bind(a.user.id)
     .bind(&like)

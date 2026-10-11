@@ -396,24 +396,38 @@
       <h4>New Users</h4><p class="side-help">Set up a free Fraglink account so you can log in and see your friends. Game tracking works without one.</p><ul class="lg-res"><li><a data-action="register">New User Registration</a></li></ul>
       <h4>Resources</h4><ul class="lg-res"><li><a data-action="web" data-page="faq">Frequently Asked Questions</a></li><li><a data-action="web" data-page="support">Technical Support Forum</a></li><li><a data-action="web" data-page="releases">Latest Release Notes</a></li></ul>`;
   }
+  /* Add Friend: small modal over the dimmed friends list (search, results, personal message in one window). */
   function addFriendHtml() {
-    const A = state.addFriend;
-    if (A.step === 'search') return `<div class="lg-wrap"><div class="lg af-in"><label for="add-handle">Search by name, email, or Fraglink username:</label>
-      <input id="add-handle" maxlength="60" autocomplete="off" value="${esc(A.q)}" />
-      <div class="af-ex">(Example: Jo, Jo Doe, or jo@doe.com)</div>
-      <div class="af-btns"><button class="hw" type="button" data-action="add-cancel">Cancel</button><button class="hw" type="button" id="add-search" data-action="add-friend-go"${A.q ? '' : ' disabled'}>Search</button></div>
-      <a class="lg-a" data-action="invite">Invite friends to join Fraglink</a></div></div>`;
-    const us = A.users, sel = A.sel || '';
-    const rows = us == null ? '<tr><td colspan="2">Searching…</td></tr>' : us.length ? us.map(u => `<tr class="${u.handle === sel ? 'sel' : ''}" data-action="add-pick" data-handle="${esc(u.handle)}"><td>${esc(u.handle)}</td><td>${esc(u.display_name || u.handle)}</td></tr>`).join('') : `<tr><td colspan="2">${esc(A.err || 'No users found. Check the spelling, or invite them to join.')}</td></tr>`;
+    const A = state.addFriend, us = A.users, sel = A.sel || '';
+    let rows = '';
+    if (us === null) rows = '<tr class="af-note"><td colspan="2">Searching…</td></tr>';
+    else if (us) rows = us.length ? us.map(u => `<tr class="${u.handle === sel ? 'sel' : ''}" data-action="add-pick" data-handle="${esc(u.handle)}"><td>${esc(u.handle)}</td><td>${esc(u.display_name || u.handle)}</td></tr>`).join('') : `<tr class="af-note"><td colspan="2">${esc(A.err || A.self || 'No users found. Check the spelling, or try part of their name.')}</td></tr>`;
     const n = us ? us.length : 0;
-    return `<div class="lg-wrap af-wrap"><div class="lg af-in af-res"><div class="af-h"><span>Search Results (select one):</span><span>${us == null ? '' : `${n} User${n === 1 ? '' : 's'} Found`}</span></div>
-      <table class="af-t"><tr><th>Username</th><th>Display Name</th></tr>${rows}</table>
-      <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">Add me to your friends list</textarea>
-      <div class="af-btns"><button class="hw" type="button" data-action="add-back">Back</button><button class="hw" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="hw" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>Add Friend</button></div>
-      <div id="add-msg"></div><a class="lg-a" data-action="add-cancel">Back to friends list</a></div></div>`;
+    return `<div class="af-dlg" role="dialog" aria-label="Add Friend"><div class="af-title"><span>Add Friend</span><button type="button" class="af-x" data-action="add-cancel" title="Close">×</button></div><div class="af-body">
+      <label for="add-handle">Search by name, email, or username:</label>
+      <input id="add-handle" maxlength="60" autocomplete="off" spellcheck="false" value="${esc(A.q)}" />
+      <div class="af-ex">(Example: Jo, Jo Doe, or jo@doe.com)</div>
+      <div class="af-btns"><button class="af-b" type="button" data-action="add-cancel">Cancel</button><button class="af-b" type="button" id="add-search" data-action="add-friend-go"${A.q.trim() ? '' : ' disabled'}>Search</button></div>
+      <div class="af-h"><span>Search Results (select one):</span><span>${us ? `${n} User${n === 1 ? '' : 's'} Found` : ''}</span></div>
+      <div class="af-tw"><table class="af-t"><tr><th>Username</th><th>Display Name</th></tr>${rows}</table></div>
+      <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">${esc(A.msg)}</textarea>
+      <div id="add-msg"></div>
+      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>Add Friend</button></div>
+    </div></div>`;
+  }
+  function renderAddFriend() {
+    let m = $('#af-modal');
+    if (!state.addFriend) { if (m) m.remove(); return; }
+    if (!m) { m = document.createElement('div'); m.id = 'af-modal'; m.className = 'af-modal'; ($('#app') || document.body).appendChild(m); /* inside the window: dims only Fraglink */ }
+    const f = document.activeElement && document.activeElement.id, pos = f === 'add-handle' ? document.activeElement.selectionStart : null;
+    const tw = m.querySelector('.af-tw'), top = tw ? tw.scrollTop : 0;
+    const app = $('#app'), sd = $('.xf-side'); // centre over the friends list, not the side panel
+    m.style.setProperty('--af-side', app && sd && app.classList.contains('side-open') ? sd.offsetWidth + 'px' : '0px');
+    m.innerHTML = addFriendHtml();
+    if (m.querySelector('.af-tw')) m.querySelector('.af-tw').scrollTop = top;
+    if (f === 'add-handle' || f === 'add-msg-text') { const e = $('#' + f); e.focus(); if (pos != null) e.setSelectionRange(pos, pos); }
   }
   function renderFriends() {
-    if (state.addFriend && !state.detectRun) { list.innerHTML = addFriendHtml(); return; }
     if (state.detectRun) { list.innerHTML = `<div class="lg"><div class="lg-h">Detecting installed games…</div><p>Looking for games from Steam, Battle.net, Epic, GOG, EA app, Ubisoft Connect and Xbox…</p><div class="det-track"><div class="det-bar" id="fd-bar" style="width:${state.detectPct}%"></div></div><button class="dk-btn" data-action="detect-skip">Skip</button></div>`; return; }
     const s = state.sort;
     let h = `<div class="xf-grid"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name</span><span class="c-status" data-sort="status">Status</span><span class="c-info">Game Info</span></div>`;
@@ -522,12 +536,12 @@
   }
   function render() {
     $$('.xf-tab, .xf-icontabs [data-tab], .dk-vtabs [data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
-    $('#sechead').textContent = state.tab === 'friends' && state.detectRun ? 'Detect Games' : state.tab === 'friends' && state.addFriend ? 'Add Friend' : state.tab === 'friends' && signedOut() ? 'Login' : ({ friends: 'Friends', stats: 'Stats', activity: 'Activity' })[state.tab] || '';
+    $('#sechead').textContent = state.tab === 'friends' && state.detectRun ? 'Detect Games' : state.tab === 'friends' && signedOut() ? 'Login' : ({ friends: 'Friends', stats: 'Stats', activity: 'Activity' })[state.tab] || '';
     $('#list').classList.toggle('nohbar', state.tab !== 'friends');
     const sl = list.scrollLeft, st = list.scrollTop;
     if (state.tab === 'stats') renderStats(); else if (state.tab === 'activity') renderActivity(); else renderFriends();
     list.scrollLeft = sl; list.scrollTop = st; LS.update();
-    renderSide();
+    renderSide(); renderAddFriend();
   }
 
   /* ---------------- side panel ---------------- */
@@ -566,7 +580,7 @@
     return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
   }
   /* Friend info panel (dev.17). Top to bottom: header (avatar, name, username, status),
-     Playing Game (icon, name, Realm and a live "Playing for" timer), Stats, Recent, then
+     Playing Game (icon, name, Realm and a live "Playing for" timer), Stats (This week, Total), then
      the buttons. Empty rows and sections are left out. Real friends use presence plus the
      server's friend summary and profile; sample friends (browser preview) their own fields. */
   const sampleStart = {};
@@ -592,22 +606,15 @@
     if (f.kind === 'out') return ['off', 'Request sent'];
     return ['off', 'Offline'];
   }
-  // Stats and recent games, or null while nothing has loaded yet.
+  // This week and Total, or null while nothing has loaded yet (Total comes from the friend's profile).
   function friendHistory(f) {
-    if (!f.real) {
-      const rec = (f.recent || []).map(([g, h]) => ({ id: g, name: GAMES[g] ? GAMES[g].name : g, sec: h * 3600 }));
-      return { week: f.week != null ? f.week * 3600 : null, total: f.total ? f.total * 3600 : null, top: f.top || (rec[0] && rec[0].name) || '', recent: rec.slice(0, 3) };
-    }
+    if (!f.real) return { week: f.week != null ? f.week * 3600 : null, total: f.total ? f.total * 3600 : null };
     const s = LIVE.summaries[f.handle], p = LIVE.profiles[f.handle];
     loadSummary(f.handle); loadProfile(f.handle); // each refreshes at most once a minute
     if ((!s || s.err) && (!p || p.err)) return s && p ? { private: false, none: true } : null;
     const ps = p && !p.err ? p : null, ss = s && !s.err ? s : null;
     if ((ss && ss.week_seconds == null && !ss.shares_activity) || (ps && ps.history_visible === false)) return { private: true };
-    const games = (ps && ps.games) || [];
-    const top = (ss && ss.top_game_7d) || ([...games].sort((a, b) => (b.minutes_7d || 0) - (a.minutes_7d || 0)).filter(g => g.minutes_7d > 0)[0] || {}).name || '';
-    const recent = games.filter(g => g.last_played_at && g.total_min > 0).sort((a, b) => Date.parse(b.last_played_at) - Date.parse(a.last_played_at)).slice(0, 3)
-      .map(g => ({ id: g.listed === false ? 'unlisted' : g.game_id, name: g.listed === false ? 'A game' : g.name, sec: g.total_min * 60 }));
-    return { week: ss ? ss.week_seconds : null, total: ps && ps.overall ? ps.overall.total_min * 60 : null, top, recent };
+    return { week: ss ? ss.week_seconds : null, total: ps && ps.overall ? ps.overall.total_min * 60 : null };
   }
   function friendPanelHtml(f) {
     const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';
@@ -631,9 +638,8 @@
       if (!s) h += sfSec('Stats') + '<p class="sf-note">Loading…</p>';
       else if (s.private) h += sfSec('Stats') + `<p class="sf-note">${esc(f.name)} keeps their play history private.</p>`;
       else if (!s.none) {
-        const rows = kv('This week', hrsText(s.week)) + kv('Total on Fraglink', s.total ? hrsText(s.total) : '') + kv('Top game', esc(s.top || ''));
+        const rows = kv('This week', hrsText(s.week)) + kv('Total', s.total ? hrsText(s.total) : '');
         if (rows) h += sfSec('Stats') + rows;
-        if (s.recent && s.recent.length) h += sfSec('Recent') + s.recent.map(r => { const id = ensureGame(r.id, r.name); return `<div class="sf-rec" title="${esc(r.name)} · ${esc(hrsText(r.sec))}"><i class="gi">${friendGameIcon(id)}</i><span>${esc(r.name.replace(/:.*/, ''))}</span><em>${esc(hrsText(r.sec))}</em></div>`; }).join('');
       }
     }
     // Footer: View Profile, Message on Discord (only when the friend has Discord linked), Mute pop-ups
@@ -1007,22 +1013,25 @@
     'privacy': () => notice('What Fraglink reads', '<ul class="fl-ul"><li>The <b>list of running programs</b> (names and install paths) every 5 seconds, matched against a list of known games.</li><li>Steam\'s own <b>RunningAppID</b> value and its library files, the <b>Epic Games</b> install manifests and <b>GOG Galaxy</b>\'s install list, to recognise games you installed through them.</li></ul>It never reads game memory, never injects anything into games and never hooks input, so it is safe with anti-cheat. Nothing leaves this PC unless you choose to <b>sign in to sync</b> in Options. Hours only count while you are signed in and connected: while the app runs it tells the server which game you are in (just the game\'s id) and the server records the time itself. Nothing is tracked or queued offline. Your friends see your status and the game you\'re playing now, named from Fraglink\'s own game list. A program you tagged with <b>This is a game</b> shows as <b>Playing a game</b> to everyone else until it is added to that list; your own name for it stays on this PC. Friends also see your recent sessions in their Activity Report and your hours this week, unless you turn that off in Options &gt; Connections. <b>Invisible</b> shows you as offline. Paths are never sent; the only program names sent are the .exe of a program you tagged as a game.'),
     'add-friend': () => {
       if (!realMode() && TAURI) { state.tab = 'friends'; render(); notice('Add Friend', 'Log in first. Friends need a Fraglink account.'); return; }
-      state.tab = 'friends'; state.addFriend = { step: 'search', q: '' }; render();
+      state.tab = 'friends'; state.addFriend = { q: '', msg: 'Add me to your friends list' }; render();
       setTimeout(() => $('#add-handle') && $('#add-handle').focus(), 0);
     },
     'add-cancel': () => { state.addFriend = null; render(); },
     'add-friend-go': async () => {
-      const h = (($('#add-handle') || {}).value || '').trim(); if (!h) return;
-      state.addFriend = { step: 'results', q: h, users: null }; render();
-      try { const r = await FLB.friendSearch(h); state.addFriend.users = (r && r.users) || []; }
-      catch (e) { state.addFriend.users = []; state.addFriend.err = String(e && e.message || e); }
-      state.addFriend.sel = state.addFriend.users[0] ? state.addFriend.users[0].handle : null;
-      if (state.addFriend.step === 'results') render();
+      const A = state.addFriend; if (!A) return;
+      const h = (A.q || '').trim(); if (!h) return;
+      Object.assign(A, { users: null, sel: null, err: '', self: '' }); renderAddFriend();
+      const myId = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name, lc = h.toLowerCase();
+      try { const r = await FLB.friendSearch(h); A.users = (r && r.users) || []; }
+      catch (e) { A.users = []; A.err = String(e && e.message || e); }
+      if (state.addFriend !== A) return;
+      if (!A.users.length && !A.err && myId && (lc === String(myId).toLowerCase() || lc === String(myId).toLowerCase().replace(/^@/, ''))) A.self = "That's you!";
+      A.sel = A.users.length === 1 ? A.users[0].handle : null;
+      renderAddFriend();
     },
-    'add-pick': a => { state.addFriend.sel = a.dataset.handle; render(); },
-    'add-back': () => { state.addFriend = { step: 'search', q: state.addFriend.q }; render(); },
+    'add-pick': a => { state.addFriend.sel = a.dataset.handle; renderAddFriend(); },
     'add-friend-send': async a => {
-      const h = a.dataset.handle, m = $('#add-msg');
+      const h = a.dataset.handle, m = $('#add-msg'); if (!h) return;
       try { const r = await FLB.friendAdd(h); m.innerHTML = r === 'accepted' ? `You and <b>${esc(h)}</b> are now friends.` : `Request sent. <b>${esc(h)}</b> shows under Friend Requests until they accept.`; refreshFriends(); }
       catch (e) { m.innerHTML = `<span class="bad">${esc(String(e && e.message || e))}</span>`; }
     },
@@ -1140,7 +1149,7 @@
     // empty space: deselect, the side panel goes back to its default view
     if (state.sel && !e.target.closest('a,button,input,select,label')) { state.sel = null; render(); }
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); if (e.key === 'Enter' && e.target.id === 'custom-status') actions['custom-status-go'](); if (e.key === 'Escape') { if (!ctx.hidden) hideCtx(); else if (state.sel && !e.target.closest('input,textarea,select')) { state.sel = null; render(); } } });
+  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'add-handle') actions['add-friend-go'](); if (e.key === 'Enter' && e.target.id === 'custom-status') actions['custom-status-go'](); if (e.key === 'Escape') { if (!ctx.hidden) hideCtx(); else if (state.addFriend) actions['add-cancel'](); else if (state.sel && !e.target.closest('input,textarea,select')) { state.sel = null; render(); } } });
   /* "Track <name> as a game?" bar (also offered as a popup). Yes tracks it from now on and
      sends the exe + name to the server for review; Not a game never asks again. */
   const exeName = exe => { const s = String(exe || '').replace(/\.exe$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim(); return (s || String(exe || '')).slice(0, 80); };
@@ -1418,8 +1427,8 @@
     $$('.sf-timer').forEach(t => { t.textContent = fmtT(Date.now() - +t.dataset.start); });
   }
   setInterval(clock, 1000);
-  document.addEventListener('input', e => { if (e.target.id === 'add-handle') { state.addFriend.q = e.target.value; $('#add-search').disabled = !e.target.value.trim(); } });
-  document.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.id === 'add-handle') actions['add-friend-go'](); else if (e.target.id === 'lg-pass') actions['login-go'](); else if (e.target.id === 'lg-npass2' || e.target.id === 'lg-email') actions['signup-go'](); });
+  document.addEventListener('input', e => { if (!state.addFriend) return; if (e.target.id === 'add-handle') { state.addFriend.q = e.target.value; $('#add-search').disabled = !e.target.value.trim(); } else if (e.target.id === 'add-msg-text') state.addFriend.msg = e.target.value; });
+  document.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.id === 'lg-pass') actions['login-go'](); else if (e.target.id === 'lg-npass2' || e.target.id === 'lg-email') actions['signup-go'](); });
   setInterval(() => { const t = $('#lg-tmo'); if (t) t.textContent = `Time out in ${Math.max(0, Math.round(+t.dataset.exp - Date.now() / 1000))} secs`; }, 1000);
 
   /* ---------------- boot ---------------- */
@@ -1438,7 +1447,11 @@
     applyTextSize(saved.text_size || params.get('text') || 'normal');
     if (params.get('side') === '1') toggleSide(true);
     if (params.get('sel')) { state.sel = params.get('sel'); render(); }
-    if (params.get('add') === '1') setTimeout(() => actions['add-friend'](), 300);
+    if (params.get('add')) setTimeout(async () => { // preview: ?add=1, or ?add=<query>[&addsel=<row>]
+      actions['add-friend'](); const q = params.get('add'); if (q === '1') return;
+      state.addFriend.q = q; await actions['add-friend-go']();
+      const i = +params.get('addsel'), u = state.addFriend && state.addFriend.users; if (u && u[i - 1]) actions['add-pick']({ dataset: { handle: u[i - 1].handle } });
+    }, 300);
     /* First run: detect installed games in the main window (progress + Skip) before the friends list. */
     if ((TAURI && !saved.games_detected_once) || params.get('detect') === '1') {
       state.detectRun = true; state.detectPct = 0; render(); if (!TAURI) refreshActivity();

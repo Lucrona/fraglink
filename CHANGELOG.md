@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Changed
+- **Add Friend is a small pop-up window:** it opens over the friends list (which dims behind it) instead of
+  replacing it. One window has the search box, Cancel / Search, the results table (Username, Display Name)
+  with the number of users found, a **Personal Message** and **View Profile** / **Add Friend**, which stay
+  disabled until you pick a result. Enter searches and Esc closes it. Searching for yourself says
+  "That's you!" instead of "No users found".
+- **Shorter friend side panel:** the panel now shows just the header, **Playing Game** (with Realm and the
+  Playing for timer) while they're in a game, and **Stats** with This week and Total. The Recent games
+  list and the Top game row are gone, and the spacing is tighter.
+- **Server: friend search matches part of a name:** searching "doe" now finds "Jo Doe" or "johndoe"
+  (before, only the start of a username or display name matched). Exact and starts-with matches are
+  listed first.
 - **Your realm on hover:** while you play World of Warcraft, hovering your status at the top of the main
   window shows the game with your realm, e.g. "Playing World of Warcraft: Forever · Frostmourne".
 - **Friends' realm on its own line:** the friend side panel shows the game under "Playing Game" and then a
