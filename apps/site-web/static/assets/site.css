@@ -391,7 +391,7 @@ table.gt .gico img,table.gt .gico .gi{width:24px!important;height:24px!important
 .av.up{background:#1b1f26}
 /* avatar crop editor */
 .crop-modal{position:fixed;inset:0;z-index:100;background:#000b;display:flex;align-items:center;justify-content:center;padding:20px}
-.crop-box{width:620px;max-width:100%;margin:0;box-shadow:0 10px 40px #000}
+.crop-box{width:720px;max-width:100%;margin:0;box-shadow:0 10px 40px #000}
 .crop-main{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
 .crop-stage{position:relative;width:320px;height:320px;flex:none;background:#0b0d10;border:1px solid #2a3a4d}
 .crop-stage canvas{display:block;cursor:grab;touch-action:none}.crop-stage canvas:active{cursor:grabbing}
