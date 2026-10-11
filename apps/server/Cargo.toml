@@ -28,6 +28,12 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
+hmac = "0.12"
+sha1 = "0.10"
+ab_glyph = "0.2"
+maxminddb = "0.24"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 
 [dev-dependencies]
 tokio-tungstenite = "0.28"
@@ -36,5 +42,4 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 fraglink-sync = { path = "../../crates/fraglink-sync" }
 tempfile = "3"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }

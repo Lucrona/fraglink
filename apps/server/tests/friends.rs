@@ -128,6 +128,15 @@ async fn request_accept_decline_remove(pool: PgPool) {
     )
     .await;
     assert!(handles(&list(&app, &a).await, "friends").is_empty());
+    sqlx::query("UPDATE users SET delete_after = now() - interval '1 minute' WHERE delete_after IS NOT NULL")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let st = fraglink_server::AppState::new(
+        pool.clone(),
+        fraglink_server::Config::for_tests("postgres://unused"),
+    );
+    fraglink_server::account::purge_due(&st).await.unwrap();
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM friendships")
         .fetch_one(&pool)
         .await

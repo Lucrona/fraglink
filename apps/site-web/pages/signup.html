@@ -3,10 +3,11 @@
   <form class="f" id="signup" autocomplete="on">
     <div id="err" class="alert err" hidden></div>
     <label>Username<input type="text" name="handle" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_\-]{3,20}" autocomplete="username" autofocus><small>3-20 letters, digits, _ or -. Friends add you by this name.</small></label>
-    <label>Email <span class="hint">(optional, for account recovery later)</span><input type="email" name="email" autocomplete="email"></label>
+    <label>Email <span class="hint">(optional, for account recovery and sign-in alerts)</span><input type="email" name="email" autocomplete="email"></label>
     <label>Password<input type="password" name="password" required minlength="10" maxlength="128" autocomplete="new-password"><small>At least 10 characters.</small></label>
     <label>Password again<input type="password" name="password2" required minlength="10" maxlength="128" autocomplete="new-password"></label>
     <label class="check"><input type="checkbox" name="terms"> <span>I accept the <a href="/terms" target="_blank">Terms</a> and the <a href="/privacy" target="_blank">Privacy Policy</a>.</span></label>
+    <div class="cf-turnstile" data-sitekey="__SITEKEY__" data-theme="dark"></div>
     <div class="row"><button class="btn dl">Create account</button></div>
   </form>
   <p class="hint" style="margin:14px 0 0">Already have an account? <a href="/login">Sign in</a>.</p>

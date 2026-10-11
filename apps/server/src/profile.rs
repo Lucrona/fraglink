@@ -6,7 +6,7 @@
 //! games table and recent sessions are shown to the user themselves, and to friends
 //! when the user shares activity. Games the server can't name never expose their id.
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, MaybeUser};
 use crate::error::{ApiResult, AppError};
 use crate::{api, friends, names, presence, AppState};
 use axum::extract::{Path, State};
@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 pub const RECENT_DAYS: i64 = 14;
-pub const RECENT_LIMIT: i64 = 20;
+pub const RECENT_LIMIT: i64 = 80;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -75,18 +75,29 @@ async fn set_display_name(
 
 async fn profile(
     State(st): State<AppState>,
-    a: AuthUser,
+    m: MaybeUser,
+    headers: HeaderMap,
     Path(handle): Path<String>,
 ) -> ApiResult<Json<Value>> {
+    let viewer = m.0.as_ref().map(|a| a.user.id);
+    let key = viewer
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| crate::client_ip(&headers));
     st.rate_limit(
-        format!("profile:{}", a.user.id),
+        format!("profile:{key}"),
         240,
         std::time::Duration::from_secs(600),
     )?;
+    let not_found = || {
+        AppError::new(
+            StatusCode::NOT_FOUND,
+            "user_not_found",
+            "No Fraglink user with that name.",
+        )
+    };
     let p = friends::find_by_handle(&st, &handle).await?;
-    let me = a.user.id;
-    let is_self = p.id == me;
-    if !is_self {
+    let is_self = viewer == Some(p.id);
+    if let (Some(me), false) = (viewer, is_self) {
         let blocked: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM blocks WHERE (blocker = $1 AND blocked = $2) OR (blocker = $2 AND blocked = $1))",
         )
@@ -95,42 +106,77 @@ async fn profile(
         .fetch_one(&st.db)
         .await?;
         if blocked {
-            return Err(AppError::new(
-                StatusCode::NOT_FOUND,
-                "user_not_found",
-                "No Fraglink user with that name.",
-            ));
+            return Err(not_found());
         }
     }
-    let (created, shares): (DateTime<Utc>, bool) =
-        sqlx::query_as("SELECT created_at, share_activity FROM users WHERE id = $1")
-            .bind(p.id)
-            .fetch_one(&st.db)
-            .await?;
+    type Extra = (
+        DateTime<Utc>,
+        bool,
+        bool,
+        bool,
+        Option<String>,
+        Option<String>,
+        Option<i16>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Value,
+        Option<DateTime<Utc>>,
+    );
+    let (created, shares, public, show_friends, akind, ahash, apreset, about, location, style, rig, delete_after): Extra =
+        sqlx::query_as(
+            "SELECT created_at, share_activity, public_profile, show_friends, avatar_kind, avatar_hash, avatar_preset,
+                    about, location, gaming_style, rig, delete_after FROM users WHERE id = $1",
+        )
+        .bind(p.id)
+        .fetch_one(&st.db)
+        .await?;
+    if delete_after.is_some() && !is_self {
+        return Err(not_found());
+    }
+    if viewer.is_none() && !public {
+        return Err(AppError::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Sign in to see this profile.",
+        ));
+    }
     let friend_count = friends::friend_ids(&st, p.id).await?.len();
-    let relation = if is_self {
-        "self"
-    } else if friends::are_friends(&st, me, p.id).await? {
-        "friend"
-    } else {
-        let mine = friends::list(&st, me).await?;
-        if mine.incoming.iter().any(|r| r.handle == p.handle) {
-            "incoming"
-        } else if mine.outgoing.iter().any(|r| r.handle == p.handle) {
-            "outgoing"
-        } else {
-            "none"
+    let relation = match viewer {
+        None => "public",
+        Some(_) if is_self => "self",
+        Some(me) if friends::are_friends(&st, me, p.id).await? => "friend",
+        Some(me) => {
+            let mine = friends::list(&st, me).await?;
+            if mine.incoming.iter().any(|r| r.handle == p.handle) {
+                "incoming"
+            } else if mine.outgoing.iter().any(|r| r.handle == p.handle) {
+                "outgoing"
+            } else {
+                "none"
+            }
         }
     };
-    let can_see_presence = is_self || relation == "friend";
-    let can_see_history = is_self || (relation == "friend" && shares);
+    let can_see_presence = is_self || relation == "friend" || public;
+    let can_see_history = is_self || ((relation == "friend" || public) && shares);
+    let hidden = if is_self {
+        vec![]
+    } else {
+        crate::account::hidden_games(&st, p.id).await?
+    };
 
     let presence = if can_see_presence {
         let mut m = presence::visible_presence_many(&st, &[p.id]).await?;
-        Some(
-            m.remove(&p.id)
-                .unwrap_or_else(presence::PresenceView::offline),
-        )
+        let mut v = m
+            .remove(&p.id)
+            .unwrap_or_else(presence::PresenceView::offline);
+        if v.game_id.as_ref().is_some_and(|g| hidden.contains(g)) {
+            v.game_id = None;
+            v.game_name = None;
+            v.game_detail = None;
+            v.session_started_at = None;
+        }
+        Some(v)
     } else {
         None
     };
@@ -141,7 +187,16 @@ async fn profile(
         let rows = api::game_stats(&st, p.id).await?;
         let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
         let named = names::public_names(&st, &ids).await?;
+        let apps = crate::home::appids(&st, &ids).await?;
+        let mine_hidden = if is_self {
+            crate::account::hidden_games(&st, p.id).await?
+        } else {
+            vec![]
+        };
         for g in rows {
+            if hidden.contains(&g.game_id) {
+                continue;
+            }
             total_min += g.display_min;
             min_7d += g.minutes_7d;
             let listed = named.contains_key(&g.game_id);
@@ -157,10 +212,46 @@ async fn profile(
                 "estimated_min": g.estimated_min,
                 "tier": g.display_tier,
                 "last_played_at": g.last_played_at,
+                "steam_appid": if listed { apps.get(&g.game_id).copied() } else { None },
+                "hidden": mine_hidden.contains(&g.game_id),
             }));
         }
         recent = recent_sessions(&st, p.id, is_self).await?;
+        recent.retain(|r| {
+            !r["game_id"]
+                .as_str()
+                .is_some_and(|g| hidden.iter().any(|h| h == g))
+        });
     }
+
+    // Friends grid: the user's own, friends' and public profiles (unless switched off).
+    let mut friend_grid = Value::Null;
+    if is_self || (show_friends && (relation == "friend" || public)) {
+        let fl = friends::list(&st, p.id).await?;
+        let mut list: Vec<Value> = fl
+            .friends
+            .iter()
+            .map(|f| json!({ "handle": f.handle, "display_name": f.display_name, "avatar": f.avatar,
+                "status": f.presence.status, "game_name": if f.presence.game_id.as_deref().is_some_and(|g| g != names::UNLISTED_ID) { f.presence.game_name.clone() } else { None } }))
+            .collect();
+        list.sort_by_key(|f| match (f["status"].as_str(), f["game_name"].is_null()) {
+            (Some("online"), false) => 0,
+            (Some("online"), true) => 1,
+            (Some("away"), _) => 2,
+            _ => 3,
+        });
+        list.truncate(12);
+        friend_grid = json!(list);
+    }
+
+    let linked: Value = sqlx::query_scalar(
+        "SELECT coalesce(jsonb_agg(jsonb_build_object('provider', provider, 'display', display)), '[]'::jsonb)
+         FROM linked_accounts WHERE user_id = $1 AND verified AND show_on_profile",
+    )
+    .bind(p.id)
+    .fetch_one(&st.db)
+    .await?;
+    let has_rig = rig.as_object().is_some_and(|o| !o.is_empty());
 
     Ok(Json(json!({
         "handle": p.handle,
@@ -169,12 +260,21 @@ async fn profile(
         "relation": relation,
         "friend_count": friend_count,
         "shares_activity": shares,
+        "public_profile": public,
         "history_visible": can_see_history,
         "presence": presence,
         "games": games,
         "overall": { "total_min": total_min, "minutes_7d": min_7d },
         "recent": recent,
         "recent_days": RECENT_DAYS,
+        "avatar": crate::avatars::avatar_json(p.id, akind.as_deref(), ahash.as_deref(), apreset),
+        "about": about,
+        "location": location,
+        "gaming_style": style,
+        "rig": if has_rig { rig } else { Value::Null },
+        "friends": friend_grid,
+        "linked": linked,
+        "delete_after": if is_self { json!(delete_after) } else { Value::Null },
     })))
 }
 

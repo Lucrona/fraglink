@@ -29,6 +29,16 @@ pub struct Config {
     /// `STEAM_STORE_URL` (default `https://store.steampowered.com`, `off` disables):
     /// names for Steam games that aren't on our lists.
     pub steam_store_url: Option<String>,
+    /// `TURNSTILE_SECRET`: Cloudflare Turnstile secret. Unset = no bot check (local, tests).
+    pub turnstile_secret: Option<String>,
+    /// `TURNSTILE_VERIFY_URL` (default Cloudflare's siteverify).
+    pub turnstile_verify_url: String,
+    /// `FRAGLINK_MAIL=on` sends email; anything else only logs it (no provider yet).
+    pub mail_enabled: bool,
+    /// `FRAGLINK_STEAM_ART_CDN`: base for Steam store header art (`<base>/<appid>/header.jpg`).
+    pub steam_art_cdn: String,
+    /// `FRAGLINK_SITE_URL` (default `https://beta.playfraglink.com`): website links in emails.
+    pub site_url: String,
 }
 
 impl Config {
@@ -66,6 +76,19 @@ impl Config {
                 Some(u) => Some(u.trim_end_matches('/').to_string()),
                 None => Some("https://store.steampowered.com".into()),
             },
+            turnstile_secret: var("TURNSTILE_SECRET"),
+            turnstile_verify_url: var("TURNSTILE_VERIFY_URL").unwrap_or_else(|| {
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify".into()
+            }),
+            mail_enabled: var("FRAGLINK_MAIL").as_deref() == Some("on"),
+            steam_art_cdn: var("FRAGLINK_STEAM_ART_CDN")
+                .unwrap_or_else(|| "https://cdn.cloudflare.steamstatic.com/steam/apps".into())
+                .trim_end_matches('/')
+                .to_string(),
+            site_url: var("FRAGLINK_SITE_URL")
+                .unwrap_or_else(|| "https://beta.playfraglink.com".into())
+                .trim_end_matches('/')
+                .to_string(),
         })
     }
 
@@ -84,6 +107,11 @@ impl Config {
             data_dir: std::env::temp_dir().join("fraglink-server-tests"),
             detectable_url: "http://127.0.0.1:9/detectable".into(),
             steam_store_url: None,
+            turnstile_secret: None,
+            turnstile_verify_url: "http://127.0.0.1:9/siteverify".into(),
+            mail_enabled: false,
+            steam_art_cdn: "http://127.0.0.1:9/apps".into(),
+            site_url: "http://localhost:8787".into(),
         }
     }
 

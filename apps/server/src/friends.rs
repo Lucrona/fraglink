@@ -34,6 +34,8 @@ pub struct FriendView {
     pub display_name: String,
     pub since: Option<DateTime<Utc>>,
     pub presence: presence::PresenceView,
+    /// How to draw their picture (see `avatars::avatar_json`).
+    pub avatar: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -41,6 +43,7 @@ pub struct RequestView {
     pub handle: String,
     pub display_name: String,
     pub created_at: DateTime<Utc>,
+    pub avatar: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -324,7 +327,7 @@ pub async fn list(st: &AppState, me: Uuid) -> ApiResult<FriendsList> {
     let rows: Vec<Row> = sqlx::query_as(
         "SELECT u.id, u.handle, u.display_name, f.status, f.requested_by, f.created_at, f.accepted_at
          FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END
-         WHERE (f.user_a = $1 OR f.user_b = $1) AND u.deleted_at IS NULL AND u.banned_at IS NULL
+         WHERE (f.user_a = $1 OR f.user_b = $1) AND u.deleted_at IS NULL AND u.banned_at IS NULL AND u.delete_after IS NULL
          ORDER BY lower(u.handle)",
     )
     .bind(me)
@@ -336,6 +339,13 @@ pub async fn list(st: &AppState, me: Uuid) -> ApiResult<FriendsList> {
         .map(|r| r.0)
         .collect();
     let pres = presence::visible_presence_many(st, &ids).await?;
+    let all: Vec<Uuid> = rows.iter().map(|r| r.0).collect();
+    let avs = crate::avatars::many(st, &all).await?;
+    let av = |id: &Uuid| {
+        avs.get(id)
+            .cloned()
+            .unwrap_or_else(|| crate::avatars::avatar_json(*id, None, None, None))
+    };
     let mut out = FriendsList::default();
     for (id, handle, display_name, status, by, created, accepted) in rows {
         if status == "accepted" {
@@ -344,18 +354,21 @@ pub async fn list(st: &AppState, me: Uuid) -> ApiResult<FriendsList> {
                 handle,
                 display_name,
                 since: accepted,
+                avatar: av(&id),
             });
         } else if by == me {
             out.outgoing.push(RequestView {
                 handle,
                 display_name,
                 created_at: created,
+                avatar: av(&id),
             });
         } else {
             out.incoming.push(RequestView {
                 handle,
                 display_name,
                 created_at: created,
+                avatar: av(&id),
             });
         }
     }

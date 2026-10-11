@@ -191,7 +191,22 @@ async fn delete_account_removes_everything(pool: PgPool) {
         Some(json!({"password":"correct horse battery"})),
     )
     .await;
-    assert_eq!(r.status, StatusCode::NO_CONTENT, "{}", r.text);
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert!(r.json()["delete_after"].is_string());
+    // signed out everywhere straight away; data stays for the 7-day grace period
+    assert_eq!(
+        api(&app, "GET", "/api/v1/me", Some(&t), None).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    sqlx::query("UPDATE users SET delete_after = now() - interval '1 minute'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let st = fraglink_server::AppState::new(
+        pool.clone(),
+        fraglink_server::Config::for_tests("postgres://unused"),
+    );
+    assert_eq!(fraglink_server::account::purge_due(&st).await.unwrap(), 1);
     for table in [
         "users",
         "auth_tokens",

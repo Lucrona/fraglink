@@ -103,6 +103,8 @@ pub struct SignupReq {
     pub email: String,
     pub password: String,
     pub handle: String,
+    #[serde(default)]
+    pub turnstile: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -117,8 +119,11 @@ async fn signup(
     Json(r): Json<SignupReq>,
 ) -> ApiResult<(StatusCode, Json<TokenResp>)> {
     signup_limit(&st, &headers)?;
+    crate::turnstile::check(&st, &headers, r.turnstile.as_deref()).await?;
     let user = auth::create_user(&st, &r.email, &r.password, &r.handle).await?;
-    let token = auth::issue_token(&st, user.id, "web", None).await?;
+    let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
+    let token = auth::issue_token_ctx(&st, user.id, "web", None, &ctx).await?;
+    crate::account::send_verification(&st, &user).await?;
     Ok((StatusCode::CREATED, Json(TokenResp { token, user })))
 }
 
@@ -128,17 +133,23 @@ pub struct LoginReq {
     #[serde(alias = "login", alias = "username", alias = "handle")]
     pub email: String,
     pub password: String,
+    #[serde(default)]
+    pub turnstile: Option<String>,
 }
 
+/// Returns `{token, user}`, or `{mfa_required: true, mfa_token}` when two-step sign-in is on.
 async fn login(
     State(st): State<AppState>,
     headers: HeaderMap,
     Json(r): Json<LoginReq>,
-) -> ApiResult<Json<TokenResp>> {
+) -> ApiResult<Json<Value>> {
     login_limit(&st, &headers)?;
+    crate::turnstile::check(&st, &headers, r.turnstile.as_deref()).await?;
     let user = auth::check_login(&st, &r.email, &r.password).await?;
-    let token = auth::issue_token(&st, user.id, "web", None).await?;
-    Ok(Json(TokenResp { token, user }))
+    let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
+    Ok(Json(
+        crate::mfa::finish_login(&st, user, "web", None, &ctx).await?,
+    ))
 }
 
 const MINUTE: std::time::Duration = std::time::Duration::from_secs(60);
@@ -187,8 +198,16 @@ async fn device_signup(
 ) -> ApiResult<(StatusCode, Json<TokenResp>)> {
     signup_limit(&st, &headers)?;
     let user = auth::create_user(&st, &r.email, &r.password, &r.handle).await?;
-    let token =
-        auth::issue_token(&st, user.id, "device", Some(&device_name(r.device_name))).await?;
+    let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
+    let token = auth::issue_token_ctx(
+        &st,
+        user.id,
+        "device",
+        Some(&device_name(r.device_name)),
+        &ctx,
+    )
+    .await?;
+    crate::account::send_verification(&st, &user).await?;
     Ok((StatusCode::CREATED, Json(TokenResp { token, user })))
 }
 
@@ -200,17 +219,20 @@ struct DeviceLoginReq {
     device_name: Option<String>,
 }
 
-/// Desktop client sign-in with username (or email) and password; returns a device token.
+/// Desktop client sign-in with username (or email) and password; returns a device token,
+/// or `{mfa_required: true, mfa_token}` (finish with `POST /api/v1/auth/mfa`).
 async fn device_login(
     State(st): State<AppState>,
     headers: HeaderMap,
     Json(r): Json<DeviceLoginReq>,
-) -> ApiResult<Json<TokenResp>> {
+) -> ApiResult<Json<Value>> {
     login_limit(&st, &headers)?;
     let user = auth::check_login(&st, &r.login, &r.password).await?;
-    let token =
-        auth::issue_token(&st, user.id, "device", Some(&device_name(r.device_name))).await?;
-    Ok(Json(TokenResp { token, user }))
+    let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
+    let name = device_name(r.device_name);
+    Ok(Json(
+        crate::mfa::finish_login(&st, user, "device", Some(&name), &ctx).await?,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -291,6 +313,12 @@ async fn me(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
         // staff see the Admin link on the website
         user["staff_role"] = json!(role);
     }
+    let extra = crate::account::me_extra(&st, a.user.id).await?;
+    if let (Some(u), Some(e)) = (user.as_object_mut(), extra.as_object()) {
+        for (k, v) in e {
+            u.insert(k.clone(), v.clone());
+        }
+    }
     Ok(Json(
         json!({ "user": user, "token_kind": a.kind, "linked_accounts": linked }),
     ))
@@ -299,28 +327,53 @@ async fn me(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
 #[derive(Deserialize)]
 struct DeleteMeReq {
     password: String,
+    #[serde(default)]
+    code: Option<String>,
 }
 
-/// Delete the account and everything attached to it, immediately.
+/// Schedule the account for deletion in 7 days (signing in again cancels it) and sign out
+/// everywhere. Needs the password, and a two-step code when that's on.
 async fn delete_me(
     State(st): State<AppState>,
     headers: HeaderMap,
     a: AuthUser,
     Json(r): Json<DeleteMeReq>,
-) -> ApiResult<StatusCode> {
+) -> ApiResult<Json<Value>> {
     check_origin(&a, &headers, &st)?;
     auth::check_login(&st, &a.user.handle, &r.password).await?;
-    sqlx::query("DELETE FROM users WHERE id = $1")
+    if crate::mfa::enabled(&st, a.user.id).await?
+        && !crate::mfa::verify_code(&st, a.user.id, r.code.as_deref().unwrap_or("")).await?
+    {
+        return Err(AppError::new(
+            StatusCode::UNAUTHORIZED,
+            "bad_code",
+            "Enter a current code from your authenticator app (or a backup code).",
+        ));
+    }
+    let when: DateTime<Utc> = sqlx::query_scalar(
+        "UPDATE users SET delete_after = now() + interval '7 days' WHERE id = $1 RETURNING delete_after",
+    )
+    .bind(a.user.id)
+    .fetch_one(&st.db)
+    .await?;
+    sqlx::query(
+        "UPDATE auth_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(a.user.id)
+    .execute(&st.db)
+    .await?;
+    sqlx::query("UPDATE presence SET status = 'offline', game_id = NULL, game_name = NULL, game_detail = NULL, session_started_at = NULL WHERE user_id = $1")
         .bind(a.user.id)
         .execute(&st.db)
         .await?;
-    Ok(StatusCode::NO_CONTENT)
+    tracing::info!(user = %a.user.id, "account deletion scheduled");
+    Ok(Json(json!({ "delete_after": when })))
 }
 
 // ------------------------------------------------------------------ account management
 
 /// The caller's current password, checked against the stored Argon2id hash.
-async fn check_current_password(st: &AppState, user_id: Uuid, password: &str) -> ApiResult<()> {
+pub async fn check_current_password(st: &AppState, user_id: Uuid, password: &str) -> ApiResult<()> {
     let hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_one(&st.db)
@@ -1269,10 +1322,15 @@ async fn friend_summary(
 
 #[derive(Deserialize)]
 struct PrivacyReq {
-    share_activity: bool,
+    share_activity: Option<bool>,
+    public_profile: Option<bool>,
+    show_friends: Option<bool>,
 }
 
-/// Whether friends can see your recent play history and weekly hours.
+/// Privacy switches; each field is optional (only the ones sent change).
+/// `share_activity`: friends see your recent play history and weekly hours.
+/// `public_profile`: anyone with the link sees your profile, signature image and you
+/// may appear on the public home page. `show_friends`: friends list on your profile.
 async fn set_privacy(
     State(st): State<AppState>,
     headers: HeaderMap,
@@ -1281,12 +1339,20 @@ async fn set_privacy(
 ) -> ApiResult<Json<Value>> {
     check_origin(&a, &headers, &st)?;
     st.rate_limit(format!("privacy:{}", a.user.id), 30, 15 * MINUTE)?;
-    sqlx::query("UPDATE users SET share_activity = $2 WHERE id = $1")
-        .bind(a.user.id)
-        .bind(r.share_activity)
-        .execute(&st.db)
-        .await?;
-    Ok(Json(json!({ "share_activity": r.share_activity })))
+    let (share, public, friends): (bool, bool, bool) = sqlx::query_as(
+        "UPDATE users SET share_activity = coalesce($2, share_activity),
+                public_profile = coalesce($3, public_profile), show_friends = coalesce($4, show_friends)
+         WHERE id = $1 RETURNING share_activity, public_profile, show_friends",
+    )
+    .bind(a.user.id)
+    .bind(r.share_activity)
+    .bind(r.public_profile)
+    .bind(r.show_friends)
+    .fetch_one(&st.db)
+    .await?;
+    Ok(Json(
+        json!({ "share_activity": share, "public_profile": public, "show_friends": friends }),
+    ))
 }
 
 async fn friend_remove(

@@ -211,12 +211,30 @@ pub async fn issue_token(
     kind: &str,
     device_name: Option<&str>,
 ) -> ApiResult<String> {
+    issue_token_ctx(
+        state,
+        user_id,
+        kind,
+        device_name,
+        &crate::geo::ReqCtx::default(),
+    )
+    .await
+}
+
+/// `issue_token` that also records where the sign-in came from (Security tab).
+pub async fn issue_token_ctx(
+    state: &AppState,
+    user_id: Uuid,
+    kind: &str,
+    device_name: Option<&str>,
+    ctx: &crate::geo::ReqCtx,
+) -> ApiResult<String> {
     let (token, hash) = new_token();
     let expires: Option<chrono::DateTime<chrono::Utc>> =
         (kind == "web").then(|| chrono::Utc::now() + chrono::Duration::days(WEB_TOKEN_DAYS));
     sqlx::query(
-        "INSERT INTO auth_tokens(id, user_id, token_hash, kind, device_name, expires_at)
-         VALUES($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO auth_tokens(id, user_id, token_hash, kind, device_name, expires_at, ip, user_agent, location)
+         VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
@@ -224,6 +242,9 @@ pub async fn issue_token(
     .bind(kind)
     .bind(device_name)
     .bind(expires)
+    .bind(&ctx.ip)
+    .bind(&ctx.user_agent)
+    .bind(&ctx.location)
     .execute(&state.db)
     .await?;
     Ok(token)

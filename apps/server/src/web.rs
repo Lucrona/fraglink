@@ -498,6 +498,12 @@ async fn login_post(
     let res = async {
         crate::api::login_limit(&st, &headers)?;
         let u = auth::check_login(&st, &f.email, &f.password).await?;
+        if crate::mfa::enabled(&st, u.id).await? {
+            return Err(AppError::bad_request(
+                "mfa_required",
+                "This account uses two-step sign-in. Sign in on the Fraglink website or app instead.",
+            ));
+        }
         auth::issue_token(&st, u.id, "web", None).await
     }
     .await;

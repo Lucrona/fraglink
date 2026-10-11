@@ -11,6 +11,8 @@ for f in ("site.css", "app.js", "admin.js"):
     h.update(open(os.path.join(HERE, "static", "assets", f), "rb").read())
 v = h.hexdigest()[:10]
 layout = open(os.path.join(HERE, "layout.html")).read()
+# Cloudflare Turnstile site key (public). Widget "Fraglink website": playfraglink.com + beta.
+SITEKEY = os.environ.get("FRAGLINK_TURNSTILE_SITEKEY", "0x4AAAAAAFUF0sKGuaUYzQ8H")
 for name in sorted(os.listdir(os.path.join(HERE, "pages"))):
     src = open(os.path.join(HERE, "pages", name)).read()
     m = re.match(r"<!--\s*(.*?)\s*-->\n", src)
@@ -18,7 +20,7 @@ for name in sorted(os.listdir(os.path.join(HERE, "pages"))):
     meta = {k.strip(): v_.strip() for k, v_ in meta.items()}
     body = src[m.end():] if m else src
     out = (layout.replace("{{title}}", meta.get("title", "Fraglink")).replace("{{page}}", meta.get("page", ""))
-                 .replace("{{v}}", v).replace("{{body}}", body.strip()))
+                 .replace("{{v}}", v).replace("{{body}}", body.strip())).replace("__SITEKEY__", SITEKEY)
     assert "xfire" not in out.lower(), name
     open(os.path.join(DIST, name), "w").write(out)
 open(os.path.join(DIST, "robots.txt"), "w").write("User-agent: *\nDisallow: /\n")

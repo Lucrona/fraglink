@@ -4,24 +4,32 @@
 // sqlx row tuples are long but clearer inline than named aliases.
 #![allow(clippy::type_complexity)]
 
+pub mod account;
 pub mod activity;
 pub mod admin;
 pub mod api;
 pub mod auth;
+pub mod avatars;
 pub mod config;
 pub mod error;
 pub mod friends;
 pub mod game_overrides;
 pub mod game_status;
 pub mod games;
+pub mod geo;
+pub mod home;
 pub mod hours;
 pub mod icons;
+pub mod mailer;
+pub mod mfa;
 pub mod names;
 pub mod presence;
 pub mod profile;
 pub mod realms;
 pub mod retire;
+pub mod sig;
 pub mod steam;
+pub mod turnstile;
 pub mod web;
 
 use axum::Router;
@@ -126,6 +134,10 @@ pub fn router(state: AppState) -> Router {
         .merge(web::routes())
         .merge(profile::routes())
         .merge(admin::routes())
+        .merge(mfa::routes())
+        .merge(account::routes())
+        .merge(avatars::routes())
+        .merge(home::routes())
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(state)
 }

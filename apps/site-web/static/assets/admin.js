@@ -23,6 +23,7 @@ const TABS = [
   ["games", "Games", can.games],
   ["users", "Users", can.users],
   ["hours", "Hours review", can.hours],
+  ["avatars", "Reported pictures", can.avatars],
   ["server", "Server", can.server],
   ["announcements", "Announcements", can.announcements],
   ["staff", "Staff", can.staff],
@@ -41,7 +42,7 @@ function route() {
   const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
   const t = tab === "user" ? "users" : tab;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
-  const fn = { approvals, games, users, hours: hoursReview, server, announcements, staff, user: userDetail }[tab];
+  const fn = { approvals, games, users, hours: hoursReview, avatars: avatarReports, server, announcements, staff, user: userDetail }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -80,6 +81,21 @@ async function approvals() {
     } else if (b.matches("[data-undo]")) {
       await act(b, async () => { await api("/admin/suggestions/undo", { method: "POST", body: { exe } }); tr.remove(); });
     }
+  };
+}
+/* ---------- reported pictures ---------- */
+async function avatarReports() {
+  const d = await api("/admin/avatar_reports");
+  badge("avatars", d.reports.length);
+  const pic = a => a && a.url_64 ? `<img src="${esc(a.url_64)}" width="64" height="64" style="border-radius:4px;border:1px solid var(--line)" alt="">` : `<span class="muted">(already reset)</span>`;
+  view.innerHTML = `<section class="panel"><h2>Reported pictures</h2><div class="note">Players report pictures from profiles. Remove resets it to the default and blocks that exact image from being uploaded again.</div>
+    ${d.reports.length ? `<table><thead><tr><th>Picture</th><th>Player</th><th class="num">Reports</th><th>Latest reason</th><th>Last report</th><th class="num"></th></tr></thead><tbody>
+    ${d.reports.map(r => `<tr data-id="${esc(r.user_id)}"><td>${pic(r.avatar)}</td><td><a href="#user/${esc(r.user_id)}">${esc(r.handle)}</a></td><td class="num">${r.reports}</td><td>${esc(r.reason || "")}</td><td>${when(r.last_at)}</td>
+      <td class="num"><div class="acts"><button class="btn sm danger" data-rm>Remove</button><button class="btn sm" data-ok>Keep</button></div></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No open reports.</div>`}</section>`;
+  view.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return; const tr = b.closest("tr[data-id]"); const id = tr.dataset.id;
+    if (b.matches("[data-rm]")) await act(b, async () => { await api(`/admin/users/${id}/avatar/remove`, { method: "POST" }); tr.remove(); });
+    else if (b.matches("[data-ok]")) await act(b, async () => { await api(`/admin/avatar_reports/${id}/dismiss`, { method: "POST" }); tr.remove(); });
   };
 }
 function badge(tab, n) { const s = $(`.tabs a[data-tab=${tab}] .n`); if (s) { s.textContent = n; s.hidden = !n; } }
@@ -231,6 +247,7 @@ async function userDetail(id) {
     <section class="panel"><h2>Actions</h2><div class="body f">
       ${u.banned_at ? `<button class="btn" id="unban">Unban</button>` : `<label>Ban reason (optional, kept in the audit log)<input type="text" id="reason" maxlength="200"></label><div class="row"><button class="btn danger" id="ban">Ban account</button></div><small>Banned accounts are signed out everywhere, can't sign in, and their profile is hidden.</small>`}
       ${can.reset_password ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="resetpw">Reset password</button></div><small>Makes a temporary password (shown once) and signs the account out everywhere. Send it to the user yourself; email isn't set up yet.</small><div id="pwout"></div>` : ""}
+      <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="rmav">Remove picture</button>${can.mfa_reset ? ` <button class="btn" id="mfareset">Reset two-step sign-in</button>` : ""}</div><small>Removing a picture resets it to the default and blocks that exact image. Resetting two-step sign-in lets them sign in with just their password (check it's really them first).</small>
       <div class="alert" id="amsg" hidden></div></div></section>
     <section class="panel"><h2>Signed-in devices</h2>${u.devices.length ? u.devices.map(d => `<div class="fr"><div class="who"><div class="nm">${esc(d.name || (d.kind === "web" ? "Web browser" : "Fraglink desktop"))} <small>${esc(d.kind)}</small></div><div class="gm">signed in ${day(d.created_at)} · last used ${when(d.last_used_at)}</div></div></div>`).join("") : `<div class="body empty">None.</div>`}</section>
   </div></div>`;
@@ -238,6 +255,9 @@ async function userDetail(id) {
   const ban = $("#ban"), unban = $("#unban"), reset = $("#resetpw");
   if (ban) ban.addEventListener("click", () => { if (confirm("Ban " + u.handle + "?")) act(ban, async () => { await api(`/admin/users/${id}/ban`, { method: "POST", body: { reason: $("#reason").value } }); userDetail(id); }).catch(x => msg(amsg, x.message)); });
   if (unban) unban.addEventListener("click", () => act(unban, async () => { await api(`/admin/users/${id}/unban`, { method: "POST" }); userDetail(id); }));
+  const rmav = $("#rmav"), mfar = $("#mfareset");
+  if (rmav) rmav.addEventListener("click", () => { if (confirm("Remove " + u.handle + "'s picture and block it?")) act(rmav, async () => { await api(`/admin/users/${id}/avatar/remove`, { method: "POST" }); msg(amsg, "Picture removed.", true); }); });
+  if (mfar) mfar.addEventListener("click", () => { if (confirm("Turn off two-step sign-in for " + u.handle + "?")) act(mfar, async () => { const r = await api(`/admin/users/${id}/mfa/reset`, { method: "POST" }); msg(amsg, r.was_enabled ? "Two-step sign-in reset." : "Two-step sign-in wasn't on.", true); }); });
   if (reset) reset.addEventListener("click", () => {
     if (!confirm("Reset " + u.handle + "'s password and sign them out everywhere?")) return;
     act(reset, async () => { const r = await api(`/admin/users/${id}/reset_password`, { method: "POST" });

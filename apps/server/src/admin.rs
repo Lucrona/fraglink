@@ -65,6 +65,16 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/staff", get(staff_list).post(staff_set))
         .route("/api/v1/admin/staff/transfer", post(staff_transfer))
         .route("/api/v1/admin/audit", get(audit_list))
+        .route("/api/v1/admin/avatar_reports", get(avatar_reports))
+        .route(
+            "/api/v1/admin/avatar_reports/{id}/dismiss",
+            post(avatar_dismiss),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/avatar/remove",
+            post(avatar_remove),
+        )
+        .route("/api/v1/admin/users/{id}/mfa/reset", post(mfa_reset))
 }
 
 static STARTED: OnceLock<std::time::Instant> = OnceLock::new();
@@ -169,6 +179,8 @@ fn permissions(r: Role) -> Value {
         "staff": admin,
         "manage_admins": r == Role::Owner,
         "audit": admin,
+        "avatars": true,
+        "mfa_reset": admin,
     })
 }
 
@@ -2113,4 +2125,102 @@ async fn game_status_save(
     )
     .await?;
     Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
+}
+
+// ------------------------------------------------------------------ avatars & two-step
+
+/// Open avatar reports, grouped per reported user (newest first).
+async fn avatar_reports(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let rows: Vec<(Uuid, String, Option<String>, Option<String>, i64, DateTime<Utc>, Option<String>, Vec<i64>)> = sqlx::query_as(
+        "SELECT u.id, u.handle, u.avatar_kind, u.avatar_hash, count(*), max(r.created_at),
+                (array_agg(r.reason ORDER BY r.created_at DESC) FILTER (WHERE r.reason IS NOT NULL))[1],
+                array_agg(r.id)
+         FROM avatar_reports r JOIN users u ON u.id = r.user_id
+         WHERE r.resolved_at IS NULL AND u.deleted_at IS NULL
+         GROUP BY u.id, u.handle, u.avatar_kind, u.avatar_hash ORDER BY max(r.created_at) DESC LIMIT 200",
+    )
+    .fetch_all(&st.db)
+    .await?;
+    let list: Vec<Value> = rows
+        .into_iter()
+        .map(|(id, h, k, hash, n, at, reason, ids)| {
+            json!({ "user_id": id, "handle": h, "reports": n, "last_at": at, "reason": reason, "report_ids": ids,
+                    "avatar": crate::avatars::avatar_json(id, k.as_deref(), hash.as_deref(), None) })
+        })
+        .collect();
+    Ok(Json(json!({ "reports": list })))
+}
+
+async fn avatar_dismiss(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    // `id` is the reported user's id: dismiss all their open reports.
+    s.need(Role::Moderator)?;
+    let (handle, _, _) = target(&st, id).await?;
+    let n = sqlx::query(
+        "UPDATE avatar_reports SET resolved_at = now(), resolved_by = $2, resolution = 'dismissed'
+         WHERE user_id = $1 AND resolved_at IS NULL",
+    )
+    .bind(id)
+    .bind(s.user.id)
+    .execute(&st.db)
+    .await?
+    .rows_affected();
+    audit(
+        &st,
+        &s,
+        "avatar.dismiss",
+        &format!("user:{handle}"),
+        Value::Null,
+        json!({ "reports": n }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true, "dismissed": n })))
+}
+
+async fn avatar_remove(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let (handle, role, _) = target(&st, id).await?;
+    if s.user.id != id {
+        outranks(&s, id, role)?;
+    }
+    let blocked = crate::avatars::remove_and_block(&st, id, s.user.id).await?;
+    audit(
+        &st,
+        &s,
+        "avatar.remove",
+        &format!("user:{handle}"),
+        json!({ "avatar": "upload" }),
+        json!({ "avatar": "default", "blocked_hash": blocked }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn mfa_reset(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let (handle, role, _) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    let was = crate::mfa::reset(&st, id).await?;
+    audit(
+        &st,
+        &s,
+        "user.mfa_reset",
+        &format!("user:{handle}"),
+        json!({ "mfa": was }),
+        json!({ "mfa": false }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true, "was_enabled": was })))
 }

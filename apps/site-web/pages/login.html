@@ -4,7 +4,14 @@
     <div id="err" class="alert err" hidden></div>
     <label>Username or email<input type="text" name="login" required autocomplete="username" autofocus></label>
     <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
+    <div class="cf-turnstile" data-sitekey="__SITEKEY__" data-theme="dark"></div>
     <div class="row"><button class="btn dl">Sign in</button><a href="/forgot" style="margin-left:auto">Forgot your password?</a></div>
+  </form>
+  <form class="f" id="mfa" hidden autocomplete="off">
+    <div id="mfa-err" class="alert err" hidden></div>
+    <p style="margin:0 0 8px">Two-step sign-in is on for this account. Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
+    <label>Code<input type="text" name="code" required maxlength="16" autocomplete="one-time-code" autofocus></label>
+    <div class="row"><button class="btn dl">Verify</button><a href="/login" style="margin-left:auto">Start over</a></div>
   </form>
   <p class="hint" style="margin:14px 0 0">New to Fraglink? <a href="/signup">Create an account</a>.</p>
 </div></section></div>
