@@ -396,13 +396,22 @@
       <h4>New Users</h4><p class="side-help">Set up a free Fraglink account so you can log in and see your friends. Game tracking works without one.</p><ul class="lg-res"><li><a data-action="register">New User Registration</a></li></ul>
       <h4>Resources</h4><ul class="lg-res"><li><a data-action="web" data-page="faq">Frequently Asked Questions</a></li><li><a data-action="web" data-page="support">Technical Support Forum</a></li><li><a data-action="web" data-page="releases">Latest Release Notes</a></li></ul>`;
   }
+  // Your relation to a search result: 'friend', 'out' (request sent), 'in' (they asked you) or ''.
+  function relationOf(handle) {
+    const h = String(handle || '').toLowerCase(), l = realMode() ? LIVE.friends.list : null;
+    const has = xs => (xs || []).some(x => String(x.handle || '').toLowerCase() === h);
+    if (l) return has(l.friends) ? 'friend' : has(l.outgoing) ? 'out' : has(l.incoming) ? 'in' : '';
+    const f = FRIENDS.find(x => String(x.handle || x.name || '').toLowerCase() === h);
+    return !f ? '' : f.kind === 'out' ? 'out' : f.kind === 'req' ? 'in' : 'friend';
+  }
+  const REL_TAG = { friend: 'Already friends', out: 'Request sent', in: 'Wants to add you' };
   /* Add Friend: small modal over the dimmed friends list (search, results, personal message in one window). */
   function addFriendHtml() {
     const A = state.addFriend, us = A.users, sel = A.sel || '';
     let rows = '';
     if (us === null) rows = '<tr class="af-note"><td colspan="2">Searching…</td></tr>';
-    else if (us) rows = us.length ? us.map(u => `<tr class="${u.handle === sel ? 'sel' : ''}" data-action="add-pick" data-handle="${esc(u.handle)}"><td>${esc(u.handle)}</td><td>${esc(u.display_name || u.handle)}</td></tr>`).join('') : `<tr class="af-note"><td colspan="2">${esc(A.err || A.self || 'No users found. Check the spelling, or try part of their name.')}</td></tr>`;
-    const n = us ? us.length : 0;
+    else if (us) rows = us.length ? us.map(u => { const r = relationOf(u.handle); return `<tr class="${u.handle === sel ? 'sel' : ''}" data-action="add-pick" data-handle="${esc(u.handle)}"><td>${esc(u.handle)}</td><td>${esc(u.display_name || u.handle)}${r ? ` <em class="af-rel">${REL_TAG[r]}</em>` : ''}</td></tr>`; }).join('') : `<tr class="af-note"><td colspan="2">${esc(A.err || A.self || 'No users found. Check the spelling, or try part of their name.')}</td></tr>`;
+    const n = us ? us.length : 0, rel = sel ? relationOf(sel) : '', canAdd = sel && rel !== 'friend' && rel !== 'out' && !A.busy;
     return `<div class="af-dlg" role="dialog" aria-label="Add Friend"><div class="af-title"><span>Add Friend</span><button type="button" class="af-x" data-action="add-cancel" title="Close">×</button></div><div class="af-body">
       <label for="add-handle">Search by name, email, or username:</label>
       <input id="add-handle" maxlength="60" autocomplete="off" spellcheck="false" value="${esc(A.q)}" />
@@ -411,8 +420,8 @@
       <div class="af-h"><span>Search Results (select one):</span><span>${us ? `${n} User${n === 1 ? '' : 's'} Found` : ''}</span></div>
       <div class="af-tw"><table class="af-t"><tr><th>Username</th><th>Display Name</th></tr>${rows}</table></div>
       <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">${esc(A.msg)}</textarea>
-      <div id="add-msg"></div>
-      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>Add Friend</button></div>
+      <div id="add-msg" class="${A.bad ? 'bad' : ''}">${esc(A.out || '')}</div>
+      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${canAdd ? '' : ' disabled'}${rel === 'friend' || rel === 'out' ? ` title="${REL_TAG[rel]}"` : ''}>${A.busy ? 'Adding…' : rel === 'in' ? 'Accept' : 'Add Friend'}</button></div>
     </div></div>`;
   }
   function renderAddFriend() {
@@ -930,6 +939,13 @@
   const LATER = 'This lives on the Fraglink website, which arrives in a later update. Your hours are already being recorded on this PC.';
   function minimize() { if (TAURI) { FLB.hide(); return; } $('#app').hidden = true; $('#task-app').classList.remove('active'); }
   function restore() { $('#app').hidden = false; $('#task-app').classList.add('active'); }
+  // Short status message at the bottom of the main window (fades after a few seconds).
+  let flashTimer = null;
+  function flash(text) {
+    let f = $('#fl-flash'); if (!f) { f = document.createElement('div'); f.id = 'fl-flash'; f.className = 'fl-flash'; ($('#app') || document.body).appendChild(f); }
+    f.textContent = text; f.style.setProperty('--af-side', $('#app') && $('#app').classList.contains('side-open') && $('.xf-side') ? $('.xf-side').offsetWidth + 'px' : '0px');
+    f.classList.add('on'); clearTimeout(flashTimer); flashTimer = setTimeout(() => f.classList.remove('on'), params.get('flash') ? 1e9 : 3500);
+  }
   const toastErr = e => notice('Something went wrong', esc(String(e && e.message || e)));
 
   /* ---- data refresh ---- */
@@ -1020,20 +1036,34 @@
     'add-friend-go': async () => {
       const A = state.addFriend; if (!A) return;
       const h = (A.q || '').trim(); if (!h) return;
-      Object.assign(A, { users: null, sel: null, err: '', self: '' }); renderAddFriend();
+      Object.assign(A, { users: null, sel: null, err: '', self: '', out: '', bad: false }); renderAddFriend();
       const myId = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name, lc = h.toLowerCase();
       try { const r = await FLB.friendSearch(h); A.users = (r && r.users) || []; }
       catch (e) { A.users = []; A.err = String(e && e.message || e); }
       if (state.addFriend !== A) return;
       if (!A.users.length && !A.err && myId && (lc === String(myId).toLowerCase() || lc === String(myId).toLowerCase().replace(/^@/, ''))) A.self = "That's you!";
-      A.sel = A.users.length === 1 ? A.users[0].handle : null;
+      A.sel = null; if (A.users.length === 1) { actions['add-pick']({ dataset: { handle: A.users[0].handle } }); return; }
       renderAddFriend();
     },
-    'add-pick': a => { state.addFriend.sel = a.dataset.handle; renderAddFriend(); },
+    'add-pick': a => { const A = state.addFriend; A.sel = a.dataset.handle; const r = relationOf(A.sel); A.out = r === 'friend' ? `${A.sel} is already your friend.` : r === 'out' ? `Request already sent to ${A.sel}.` : ''; A.bad = false; renderAddFriend(); },
+    // Always answers: success closes the window with a short status message; problems show inside it.
+    // (The old code wrote the result into #add-msg and then refreshFriends() re-rendered the window,
+    // wiping the message, so nothing seemed to happen.)
     'add-friend-send': async a => {
-      const h = a.dataset.handle, m = $('#add-msg'); if (!h) return;
-      try { const r = await FLB.friendAdd(h); m.innerHTML = r === 'accepted' ? `You and <b>${esc(h)}</b> are now friends.` : `Request sent. <b>${esc(h)}</b> shows under Friend Requests until they accept.`; refreshFriends(); }
-      catch (e) { m.innerHTML = `<span class="bad">${esc(String(e && e.message || e))}</span>`; }
+      const A = state.addFriend, h = a.dataset.handle; if (!A || !h || A.busy) return;
+      const rel = relationOf(h);
+      if (rel === 'friend' || rel === 'out') { Object.assign(A, { out: rel === 'friend' ? `${h} is already your friend.` : `Request already sent to ${h}.`, bad: true }); renderAddFriend(); return; }
+      Object.assign(A, { busy: true, out: '', bad: false }); renderAddFriend();
+      try {
+        const r = await FLB.friendAdd(h);
+        if (state.addFriend !== A) return;
+        state.addFriend = null; render();
+        flash(r === 'accepted' ? (rel === 'in' ? `You and ${h} are now friends.` : `${h} is already your friend.`) : `Friend request sent to ${h}.`);
+        refreshFriends();
+      } catch (e) {
+        if (state.addFriend !== A) return;
+        Object.assign(A, { busy: false, out: String(e && e.message || e) || "Couldn't send the request. Try again.", bad: true }); renderAddFriend();
+      }
     },
     'update-now': a => { a.disabled = true; a.classList.add('busy'); a.title = 'Restarting…'; FLB.installUpdate().catch(e => { a.disabled = false; a.classList.remove('busy'); a.title = 'Update ready - click to restart'; toastErr(e); }); },
     // Help > Check for Updates: "You're up to date", or the update downloads, installs and restarts.

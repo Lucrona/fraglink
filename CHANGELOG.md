@@ -5,7 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+- **Add Friend always answers:** clicking Add Friend now closes the window and shows "Friend request sent to …"
+  at the bottom of the main window. Problems (already friends, request already sent, errors) show inside the
+  Add Friend window. Before, the answer was written into the window and then wiped straight away when the
+  friends list refreshed, so nothing seemed to happen. Results that are already your friends (or that you
+  already asked) are marked "Already friends" / "Request sent" and Add Friend is greyed out for them; for
+  someone who asked you, the button says Accept.
+
 ### Changed
+- **Bigger Add Friend window:** about 25% larger, with the friends list's text size, a taller results list
+  (about 6 rows), roomier buttons and padding, and the list behind it dimmed a bit more.
 - **Side panel height like the classic client:** the info panel now starts just under the main window's title
   bar and stops a little above its bottom edge, instead of running the full height of the window. The main
   window keeps all four rounded corners. Width is unchanged (180 px, still draggable).

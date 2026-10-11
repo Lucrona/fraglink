@@ -454,3 +454,27 @@ body.skin-dark .xf-app.side-open .dk-edges [data-resize=East] { top: var(--side-
 body.skin-dark .xf-app.side-open .dk-edges [data-resize=NorthEast] { display: none; }
 body.skin-dark .xf-app.side-open .dk-edges [data-resize=SouthEast] { bottom: var(--side-bot); }
 body.skin-dark .xf-app.side-open .dk-grip { bottom: calc(var(--side-bot) + 1px); }
+
+/* dev.18: roomier Add Friend window (~25-30% larger), friends-list text size, darker dim behind */
+.af-modal { background: rgba(0,0,0,.68); }
+.af-dlg { width: 312px; max-width: calc(100% - 24px - var(--af-side, 0px)); max-height: calc(100% - 16px); overflow: auto; font-size: 12px; }
+.af-title { height: 22px; padding: 0 3px 0 9px; font-size: 12px; }
+.af-x { width: 20px; height: 20px; font-size: 17px; line-height: 17px; }
+.af-body { padding: 9px 11px 4px; }
+.af-body label { margin: 3px 0 4px; }
+.af-body input, .af-body textarea, .af-b { font-size: 12px; }
+.af-body input { height: 23px; padding: 2px 5px; }
+.af-body textarea { height: 50px; padding: 3px 5px; }
+.af-body .af-ex { font-size: 11px; margin-top: 3px; }
+.af-body .af-btns { margin: 9px 0; gap: 6px; }
+.af-b { min-width: 76px; height: 23px; padding: 0 11px; }
+.af-body .af-h { margin: 3px 0 4px; }
+.af-tw { height: 124px; margin-bottom: 9px; }
+.af-body .af-t th, .af-body .af-t td { padding: 3px 6px; line-height: 15px; }
+.af-body #add-msg { font-size: 11px; }
+.af-body .af-t .af-rel { font-style: normal; font-size: 10px; color: #8ea3c8; margin-left: 4px; }
+.af-body .af-t tr.sel .af-rel { color: #cfe0ff; }
+.af-body #add-msg { color: #9fd0ff; margin: 2px 0 0; } .af-body #add-msg.bad { color: #ff9a8a; }
+.fl-flash { position: absolute; left: 50%; bottom: 46px; transform: translateX(calc(-50% - var(--af-side, 0px) / 2)); z-index: 26; max-width: 280px; padding: 5px 12px; background: #1b1d22; color: #e6e9ee; border: 1px solid #000; border-left: 3px solid var(--dk-blue1, #4b82d6); box-shadow: 2px 2px 8px rgba(0,0,0,.6); font: 12px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; opacity: 0; transition: opacity .25s; }
+.fl-flash.on { opacity: 1; }
+.fl-flash::before { content: none; }
