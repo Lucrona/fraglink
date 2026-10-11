@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 - **WoW realm without `realmName`:** when a WoW install's `WTF\Config.wtf` doesn't name a realm (the Classic
+- **Real WoW realm names:** the server now keeps Blizzard's realm lists (Retail, Classic and Classic Era; US, EU, Korea, Taiwan), refreshed daily, and the app downloads them along with the game lists. When the realm comes from the character folders, a folder that matches a real realm name wins over other folders; realms not on the list (such as beta realms) still work as before. Server: `GET /api/v1/games/wow-realms` (ETag-cached).
   beta doesn't), Fraglink takes the realm from the character folders WoW keeps under
   `WTF\Account\<account>\<realm>\<character>\`: the realm whose character was played most recently,
   across all accounts. `SavedVariables`, number-only folders and folders without characters are skipped.

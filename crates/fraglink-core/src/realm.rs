@@ -11,7 +11,9 @@
 //! the realm whose character folder changed most recently. That scan runs when the game
 //! is detected and then at most every [`SCAN_EVERY`] while playing.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 use std::time::{Duration, Instant, SystemTime};
 
 /// How often the account folders are scanned while playing (only when Config.wtf has no realm).
@@ -28,7 +30,52 @@ fn newest(a: Option<SystemTime>, b: Option<SystemTime>) -> Option<SystemTime> {
 /// one character subfolder (`SavedVariables` and all-digit names are skipped). Its age is the
 /// newest modification time of its character folders and the files directly inside them.
 pub fn realm_from_accounts(wtf: &Path) -> Option<String> {
+    let known = KNOWN.read().ok()?;
+    realm_from_accounts_with(wtf, known.as_ref())
+}
+
+/// Real realm names (lower-case), from the server's `/api/v1/games/wow-realms`.
+static KNOWN: RwLock<Option<HashSet<String>>> = RwLock::new(None);
+
+/// Install the list of real realm names. Folder names found in it win over others
+/// (beta / private realms are missing from Blizzard's list and still work as fallback).
+pub fn set_known_realms<I: IntoIterator<Item = String>>(names: I) {
+    let set: HashSet<String> = names.into_iter().map(|n| n.trim().to_lowercase()).collect();
+    if let Ok(mut k) = KNOWN.write() {
+        *k = (!set.is_empty()).then_some(set);
+    }
+}
+
+/// Names from the server's realm list (`{"flavours":{flavour:{region:[names]}}}`,
+/// plain or gzip). `None` when unusable or empty.
+pub fn known_realms_from_bytes(b: &[u8]) -> Option<Vec<String>> {
+    use std::io::Read;
+    let mut raw = Vec::new();
+    let json = if b.starts_with(&[0x1f, 0x8b]) {
+        flate2::read::GzDecoder::new(b).read_to_end(&mut raw).ok()?;
+        &raw[..]
+    } else {
+        b
+    };
+    let v: serde_json::Value = serde_json::from_slice(json).ok()?;
+    let names: Vec<String> = v
+        .get("flavours")?
+        .as_object()?
+        .values()
+        .filter_map(|r| r.as_object())
+        .flat_map(|r| r.values())
+        .filter_map(|l| l.as_array())
+        .flatten()
+        .filter_map(|n| n.as_str().map(str::to_string))
+        .collect();
+    (!names.is_empty()).then_some(names)
+}
+
+/// [`realm_from_accounts`] with an explicit list: the most recently played realm that is
+/// on the list; when none is (or there is no list), the most recently played folder.
+pub fn realm_from_accounts_with(wtf: &Path, known: Option<&HashSet<String>>) -> Option<String> {
     let mut best: Option<(SystemTime, String)> = None;
+    let mut best_known: Option<(SystemTime, String)> = None;
     for acc in std::fs::read_dir(wtf.join("Account")).ok()?.flatten() {
         if !acc.file_type().is_ok_and(|t| t.is_dir()) {
             continue;
@@ -67,12 +114,18 @@ pub fn realm_from_accounts(wtf: &Path) -> Option<String> {
                 continue;
             }
             let when = when.unwrap_or(SystemTime::UNIX_EPOCH);
+            let name = name.trim().to_string();
+            if known.is_some_and(|k| k.contains(&name.to_lowercase()))
+                && best_known.as_ref().is_none_or(|(t, _)| when > *t)
+            {
+                best_known = Some((when, name.clone()));
+            }
             if best.as_ref().is_none_or(|(t, _)| when > *t) {
-                best = Some((when, name.trim().to_string()));
+                best = Some((when, name));
             }
         }
     }
-    best.map(|(_, n)| n)
+    best_known.or(best).map(|(_, n)| n)
 }
 
 /// Fraglink game ids of every WoW flavour (`wow`, `wow_classic`, `wow_forever`, ...).
@@ -329,5 +382,42 @@ mod tests {
         touch(&b.join("Empty Realm/file.txt"), 9000);
         assert_eq!(realm_from_accounts(&wtf).as_deref(), Some("Barthilas"));
         assert_eq!(realm_from_accounts(&dir.path().join("nope")), None);
+    }
+
+    #[test]
+    fn realm_list_bytes() {
+        let j =
+            br#"{"v":1,"flavours":{"retail":{"us":["Frostmourne"]},"classic":{"eu":["Firemaw"]}}}"#;
+        let mut n = known_realms_from_bytes(j).unwrap();
+        n.sort();
+        assert_eq!(n, ["Firemaw", "Frostmourne"]);
+        assert!(known_realms_from_bytes(b"{}").is_none());
+    }
+
+    #[test]
+    fn known_realm_names_win_and_unknown_ones_are_the_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let wtf = dir.path().join("WTF");
+        let a = wtf.join("Account").join("ONE");
+        std::fs::create_dir_all(a.join("Frostmourne/Aaa")).unwrap();
+        std::fs::create_dir_all(a.join("Some Addon Junk/Bbb")).unwrap();
+        touch(&a.join("Frostmourne/Aaa/c.lua"), -600);
+        touch(&a.join("Some Addon Junk/Bbb/c.lua"), 600);
+        let known: HashSet<String> = ["frostmourne".to_string()].into();
+        assert_eq!(
+            realm_from_accounts_with(&wtf, Some(&known)).as_deref(),
+            Some("Frostmourne")
+        );
+        assert_eq!(
+            realm_from_accounts_with(&wtf, None).as_deref(),
+            Some("Some Addon Junk")
+        );
+        // beta realm not on Blizzard's list: heuristic still answers
+        let beta = dir.path().join("BETA");
+        std::fs::create_dir_all(beta.join("Account/X/Classic Beta PvE/Ccc")).unwrap();
+        assert_eq!(
+            realm_from_accounts_with(&beta, Some(&known)).as_deref(),
+            Some("Classic Beta PvE")
+        );
     }
 }

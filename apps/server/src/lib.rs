@@ -18,6 +18,7 @@ pub mod icons;
 pub mod names;
 pub mod presence;
 pub mod profile;
+pub mod realms;
 pub mod retire;
 pub mod steam;
 pub mod web;
@@ -52,6 +53,8 @@ pub struct AppState {
     pub overrides: Arc<game_overrides::OverrideCache>,
     /// Retired games -> successor ids (see `retire`).
     pub retired: Arc<retire::RetireCache>,
+    /// WoW realm names (see `realms`).
+    pub realms: Arc<realms::RealmCache>,
 }
 
 impl AppState {
@@ -69,6 +72,7 @@ impl AppState {
             games: Arc::new(games::GameLists::default()),
             overrides: Arc::new(game_overrides::OverrideCache::default()),
             retired: Arc::new(retire::RetireCache::default()),
+            realms: Arc::new(realms::RealmCache::default()),
         }
     }
 

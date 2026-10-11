@@ -58,6 +58,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/games/icons", get(game_icons))
         .route("/icons/games/{size}/{file}", get(crate::icons::serve))
         .route("/api/v1/games/detectable", get(crate::games::detectable))
+        .route("/api/v1/games/wow-realms", get(crate::realms::serve))
         .route("/api/v1/games/overrides", get(crate::games::overrides))
         .route("/api/v1/games/suggest", post(crate::games::suggest))
 }

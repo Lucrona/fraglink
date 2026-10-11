@@ -139,3 +139,25 @@ async fn staff_renames_reach_the_overrides_list(pool: PgPool) {
         )
         .is_none());
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn wow_realms_are_served_from_the_cache_with_an_etag(pool: PgPool) {
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path().to_path_buf();
+    let app = fraglink_server::router(state_with(pool, |c| c.data_dir = d.clone()));
+    let r = send(&app, get("/api/v1/games/wow-realms", &[])).await;
+    assert_eq!(r.status, StatusCode::SERVICE_UNAVAILABLE, "no list yet");
+    let body =
+        r#"{"v":1,"updated":"x","source":"test","flavours":{"retail":{"us":["Frostmourne"]}}}"#;
+    std::fs::write(d.join("wow-realms.json"), body).unwrap();
+    let r = send(&app, get("/api/v1/games/wow-realms", &[])).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.text, body);
+    let etag = r.headers[header::ETAG].to_str().unwrap().to_string();
+    let again = send(
+        &app,
+        get("/api/v1/games/wow-realms", &[("if-none-match", &etag)]),
+    )
+    .await;
+    assert_eq!(again.status, StatusCode::NOT_MODIFIED);
+}

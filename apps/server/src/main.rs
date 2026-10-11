@@ -35,6 +35,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!(e.message))?;
     tokio::spawn(fraglink_server::games::refresh_loop(state.clone()));
+    tokio::spawn(fraglink_server::realms::refresh_loop(state.clone()));
     let bg = state.clone();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));

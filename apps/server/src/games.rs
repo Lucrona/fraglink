@@ -147,13 +147,13 @@ pub struct GameLists {
     >,
 }
 
-fn etag_of(b: &[u8]) -> String {
+pub(crate) fn etag_of(b: &[u8]) -> String {
     let h = Sha256::digest(b);
     let hex: String = h[..12].iter().map(|x| format!("{x:02x}")).collect();
     format!("\"{hex}\"")
 }
 
-fn gzip(b: &[u8]) -> std::io::Result<Vec<u8>> {
+pub(crate) fn gzip(b: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
     gz.write_all(b)?;
     gz.finish()
@@ -356,7 +356,12 @@ fn not_modified(headers: &HeaderMap, etag: &str) -> bool {
         .is_some_and(|v| v.split(',').any(|t| t.trim() == etag || t.trim() == "*"))
 }
 
-fn respond(headers: &HeaderMap, etag: &str, json: &[u8], gz: Option<&[u8]>) -> Response<Body> {
+pub(crate) fn respond(
+    headers: &HeaderMap,
+    etag: &str,
+    json: &[u8],
+    gz: Option<&[u8]>,
+) -> Response<Body> {
     let mut b = Response::builder()
         .header(header::ETAG, etag)
         .header(header::CACHE_CONTROL, "public, max-age=3600")

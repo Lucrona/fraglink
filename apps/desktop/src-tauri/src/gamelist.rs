@@ -17,6 +17,7 @@ use tauri::{AppHandle, Manager};
 
 const LIST_PATH: &str = "/api/v1/games/detectable";
 const OVERRIDES_PATH: &str = "/api/v1/games/overrides";
+const REALMS_PATH: &str = "/api/v1/games/wow-realms";
 const REFRESH: Duration = Duration::from_secs(6 * 3600); // cheap: ETag, usually 304
 const RETRY: Duration = Duration::from_secs(3600);
 
@@ -25,6 +26,8 @@ struct Files {
     list_etag: PathBuf,
     overrides: PathBuf,
     overrides_etag: PathBuf,
+    realms: PathBuf,
+    realms_etag: PathBuf,
 }
 
 fn files(data: &Path) -> Files {
@@ -33,6 +36,8 @@ fn files(data: &Path) -> Files {
         list_etag: data.join("detectable.etag"),
         overrides: data.join("detect-overrides.json"),
         overrides_etag: data.join("detect-overrides.etag"),
+        realms: data.join("wow-realms.json"),
+        realms_etag: data.join("wow-realms.etag"),
     }
 }
 
@@ -64,6 +69,13 @@ fn load_cache(app: &AppHandle, f: &Files) {
             }
             Err(err) => log::warn!("overrides cache unusable: {err:#}"),
         }
+    }
+    if let Some(n) = std::fs::read(&f.realms)
+        .ok()
+        .and_then(|b| fraglink_core::realm::known_realms_from_bytes(&b))
+    {
+        log::info!("wow realm list: {} names from cache", n.len());
+        fraglink_core::realm::set_known_realms(n);
     }
 }
 
@@ -137,6 +149,20 @@ fn refresh(app: &AppHandle, f: &Files) -> Result<(), String> {
             }
         }
         Err(e) => return Err(e.to_string()),
+    }
+    // real WoW realm names, to check WTF\Account folder names against (optional:
+    // older servers don't have it, and the folder heuristic works without it)
+    match c.fetch_list(REALMS_PATH, read_etag(&f.realms_etag, &f.realms).as_deref()) {
+        Ok(None) => {}
+        Ok(Some((body, etag))) => match fraglink_core::realm::known_realms_from_bytes(&body) {
+            Some(n) => {
+                log::info!("wow realm list: {} names downloaded", n.len());
+                save(&f.realms, &body, &f.realms_etag, etag.as_deref());
+                fraglink_core::realm::set_known_realms(n);
+            }
+            None => log::warn!("wow realm list: bad download"),
+        },
+        Err(e) => log::info!("wow realm list not available: {e}"),
     }
     Ok(())
 }
