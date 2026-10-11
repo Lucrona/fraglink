@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.17] - 2026-10-11
+
+Test update (builds report `0.2.0-17`). Server update: friend search matches part of a name.
+
 ### Changed
 - **Dark pop-up notifications:** the small bottom-right pop-ups (a friend logged on, started playing, sent a
   friend request) now match the dark look: dark grey box with a thin border, a blue title bar with the logo
