@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Added
+- **WoW realm without `realmName`:** when a WoW install's `WTF\Config.wtf` doesn't name a realm (the Classic
+  beta doesn't), Fraglink takes the realm from the character folders WoW keeps under
+  `WTF\Account\<account>\<realm>\<character>\`: the realm whose character was played most recently,
+  across all accounts. `SavedVariables`, number-only folders and folders without characters are skipped.
+  It checks when the game starts and every 3 minutes while you play; a realm in Config.wtf still wins.
 - **Retire a game (website admin):** staff can retire any game entry. It keeps its name, icon and every hour
   recorded so far and shows as a normal past game on profiles, but its program is detached: the next time
   someone plays it, the time goes to a new entry (named after the program) that starts from zero and waits

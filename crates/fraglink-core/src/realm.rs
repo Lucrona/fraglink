@@ -5,9 +5,75 @@
 //! The file is read when that WoW starts and again whenever its modification
 //! time or size changes (checked on the normal 5 s poll). No game hooks and no
 //! memory reads: just a small text file the game itself writes.
+//!
+//! Some installs (e.g. the Classic beta) never write `realmName`. Then the realm is
+//! taken from the folders WoW keeps per character, `WTF\Account\<account>\<realm>\<character>\`:
+//! the realm whose character folder changed most recently. That scan runs when the game
+//! is detected and then at most every [`SCAN_EVERY`] while playing.
 
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
+
+/// How often the account folders are scanned while playing (only when Config.wtf has no realm).
+pub const SCAN_EVERY: Duration = Duration::from_secs(180);
+
+fn newest(a: Option<SystemTime>, b: Option<SystemTime>) -> Option<SystemTime> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(x.max(y)),
+        (x, y) => x.or(y),
+    }
+}
+
+/// Most recently played realm under `<WTF>/Account/*/`: a realm folder is one with at least
+/// one character subfolder (`SavedVariables` and all-digit names are skipped). Its age is the
+/// newest modification time of its character folders and the files directly inside them.
+pub fn realm_from_accounts(wtf: &Path) -> Option<String> {
+    let mut best: Option<(SystemTime, String)> = None;
+    for acc in std::fs::read_dir(wtf.join("Account")).ok()?.flatten() {
+        if !acc.file_type().is_ok_and(|t| t.is_dir()) {
+            continue;
+        }
+        let Ok(realms) = std::fs::read_dir(acc.path()) else {
+            continue;
+        };
+        for r in realms.flatten() {
+            let name = r.file_name().to_string_lossy().into_owned();
+            if !r.file_type().is_ok_and(|t| t.is_dir())
+                || name.eq_ignore_ascii_case("SavedVariables")
+                || name.chars().all(|c| c.is_ascii_digit())
+                || name.starts_with('.')
+            {
+                continue;
+            }
+            let Ok(chars) = std::fs::read_dir(r.path()) else {
+                continue;
+            };
+            let mut when: Option<SystemTime> = None;
+            let mut has_char = false;
+            for c in chars.flatten() {
+                if !c.file_type().is_ok_and(|t| t.is_dir()) {
+                    continue;
+                }
+                has_char = true;
+                when = newest(when, c.metadata().ok().and_then(|m| m.modified().ok()));
+                if let Ok(files) = std::fs::read_dir(c.path()) {
+                    for f in files.flatten() {
+                        when = newest(when, f.metadata().ok().and_then(|m| m.modified().ok()));
+                    }
+                }
+            }
+            let name: String = name.chars().filter(|c| !c.is_control()).take(64).collect();
+            if !has_char || name.trim().is_empty() {
+                continue;
+            }
+            let when = when.unwrap_or(SystemTime::UNIX_EPOCH);
+            if best.as_ref().is_none_or(|(t, _)| when > *t) {
+                best = Some((when, name.trim().to_string()));
+            }
+        }
+    }
+    best.map(|(_, n)| n)
+}
 
 /// Fraglink game ids of every WoW flavour (`wow`, `wow_classic`, `wow_forever`, ...).
 pub fn is_wow(game_id: &str) -> bool {
@@ -58,6 +124,10 @@ pub struct RealmWatch {
     /// None until the first poll.
     stamp: Option<Stamp>,
     pub realm: Option<String>,
+    /// Realm from Config.wtf (wins when present).
+    config_realm: Option<String>,
+    /// Last account-folder scan: when, and what it found.
+    scanned: Option<(Instant, Option<String>)>,
 }
 
 impl RealmWatch {
@@ -66,28 +136,49 @@ impl RealmWatch {
             path,
             stamp: None,
             realm: None,
+            config_realm: None,
+            scanned: None,
         }
     }
 
-    /// Re-read the file if it changed (or on the first call). True when the realm changed.
+    /// Re-read the file if it changed (or on the first call); without a realm in it, fall back
+    /// to the account folders (rescanned every [`SCAN_EVERY`]). True when the realm changed.
     pub fn poll(&mut self) -> bool {
         let stamp: Stamp = std::fs::metadata(&self.path)
             .ok()
             .map(|m| (m.modified().ok(), m.len()));
-        if self.stamp == Some(stamp) {
-            return false;
-        }
         let first = self.stamp.is_none();
-        self.stamp = Some(stamp);
-        let realm = stamp.and_then(|_| {
-            let bytes = std::fs::read(&self.path).ok()?;
-            parse_realm(&String::from_utf8_lossy(&bytes))
-        });
+        if self.stamp != Some(stamp) {
+            self.stamp = Some(stamp);
+            self.config_realm = stamp.and_then(|_| {
+                let bytes = std::fs::read(&self.path).ok()?;
+                parse_realm(&String::from_utf8_lossy(&bytes))
+            });
+        }
+        let realm = match &self.config_realm {
+            Some(r) => Some(r.clone()),
+            None => {
+                let due = self
+                    .scanned
+                    .as_ref()
+                    .is_none_or(|(t, _)| t.elapsed() >= SCAN_EVERY);
+                if due {
+                    let found = self.path.parent().and_then(realm_from_accounts);
+                    self.scanned = Some((Instant::now(), found));
+                }
+                self.scanned.as_ref().and_then(|(_, r)| r.clone())
+            }
+        };
         let changed = realm != self.realm;
         if changed || first {
             log::info!(
-                "wow realm from {}: {}",
+                "wow realm from {}{}: {}",
                 self.path.display(),
+                if self.config_realm.is_none() {
+                    " (account folders)"
+                } else {
+                    ""
+                },
                 realm.as_deref().unwrap_or("(none)")
             );
         }
@@ -160,5 +251,83 @@ mod tests {
         std::fs::remove_file(wtf.join("Config.wtf")).unwrap();
         assert!(w.poll());
         assert_eq!(w.realm, None);
+    }
+
+    fn touch(p: &Path, secs_from_now: i64) {
+        std::fs::write(p, "x").unwrap();
+        let t = if secs_from_now >= 0 {
+            SystemTime::now() + Duration::from_secs(secs_from_now as u64)
+        } else {
+            SystemTime::now() - Duration::from_secs((-secs_from_now) as u64)
+        };
+        std::fs::File::options()
+            .write(true)
+            .open(p)
+            .unwrap()
+            .set_modified(t)
+            .unwrap();
+    }
+
+    /// `_classic_beta_` layout: no realmName, realms as folders under the account.
+    fn beta_install(root: &Path) -> PathBuf {
+        let wtf = root.join("_classic_beta_").join("WTF");
+        let acc = wtf.join("Account").join("379572#10");
+        for d in [
+            "Classic Beta PvE/Grumz",
+            "Classic Beta PvP/Lucro",
+            "SavedVariables/Sub",
+            "70/Sub",
+        ] {
+            std::fs::create_dir_all(acc.join(d)).unwrap();
+        }
+        std::fs::write(acc.join("bindings-cache.wtf"), "x").unwrap();
+        std::fs::write(
+            wtf.join("Config.wtf"),
+            "SET portal \"test\"\nSET agentUID \"wow_classic_beta\"\n",
+        )
+        .unwrap();
+        wtf
+    }
+
+    #[test]
+    fn realm_from_account_folders_when_config_has_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let wtf = beta_install(dir.path());
+        let acc = wtf.join("Account").join("379572#10");
+        touch(&acc.join("Classic Beta PvE/Grumz/SavedVariables.lua"), 3600);
+        touch(
+            &acc.join("Classic Beta PvP/Lucro/SavedVariables.lua"),
+            -3600,
+        );
+        // the skipped folders are the newest of all
+        touch(&acc.join("SavedVariables/Sub/x.lua"), 7200);
+        touch(&acc.join("70/Sub/x.lua"), 7200);
+        assert_eq!(
+            realm_from_accounts(&wtf).as_deref(),
+            Some("Classic Beta PvE")
+        );
+        let mut w = RealmWatch::new(wtf.join("Config.wtf"));
+        assert!(w.poll());
+        assert_eq!(w.realm.as_deref(), Some("Classic Beta PvE"));
+        // Config.wtf wins once it names a realm
+        std::fs::write(wtf.join("Config.wtf"), "SET realmName \"Mankrik\"\n").unwrap();
+        assert!(w.poll());
+        assert_eq!(w.realm.as_deref(), Some("Mankrik"));
+    }
+
+    #[test]
+    fn newest_realm_across_accounts_and_no_realm_without_characters() {
+        let dir = tempfile::tempdir().unwrap();
+        let wtf = dir.path().join("WTF");
+        let a = wtf.join("Account").join("ONE");
+        let b = wtf.join("Account").join("TWO");
+        std::fs::create_dir_all(a.join("Frostmourne/Aaa")).unwrap();
+        std::fs::create_dir_all(b.join("Barthilas/Bbb")).unwrap();
+        std::fs::create_dir_all(b.join("Empty Realm")).unwrap();
+        touch(&a.join("Frostmourne/Aaa/c.lua"), -600);
+        touch(&b.join("Barthilas/Bbb/c.lua"), 600);
+        touch(&b.join("Empty Realm/file.txt"), 9000);
+        assert_eq!(realm_from_accounts(&wtf).as_deref(), Some("Barthilas"));
+        assert_eq!(realm_from_accounts(&dir.path().join("nope")), None);
     }
 }
