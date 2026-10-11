@@ -348,6 +348,7 @@ pub fn announcement_toast(
         game_id: link.to_string(),
         game: String::new(),
         icon: Some(String::new()),
+        detail: String::new(),
     })
 }
 

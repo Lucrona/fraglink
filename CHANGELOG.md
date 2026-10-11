@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Changed
+- **Dark pop-up notifications:** the small bottom-right pop-ups (a friend logged on, started playing, sent a
+  friend request) now match the dark look: dark grey box with a thin border, a blue title bar with the logo
+  and a close X, the game icon (or the friend's letter avatar) on the left, their name in bold, one line
+  of text, and the World of Warcraft realm underneath when known. Timing and clicks work as before.
 - **Add Friend is a small pop-up window:** it opens over the friends list (which dims behind it) instead of
   replacing it. One window has the search box, Cancel / Search, the results table (Username, Display Name)
   with the number of users found, a **Personal Message** and **View Profile** / **Add Friend**, which stay

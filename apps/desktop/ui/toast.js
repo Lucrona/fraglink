@@ -6,6 +6,10 @@
   const el = document.getElementById('toast'), body = document.getElementById('toast-body');
   let timer = null;
   const GENERIC = '<svg class="gi-gen" viewBox="0 0 16 16"><rect x=".5" y=".5" width="15" height="15" rx="2" fill="#39414f" stroke="#15191f"/><path d="M4.2 6h7.6c1.3 0 2.2 1 2.2 2.3l-.4 2.4c-.2 1-1.4 1.3-2.1.6L10.3 10H5.7l-1.2 1.3c-.7.7-1.9.4-2.1-.6L2 8.3C2 7 2.9 6 4.2 6z" fill="#aab4c4"/></svg>';
+  function avatar(n) {
+    n = String(n || '?'); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0;
+    return `<i class="av" style="--av:hsl(${h % 360} 28% 34%)">${esc((n.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</i>`;
+  }
   function close() { if (T) T.window.getCurrentWindow().close(); else el.hidden = true; }
   function show(p) {
     if (!p) return;
@@ -20,10 +24,12 @@
     }
     if (/^track:/.test(p.kind || '')) return ask(p, icon);
     const friend = /^(friend|request):/.test(p.kind || '');
-    // plain one-liner: "<name> logged on" / "<name> started playing <game>"
-    body.innerHTML = (p.game || !friend ? `<i class="gi">${icon}</i>` : '') +
-      `<div><b>${esc(p.title)}</b> ${esc(p.line)}${p.game ? ` <span class="g">${esc(p.game)}</span>` : ''}` +
-      `${friend ? '<br><a class="more" href="#" id="toast-more">View More</a>' : ''}</div>`;
+    // icon (game, or a letter avatar for a friend with no game), bold name, one line, then a dim line (realm / @username)
+    const lead = p.game_id || !friend ? `<i class="gi">${icon}</i>` : avatar(p.title);
+    const req = /^request:/.test(p.kind || '');
+    const sub = req ? p.game : (p.detail || '');
+    body.innerHTML = `${lead}<div class="tx"><b>${esc(p.title)}</b><span class="ln">${esc(p.line)}${!req && p.game ? ` <span class="g">${esc(p.game)}</span>` : ''}</span>` +
+      `${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
     el.hidden = false; el.classList.remove('out');
     clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 6000);
   }
@@ -41,7 +47,11 @@
   document.getElementById('toast-close').addEventListener('click', e => { e.stopPropagation(); close(); });
   el.addEventListener('click', e => { e.preventDefault(); if (T) T.core.invoke('toast_clicked'); else close(); });
   (async () => {
-    if (!T) { document.body.className = 'toast-page skin-' + (localStorage.getItem('fl-skin') || 'dark'); const q = new URLSearchParams(location.search); show(q.get('logon') ? { kind: 'friend:nova', title: 'Nova', line: 'logged on', game: '' } : { kind: 'friend:nova', title: 'Nova', line: 'started playing', game: 'Dota 2' }); return; }
+    if (!T) { document.body.className = 'toast-page skin-' + (localStorage.getItem('fl-skin') || 'dark'); el.style.cssText = 'inset:auto;right:8px;bottom:8px;width:226px;height:78px;box-sizing:border-box;animation:none'; // preview: native window size
+      const q = new URLSearchParams(location.search), t = q.get('t') || (q.get('logon') ? 'online' : 'playing');
+      show(({ online: { kind: 'friend:nova', title: 'Nova', line: 'logged on', game_id: '', game: '' },
+        request: { kind: 'request:riftwalker', title: 'Riftwalker', line: 'wants to be your friend', game_id: '', game: '@riftwalker' },
+        playing: { kind: 'friend:dizz', title: 'Dizz', line: 'started playing', game_id: 'wow', game: 'World of Warcraft', detail: 'Frostmourne', icon: q.get('icon') || '' } })[t]); return; }
     try {
       const st = await window.FL.settings();
       const skin = st.settings.skin || 'classic';

@@ -38,6 +38,8 @@ pub struct ToastPayload {
     pub game: String,
     /// `data:` URL of the game icon (filled in by `show_toast` if empty).
     pub icon: Option<String>,
+    /// Extra line under the text, e.g. the WoW realm (empty when unknown).
+    pub detail: String,
 }
 
 pub struct AppState {
@@ -85,6 +87,7 @@ fn offer_track(app: &AppHandle, c: fraglink_core::detector::Candidate) {
                 game_id: String::new(),
                 game: c.exe.clone(),
                 icon,
+                detail: String::new(),
             },
         );
     }
@@ -196,6 +199,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 game_id: game_id.clone(),
                 game: name.clone(),
                 icon: None,
+                detail: String::new(),
             }),
             TrackerEvent::Milestone {
                 game_id,
@@ -208,6 +212,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 game_id: game_id.clone(),
                 game: name.clone(),
                 icon: None,
+                detail: String::new(),
             }),
             TrackerEvent::Stopped {
                 game_id,
@@ -222,6 +227,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
                 game_id: game_id.clone(),
                 game: name.clone(),
                 icon: None,
+                detail: String::new(),
             }),
             _ => None,
         };
