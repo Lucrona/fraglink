@@ -8,6 +8,7 @@ pub mod account;
 pub mod activity;
 pub mod admin;
 pub mod api;
+pub mod art;
 pub mod auth;
 pub mod avatars;
 pub mod config;
@@ -138,6 +139,7 @@ pub fn router(state: AppState) -> Router {
         .merge(account::routes())
         .merge(avatars::routes())
         .merge(home::routes())
+        .merge(art::routes())
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(state)
 }

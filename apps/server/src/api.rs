@@ -1301,9 +1301,19 @@ async fn friend_respond(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn friends_activity(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
+#[derive(Deserialize)]
+struct TzQuery {
+    tz: Option<String>,
+}
+
+async fn friends_activity(
+    State(st): State<AppState>,
+    a: AuthUser,
+    axum::extract::Query(q): axum::extract::Query<TzQuery>,
+) -> ApiResult<Json<Value>> {
     st.rate_limit(format!("activity:{}", a.user.id), 120, 10 * MINUTE)?;
-    let items = crate::activity::recent(&st, a.user.id).await?;
+    let tz = crate::activity::tz_or_default(&st, q.tz.as_deref()).await;
+    let items = crate::activity::recent(&st, a.user.id, &tz).await?;
     Ok(Json(
         json!({ "items": items, "days": crate::activity::ACTIVITY_DAYS }),
     ))
@@ -1325,6 +1335,8 @@ struct PrivacyReq {
     share_activity: Option<bool>,
     public_profile: Option<bool>,
     show_friends: Option<bool>,
+    /// Per-feature switches (`account::PRIVACY_KEYS`), true = shown. Only sent keys change.
+    privacy: Option<serde_json::Map<String, Value>>,
 }
 
 /// Privacy switches; each field is optional (only the ones sent change).
@@ -1338,20 +1350,34 @@ async fn set_privacy(
     Json(r): Json<PrivacyReq>,
 ) -> ApiResult<Json<Value>> {
     check_origin(&a, &headers, &st)?;
-    st.rate_limit(format!("privacy:{}", a.user.id), 30, 15 * MINUTE)?;
-    let (share, public, friends): (bool, bool, bool) = sqlx::query_as(
+    st.rate_limit(format!("privacy:{}", a.user.id), 60, 15 * MINUTE)?;
+    let mut patch = serde_json::Map::new();
+    for (k, v) in r.privacy.unwrap_or_default() {
+        if !crate::account::PRIVACY_KEYS.contains(&k.as_str()) || !v.is_boolean() {
+            return Err(AppError::bad_request(
+                "invalid_privacy",
+                "Unknown privacy setting.",
+            ));
+        }
+        patch.insert(k, v);
+    }
+    let (share, public, friends, privacy): (bool, bool, bool, Value) = sqlx::query_as(
         "UPDATE users SET share_activity = coalesce($2, share_activity),
-                public_profile = coalesce($3, public_profile), show_friends = coalesce($4, show_friends)
-         WHERE id = $1 RETURNING share_activity, public_profile, show_friends",
+                public_profile = coalesce($3, public_profile), show_friends = coalesce($4, show_friends),
+                privacy = privacy || $5
+         WHERE id = $1 RETURNING share_activity, public_profile, show_friends, privacy",
     )
     .bind(a.user.id)
     .bind(r.share_activity)
     .bind(r.public_profile)
     .bind(r.show_friends)
+    .bind(Value::Object(patch))
     .fetch_one(&st.db)
     .await?;
+    crate::sig::forget(&a.user.handle);
     Ok(Json(
-        json!({ "share_activity": share, "public_profile": public, "show_friends": friends }),
+        json!({ "share_activity": share, "public_profile": public, "show_friends": friends,
+        "privacy": crate::account::privacy_view(&privacy) }),
     ))
 }
 

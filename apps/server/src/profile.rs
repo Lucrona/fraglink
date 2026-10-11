@@ -122,24 +122,18 @@ async fn profile(
         Option<String>,
         Value,
         Option<DateTime<Utc>>,
+        Value,
     );
-    let (created, shares, public, show_friends, akind, ahash, apreset, about, location, style, rig, delete_after): Extra =
+    let (created, shares, public, show_friends, akind, ahash, apreset, about, location, style, rig, delete_after, privacy): Extra =
         sqlx::query_as(
             "SELECT created_at, share_activity, public_profile, show_friends, avatar_kind, avatar_hash, avatar_preset,
-                    about, location, gaming_style, rig, delete_after FROM users WHERE id = $1",
+                    about, location, gaming_style, rig, delete_after, privacy FROM users WHERE id = $1",
         )
         .bind(p.id)
         .fetch_one(&st.db)
         .await?;
     if delete_after.is_some() && !is_self {
         return Err(not_found());
-    }
-    if viewer.is_none() && !public {
-        return Err(AppError::new(
-            StatusCode::UNAUTHORIZED,
-            "unauthorized",
-            "Sign in to see this profile.",
-        ));
     }
     let friend_count = friends::friend_ids(&st, p.id).await?.len();
     let relation = match viewer {
@@ -157,8 +151,25 @@ async fn profile(
             }
         }
     };
-    let can_see_presence = is_self || relation == "friend" || public;
-    let can_see_history = is_self || ((relation == "friend" || public) && shares);
+    let avatar = crate::avatars::avatar_json(p.id, akind.as_deref(), ahash.as_deref(), apreset);
+    // Private profile: only friends (and the owner) see more than name and picture.
+    let full = is_self || relation == "friend" || public;
+    if !full {
+        return Ok(Json(json!({
+            "handle": p.handle,
+            "display_name": p.display_name,
+            "relation": relation,
+            "private": true,
+            "avatar": avatar,
+            "public_profile": false,
+        })));
+    }
+    // Per-feature switches apply to everyone but the owner.
+    let show = |k: &str| is_self || crate::account::shows(&privacy, k);
+    let can_see_presence = true;
+    let show_game = show("now_playing");
+    let can_see_games = show("games");
+    let can_see_history = is_self || shares;
     let hidden = if is_self {
         vec![]
     } else {
@@ -170,7 +181,7 @@ async fn profile(
         let mut v = m
             .remove(&p.id)
             .unwrap_or_else(presence::PresenceView::offline);
-        if v.game_id.as_ref().is_some_and(|g| hidden.contains(g)) {
+        if !show_game || v.game_id.as_ref().is_some_and(|g| hidden.contains(g)) {
             v.game_id = None;
             v.game_name = None;
             v.game_detail = None;
@@ -183,7 +194,7 @@ async fn profile(
 
     let (mut games, mut recent) = (Vec::new(), Vec::new());
     let (mut total_min, mut min_7d) = (0i64, 0i64);
-    if can_see_history {
+    if can_see_games {
         let rows = api::game_stats(&st, p.id).await?;
         let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
         let named = names::public_names(&st, &ids).await?;
@@ -216,6 +227,8 @@ async fn profile(
                 "hidden": mine_hidden.contains(&g.game_id),
             }));
         }
+    }
+    if can_see_history {
         recent = recent_sessions(&st, p.id, is_self).await?;
         recent.retain(|r| {
             !r["game_id"]
@@ -226,13 +239,26 @@ async fn profile(
 
     // Friends grid: the user's own, friends' and public profiles (unless switched off).
     let mut friend_grid = Value::Null;
-    if is_self || (show_friends && (relation == "friend" || public)) {
+    if is_self || show_friends {
         let fl = friends::list(&st, p.id).await?;
+        // Friends who hide their game (or are private to this viewer) show no game here.
+        let fids: Vec<String> = fl.friends.iter().map(|f| f.handle.clone()).collect();
+        let quiet: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT u.handle FROM users u WHERE u.handle = ANY($1) AND NOT ({} AND (u.public_profile OR u.id = ANY($2)))",
+            crate::account::sql_shows("now_playing")
+        )))
+        .bind(&fids)
+        .bind(match viewer {
+            Some(v) => friends::friend_ids(&st, v).await?.into_iter().chain([v]).collect::<Vec<_>>(),
+            None => vec![],
+        })
+        .fetch_all(&st.db)
+        .await?;
         let mut list: Vec<Value> = fl
             .friends
             .iter()
             .map(|f| json!({ "handle": f.handle, "display_name": f.display_name, "avatar": f.avatar,
-                "status": f.presence.status, "game_name": if f.presence.game_id.as_deref().is_some_and(|g| g != names::UNLISTED_ID) { f.presence.game_name.clone() } else { None } }))
+                "status": f.presence.status, "game_name": if !quiet.contains(&f.handle) && f.presence.game_id.as_deref().is_some_and(|g| g != names::UNLISTED_ID) { f.presence.game_name.clone() } else { None } }))
             .collect();
         list.sort_by_key(|f| match (f["status"].as_str(), f["game_name"].is_null()) {
             (Some("online"), false) => 0,
@@ -262,16 +288,18 @@ async fn profile(
         "shares_activity": shares,
         "public_profile": public,
         "history_visible": can_see_history,
+        "games_visible": can_see_games,
+        "privacy": if is_self { crate::account::privacy_view(&privacy) } else { Value::Null },
         "presence": presence,
         "games": games,
         "overall": { "total_min": total_min, "minutes_7d": min_7d },
         "recent": recent,
         "recent_days": RECENT_DAYS,
-        "avatar": crate::avatars::avatar_json(p.id, akind.as_deref(), ahash.as_deref(), apreset),
-        "about": about,
-        "location": location,
-        "gaming_style": style,
-        "rig": if has_rig { rig } else { Value::Null },
+        "avatar": avatar,
+        "about": if show("about") { about } else { None },
+        "location": if show("location") { location } else { None },
+        "gaming_style": if show("gaming_style") { style } else { None },
+        "rig": if has_rig && show("rig") { rig } else { Value::Null },
         "friends": friend_grid,
         "linked": linked,
         "delete_after": if is_self { json!(delete_after) } else { Value::Null },

@@ -121,9 +121,10 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     // ---- now playing
     let cand: Vec<(Uuid, String, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT u.id, u.handle, u.display_name FROM presence p JOIN users u ON u.id = p.user_id
-         WHERE {LIVE_USER} AND {audience} AND p.status IN ('online','away') AND p.game_id IS NOT NULL
+         WHERE {LIVE_USER} AND {audience} AND {np} AND p.status IN ('online','away') AND p.game_id IS NOT NULL
            AND NOT p.game_hidden
-         ORDER BY p.session_started_at DESC NULLS LAST LIMIT 40"
+         ORDER BY p.session_started_at DESC NULLS LAST LIMIT 40",
+        np = crate::account::sql_shows("now_playing")
     )))
     .bind(&friend_ids)
     .fetch_all(&st.db)
@@ -159,11 +160,12 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     }
 
     // ---- top players this week
-    let share = if signed_in {
-        "u.share_activity"
-    } else {
-        "u.share_activity AND u.public_profile"
-    };
+    // Leaderboard: public profiles that show games & hours and opted into leaderboards.
+    let share = format!(
+        "u.public_profile AND {} AND {}",
+        crate::account::sql_shows("games"),
+        crate::account::sql_shows("leaderboards")
+    );
     let tops: Vec<(Uuid, String, String, i64, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "WITH w AS (
             SELECT s.user_id, s.game_id, sum(s.duration_s) AS secs FROM sessions s
@@ -192,11 +194,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         .collect();
 
     // ---- newest members
-    let newest_q = if signed_in {
-        "true"
-    } else {
-        "u.public_profile"
-    };
+    let newest_q = "u.public_profile";
     let newest: Vec<(Uuid, String, String, DateTime<Utc>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT u.id, u.handle, u.display_name, u.created_at FROM users u WHERE {LIVE_USER} AND {newest_q}
          ORDER BY u.created_at DESC LIMIT 12"

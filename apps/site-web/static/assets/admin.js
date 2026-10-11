@@ -168,6 +168,13 @@ async function editGame(id) {
       <small>PNG or JPEG up to 1 MB, square works best. Stored on our server and resized to 16, 32 and 64 px. Browsers may keep the old icon for a while.</small>
       <div class="alert" id="imsg" hidden></div></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+    <div class="f"><label>Banner art <span class="dimt">(now: ${esc({ override: "uploaded here", steam: "Steam store header", discord: "Discord app directory cover", none: "none: gradient with icon" }[g.art_source] || g.art_source || "?")})</span></label>
+      <img id="gartimg" src="/api/v1/game-art/${encodeURIComponent(id)}.jpg${bust}" width="230" height="108" alt="" style="border:1px solid var(--line);border-radius:3px;object-fit:cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'dimt',textContent:'No art found.'}))">
+      <div class="row"><input type="file" id="gart" accept="image/png,image/jpeg,image/webp,image/gif"><button class="btn" id="gartup" type="button">Upload</button></div>
+      <div class="row"><input type="text" class="in" id="garturl" placeholder="https://… link to a picture" style="flex:1"><button class="btn" id="garturlb" type="button">Use link</button>${g.art_source === "override" ? `<button class="btn danger" id="gartdel" type="button">Remove override</button>` : ""}</div>
+      <small>Any size; cropped to 460×215 (Steam header shape), up to 2 MB.</small>
+      <div class="alert" id="amsg" hidden></div></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     ${statusHtml(g)}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${retireHtml(g)}</div>`;
   const gid = "/admin/games/" + encodeURIComponent(id);
@@ -206,6 +213,18 @@ async function editGame(id) {
   });
   const del = $("#gdel");
   if (del) del.addEventListener("click", () => act(del, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/icon", { method: "DELETE" }); editGame(id); }));
+  $("#gartup").addEventListener("click", async () => {
+    const file = $("#gart").files[0]; if (!file) return msg($("#amsg"), "Pick an image first.");
+    try {
+      const r = await fetch(FL.API + gid + "/art", { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream" }, body: file });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.message || "Upload failed (HTTP " + r.status + ").");
+      editGame(id);
+    } catch (x) { msg($("#amsg"), x.message); }
+  });
+  $("#garturlb").addEventListener("click", () => act($("#garturlb"), async () => { await api(gid + "/art/url", { method: "POST", body: { url: $("#garturl").value.trim() } }); editGame(id); }).catch(x => msg($("#amsg"), x.message)));
+  const adel = $("#gartdel");
+  if (adel) adel.addEventListener("click", () => act(adel, async () => { await api(gid + "/art", { method: "DELETE" }); editGame(id); }).catch(x => msg($("#amsg"), x.message)));
 }
 
 /* ---------- 3. users ---------- */

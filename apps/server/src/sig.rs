@@ -59,6 +59,11 @@ pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Resp
     }
 }
 
+/// Drop a cached card (privacy changed).
+pub fn forget(handle: &str) {
+    cache().lock().unwrap().remove(&handle.to_lowercase());
+}
+
 fn png(b: Vec<u8>) -> Response {
     (
         [
@@ -81,14 +86,23 @@ pub struct Card {
 }
 
 async fn render_for(st: &AppState, handle: &str) -> ApiResult<Option<Vec<u8>>> {
-    let row: Option<(Uuid, String, String, bool, Option<String>, Option<String>)> = sqlx::query_as(
-        "SELECT id, handle, display_name, share_activity, avatar_kind, avatar_hash FROM users
+    type Row = (
+        Uuid,
+        String,
+        String,
+        bool,
+        Option<String>,
+        Option<String>,
+        serde_json::Value,
+    );
+    let row: Option<Row> = sqlx::query_as(
+        "SELECT id, handle, display_name, share_activity, avatar_kind, avatar_hash, privacy FROM users
          WHERE lower(handle) = $1 AND public_profile AND deleted_at IS NULL AND banned_at IS NULL AND delete_after IS NULL",
     )
     .bind(handle)
     .fetch_optional(&st.db)
     .await?;
-    let Some((uid, handle, dn, share, kind, hash)) = row else {
+    let Some((uid, handle, dn, share, kind, hash, privacy)) = row else {
         return Ok(None);
     };
     let p = presence::visible_presence(st, uid)
@@ -101,14 +115,20 @@ async fn render_for(st: &AppState, handle: &str) -> ApiResult<Option<Vec<u8>>> {
         "away" => "Away".to_string(),
         _ => "Offline".to_string(),
     };
-    if let Some(g) = p.game_id.as_ref().filter(|g| !hidden.contains(g)) {
+    let show_game = crate::account::shows(&privacy, "now_playing");
+    let show_hours = crate::account::shows(&privacy, "games");
+    if let Some(g) = p
+        .game_id
+        .as_ref()
+        .filter(|g| show_game && !hidden.contains(g))
+    {
         if let Some(n) = names::public_name(st, g).await? {
             line1 = format!("Playing {n}");
             playing = true;
         }
     }
     let mut line2 = String::from("playfraglink.com");
-    if share {
+    if show_hours {
         let (w, total): (i64, i64) = sqlx::query_as(
             "SELECT coalesce(sum(minutes_7d), 0)::bigint, coalesce(sum(display_min), 0)::bigint
              FROM user_game_stats WHERE user_id = $1 AND NOT (game_id = ANY($2))",
@@ -118,7 +138,7 @@ async fn render_for(st: &AppState, handle: &str) -> ApiResult<Option<Vec<u8>>> {
         .fetch_one(&st.db)
         .await?;
         line2 = format!("{} this week  ·  {} total", hrs(w), hrs(total));
-        if !playing {
+        if !playing && share && show_game {
             let last: Option<String> = sqlx::query_scalar(
                 "SELECT game_id FROM sessions WHERE user_id = $1 AND NOT (game_id = ANY($2)) ORDER BY ended_at DESC LIMIT 1",
             )

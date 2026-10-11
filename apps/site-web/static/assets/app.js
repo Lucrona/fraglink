@@ -3,6 +3,7 @@
 (function () {
 "use strict";
 const API = "/api/v1", TK = "fl_token", UK = "fl_user";
+const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } })();
 const DISCORD = "https://discord.gg/QbaYRtvADj";
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
@@ -44,13 +45,19 @@ function hours(min, opts) {
 function dur(sec) {
   sec = Math.max(0, Math.round(sec || 0));
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-  if (h >= 1) return h + (h === 1 ? " hour" : " hours") + (h < 10 && m >= 10 ? " " + m + " min" : "");
+  if (h >= 1) return h + (h === 1 ? " hour" : " hours") + (m > 0 ? " " + m + " min" : "");
   return Math.max(1, m) + " min";
 }
 function since(iso) { return dur((Date.now() - new Date(iso).getTime()) / 1000); }
 const dayFmt = new Intl.DateTimeFormat("en-AU", { weekday: "long" });
 const dateFmt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
 const fullDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
+/* Friends' activity rows from the server: "playing" first, then one per friend/game/day. */
+function actDay(i) { return i.kind === "playing" ? "Now" : dayLabel(i.day ? new Date(i.day + "T12:00:00") : i.at); }
+function actText(i) {
+  const g = isUnlisted(i.game_id) ? "a game" : `<b>${esc(i.game_name)}</b>`;
+  return i.kind === "playing" ? `is playing ${g} now` : `played ${g} for ${dur(i.duration_s)}`;
+}
 function dayLabel(d) {
   const t = new Date(); t.setHours(0, 0, 0, 0);
   const x = new Date(d); x.setHours(0, 0, 0, 0);
@@ -116,11 +123,17 @@ function avatar(a, size, extra) {
   return `<span class="av c${(a.color || 0) % 6} ${x}" style="${st}"><img class="mk" src="/assets/mark.svg" alt=""></span>`;
 }
 const artUrl = appid => appid ? `/api/v1/art/${encodeURIComponent(appid)}.jpg` : null;
-function gameArt(appid, id, name, cls) {
-  const u = artUrl(appid);
-  if (u) return `<img class="${cls || ""}" src="${u}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`;
-  return icon(id, name, cls);
+/* Banner art by game id (server picks Steam / Discord directory / admin upload). */
+const gartUrl = id => id && !isUnlisted(id) ? `/api/v1/game-art/${encodeURIComponent(id)}.jpg` : null;
+function artHue(s) { let h = 0; for (const c of String(s || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 6; }
+const ART_GRAD = ["#1d3a5f,#0c1522", "#3d2357,#120c1c", "#1f4a3c,#0b1813", "#5a3216,#1a0f07", "#4a1c26,#170a0d", "#26405a,#101820"];
+const artGrad = name => { const [a, b] = ART_GRAD[artHue(name)].split(","); return `linear-gradient(135deg,${a},${b})`; };
+/* Art with a tasteful fallback: gradient + the game's icon, covered by the picture when it loads. */
+function gameArt(id, name, cls) {
+  const u = gartUrl(id);
+  return `<div class="artbox ${cls || ""}" style="background:${artGrad(name)}"><span class="ai">${iconCache[id] ? icon(id, name) : `<img src="/assets/mark.svg" alt="" style="opacity:.35">`}</span>${u ? `<img class="ov" src="${u}" alt="" loading="lazy" onerror="this.remove()">` : ""}</div>`;
 }
+const artBg = (id, name) => { const u = gartUrl(id); return `${u ? `url(${u}) center/cover no-repeat, ` : ""}${artGrad(name)}`; };
 function turnstileToken(form) {
   const i = form.querySelector('[name="cf-turnstile-response"]');
   return i ? i.value : null;
@@ -209,7 +222,7 @@ pages.home = async () => {
   const ids = [].concat(h.most_played.map(g => g.game_id), h.now_playing.map(n => n.game_id));
   let fl = null, act = null;
   if (u && token()) {
-    [fl, act] = await Promise.all([api("/friends").catch(() => null), api("/friends/activity").catch(() => null)]);
+    [fl, act] = await Promise.all([api("/friends").catch(() => null), api("/friends/activity?tz=" + encodeURIComponent(TZ)).catch(() => null)]);
     if (fl) fl.friends.forEach(f => f.presence && ids.push(f.presence.game_id));
     if (act) act.items.forEach(i => ids.push(i.game_id));
   }
@@ -221,8 +234,8 @@ pages.home = async () => {
       <div class="sub">${h.me.top_game ? `Most played this week: <b>${esc(h.me.top_game)}</b>` : `Nothing played this week yet. <a href="/download">Get the app</a> and it counts your hours.`}</div>
       <div style="margin-top:6px"><a href="/u/${encodeURIComponent(u.handle)}">View my profile</a> · <a href="/friends">Friends</a> · <a href="/settings">Settings</a></div></div>
       <div class="kpi"><div><b>${hrsShort(h.me.minutes_7d)}</b><span>Hours this week</span></div><div><b>${hrsShort(h.me.total_min)}</b><span>Total hours</span></div><div><b>${h.me.friends_online}/${h.me.friends}</b><span>Friends online</span></div></div></section>`;
-  } else if (top && top.steam_appid) {
-    $("#hero").style.background = `#000 url(${artUrl(top.steam_appid)}) right center/cover`;
+  } else if (top) {
+    $("#hero").style.background = artBg(top.game_id, top.name);
     $("#hero .inr").insertAdjacentHTML("beforeend", `<p style="margin-top:14px;font-size:12px;color:#c8d4e0">Most played on Fraglink this week: <b style="color:#fff">${esc(top.name)}</b> · ${plural(top.players, "player")}</p>`);
   }
   const ticker = h.now_playing.length ? (() => {
@@ -234,7 +247,7 @@ pages.home = async () => {
     <div><b>${nf.format(s.in_game)}</b><span>In a game now</span></div><div><b>${hrsShort(s.minutes_7d)}</b><span>Hours played this week</span></div></div>`;
   const panel = (title, body, more) => `<section class="panel"><h2>${title}${more || ""}</h2><div class="body">${body}</div></section>`;
   const tiles = h.most_played.length ? panel("Most played this week", `<div class="tiles">${h.most_played.slice(0, 7).map((g, i) => `<div class="tile${i === 0 ? " big" : ""}">
-      ${g.steam_appid ? `<img src="${artUrl(g.steam_appid)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'noart'}))">` : `<div class="noart">${icon(g.game_id, g.name)}</div>`}
+      ${gameArt(g.game_id, g.name)}
       <span class="rk">#${i + 1}</span><div class="cap">${esc(g.name)}<br><b>${hrsShort(g.minutes)} h</b> <span class="pl">· ${plural(g.players, "player")}</span></div></div>`).join("")}</div>`) : "";
   const feed = h.now_playing.length ? panel("Now playing", `<div class="feed2">${h.now_playing.map(n => `<div>${avatar(n.avatar, 24)}<span><a href="/u/${encodeURIComponent(n.handle)}">${esc(n.display_name || n.handle)}</a><br>${icon(n.game_id, n.game_name)} ${esc(n.game_name)}</span>${n.since ? `<small>${since(n.since)}</small>` : ""}</div>`).join("")}</div>`) : "";
   const lb = h.top_players.length ? panel("Top players this week", `<div class="lb">${h.top_players.map((p, i) => `<div><span class="n">${i + 1}</span>${avatar(p.avatar, 24)}<span class="who"><a href="/u/${encodeURIComponent(p.handle)}">${esc(p.display_name || p.handle)}</a>${p.top_game ? `<small>${esc(p.top_game)}</small>` : ""}</span><span class="h">${hrsShort(p.minutes)} h</span></div>`).join("")}</div>`) : "";
@@ -247,9 +260,8 @@ pages.home = async () => {
   }
   if (act && act.items.length) {
     let f = "", last = "";
-    act.items.slice(0, 12).forEach(i => { const d = dayLabel(i.at); if (d !== last) { f += `<div class="day">${d}</div>`; last = d; }
-      const g = isUnlisted(i.game_id) ? "a game" : `<b>${esc(i.game_name)}</b>`;
-      f += `<div class="act">${icon(i.game_id, i.game_name)}<span><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${i.kind === "playing" ? `is playing ${g}` : `played ${g}`}</span>${i.duration_s ? `<span class="tm">${dur(i.duration_s)}</span>` : ""}</div>`; });
+    act.items.slice(0, 12).forEach(i => { const d = actDay(i); if (d !== last) { f += `<div class="day">${d}</div>`; last = d; }
+      f += `<div class="act">${icon(i.game_id, i.game_name)}<span><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${actText(i)}</span></div>`; });
     actBox = panel("Friends' activity", f);
   }
   const why = u ? "" : panel("Why Fraglink", `<p style="margin:0 0 8px"><b>Friends, live.</b> See who's online and what they're playing, with a quiet pop-up when a friend starts a game.</p><p style="margin:0 0 8px"><b>Hours that add up.</b> Play time is counted game by game while the app runs.</p><p style="margin:0"><b>Light and private.</b> Never reads game memory or keystrokes. Export or delete your data any time.</p>`);
@@ -353,6 +365,13 @@ pages.profile = async () => {
       : `<div class="narrow alert err">${esc(e.message)}</div>`;
     return;
   }
+  if (p.private) {
+    root.innerHTML = `<div class="narrow panel"><h2>${esc(p.display_name || p.handle)}</h2><div class="body" style="display:flex;gap:16px;align-items:center">${avatar(p.avatar, 64)}<div><p>This profile is private. Only ${esc(p.display_name || p.handle)}'s friends can see it.</p>
+      ${!token() ? `<a class="btn" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in</a>` : p.relation === "none" ? `<button class="btn blue" data-add>+ Add friend</button>` : p.relation === "outgoing" ? `<span class="muted">Friend request sent</span>` : p.relation === "incoming" ? `<a class="btn" href="/friends">Answer friend request</a>` : ""}</div></div></div>`;
+    const add = root.querySelector("[data-add]");
+    if (add) add.addEventListener("click", async () => { add.disabled = true; try { await api("/friends/request", { method: "POST", body: { handle: p.handle } }); add.textContent = "Friend request sent"; } catch (x) { add.disabled = false; alert(x.message); } });
+    return;
+  }
   const pres = p.presence;
   const ids = [].concat((p.games || []).map(g => g.game_id), (p.recent || []).map(r => r.game_id), pres && pres.game_id ? [pres.game_id] : []);
   await loadIcons(ids);
@@ -361,7 +380,7 @@ pages.profile = async () => {
   const live = pres && pres.status !== "offline" && pres.game_name;
   const listedGames = (p.games || []).filter(g => g.listed !== false);
   const main = listedGames[0];
-  const bannerApp = (live && (p.games || []).find(g => g.game_id === pres.game_id && g.steam_appid)) || listedGames.find(g => g.steam_appid);
+  const bannerG = live && !isUnlisted(pres.game_id) ? { game_id: pres.game_id, name: pres.game_name } : main;
   const total = p.overall ? p.overall.total_min : 0;
 
   let actions = "";
@@ -381,7 +400,7 @@ pages.profile = async () => {
       <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
   const report = !self && token() && p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : "";
   const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div><b>${hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}<div><b>${p.friend_count}</b><span>Friends</span></div></div>`;
-  const head = `<section class="ph${bannerApp ? "" : " noart"}"${bannerApp ? ` style="background-image:url(${artUrl(bannerApp.steam_appid)})"` : ""}><div class="inr">
+  const head = `<section class="ph${bannerG ? "" : " noart"}"${bannerG ? ` style="background:${artBg(bannerG.game_id, bannerG.name)}"` : ""}><div class="inr">
       <div>${avatar(p.avatar, 184)}${report}</div>
       <div class="who"><h1>${esc(p.display_name || p.handle)}${p.display_name && p.display_name !== p.handle ? ` <small style="font-size:15px;color:#c8d4e0">${esc(p.handle)}</small>` : ""}</h1>
       <div class="sub">${sub}</div>${badges}${np}<div class="acts">${actions}</div></div>${kpi}</div></section>`;
@@ -405,7 +424,7 @@ pages.profile = async () => {
   } else if (!p.games || !p.games.length) {
     games = `<section class="panel"><h2>Games</h2><div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div></section>`;
   } else {
-    const row = g => `<tr><td>${g.steam_appid ? `<img src="${artUrl(g.steam_appid)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span style="display:inline-block;width:64px;margin-right:8px;text-align:center">${icon(g.game_id, g.name)}</span>`}${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
+    const row = g => `<tr><td>${gameArt(g.listed === false && !self ? null : g.game_id, g.name, "sm")}${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
       <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${lastPlayed(g.last_played_at)}</td></tr>`;
     const top = p.games.slice(0, 8), rest = p.games.slice(8);
     games = `<section class="panel"><h2>Games</h2><table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total ▾</th><th class="n hide-sm">Last played</th></tr></thead>
@@ -426,11 +445,11 @@ pages.profile = async () => {
       const cur = g.get(gk) || { id: r.game_id, name: r.game_name, secs: 0, n: 0 };
       cur.secs += r.duration_s || 0; cur.n += 1; g.set(gk, cur);
     });
-    if (live) act += `<div class="day">Now</div><div class="act">${icon(pres.game_id, pres.game_name)}<span>${isUnlisted(pres.game_id) ? "Playing a game" : `Playing <b>${esc(pres.game_name)}</b>`}</span>${pres.session_started_at ? `<span class="tm">${since(pres.session_started_at)}</span>` : ""}</div>`;
+    if (live) act += `<div class="day">Now</div><div class="act">${icon(pres.game_id, pres.game_name)}<span>${isUnlisted(pres.game_id) ? "Playing a game now" : `Playing <b>${esc(pres.game_name)}</b> now`}</span>${pres.session_started_at ? `<span class="tm">for ${since(pres.session_started_at)}</span>` : ""}</div>`;
     Array.from(days.values()).slice(0, 7).forEach(d => {
       act += `<div class="day">${dayLabel(d.at)}</div>`;
       Array.from(d.games.values()).sort((a, b) => b.secs - a.secs).forEach(g => {
-        act += `<div class="act">${icon(g.id, g.name)}<span>${isUnlisted(g.id) ? "A game" : `<b>${esc(g.name)}</b>`}${g.n > 1 ? ` <span style="color:var(--dim)">· ${g.n} sessions</span>` : ""}</span><span class="tm">${dur(g.secs)}</span></div>`;
+        act += `<div class="act">${icon(g.id, g.name)}<span>Played ${isUnlisted(g.id) ? "a game" : `<b>${esc(g.name)}</b>`} for ${dur(g.secs)}</span></div>`;
       });
     });
   }
@@ -445,7 +464,7 @@ pages.profile = async () => {
       ? `<div class="share"><input class="t" readonly value="${esc(shareUrl)}"><button class="btn sm" data-copy="${esc(shareUrl)}">Copy</button></div>
          <p style="margin:10px 0 4px;color:var(--muted)">Signature image (updates with what you're playing):</p><img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png" alt="Signature" width="460" height="100">
          <div class="share" style="margin-top:6px"><input class="t" readonly value="${esc("https://playfraglink.com/api/v1/sig/" + encodeURIComponent(p.handle) + ".png")}"><button class="btn sm" data-copy="https://playfraglink.com/api/v1/sig/${esc(encodeURIComponent(p.handle))}.png">Copy</button></div>`
-      : `<span class="empty">Your profile is visible to signed-in players only. Turn on <a href="/settings#privacy">Public profile</a> to get a shareable link and a signature image.</span>`}</div></section>` : "";
+      : `<span class="empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></span>`}</div></section>` : "";
   const discord = `<section class="panel"><h2>Discord server</h2><div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div></section>`;
 
   root.innerHTML = head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${mini}</div><aside class="col">${fr}${rig}${share}${discord}</aside></div>`;
@@ -476,7 +495,7 @@ pages.friends = async () => {
   const root = $("#friends"), msg = $("#msg");
   async function load() {
     let fl, act;
-    try { [fl, act] = await Promise.all([api("/friends"), api("/friends/activity").catch(() => ({ items: [] }))]); }
+    try { [fl, act] = await Promise.all([api("/friends"), api("/friends/activity?tz=" + encodeURIComponent(TZ)).catch(() => ({ items: [] }))]); }
     catch (e) { if (!token()) return requireLogin(); showErr(msg, e); return; }
     await loadIcons([].concat(fl.friends.map(f => f.presence && f.presence.game_id), act.items.map(i => i.game_id)));
     const sorted = fl.friends.slice().sort((a, b) => rank(b.presence) - rank(a.presence) || a.handle.localeCompare(b.handle));
@@ -488,9 +507,8 @@ pages.friends = async () => {
       <div class="acts"><button class="btn sm" data-act="cancel">Cancel</button></div></div>`).join("");
     let feed = "", last = "";
     act.items.slice(0, 20).forEach(i => {
-      const d = dayLabel(i.at); if (d !== last) { feed += `<div class="day">${d}</div>`; last = d; }
-      const g = isUnlisted(i.game_id) ? "a game" : `<b>${esc(i.game_name)}</b>`;
-      feed += `<div class="ev">${icon(i.game_id, i.game_name)}<p><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${i.kind === "playing" ? `is playing ${g}` : `played ${g} for ${dur(i.duration_s)}`}</p></div>`;
+      const d = actDay(i); if (d !== last) { feed += `<div class="day">${d}</div>`; last = d; }
+      feed += `<div class="ev">${icon(i.game_id, i.game_name)}<p><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${actText(i)}</p></div>`;
     });
     root.innerHTML = `<div class="grid"><div class="col">
       ${fl.incoming.length ? `<section class="panel"><h2>Friend requests (${fl.incoming.length})</h2><div>${reqIn}</div></section>` : ""}
@@ -593,12 +611,16 @@ pages.settings = async () => {
   }
   function privacyTab() {
     const share = location.origin + "/u/" + encodeURIComponent(u.handle);
+    const pv = u.privacy || {};
+    const priv = !u.public_profile;
+    const sw = (k, label) => `<label style="display:block;margin:3px 0"><input type="checkbox" data-pv="${k}" ${pv[k] !== false ? "checked" : ""}>${label}</label>`;
     return `<h3>Privacy</h3><form data-f="privacy">${msg}<div class="frm">
-      ${row("Play history", `<label><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Share my games, hours and recent activity with friends</label>`, "Live status follows the app: pick Invisible there to hide it.")}
-      ${row("Public profile", `<label><input type="checkbox" name="public_profile" ${u.public_profile ? "checked" : ""}>Anyone with the link can see my profile</label>`, "Also turns on your signature image, and you may appear on the public home page (Now playing, Top players, Newest members). Off: only signed-in players can open your profile.")}
-      ${row("Friends list", `<label><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Show my friends on my profile</label>`)}
+      ${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""}>Only my friends can see my profile</label>`, "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page lists, and your signature image is switched off.")}
+      ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
+      ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location")}${sw("gaming_style", "Gaming style")}`)}
+      ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
       ${row("Your link", `<div class="share"><input class="t" readonly value="${esc(share)}"><button class="btn sm" type="button" data-copy="${esc(share)}">Copy</button></div>`)}
-      ${u.public_profile ? row("Signature image", `<img class="sigimg" src="/api/v1/sig/${encodeURIComponent(u.handle)}.png?t=${Date.now()}" alt="" width="460" height="100"><div class="share" style="margin-top:6px"><input class="t" readonly value="https://playfraglink.com/api/v1/sig/${esc(encodeURIComponent(u.handle))}.png"></div>`, "Paste the image link into forum signatures. It refreshes about once a minute.") : ""}
+      ${!priv ? row("Signature image", `<img class="sigimg" src="/api/v1/sig/${encodeURIComponent(u.handle)}.png?t=${Date.now()}" alt="" width="460" height="100"><div class="share" style="margin-top:6px"><input class="t" readonly value="https://playfraglink.com/api/v1/sig/${esc(encodeURIComponent(u.handle))}.png"></div>`, "Paste the image link into forum signatures. It refreshes about once a minute.") : ""}
       </div></form>`;
   }
   function notificationsTab() {
@@ -688,7 +710,9 @@ pages.settings = async () => {
     }
     if (!f) return;
     try {
-      if (f.dataset.f === "privacy") { const r = await api("/me/privacy", { method: "POST", body: { [e.target.name]: e.target.checked } }); Object.assign(u, r); keep(); render(); ok($("#pane"), "Saved."); }
+      if (f.dataset.f === "privacy") {
+        const t = e.target, body = t.dataset.pv ? { privacy: { [t.dataset.pv]: t.checked } } : t.name === "private_profile" ? { public_profile: !t.checked } : { [t.name]: t.checked };
+        const r = await api("/me/privacy", { method: "POST", body }); Object.assign(u, r); keep(); render(); ok($("#pane"), "Saved."); }
       else if (f.dataset.f === "notify") { u.notify_prefs = await api("/me/notifications", { method: "POST", body: { [e.target.name]: e.target.checked } }); ok(f, "Saved."); }
     } catch (x) { e.target.checked = !e.target.checked; bad(f, x); }
   });

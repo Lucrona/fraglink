@@ -57,14 +57,38 @@ async fn profile_visibility(pool: PgPool) {
     );
     assert_eq!(v["recent"].as_array().unwrap().len(), 2);
 
-    // stranger: basics only
+    // public by default: a stranger sees the profile
     let v = api(&app, "GET", "/api/v1/users/bob/profile", Some(&c), None)
         .await
         .json();
     assert_eq!(v["relation"], "none");
-    assert!(v["presence"].is_null());
-    assert_eq!(v["games"].as_array().unwrap().len(), 0);
+    assert!(v["presence"].is_object());
+    assert_eq!(v["games"].as_array().unwrap().len(), 2);
     assert_eq!(v["friend_count"], 1);
+
+    // private profile: stranger gets name + picture only, friend still sees it all
+    sqlx::query("UPDATE users SET public_profile = false WHERE handle = 'bob'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let v = api(&app, "GET", "/api/v1/users/bob/profile", Some(&c), None)
+        .await
+        .json();
+    assert_eq!(v["private"], true);
+    assert!(v["presence"].is_null() && v["games"].is_null() && v["friends"].is_null());
+    let v = api(&app, "GET", "/api/v1/users/bob/profile", None, None)
+        .await
+        .json();
+    assert_eq!(v["private"], true);
+    assert_eq!(
+        api(&app, "GET", "/api/v1/users/bob/profile", Some(&a), None)
+            .await
+            .json()["games"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
 
     // bob stops sharing: friend loses history, keeps presence
     sqlx::query("UPDATE users SET share_activity = false WHERE handle = 'bob'")
@@ -85,13 +109,7 @@ async fn profile_visibility(pool: PgPool) {
     assert_eq!(v["relation"], "self");
     assert_eq!(v["games"].as_array().unwrap().len(), 2);
 
-    // signed out / unknown
-    assert_eq!(
-        api(&app, "GET", "/api/v1/users/bob/profile", None, None)
-            .await
-            .status,
-        StatusCode::UNAUTHORIZED
-    );
+    // unknown
     assert_eq!(
         api(&app, "GET", "/api/v1/users/nobody/profile", Some(&a), None)
             .await

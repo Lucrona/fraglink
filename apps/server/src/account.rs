@@ -76,6 +76,7 @@ pub async fn me_extra(st: &AppState, uid: Uuid) -> ApiResult<Value> {
         prefs,
         delete_after,
         created,
+        privacy,
     ): (
         Option<String>,
         Option<String>,
@@ -89,9 +90,10 @@ pub async fn me_extra(st: &AppState, uid: Uuid) -> ApiResult<Value> {
         Value,
         Option<DateTime<Utc>>,
         DateTime<Utc>,
+        Value,
     ) = sqlx::query_as(
         "SELECT avatar_kind, avatar_hash, avatar_preset, about, location, gaming_style, rig,
-                public_profile, show_friends, notify_prefs, delete_after, created_at
+                public_profile, show_friends, notify_prefs, delete_after, created_at, privacy
          FROM users WHERE id = $1",
     )
     .bind(uid)
@@ -101,6 +103,7 @@ pub async fn me_extra(st: &AppState, uid: Uuid) -> ApiResult<Value> {
         "avatar": avatars::avatar_json(uid, kind.as_deref(), hash.as_deref(), preset),
         "about": about, "location": location, "gaming_style": style, "rig": rig,
         "public_profile": public, "show_friends": show_friends,
+        "privacy": privacy_view(&privacy),
         "notify_prefs": notify_defaults(&prefs),
         "delete_after": delete_after, "created_at": created,
         "mfa": mfa::status(st, uid).await?,
@@ -608,4 +611,37 @@ pub async fn purge_loop(st: AppState) {
         }
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
     }
+}
+
+// ------------------------------------------------------------------ per-feature privacy
+
+/// Per-feature visibility switches stored in `users.privacy` (missing key = shown).
+pub const PRIVACY_KEYS: [&str; 7] = [
+    "now_playing",
+    "games",
+    "rig",
+    "about",
+    "location",
+    "gaming_style",
+    "leaderboards",
+];
+
+/// Whether `key` is shown (true unless explicitly switched off).
+pub fn shows(privacy: &Value, key: &str) -> bool {
+    privacy.get(key).and_then(Value::as_bool).unwrap_or(true)
+}
+
+/// All keys with their effective value.
+pub fn privacy_view(privacy: &Value) -> Value {
+    let mut m = serde_json::Map::new();
+    for k in PRIVACY_KEYS {
+        m.insert(k.to_string(), json!(shows(privacy, k)));
+    }
+    Value::Object(m)
+}
+
+/// SQL expression: is privacy key `k` shown for the row aliased `u`. `k` must be a constant.
+pub fn sql_shows(k: &str) -> String {
+    debug_assert!(PRIVACY_KEYS.contains(&k));
+    format!("coalesce((u.privacy->>'{k}')::boolean, true)")
 }

@@ -482,22 +482,39 @@ async fn home_profile_and_signature(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let a = signup(&app, "h1@example.com", "alpha").await;
     let _b = signup(&app, "h2@example.com", "bravo").await;
-    // signed out: aggregate only, nobody listed until they opt in
-    let h = api(&app, "GET", "/api/v1/home", None, None).await.json();
-    assert_eq!(h["stats"]["registered"], 2);
-    assert_eq!(h["newest"].as_array().unwrap().len(), 0);
+    // public by default: listed on the home page
     let h = api(&app, "GET", "/api/v1/home", Some(&a), None)
         .await
         .json();
+    assert_eq!(h["stats"]["registered"], 2);
     assert_eq!(h["newest"].as_array().unwrap().len(), 2);
     assert!(h["me"]["minutes_7d"].is_number());
-    // private profile: signed-out gets 401, no signature
+    assert_eq!(
+        api(&app, "GET", "/api/v1/sig/alpha.png", None, None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+    // private profile: name + picture only, off the home lists, no signature
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&a),
+        Some(json!({"public_profile": false})),
+    )
+    .await;
+    assert_eq!(r.json()["public_profile"], false);
     assert_eq!(
         api(&app, "GET", "/api/v1/users/alpha/profile", None, None)
             .await
-            .status,
-        StatusCode::UNAUTHORIZED
+            .json()["private"],
+        true
     );
+    let h = api(&app, "GET", "/api/v1/home", Some(&_b), None)
+        .await
+        .json();
+    assert!(!h.to_string().contains("\"alpha\""), "{h}");
     assert_eq!(
         api(&app, "GET", "/api/v1/sig/alpha.png", None, None)
             .await
@@ -719,4 +736,126 @@ async fn forgot_and_reset_password(pool: PgPool) {
     )
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn per_feature_privacy_and_grouped_activity(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let a = signup(&app, "pf1@example.com", "pfa").await;
+    let b = signup(&app, "pf2@example.com", "pfb").await;
+    api(
+        &app,
+        "POST",
+        "/api/v1/friends/request",
+        Some(&a),
+        Some(json!({"handle": "pfb"})),
+    )
+    .await;
+    api(
+        &app,
+        "POST",
+        "/api/v1/friends/request",
+        Some(&b),
+        Some(json!({"handle": "pfa"})),
+    )
+    .await;
+    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true) ON CONFLICT DO NOTHING")
+        .execute(&pool).await.unwrap();
+    // three sessions today, one yesterday -> two grouped rows
+    for (ago, secs) in [(1i32, 3600), (3, 1800), (5, 600), (30, 1200)] {
+        sqlx::query(
+            "INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s)
+             SELECT gen_random_uuid(), id, 'wow', date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '20 hours' - make_interval(hours => $1) - make_interval(secs => $2),
+                    date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '20 hours' - make_interval(hours => $1), $2
+             FROM users WHERE handle = 'pfb'",
+        )
+        .bind(ago).bind(secs as f64).execute(&pool).await.unwrap();
+    }
+    sqlx::query("UPDATE sessions SET started_at = started_at - interval '1 day', ended_at = ended_at - interval '1 day' WHERE ended_at > now()")
+        .execute(&pool).await.unwrap();
+    let act = api(
+        &app,
+        "GET",
+        "/api/v1/friends/activity?tz=UTC",
+        Some(&a),
+        None,
+    )
+    .await
+    .json();
+    let items = act["items"].as_array().unwrap();
+    let played: Vec<_> = items.iter().filter(|i| i["kind"] == "played").collect();
+    assert!(played.len() <= 2 && !played.is_empty(), "{act}");
+    let total: i64 = played
+        .iter()
+        .map(|i| i["duration_s"].as_i64().unwrap())
+        .sum();
+    assert_eq!(total, 3600 + 1800 + 600 + 1200, "{act}");
+    assert!(played[0]["day"].is_string() && played[0]["sessions"].as_i64().unwrap() >= 1);
+    // bogus tz falls back
+    assert_eq!(
+        api(
+            &app,
+            "GET",
+            "/api/v1/friends/activity?tz=Mars/Base",
+            Some(&a),
+            None
+        )
+        .await
+        .status,
+        StatusCode::OK
+    );
+
+    // per-feature hides
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/profile",
+        Some(&b),
+        Some(json!({"about": "hello", "location": "Perth", "rig": {"cpu": "X"}})),
+    )
+    .await;
+    let r = api(&app, "POST", "/api/v1/me/privacy", Some(&b),
+        Some(json!({"privacy": {"games": false, "rig": false, "location": false, "now_playing": false, "leaderboards": false}}))).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["privacy"]["games"], false);
+    assert_eq!(r.json()["privacy"]["about"], true);
+    assert_eq!(
+        api(
+            &app,
+            "POST",
+            "/api/v1/me/privacy",
+            Some(&b),
+            Some(json!({"privacy": {"bogus": false}}))
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    for viewer in [Some(a.as_str()), None] {
+        let p = api(&app, "GET", "/api/v1/users/pfb/profile", viewer, None)
+            .await
+            .json();
+        assert_eq!(p["games"].as_array().unwrap().len(), 0, "{p}");
+        assert!(p["rig"].is_null() && p["location"].is_null(), "{p}");
+        assert_eq!(p["about"], "hello");
+        assert!(p["presence"]["game_id"].is_null());
+    }
+    let own = api(&app, "GET", "/api/v1/users/pfb/profile", Some(&b), None)
+        .await
+        .json();
+    assert_eq!(own["games"].as_array().unwrap().len(), 1);
+    assert_eq!(own["location"], "Perth");
+    let h = api(&app, "GET", "/api/v1/home", Some(&a), None)
+        .await
+        .json();
+    assert!(
+        h["top_players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["handle"] != "pfb"),
+        "{h}"
+    );
+    let me = api(&app, "GET", "/api/v1/me", Some(&b), None).await.json();
+    assert_eq!(me["user"]["privacy"]["rig"], false);
 }

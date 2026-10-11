@@ -35,6 +35,11 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/suggestions/undo", post(undo_suggestion))
         .route("/api/v1/admin/games", get(games_search))
         .route("/api/v1/admin/games/{id}", get(game_detail).post(game_save))
+        .route(
+            "/api/v1/admin/games/{id}/art",
+            post(game_art_upload).delete(game_art_clear),
+        )
+        .route("/api/v1/admin/games/{id}/art/url", post(game_art_url))
         .route("/api/v1/admin/games/{id}/retire", post(game_retire))
         .route("/api/v1/admin/games/{id}/unretire", post(game_unretire))
         .route("/api/v1/admin/games/{id}/status", post(game_status_save))
@@ -556,6 +561,7 @@ async fn game_detail(
     .await?;
     v["players"] = json!(u);
     v["tracked_min"] = json!(m);
+    v["art_source"] = json!(crate::art::source_of(&st, &id).await);
     Ok(Json(v))
 }
 
@@ -2223,4 +2229,108 @@ async fn mfa_reset(
     )
     .await?;
     Ok(Json(json!({ "ok": true, "was_enabled": was })))
+}
+
+// ------------------------------------------------------------------ game art overrides
+
+async fn art_game_exists(st: &AppState, id: &str) -> ApiResult<()> {
+    let ok: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM games WHERE id = $1)")
+        .bind(id)
+        .fetch_one(&st.db)
+        .await?;
+    if ok || st.games.icon_index().by_slug.contains_key(id) {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            StatusCode::NOT_FOUND,
+            "game_not_found",
+            "No such game.",
+        ))
+    }
+}
+
+async fn art_saved(
+    st: &AppState,
+    s: &Staff,
+    id: &str,
+    how: &str,
+    bytes: &[u8],
+) -> ApiResult<Json<Value>> {
+    crate::art::set_override(st, id, bytes).map_err(|m| AppError::bad_request("bad_image", m))?;
+    audit(
+        st,
+        s,
+        "game.art",
+        &format!("game:{id}"),
+        json!({}),
+        json!({ "art": how }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true, "source": "override" })))
+}
+
+async fn game_art_upload(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    body: axum::body::Bytes,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    art_game_exists(&st, &id).await?;
+    art_saved(&st, &s, &id, "upload", &body).await
+}
+
+#[derive(Deserialize)]
+struct ArtUrl {
+    url: String,
+}
+
+async fn game_art_url(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Json(r): Json<ArtUrl>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    art_game_exists(&st, &id).await?;
+    let u = reqwest::Url::parse(r.url.trim())
+        .map_err(|_| AppError::bad_request("bad_url", "That isn't a link."))?;
+    let host = u.host_str().unwrap_or("");
+    if u.scheme() != "https"
+        || host.is_empty()
+        || host == "localhost"
+        || host.parse::<std::net::IpAddr>().is_ok()
+    {
+        return Err(AppError::bad_request(
+            "bad_url",
+            "Use an https link to a picture.",
+        ));
+    }
+    let b = crate::art::fetch(u.as_str())
+        .await
+        .ok_or_else(|| AppError::bad_request("bad_url", "Couldn't download that picture."))?;
+    art_saved(&st, &s, &id, &format!("url {}", u.as_str()), &b).await
+}
+
+async fn game_art_clear(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let had = crate::art::clear_override(&st, &id);
+    if had {
+        audit(
+            &st,
+            &s,
+            "game.art",
+            &format!("game:{id}"),
+            json!({ "art": "override" }),
+            json!({ "art": "auto" }),
+        )
+        .await?;
+    }
+    Ok(Json(
+        json!({ "ok": true, "source": crate::art::source_of(&st, &id).await }),
+    ))
 }
