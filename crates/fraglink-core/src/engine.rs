@@ -240,8 +240,26 @@ impl Engine {
     }
 
     /// Swap in newer override rules (downloaded by the app).
+    /// Rule names win over the built-in lists (staff renames, dev.18), so games already in the
+    /// local database take the rule's name too (Activity, Stats, Options > Games).
     pub fn set_overrides(&mut self, o: crate::overrides::Overrides) {
+        let mut seen = std::collections::HashSet::new();
+        for r in o.rules() {
+            if seen.insert(r.id.as_str()) {
+                let _ = self.tracker.store.rename_game(&r.id, &r.name);
+            }
+        }
         self.detector.overrides = o;
+    }
+
+    /// Display name from the override rules (staff renames), if any.
+    pub fn override_name(&self, id: &str) -> Option<&str> {
+        self.detector
+            .overrides
+            .rules()
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.name.as_str())
     }
 
     /// Detail shown after a running game's name (the WoW realm), if known.

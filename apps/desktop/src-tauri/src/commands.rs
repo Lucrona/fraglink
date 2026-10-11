@@ -837,13 +837,22 @@ pub(crate) fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {
     let e = state.engine.lock().unwrap();
     let games = e.tracker.store.list_games().unwrap_or_default();
     let settings = e.tracker.store.all_settings().unwrap_or_default();
-    catalog::build(
+    let mut out = catalog::build(
         &e.detector.sigs,
         &e.detector.steam,
         &e.detector.libs,
         &games,
         &settings,
-    )
+    );
+    // staff renames (override rules) win over the bundled signature names
+    for g in out.iter_mut() {
+        if let Some(n) = e.override_name(&g.id) {
+            if g.source != "manual" && n != g.name {
+                g.name = n.to_string();
+            }
+        }
+    }
+    out
 }
 
 /// Options > Games and Tools > Launch: known games, installed first.

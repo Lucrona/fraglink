@@ -421,13 +421,19 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
     let ov = crate::game_overrides::current(st).await?;
     let extra: Vec<&crate::game_overrides::GameOverride> =
         ov.values().filter(|o| !o.extra_exes.is_empty()).collect();
-    if approved.is_empty() && extra.is_empty() {
+    let renamed: Vec<(&String, &String)> = ov
+        .values()
+        .filter(|o| !o.hidden)
+        .filter_map(|o| o.name.as_ref().map(|n| (&o.game_id, n)))
+        .collect();
+    if approved.is_empty() && extra.is_empty() && renamed.is_empty() {
         return Ok(s);
     }
     let mut f: overrides::OverrideFile = match serde_json::from_str(&s) {
         Ok(f) => f,
         Err(_) => return Ok(s),
     };
+    apply_renames(st, &mut f, renamed);
     for (id, name) in approved {
         let exe = id.trim_start_matches("exe:").to_string();
         if !valid_exe(&exe) || f.rules.iter().any(|r| r.id == id) {
@@ -475,6 +481,86 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         });
     }
     Ok(serde_json::to_string_pretty(&f).unwrap_or(s))
+}
+
+/// Staff renames reach every client (dev.18): an existing rule takes the new name, and a game
+/// known from the signatures or the detectable list gets a rule of its own with the same exe
+/// names, so detection reports the new name. Rules match before the signatures, and the id
+/// is unchanged, so this only renames; older apps (dev.12+) pick it up with no update.
+fn apply_renames(
+    st: &AppState,
+    f: &mut overrides::OverrideFile,
+    mut renamed: Vec<(&String, &String)>,
+) {
+    renamed.sort();
+    for (id, name) in renamed {
+        let mut found = false;
+        for r in f.rules.iter_mut().filter(|r| &r.id == id) {
+            r.name = name.clone();
+            found = true;
+        }
+        if found {
+            continue;
+        }
+        for (exes, paths) in rename_patterns(st, id) {
+            if exes.is_empty() {
+                continue;
+            }
+            f.rules.push(overrides::Rule {
+                id: id.clone(),
+                name: name.clone(),
+                exes,
+                paths,
+                channel: None,
+                note: Some("renamed by staff".into()),
+            });
+        }
+    }
+}
+
+/// `(exe names, path fragments)` that identify game `id`, from the signatures, else the
+/// detectable list (`folder/game.exe` patterns become exe `game.exe` + path `/folder/`).
+fn rename_patterns(st: &AppState, id: &str) -> Vec<(Vec<String>, Vec<String>)> {
+    if let Some(g) = st.sigs.get(id) {
+        let low = |v: &[String]| v.iter().map(|e| e.to_lowercase()).collect::<Vec<_>>();
+        let hints = low(&g.path_hints);
+        let mut out = vec![(low(&g.exes), hints.clone())];
+        if !g.path_exes.is_empty() && !hints.is_empty() {
+            out.push((low(&g.path_exes), hints));
+        }
+        return out;
+    }
+    let Some(g) = detectable_game(st, id) else {
+        return vec![];
+    };
+    let mut plain = vec![];
+    let mut out = vec![];
+    for e in g.exes {
+        match e.rsplit_once('/') {
+            Some((dir, exe)) if !dir.is_empty() => out.push((
+                vec![exe.to_string()],
+                vec![format!("/{}/", dir.trim_matches('/'))],
+            )),
+            _ => plain.push(e),
+        }
+    }
+    out.insert(0, (plain, vec![]));
+    out
+}
+
+/// A game of the current detectable list by Fraglink id (the parsed list is kept per ETag).
+fn detectable_game(st: &AppState, slug: &str) -> Option<detectable::DGame> {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<Option<(String, Arc<DetectableDb>)>>> = OnceLock::new();
+    let b = st.games.current()?;
+    let mut c = CACHE.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    if c.as_ref().map(|(t, _)| t != &b.etag).unwrap_or(true) {
+        *c = Some((
+            b.etag.clone(),
+            Arc::new(DetectableDb::from_json(&b.json).ok()?),
+        ));
+    }
+    c.as_ref()?.1.by_slug(slug).cloned()
 }
 
 pub async fn overrides(

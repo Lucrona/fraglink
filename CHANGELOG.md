@@ -6,6 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Fixed
+- **Game renames from the website admin show up in the app:** when staff rename a game, the server now sends
+  the new name with its detection rules, so the app shows it for the game you're playing, in Activity and
+  Stats, and in Options > Games. The app checks for list changes every 6 hours (was 24) and at start-up.
 - **Add Friend always answers:** clicking Add Friend now closes the window and shows "Friend request sent to …"
   at the bottom of the main window. Problems (already friends, request already sent, errors) show inside the
   Add Friend window. Before, the answer was written into the window and then wiped straight away when the

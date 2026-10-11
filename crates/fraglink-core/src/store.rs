@@ -206,6 +206,15 @@ impl Store {
         Ok(())
     }
 
+    /// Rename a known game (not one the user named by hand); no row is created.
+    pub fn rename_game(&self, id: &str, name: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "UPDATE games SET name = ?2 WHERE id = ?1 AND source != 'manual' AND name != ?2",
+            params![id, name],
+        )?;
+        Ok(n > 0)
+    }
+
     pub fn game_name(&self, id: &str) -> Result<Option<String>> {
         Ok(self
             .conn

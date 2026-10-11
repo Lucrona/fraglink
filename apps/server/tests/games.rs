@@ -109,3 +109,33 @@ async fn suggestions_are_stored_for_review(pool: PgPool) {
         vec![("OddGame.exe".into(), "Odd Game".into(), 2, "new".into())]
     );
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn staff_renames_reach_the_overrides_list(pool: PgPool) {
+    sqlx::query("INSERT INTO game_overrides(game_id, name) VALUES('wow_forever', 'World of Warcraft: Forever - Beta')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path().to_path_buf();
+    let app = fraglink_server::router(state_with(pool, |c| c.data_dir = d.clone()));
+    let r = send(&app, get("/api/v1/games/overrides", &[])).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_ne!(r.text, fraglink_core::overrides::BUILTIN_JSON);
+    let o = fraglink_core::overrides::Overrides::from_json(&r.text).unwrap();
+    let rule = o
+        .match_process(
+            "WowB.exe",
+            Some(r"E:\Games\World of Warcraft\_beta_\WowB.exe"),
+        )
+        .expect("renamed game gets a rule");
+    assert_eq!(rule.id, "wow_forever");
+    assert_eq!(rule.name, "World of Warcraft: Forever - Beta");
+    // other games are untouched
+    assert!(o
+        .match_process(
+            "Wow.exe",
+            Some(r"E:\Games\World of Warcraft\_retail_\Wow.exe")
+        )
+        .is_none());
+}

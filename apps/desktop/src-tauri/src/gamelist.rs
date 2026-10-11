@@ -17,7 +17,7 @@ use tauri::{AppHandle, Manager};
 
 const LIST_PATH: &str = "/api/v1/games/detectable";
 const OVERRIDES_PATH: &str = "/api/v1/games/overrides";
-const REFRESH: Duration = Duration::from_secs(24 * 3600);
+const REFRESH: Duration = Duration::from_secs(6 * 3600); // cheap: ETag, usually 304
 const RETRY: Duration = Duration::from_secs(3600);
 
 struct Files {
