@@ -5,39 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Added
-  beta doesn't), Fraglink takes the realm from the character folders WoW keeps under
-  `WTF\Account\<account>\<realm>\<character>\`: the realm whose character was played most recently,
-  across all accounts. `SavedVariables`, number-only folders and folders without characters are skipped.
-  It checks when the game starts and every 3 minutes while you play; a realm in Config.wtf still wins.
-- **Retire a game (website admin):** staff can retire any game entry. It keeps its name, icon and every hour
-- **Retire only some programs (website admin):** Retire lists the game's programs with checkboxes (all ticked by default) and asks before going ahead. Untick some to detach just the ticked ones: each gets a fresh entry in Game approvals and the game stays live with the rest.
-- **Game status (website admin):** Edit Game has a Status section: Live / Beta / Test / Early Access / Ended, an expected end or launch date, a note, and when it was last checked and by whom. Saving is logged in the audit log; the games table shows a tag for anything not Live. Server CLI for scheduled checks: `fraglink-server game-status <id> --lifecycle beta --ends 2026-12-01 --note "..." --by "Fraglink check"`. Server: migration `0013_game_status`.
-  recorded so far and shows as a normal past game on profiles, but its program is detached: the next time
-  someone plays it, the time goes to a new entry (named after the program) that starts from zero and waits
-  in Game approvals. Logged in the audit log; "Undo retire" works while the new entry has no hours yet.
-  Server: migration `0012_game_retirements`.
+## [0.2.0-dev.18] - 2026-10-11
+Test update (builds report `0.2.0-18`).
 
-### Fixed
-- **Game renames from the website admin show up in the app:** when staff rename a game, the server now sends
-  the new name with its detection rules, so the app shows it for the game you're playing, in Activity and
-  Stats, and in Options > Games. The app checks for list changes every 6 hours (was 24) and at start-up.
-- **Add Friend always answers:** clicking Add Friend now closes the window and shows "Friend request sent to …"
-  at the bottom of the main window. Problems (already friends, request already sent, errors) show inside the
-  Add Friend window. Before, the answer was written into the window and then wiped straight away when the
-  friends list refreshed, so nothing seemed to happen. Results that are already your friends (or that you
-  already asked) are marked "Already friends" / "Request sent" and Add Friend is greyed out for them; for
-  someone who asked you, the button says Accept.
+### Added
+- **Already friends?** Add Friend search results now show "Already friends" or "Request sent", and if someone has already asked you, the button says Accept.
 
 ### Changed
+- **Smoother pop-ups:** notifications are now a single dark rounded box that slides in and fades out, laid out like Steam's: the name, what happened ("is now playing", "played 1h 33m of"), then the game on its own line. Long game names show in full instead of being cut off. The close button appears when you hover.
+- **Bigger Add Friend window:** easier to read, with a taller results list and a darker background behind it.
+- **Side panel fits the window better:** the info panel now sits neatly inside the main window's height instead of running edge to edge.
+- **WoW realm hidden for now:** realm names weren't always right, so they're switched off until they're reliable.
 
-- **Smoother pop-ups, laid out like Steam's:** no title bar any more. Each pop-up (friends, your play time, Track-as-game, announcements) is one dark rounded box with a soft shadow that slides and fades in and out. The close × appears when you hover, and a faint Fraglink mark sits in the corner. Inside: the name in bold, then what happened ("is now playing", "played 1h 33m of"), then the game name on its own line in blue, wrapping to two lines before it's cut off. The pop-up grows to fit, so long names like "World of Warcraft: Forever - Beta" show in full.
-- **WoW realm hidden for now:** realm detection wasn't reliable enough, so the app no longer reads or shows the realm (side panel, tooltips, your status and pop-ups), and the server no longer passes one on to friends.
-- **Bigger Add Friend window:** about 25% larger, with the friends list's text size, a taller results list
-  (about 6 rows), roomier buttons and padding, and the list behind it dimmed a bit more.
-- **Side panel height like the classic client:** the info panel now starts just under the main window's title
-  bar and stops a little above its bottom edge, instead of running the full height of the window. The main
-  window keeps all four rounded corners. Width is unchanged (180 px, still draggable).
+### Fixed
+- **Add Friend now always responds:** after you click Add Friend you see "Friend request sent", or a clear message if something went wrong. Before, nothing seemed to happen.
+- **Renamed games update in the app:** when we rename a game, the new name now shows in the app (your status, Activity, Stats and your games list) without needing an update.
 
 ## [0.2.0-dev.17] - 2026-10-11
 

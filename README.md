@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
 <p align="center"><b>PLAY. CONNECT. TRACK.</b><br>A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
-<sub>Early development · current pre-release <b>0.2.0-dev.17</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
+<sub>Early development · current pre-release <b>0.2.0-dev.18</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 
@@ -20,7 +20,7 @@ The client stays small on purpose. The bigger things (profiles, full stats and h
 <br><sub>The main window with the side panel (Activity Report and installed games, green update arrow in the title bar), and with a friend selected. Browser preview of the dev.11 UI with sample data.</sub>
 </p>
 
-## What works today (0.2.0-dev.17)
+## What works today (0.2.0-dev.18)
 
 - **Improved game detection:** a much bigger, more accurate games list of about 10,000 Windows games (downloaded from our server and refreshed daily, with a bundled copy for offline use; WoW Public Test builds are skipped), Fraglink's own signatures and folder rules (Star Citizen channels), installed Steam games, and a "Track <name> as a game?" question for an unlisted program that runs full screen for 5 minutes. Read-only: no injection, no memory reading.
 - **WoW realm:** friends see the realm you're on ("World of Warcraft · Frostmourne") in their side panel and your hover tooltip.
