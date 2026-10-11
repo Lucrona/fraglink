@@ -1,7 +1,6 @@
 //! Main window (destroyed when hidden to keep idle memory low) and toast window.
 
 use crate::{AppState, ToastPayload, TOAST_EVENT};
-use fraglink_core::engine::keys;
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Size, WebviewUrl,
     WebviewWindowBuilder, Window, WindowEvent,
