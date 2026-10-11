@@ -104,12 +104,34 @@ async function listGames(q) {
       const o = g.override || {};
       const flags = (o.name ? `<span class="pill warn">renamed</span>` : "") + (o.hidden ? `<span class="pill bad">hidden</span>` : "") +
         (o.has_icon ? `<span class="pill">icon</span>` : "") + ((o.extra_exes || []).length ? `<span class="pill">+${o.extra_exes.length} exe</span>` : "") +
-        (g.retired ? `<span class="pill bad">retired</span>` : "");
+        (g.retired ? `<span class="pill bad">${g.retired.partial ? "exe retired" : "retired"}</span>` : "") +
+        (g.status && g.status.lifecycle !== "live" ? `<span class="pill ${g.status.lifecycle === "ended" ? "bad" : "warn"}">${esc(LIFE[g.status.lifecycle] || g.status.lifecycle)}</span>` : "");
       return `<tr class="click" data-id="${esc(g.id)}"><td class="ic"><img src="${esc(g.icon)}" width="20" height="20" alt="" onerror="this.style.visibility='hidden'"></td>
         <td>${esc(g.public_name || g.name)}${flags}</td><td class="mono dimt">${esc(g.id)}</td><td class="muted">${esc(g.source)}</td>
         <td class="num">${g.players}</td><td class="num">${hrs(g.tracked_min)}</td></tr>`;
     }).join("")}</tbody></table>`;
   box.onclick = e => { const tr = e.target.closest("tr[data-id]"); if (tr) editGame(tr.dataset.id); };
+}
+const LIFE = { live: "Live", beta: "Beta", test: "Test", early_access: "Early Access", ended: "Ended" };
+function statusHtml(g) {
+  const s = g.status || { lifecycle: "live" };
+  return `<form class="f" id="gst"><label>Status</label>
+    <div class="row"><select class="in" name="lifecycle">${Object.entries(LIFE).map(([k, v]) => `<option value="${k}"${s.lifecycle === k ? " selected" : ""}>${v}</option>`).join("")}</select>
+      <label style="margin:0">Expected end / launch <input type="date" name="date" value="${esc(s.date || "")}"></label></div>
+    <label>Note<input type="text" name="note" maxlength="500" value="${esc(s.note || "")}" placeholder="e.g. beta ends when the full game launches"></label>
+    <label class="check"><input type="checkbox" name="checked" checked> Mark as checked now</label>
+    <div class="row"><button class="btn">Save status</button><span class="dimt">Last checked: ${s.checked_at ? `${when(s.checked_at)} by ${esc(s.checked_by || "?")}` : "never"}</span></div>
+    <div class="alert" id="stmsg" hidden></div></form>`;
+}
+function retireHtml(g) {
+  const r = g.retired, exes = g.exes || [];
+  if (r) return `<div class="f"><label>Retired</label><div>${r.partial ? `Detached ${r.exes.map(e => `<span class="mono">${esc(e)}</span>`).join(", ")} on ${day(r.at)}; the game stays live.` : `Retired ${day(r.at)}. New play goes to <a href="#" data-goto="${esc(r.successor)}" class="mono">${esc(r.successor)}</a>.`}</div>
+    <div class="row"><button class="btn" id="gunret" type="button">Undo retire</button><small>Only while the new entry has no hours.</small></div><div class="alert" id="rmsg" hidden></div></div>`;
+  return `<div class="f"><label>Retire</label>${g.retired_from ? `<div class="dimt">New entry for retired <a href="#" data-goto="${esc(g.retired_from)}" class="mono">${esc(g.retired_from)}</a>.</div>` : ""}
+    ${exes.length ? `<div>Programs to detach:</div>${exes.map(e => `<label class="check"><input type="checkbox" name="rx" value="${esc(e)}" checked> <span class="mono">${esc(e)}</span></label>`).join("")}` : `<div class="dimt">No known program names; add an extra exe first.</div>`}
+    <div class="row"><button class="btn danger" id="gret" type="button"${exes.length ? "" : " disabled"}>Retire…</button></div>
+    <small>All programs: the entry is frozen (name, icon and hours stay) and new play starts a fresh entry in Game approvals. Some programs: only those move to fresh entries; the game stays live.</small>
+    <div class="alert" id="rmsg" hidden></div></div>`;
 }
 async function editGame(id) {
   const box = $("#gedit");
@@ -130,17 +152,26 @@ async function editGame(id) {
       <small>PNG or JPEG up to 1 MB, square works best. Stored on our server and resized to 16, 32 and 64 px. Browsers may keep the old icon for a while.</small>
       <div class="alert" id="imsg" hidden></div></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
-    <div class="f"><label>Retire</label>${g.retired
-      ? `<div>Retired ${esc(day(g.retired.at))}. Play of its program now counts for <a href="#" id="gsucc" class="mono">${esc(g.retired.successor)}</a> (in Game approvals).</div>
-         <div class="row"><button class="btn" id="gunret" type="button">Undo retire</button><span class="dimt">Only while the new entry has no hours.</span></div>`
-      : `<small>Freezes this entry: its name, icon and every hour recorded so far stay, and it shows as a past game on profiles. Its program is detached: the next time someone plays it, it's recorded as a new entry with fresh hours, which goes to Game approvals.</small>
-         <div class="row"><button class="btn danger" id="gret" type="button">Retire this game</button></div>`}
-      ${g.retired_from ? `<div class="dimt">New entry for the retired game <a href="#" id="gfrom" class="mono">${esc(g.retired_from)}</a>.</div>` : ""}
-      <div class="alert" id="rmsg" hidden></div></div></div>`;
+    ${statusHtml(g)}
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${retireHtml(g)}</div>`;
+  const gid = "/admin/games/" + encodeURIComponent(id);
+  $("#gst").addEventListener("submit", async e => {
+    e.preventDefault(); const f = e.target;
+    try { await api(gid + "/status", { method: "POST", body: { lifecycle: f.lifecycle.value, date: f.date.value, note: f.note.value, checked: f.checked.checked } });
+      editGame(id); listGames($("#gs").q.value.trim());
+    } catch (x) { msg($("#stmsg"), x.message); }
+  });
+  box.querySelectorAll("[data-goto]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); editGame(a.dataset.goto); }));
   const ret = $("#gret"), unret = $("#gunret");
-  if (ret) ret.addEventListener("click", () => { if (confirm("Retire " + (g.public_name || g.name || g.id) + "? Its hours are kept; new play starts a new entry.")) act(ret, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/retire", { method: "POST" }); editGame(id); listGames($("#gs").q.value.trim()); }).catch(x => msg($("#rmsg"), x.message)); });
-  if (unret) unret.addEventListener("click", () => act(unret, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/unretire", { method: "POST" }); editGame(id); listGames($("#gs").q.value.trim()); }).catch(x => msg($("#rmsg"), x.message)));
-  for (const [sel, to] of [["#gsucc", g.retired && g.retired.successor], ["#gfrom", g.retired_from]]) { const a = $(sel); if (a) a.addEventListener("click", e => { e.preventDefault(); editGame(to); }); }
+  if (ret) ret.addEventListener("click", () => {
+    const all = [...box.querySelectorAll("input[name=rx]")], pick = all.filter(c => c.checked).map(c => c.value);
+    if (!pick.length) return msg($("#rmsg"), "Pick at least one program.");
+    const whole = pick.length === all.length;
+    if (!confirm(whole ? `Retire ${g.public_name || g.name || id}?\n\nIts hours stay as they are; the next time ${pick.join(", ")} runs, play goes to a new entry (in Game approvals).`
+      : `Detach ${pick.join(", ")} from ${g.public_name || g.name || id}?\n\nThose programs get new entries (in Game approvals); the game stays live with its other programs.`)) return;
+    act(ret, async () => { await api(gid + "/retire", { method: "POST", body: { exes: pick } }); editGame(id); listGames($("#gs").q.value.trim()); }).catch(x => msg($("#rmsg"), x.message));
+  });
+  if (unret) unret.addEventListener("click", () => act(unret, async () => { await api(gid + "/unretire", { method: "POST" }); editGame(id); listGames($("#gs").q.value.trim()); }).catch(x => msg($("#rmsg"), x.message)));
   $("#gf").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
     try {
