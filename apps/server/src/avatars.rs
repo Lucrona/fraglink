@@ -153,7 +153,41 @@ fn bad_image(msg: &str) -> AppError {
 }
 
 /// Decode, crop square and encode the three WebP sizes. CPU-bound: call from spawn_blocking.
+/// Square crop chosen in the website's crop editor, in source-image pixels.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+pub struct Crop {
+    pub x: u32,
+    pub y: u32,
+    pub size: u32,
+}
+
+/// Resize RGBA with premultiplied alpha, so fully transparent pixels (whatever colour
+/// they hold) don't bleed into the edges. Alpha is kept in the WebP output.
+fn resize_rgba(img: &image::RgbaImage, px: u32) -> image::RgbaImage {
+    let mut pre = img.clone();
+    for p in pre.pixels_mut() {
+        let a = p[3] as u32;
+        for c in 0..3 {
+            p[c] = ((p[c] as u32 * a + 127) / 255) as u8;
+        }
+    }
+    let mut out = image::imageops::resize(&pre, px, px, FilterType::Lanczos3);
+    for p in out.pixels_mut() {
+        let a = p[3] as u32;
+        for c in 0..3 {
+            p[c] = (p[c] as u32 * 255 + a / 2)
+                .checked_div(a)
+                .map_or(0, |v| v.min(255)) as u8;
+        }
+    }
+    out
+}
+
 pub fn process(bytes: &[u8]) -> Result<Vec<(u32, Vec<u8>)>, AppError> {
+    process_crop(bytes, None)
+}
+
+pub fn process_crop(bytes: &[u8], crop: Option<Crop>) -> Result<Vec<(u32, Vec<u8>)>, AppError> {
     let fmt = sniff(bytes).ok_or_else(|| bad_image("Use a PNG, JPEG, WebP or GIF image."))?;
     let mut r = image::ImageReader::with_format(std::io::Cursor::new(bytes), fmt);
     let mut limits = image::Limits::default();
@@ -168,13 +202,24 @@ pub fn process(bytes: &[u8]) -> Result<Vec<(u32, Vec<u8>)>, AppError> {
     if w < 16 || h < 16 {
         return Err(bad_image("That image is too small (at least 16 x 16)."));
     }
-    let side = w.min(h);
-    let sq = img
-        .crop_imm((w - side) / 2, (h - side) / 2, side, side)
-        .to_rgba8();
+    let (cx, cy, side) = match crop {
+        Some(c)
+            if c.size >= 16
+                && c.x.saturating_add(c.size) <= w
+                && c.y.saturating_add(c.size) <= h =>
+        {
+            (c.x, c.y, c.size)
+        }
+        Some(_) => return Err(bad_image("That crop doesn't fit the picture.")),
+        None => {
+            let side = w.min(h);
+            ((w - side) / 2, (h - side) / 2, side)
+        }
+    };
+    let sq = img.crop_imm(cx, cy, side, side).to_rgba8();
     let mut out = Vec::new();
     for px in SIZES {
-        let small = image::imageops::resize(&sq, px, px, FilterType::Lanczos3);
+        let small = resize_rgba(&sq, px);
         let mut buf = Vec::new();
         image::codecs::webp::WebPEncoder::new_lossless(&mut buf)
             .encode(small.as_raw(), px, px, image::ExtendedColorType::Rgba8)
@@ -182,6 +227,13 @@ pub fn process(bytes: &[u8]) -> Result<Vec<(u32, Vec<u8>)>, AppError> {
         out.push((px, buf));
     }
     Ok(out)
+}
+
+#[derive(serde::Deserialize)]
+struct CropQuery {
+    x: Option<u32>,
+    y: Option<u32>,
+    size: Option<u32>,
 }
 
 fn semaphore() -> &'static tokio::sync::Semaphore {
@@ -193,8 +245,14 @@ async fn upload(
     State(st): State<AppState>,
     headers: HeaderMap,
     a: AuthUser,
+    axum::extract::Query(q): axum::extract::Query<CropQuery>,
     body: Bytes,
 ) -> ApiResult<Json<Value>> {
+    let crop = match (q.x, q.y, q.size) {
+        (Some(x), Some(y), Some(size)) => Some(Crop { x, y, size }),
+        (None, None, None) => None,
+        _ => return Err(bad_image("Send x, y and size together.")),
+    };
     api::check_origin(&a, &headers, &st)?;
     if let Some(why) = upload_block_reason(&st, a.user.id).await? {
         return Err(AppError::new(
@@ -224,7 +282,7 @@ async fn upload(
     }
     count_change(&st, a.user.id).await?;
     let _permit = semaphore().acquire().await.map_err(AppError::internal)?;
-    let files = tokio::task::spawn_blocking(move || process(&body))
+    let files = tokio::task::spawn_blocking(move || process_crop(&body, crop))
         .await
         .map_err(AppError::internal)??;
     let hash = hex(&Sha256::digest(&files[0].1))[..16].to_string();
@@ -410,6 +468,52 @@ fn hex(b: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn crop_and_alpha() {
+        // left half transparent (with junk red), right half opaque blue
+        let mut img = image::RgbaImage::new(100, 50);
+        for (x, _, p) in img.enumerate_pixels_mut() {
+            *p = if x < 50 {
+                image::Rgba([255, 0, 0, 0])
+            } else {
+                image::Rgba([0, 0, 255, 255])
+            };
+        }
+        let mut b = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut b, image::ImageFormat::Png).unwrap();
+        let b = b.into_inner();
+        let out = super::process_crop(
+            &b,
+            Some(super::Crop {
+                x: 0,
+                y: 0,
+                size: 50,
+            }),
+        )
+        .unwrap();
+        let px = image::load_from_memory(&out[0].1).unwrap().to_rgba8();
+        assert_eq!(px.get_pixel(90, 90)[3], 0, "transparency kept");
+        let out = super::process_crop(
+            &b,
+            Some(super::Crop {
+                x: 50,
+                y: 0,
+                size: 50,
+            }),
+        )
+        .unwrap();
+        let px = image::load_from_memory(&out[0].1).unwrap().to_rgba8();
+        assert_eq!(px.get_pixel(5, 5).0, [0, 0, 255, 255]);
+        assert!(super::process_crop(
+            &b,
+            Some(super::Crop {
+                x: 60,
+                y: 0,
+                size: 50
+            })
+        )
+        .is_err());
+    }
     use super::*;
 
     #[test]

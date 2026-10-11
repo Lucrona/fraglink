@@ -342,6 +342,12 @@ pub fn render(c: &Card) -> Vec<u8> {
         .as_ref()
         .and_then(|b| image::load_from_memory(b).ok())
         .map(|a| {
+            // dark backdrop for transparent pictures (same as the site's panels)
+            for y in ay..ay + asz {
+                for x in ax..ax + asz {
+                    img.put_pixel(x, y, Rgba([0x1b, 0x1f, 0x26, 255]));
+                }
+            }
             let a = resize(&a.to_rgba8(), asz, asz, FilterType::Lanczos3);
             overlay(&mut img, &a, ax as i64, ay as i64);
         });

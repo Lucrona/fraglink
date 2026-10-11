@@ -231,11 +231,16 @@ impl SteamClient {
 
     /// Where to send the browser for "Sign in through Steam".
     pub fn openid_redirect(&self, public_url: &str) -> String {
-        let return_to = format!("{public_url}/auth/steam/callback");
+        self.openid_redirect_to(&format!("{public_url}/auth/steam/callback"), public_url)
+    }
+
+    /// "Sign in through Steam" URL returning to `return_to` (under `realm`).
+    pub fn openid_redirect_to(&self, return_to: &str, realm: &str) -> String {
+        let public_url = realm;
         let q: Vec<(&str, &str)> = vec![
             ("openid.ns", OPENID_NS),
             ("openid.mode", "checkid_setup"),
-            ("openid.return_to", &return_to),
+            ("openid.return_to", return_to),
             ("openid.realm", public_url),
             ("openid.identity", IDENTIFIER_SELECT),
             ("openid.claimed_id", IDENTIFIER_SELECT),
@@ -253,6 +258,16 @@ impl SteamClient {
         public_url: &str,
         params: &HashMap<String, String>,
     ) -> ApiResult<u64> {
+        self.verify_openid_at(&format!("{public_url}/auth/steam/callback"), params)
+            .await
+    }
+
+    /// Verify an assertion that must have come back to `expected_return`.
+    pub async fn verify_openid_at(
+        &self,
+        expected_return: &str,
+        params: &HashMap<String, String>,
+    ) -> ApiResult<u64> {
         let bad = || {
             AppError::bad_request(
                 "steam_openid_invalid",
@@ -263,8 +278,7 @@ impl SteamClient {
         if get("openid.mode") != Some("id_res") || get("openid.ns") != Some(OPENID_NS) {
             return Err(bad());
         }
-        let expected_return = format!("{public_url}/auth/steam/callback");
-        if !get("openid.return_to").is_some_and(|r| r.starts_with(&expected_return)) {
+        if !get("openid.return_to").is_some_and(|r| r.starts_with(expected_return)) {
             return Err(bad());
         }
         if get("openid.op_endpoint") != Some(self.openid_url.as_str()) {

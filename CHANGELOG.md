@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+- Hovering a friend (or a button) showed two tooltips at once on Windows; now there's only the dark one, and cut-off text shows its full version there.
+
 ### Changed
 - **Friends list back to the classic look:** a friend's game icon sits in front of their name while they play (a blank space otherwise); pictures stay in the side panel, next to your own name and in pop-ups.
 

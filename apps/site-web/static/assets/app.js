@@ -112,6 +112,68 @@ function icon(id, name, cls) {
 
 /* ---------- v2 helpers: avatars, game art, bot check ---------- */
 const PRESET_GLYPHS = ["\u2694", "\u25C9", "\u25B2", "\u2605", "\u25C6", "\u2726", "\u2663", "\u2699", "\u2620", "\u265B", "\u26A1", "\u271A"];
+/* Avatar crop editor: square frame, zoom (slider + wheel), drag to pan, live 184/64/32
+   previews. Nothing is sent until Save; the server crops the original (x, y, size in
+   source pixels), so GIFs/PNGs keep full quality and transparency. */
+function cropEditor(file, onSave) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That image couldn't be opened.")); };
+    img.onload = () => {
+      const W = img.naturalWidth, H = img.naturalHeight;
+      if (W < 16 || H < 16) { URL.revokeObjectURL(url); return reject(new Error("That image is too small (at least 16 x 16).")); }
+      const V = 320, minSide = Math.min(W, H);
+      let side = minSide, cx = W / 2, cy = H / 2; // crop square in source pixels
+      const maxZoom = Math.max(1, minSide / 16);
+      const m = document.createElement("div");
+      m.className = "crop-modal";
+      m.innerHTML = `<div class="crop-box panel" role="dialog" aria-modal="true" aria-label="Crop your picture"><h2>Crop your picture</h2><div class="body">
+        <div class="crop-main"><div class="crop-stage"><canvas width="${V}" height="${V}" data-c></canvas><div class="crop-frame"></div></div>
+        <div class="crop-side"><div class="crop-prev"><div><canvas width="184" height="184" data-p="184"></canvas><small>184 profile</small></div>
+          <div><canvas width="64" height="64" data-p="64"></canvas><small>64 panels</small><canvas width="32" height="32" data-p="32" style="margin-top:10px"></canvas><small>32 lists</small></div></div></div></div>
+        <label class="crop-zoom">Zoom <input type="range" min="1" max="${maxZoom.toFixed(2)}" step="0.01" value="1" data-z></label>
+        <p class="hint">Drag to move · scroll or use the slider to zoom. Nothing changes until you press Save.</p>
+        <div class="row"><button class="btn dl" type="button" data-save>Save</button><button class="btn" type="button" data-cancel>Cancel</button><span class="crop-err"></span></div></div></div>`;
+      document.body.appendChild(m);
+      const cv = m.querySelector("[data-c]"), ctx = cv.getContext("2d"), z = m.querySelector("[data-z]");
+      const clamp = () => {
+        side = Math.min(minSide, Math.max(16, side));
+        cx = Math.min(W - side / 2, Math.max(side / 2, cx)); cy = Math.min(H - side / 2, Math.max(side / 2, cy));
+      };
+      const paint = (c, n) => {
+        const g = c.getContext("2d"); g.imageSmoothingQuality = "high";
+        g.fillStyle = "#1b1f26"; g.fillRect(0, 0, n, n);
+        g.drawImage(img, cx - side / 2, cy - side / 2, side, side, 0, 0, n, n);
+      };
+      const draw = () => {
+        clamp(); paint(cv, V);
+        m.querySelectorAll("[data-p]").forEach(c => paint(c, +c.dataset.p));
+        z.value = (minSide / side).toFixed(2);
+      };
+      z.addEventListener("input", () => { side = minSide / +z.value; draw(); });
+      cv.addEventListener("wheel", e => { e.preventDefault(); side *= e.deltaY > 0 ? 1.08 : 1 / 1.08; draw(); }, { passive: false });
+      let drag = null;
+      cv.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, cx, cy }; cv.setPointerCapture(e.pointerId); });
+      cv.addEventListener("pointermove", e => { if (!drag) return; const k = side / V; cx = drag.cx - (e.clientX - drag.x) * k; cy = drag.cy - (e.clientY - drag.y) * k; draw(); });
+      cv.addEventListener("pointerup", () => { drag = null; });
+      const close = () => { m.remove(); URL.revokeObjectURL(url); document.removeEventListener("keydown", esc); };
+      const esc = e => { if (e.key === "Escape") { close(); resolve(false); } };
+      document.addEventListener("keydown", esc);
+      m.querySelector("[data-cancel]").addEventListener("click", () => { close(); resolve(false); });
+      m.addEventListener("click", e => { if (e.target === m) { close(); resolve(false); } });
+      m.querySelector("[data-save]").addEventListener("click", async e => {
+        const b = e.target; b.disabled = true;
+        const s = Math.max(16, Math.min(minSide, Math.round(side)));
+        const crop = { size: s, x: Math.max(0, Math.min(W - s, Math.round(cx - s / 2))), y: Math.max(0, Math.min(H - s, Math.round(cy - s / 2))) };
+        try { await onSave(crop); close(); resolve(true); }
+        catch (x) { b.disabled = false; m.querySelector(".crop-err").textContent = x.message; }
+      });
+      draw();
+    };
+    img.src = url;
+  });
+}
+
 /* One public base for profile + signature links (server's FRAGLINK_SITE_URL). */
 const siteBase = () => ((me() && me().site_url) || location.origin).replace(/\/$/, "");
 const sigUrl = h => siteBase() + "/api/v1/sig/" + encodeURIComponent(h) + ".png";
@@ -121,7 +183,7 @@ function avatar(a, size, extra) {
   const st = `width:${size}px;height:${size}px`, x = extra || "";
   if (a.kind === "upload" && a.url_184) {
     const src = size > 64 ? a.url_184 : size > 32 ? a.url_64 : a.url_32;
-    return `<span class="av c${(a.color || 0) % 6} ${x}" style="${st}"><img src="${esc(src)}" alt="" loading="lazy"></span>`;
+    return `<span class="av up ${x}" style="${st}"><img src="${esc(src)}" alt="" loading="lazy"></span>`;
   }
   if (a.kind === "preset") return `<span class="av p c${a.preset % 6} ${x}" style="${st};font-size:${Math.round(size * 0.46)}px" aria-hidden="true">${PRESET_GLYPHS[a.preset % 12]}</span>`;
   return `<span class="av c${(a.color || 0) % 6} ${x}" style="${st}"><img class="mk" src="/assets/mark.svg" alt=""></span>`;
@@ -401,7 +463,7 @@ pages.profile = async () => {
   let sub = pres ? `<span class="status"><span class="dot ${esc(st)}"></span>${statusText(pres)}</span>` : "";
   if (p.member_since) sub += (sub ? " · " : "") + `member since ${fullDate.format(new Date(p.member_since))}`;
   if (p.location) sub += " · " + esc(p.location);
-  const badges = (p.linked || []).length ? `<div class="badges">${p.linked.map(l => `<span>${l.provider === "steam" ? "Steam" : l.provider === "discord" ? "Discord" : esc(l.provider)} linked${l.display ? ": " + esc(l.display) : ""}</span>`).join("")}</div>` : "";
+  const badges = (p.linked || []).length ? `<div class="badges">${p.linked.map(l => `<span>${l.provider === "steam" ? "Steam" : l.provider === "discord" ? "Discord" : l.provider === "bnet" ? "Battle.net" : esc(l.provider)} ✓${l.display ? ": " + esc(l.display) : ""}</span>`).join("")}</div>` : "";
   const np = live ? `<div class="np">${gameArt(pres.game_id, pres.game_name, "npa")}<div><div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8">Now playing</div>
       <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
   const report = !self && token() && p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : "";
@@ -638,12 +700,36 @@ pages.settings = async () => {
       ${row("Desktop app", cb("friend_request_client", "Friend requests") + cb("friend_online_client", "A friend comes online or starts a game"), "The app's own pop-up settings still apply.")}
       </div></form>`;
   }
-  function connectionsTab() {
-    const steam = (m.linked_accounts || []).find(l => l.provider === "steam");
-    return `<h3>Connections</h3>${msg}<div style="padding:0 14px">
-      <div class="conn"><b style="width:90px">Steam</b><span>${steam ? `Linked${steam.verified ? " (verified)" : ""}${steam.last_sync_at ? " · last sync " + fullDate.format(new Date(steam.last_sync_at)) : ""}` : `<span class="empty">Not linked</span>`}</span><span class="btn" aria-disabled="true" style="margin-left:auto">${steam ? "Linked" : "Link from the app"}</span></div>
-      <div class="conn"><b style="width:90px">Discord</b><span class="empty">Linking Discord is coming soon.</span><span class="btn" aria-disabled="true" style="margin-left:auto">Soon</span></div>
-      <p class="sub" style="padding:8px 0">Linked accounts show as badges on your profile when they're verified.</p></div>`;
+  async function connectionsTab(el) {
+    el.innerHTML = `<h3>Connections</h3><div data-conn>${msg}<div class="empty-v2">Loading…</div></div>`;
+    const box = $("[data-conn]", el);
+    const q = new URLSearchParams(location.search), NAMES = { steam: "Steam", discord: "Discord", bnet: "Battle.net" };
+    let c;
+    try { c = await api("/connect"); } catch (x) { return bad(box, x); }
+    const card = (p, logo, blurb) => {
+      const v = c[p] || {}, l = v.linked;
+      const right = l
+        ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
+        : v.available ? `<button class="btn sm blue" type="button" data-link="${p}">${p === "steam" ? "Sign in through Steam" : "Link " + NAMES[p]}</button>` : `<span class="btn sm" aria-disabled="true">Coming soon</span>`;
+      const who = l ? `${p === "steam" ? `<a href="https://steamcommunity.com/profiles/${esc(l.uid)}" rel="noopener">${esc(l.display || l.uid)}</a>` : `<b>${esc(l.display || l.uid)}</b>`} ${l.verified ? `<span class="vbadge">✓ Verified</span>` : `<span class="sub">(not verified)</span>`}${l.last_sync_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(l.last_sync_at))}${l.sync_status && l.sync_status !== "ok" ? " · " + esc(l.sync_status) : ""}</div>` : ""}`
+        : `<span class="sub">${blurb}</span>`;
+      return `<div class="conn"><span class="cl">${logo}</span><div style="flex:1"><b style="display:block">${NAMES[p]}</b>${who}</div><div>${right}</div></div>`;
+    };
+    box.innerHTML = msg + `<div style="padding:0 14px">
+      ${card("steam", "S", c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
+      ${card("discord", "D", "Show your Discord name on your profile.")}
+      ${card("bnet", "B", "Show your BattleTag on your profile.")}
+      <p class="sub" style="padding:8px 0">Verified accounts show as badges on your profile. You're sent to the provider's own sign-in page; Fraglink never sees your password there.</p></div>`;
+    if (q.get("connected")) { ok(box, `${NAMES[q.get("connected")] || "Account"} linked.`); history.replaceState(null, "", "/settings#connections"); }
+    else if (q.get("connect_error")) { bad(box, new Error(q.get("connect_error") === "expired" ? "That link expired. Try again." : q.get("connect_error") === "cancelled" ? "Linking was cancelled." : q.get("connect_error"))); history.replaceState(null, "", "/settings#connections"); }
+    box.onclick = async e => {
+      const b = e.target.closest("button"); if (!b) return;
+      try {
+        if (b.dataset.link) { b.disabled = true; const r = await api(`/connect/${b.dataset.link}/start`, { method: "POST" }); location.href = r.url; }
+        else if (b.dataset.unlink) { if (!confirm(`Unlink ${NAMES[b.dataset.unlink]}?`)) return; await api(`/connect/${b.dataset.unlink}`, { method: "DELETE" }); connectionsTab(el); }
+        else if (b.matches("[data-import]")) { b.disabled = true; const r = await api("/steam/sync", { method: "POST" }); await connectionsTab(el); ok($("[data-conn]", el), `Imported ${r.games} games.`); }
+      } catch (x) { b.disabled = false; bad(box, x); }
+    };
   }
   async function securityTab(el) {
     const mf = u.mfa || {};
@@ -677,7 +763,7 @@ pages.settings = async () => {
     else if (t === "games") gamesTab(el);
     else if (t === "privacy") el.innerHTML = privacyTab();
     else if (t === "notifications") el.innerHTML = notificationsTab();
-    else if (t === "connections") el.innerHTML = connectionsTab();
+    else if (t === "connections") connectionsTab(el);
     else if (t === "security") securityTab(el);
   }
   async function refresh() { u = (await api("/me")).user; keep(); renderHeader(); }
@@ -706,13 +792,14 @@ pages.settings = async () => {
   root.addEventListener("change", async e => {
     const f = e.target.closest("form[data-f]");
     if (e.target.id === "av-file") {
-      const file = e.target.files[0]; if (!file) return; const pane = $("#pane");
+      const file = e.target.files[0]; e.target.value = ""; if (!file) return; const pane = $("#pane");
       if (file.size > 2 * 1024 * 1024) return bad(pane, new Error("Images can be up to 2 MB."));
-      try {
-        const r = await fetch(API + "/me/avatar", { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": "application/octet-stream" }, body: file });
+      cropEditor(file, async crop => {
+        const q = `?x=${crop.x}&y=${crop.y}&size=${crop.size}`;
+        const r = await fetch(API + "/me/avatar" + q, { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": "application/octet-stream" }, body: file });
         const j = await r.json().catch(() => null); if (!r.ok) throw new Error((j && j.message) || "Upload failed (HTTP " + r.status + ").");
         await refresh(); render(); ok($("#pane"), "Picture updated.");
-      } catch (x) { bad(pane, x); }
+      }).catch(x => bad(pane, x));
       return;
     }
     if (!f) return;

@@ -497,6 +497,7 @@ body.skin-dark .xf-dropdown .has-sub.force { background: var(--dk-blue2, #1f4f9e
 .fav-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .fav-av img.mk { width: 58%; height: auto; object-fit: contain; opacity: .85; }
 .fav-av.c0 { background: #2d4a66; } .fav-av.c1 { background: #3f5a3a; } .fav-av.c2 { background: #5a3f3a; } .fav-av.c3 { background: #4a3d5e; } .fav-av.c4 { background: #5e5234; } .fav-av.c5 { background: #2f5458; }
+.fav-av.up { background: #1b1f26; } /* uploaded pictures keep transparency; dark backdrop */
 .fav-av.p { background-image: linear-gradient(135deg, transparent, #14181d); }
 .xf-row .row-av { margin: 0 4px 0 1px; border-radius: 2px; }
 .xf-row .c-status .gi { display: inline-block; width: 14px; height: 14px; margin-right: 3px; vertical-align: -3px; }
@@ -515,3 +516,4 @@ body.skin-dark .nick-dlg input:focus { outline: none; border-color: #3d7fd6; }
 body.skin-dark .nick-foot .msg.bad { color: #ff8a80; }
 body.skin-dark .sf-user { opacity: .7; }
 body.skin-dark .sf-head .sf-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; line-height: 1.15; }
+.fl-tip-s { white-space: pre-line; pointer-events: none; }

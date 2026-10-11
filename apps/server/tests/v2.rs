@@ -859,3 +859,47 @@ async fn per_feature_privacy_and_grouped_activity(pool: PgPool) {
     let me = api(&app, "GET", "/api/v1/me", Some(&b), None).await.json();
     assert_eq!(me["user"]["privacy"]["rig"], false);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn connect_steam_start_and_unlink(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "cn@example.com", "conny").await;
+    let c = api(&app, "GET", "/api/v1/connect", Some(&t), None).await;
+    assert_eq!(c.status, StatusCode::OK, "{}", c.text);
+    assert_eq!(c.json()["steam"]["available"], true);
+    let r = api(&app, "POST", "/api/v1/connect/steam/start", Some(&t), None).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let url = r.json()["url"].as_str().unwrap().to_string();
+    assert!(
+        url.contains("openid.return_to=") && url.contains("state%3D"),
+        "{url}"
+    );
+    assert_eq!(
+        api(&app, "POST", "/api/v1/connect/nope/start", Some(&t), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    // unknown state -> back to settings with an error
+    let r = api(
+        &app,
+        "GET",
+        "/api/v1/connect/steam/return?state=bogus",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    sqlx::query("INSERT INTO linked_accounts(user_id, provider, provider_uid, verified) SELECT id, 'discord', '1', true FROM users WHERE handle = 'conny'")
+        .execute(&pool).await.unwrap();
+    assert_eq!(
+        api(&app, "DELETE", "/api/v1/connect/discord", Some(&t), None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let c = api(&app, "GET", "/api/v1/connect", Some(&t), None)
+        .await
+        .json();
+    assert!(c["discord"]["linked"].is_null());
+}

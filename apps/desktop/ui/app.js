@@ -195,7 +195,7 @@
   const VERIFIED = sumBy(MY_HOURS.filter(r => r.tier !== 'estimated'), r => r.total);
   const ESTIMATED = sumBy(MY_HOURS.filter(r => r.tier === 'estimated'), r => r.total);
   const nf = n => Math.round(n).toLocaleString('en-AU');
-  function tierMark(t) { const x = TIERS[t]; return `<i class="tm tm-${t}" title="${x.label}">${t === 'estimated' ? '' : x.sym}</i>`; }
+  function tierMark(t) { const x = TIERS[t]; return `<i class="tm tm-${t}" data-tip="${x.label}">${t === 'estimated' ? '' : x.sym}</i>`; }
   function fmtTotalShort(r) { return r.tier === 'estimated' ? `<span class="est">~${nf(r.total)}h</span>` : `${nf(r.total)}h${tierMark(r.tier)}`; }
   // friends' activity (day-grouped), newest first
   const ACTIVITY = [
@@ -283,7 +283,7 @@
     // classic: the game icon sits before the name while playing, a blank slot otherwise
     const icon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}<span class="nm" title="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" title="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" title="${esc(info)}">${esc(info)}</span></div>`;
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
@@ -421,7 +421,7 @@
     if (us === null) rows = '<tr class="af-note"><td colspan="2">Searching…</td></tr>';
     else if (us) rows = us.length ? us.map(u => { const r = relationOf(u.handle); return `<tr class="${u.handle === sel ? 'sel' : ''}" data-action="add-pick" data-handle="${esc(u.handle)}"><td>${esc(u.handle)}</td><td>${esc(u.display_name || u.handle)}${r ? ` <em class="af-rel">${REL_TAG[r]}</em>` : ''}</td></tr>`; }).join('') : `<tr class="af-note"><td colspan="2">${esc(A.err || A.self || 'No users found. Check the spelling, or try part of their name.')}</td></tr>`;
     const n = us ? us.length : 0, rel = sel ? relationOf(sel) : '', canAdd = sel && rel !== 'friend' && rel !== 'out' && !A.busy;
-    return `<div class="af-dlg" role="dialog" aria-label="Add Friend"><div class="af-title"><span>Add Friend</span><button type="button" class="af-x" data-action="add-cancel" title="Close">×</button></div><div class="af-body">
+    return `<div class="af-dlg" role="dialog" aria-label="Add Friend"><div class="af-title"><span>Add Friend</span><button type="button" class="af-x" data-action="add-cancel" data-tip="Close">×</button></div><div class="af-body">
       <label for="add-handle">Search by name, email, or username:</label>
       <input id="add-handle" maxlength="60" autocomplete="off" spellcheck="false" value="${esc(A.q)}" />
       <div class="af-ex">(Example: Jo, Jo Doe, or jo@doe.com)</div>
@@ -430,7 +430,7 @@
       <div class="af-tw"><table class="af-t"><tr><th>Username</th><th>Display Name</th></tr>${rows}</table></div>
       <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">${esc(A.msg)}</textarea>
       <div id="add-msg" class="${A.bad ? 'bad' : ''}">${esc(A.out || '')}</div>
-      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${canAdd ? '' : ' disabled'}${rel === 'friend' || rel === 'out' ? ` title="${REL_TAG[rel]}"` : ''}>${A.busy ? 'Adding…' : rel === 'in' ? 'Accept' : 'Add Friend'}</button></div>
+      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${canAdd ? '' : ' disabled'}${rel === 'friend' || rel === 'out' ? ` data-tip="${REL_TAG[rel]}"` : ''}>${A.busy ? 'Adding…' : rel === 'in' ? 'Accept' : 'Add Friend'}</button></div>
     </div></div>`;
   }
   function renderAddFriend() {
@@ -469,7 +469,7 @@
     if (state.detectRun) { list.innerHTML = `<div class="lg"><div class="lg-h">Detecting installed games…</div><p>Looking for games from Steam, Battle.net, Epic, GOG, EA app, Ubisoft Connect and Xbox…</p><div class="det-track"><div class="det-bar" id="fd-bar" style="width:${state.detectPct}%"></div></div><button class="dk-btn" data-action="detect-skip">Skip</button></div>`; return; }
     const s = state.sort;
     const cw = colWidths(), cs = cw ? ` cw" style="--cw-name:${cw.name}px;--cw-status:${cw.status}px` : '';
-    let h = `<div class="xf-grid${cs}"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name<i class="col-grip" data-col="name" title="Drag to resize, double-click to reset"></i></span><span class="c-status" data-sort="status">Status<i class="col-grip" data-col="status" title="Drag to resize, double-click to reset"></i></span><span class="c-info">Game Info</span></div>`;
+    let h = `<div class="xf-grid${cs}"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name<i class="col-grip" data-col="name" data-tip="Drag to resize, double-click to reset"></i></span><span class="c-status" data-sort="status">Status<i class="col-grip" data-col="status" data-tip="Drag to resize, double-click to reset"></i></span><span class="c-info">Game Info</span></div>`;
     if (realMode()) {
       const F = realFriends(), fs = LIVE.friends;
       let note = '';
@@ -496,16 +496,16 @@
     if (!g) { list.innerHTML = h + `<div class="fl-empty">Loading your stats…</div></div>`; return; }
     h += `<div class="xf-sec s-now"><i class="tri"></i>Now Playing</div>`;
     const np = g.now_playing;
-    if (np) { const id = ensureGame(np.game_id, np.name); h += `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(np.name)} · detected via ${esc(String(np.source).replace('_', ' '))}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(np.name)}</span></span><span class="st-live timer" id="session">${fmtT(liveSeconds() * 1000)}</span></div>`; }
-    else if (g.paused) h += `<div class="xf-row st-row fl-muted" title="Hours only count while you're signed in and connected to Fraglink: the server records them as you play."><span class="c-name st-g"><i class="noicon"></i><span class="nm">${realMode() ? 'Offline · hours count again once reconnected' : 'Not tracking · sign in to count hours'}</span></span><span class="st-live"></span></div>`;
+    if (np) { const id = ensureGame(np.game_id, np.name); h += `<div class="xf-row st-row" data-game="${esc(id)}" data-tip="${esc(np.name)} · detected via ${esc(String(np.source).replace('_', ' '))}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(np.name)}</span></span><span class="st-live timer" id="session">${fmtT(liveSeconds() * 1000)}</span></div>`; }
+    else if (g.paused) h += `<div class="xf-row st-row fl-muted" data-tip="Hours only count while you're signed in and connected to Fraglink: the server records them as you play."><span class="c-name st-g"><i class="noicon"></i><span class="nm">${realMode() ? 'Offline · hours count again once reconnected' : 'Not tracking · sign in to count hours'}</span></span><span class="st-live"></span></div>`;
     else h += `<div class="xf-row st-row fl-muted"><span class="c-name st-g"><i class="noicon"></i><span class="nm">Not in a game · watching</span></span><span class="st-live"></span></div>`;
     const change = g.last_week_seconds > 0 ? Math.round((g.week_seconds - g.last_week_seconds) / g.last_week_seconds * 100) : null;
-    const chg = change === null ? '' : `<em class="${change < 0 ? 'down' : ''}" title="vs all of last week">${change < 0 ? '&#9660;' : '&#9650;'}${Math.abs(change)}%</em>`;
+    const chg = change === null ? '' : `<em class="${change < 0 ? 'down' : ''}" data-tip="vs all of last week">${change < 0 ? '&#9660;' : '&#9650;'}${Math.abs(change)}%</em>`;
     h += `<div class="st-sum"><div><small>Today</small><b>${fmtHrs(g.today_seconds)} h</b></div><div><small>This week</small><b>${fmtHrs(g.week_seconds)} h</b>${chg}</div><div><small>Streak</small><b>${g.streak_days} day${g.streak_days === 1 ? '' : 's'}</b></div></div>`;
     h += `<div class="xf-sec s-fof"><i class="tri"></i>Top Games This Week</div>`;
     const top = g.top || []; const max = Math.max(1, ...top.map(r => r.seven_day_seconds));
     if (!top.length) h += `<div class="fl-empty">No games tracked yet. Start a game, or use <a data-action="tag-game">Fraglink → This is a game…</a></div>`;
-    h += top.map(r => { const id = ensureGame(r.game_id, r.name); return `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(r.name)} · ${fmtDur(r.total_seconds)} tracked on this PC"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w"><i class="st-bar"><b style="width:${Math.round(r.seven_day_seconds / max * 100)}%"></b></i>${hrs(r.seven_day_seconds).toFixed(1)}</span><span class="st-t">${fmtHrs(r.total_seconds)}h${tierMark(r.tier || 'tracked')}</span></div>`; }).join('');
+    h += top.map(r => { const id = ensureGame(r.game_id, r.name); return `<div class="xf-row st-row" data-game="${esc(id)}" data-tip="${esc(r.name)} · ${fmtDur(r.total_seconds)} tracked on this PC"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w"><i class="st-bar"><b style="width:${Math.round(r.seven_day_seconds / max * 100)}%"></b></i>${hrs(r.seven_day_seconds).toFixed(1)}</span><span class="st-t">${fmtHrs(r.total_seconds)}h${tierMark(r.tier || 'tracked')}</span></div>`; }).join('');
     h += `<div class="st-legend">${tierMark('tracked')}Tracked on this PC · ${g.games_tracked} game${g.games_tracked === 1 ? '' : 's'} · ${fmtHrs(g.total_seconds)} h total</div>`;
     h += serverStatsHtml(g);
     h += `<div class="st-link"><a data-action="tag-game">&raquo; This is a game…</a> &nbsp; <a data-action="my-stats">&raquo; Full stats</a></div></div>`;
@@ -529,7 +529,7 @@
       const tot = est ? `<span class="est">~${nf(roundEst(Math.floor(mins / 60)))}h</span>` : `${fmtHrs(mins * 60)}h${tierMark(r.display_tier)}`;
       const unl = r.game_id.startsWith('exe:') && r.name === 'Unlisted game';
       const tip = unl ? 'A program you tagged as a game. Friends see "Playing a game" until it is added to Fraglink\'s game list; its hours stay with it.' : `${r.name} · tracked ${nf(r.tracked_min / 60)}h · imported ${nf(r.imported_min / 60)}h · estimated ~${nf(r.estimated_min / 60)}h`;
-      return `<div class="xf-row st-row" data-game="${esc(id)}" title="${esc(tip)}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w">${r.minutes_7d ? (r.minutes_7d / 60).toFixed(1) : ''}</span><span class="st-t">${tot}</span></div>`;
+      return `<div class="xf-row st-row" data-game="${esc(id)}" data-tip="${esc(tip)}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w">${r.minutes_7d ? (r.minutes_7d / 60).toFixed(1) : ''}</span><span class="st-t">${tot}</span></div>`;
     }).join('');
     const o = sv.overall || {};
     h += `<div class="st-legend">${tierMark('tracked')}Tracked ${tierMark('imported')}Imported <span class="est">~</span> Estimated · ${nf((o.verified_min || 0) / 60)} h${o.estimated_min ? ` + ${esc(o.estimated_display || '')} est.` : ''}</div>`;
@@ -568,7 +568,7 @@
       const lbl = dayLabel(a.ts);
       if (lbl !== cur) { cur = lbl; h += `<div class="xf-sec s-day"><i class="tri"></i>${esc(lbl)}</div>`; }
       const kindTile = a.game_id ? ensureGame(a.game_id, a.game_name) : '_new';
-      h += `<div class="av-row" title="${esc(new Date(a.ts * 1000).toLocaleString())}"><i class="gi">${gameIcon(kindTile)}</i><div class="av-tx"><b class="me">You</b> ${activityHtml(a)}</div><span class="av-t">${esc(whenLabel(a.ts))}</span></div>`;
+      h += `<div class="av-row" data-tip="${esc(new Date(a.ts * 1000).toLocaleString())}"><i class="gi">${gameIcon(kindTile)}</i><div class="av-tx"><b class="me">You</b> ${activityHtml(a)}</div><span class="av-t">${esc(whenLabel(a.ts))}</span></div>`;
     }
     h += `<div class="st-link"><a data-action="website">&raquo; All activity on playfraglink.com (later)</a></div></div>`;
     list.innerHTML = h;
@@ -610,15 +610,15 @@
       const id = ensureGame(x.game_id || ('n:' + x.game_name), x.game_name || 'a game');
       const g = `<span class="g">${esc(x.game_name || 'a game')}</span>`;
       const what = x.kind === 'playing' ? `started playing ${g}` : `played ${g} for ${esc(fmtMins(Math.round((x.duration_s || 0) / 60)))}`;
-      return `<div class="ar-row" title="${esc(new Date(x.at).toLocaleString())}"><i class="gi">${friendGameIcon(id)}</i><div><b>${esc(x.display_name || x.handle)}</b> ${what}<small>${esc(agoText(x.at))}</small></div></div>`;
+      return `<div class="ar-row" data-tip="${esc(new Date(x.at).toLocaleString())}"><i class="gi">${friendGameIcon(id)}</i><div><b>${esc(x.display_name || x.handle)}</b> ${what}<small>${esc(agoText(x.at))}</small></div></div>`;
     }).join('');
-    return `<div class="side-sec"><h4>Activity Report</h4><a class="side-more" data-action="activity-more" title="View more of your friends' activity">More</a></div>${rows}`;
+    return `<div class="side-sec"><h4>Activity Report</h4><a class="side-more" data-action="activity-more" data-tip="View more of your friends' activity">More</a></div>${rows}`;
   }
   function installedHtml() {
     const inst = (CATALOG || []).filter(g => g.installed && !g.excluded);
     const games = CATALOG === null ? '<li><span>Looking for games…</span></li>'
-      : inst.map(g => { const id = ensureGame(g.id, g.name); return `<li title="${esc(g.game_path || g.detect_path || '')}"><i class="gi">${gameIcon(id)}</i><span>${esc(g.name)}</span>${g.can_launch ? `<a data-action="launch" data-game="${esc(g.id)}">Launch</a>` : ''}</li>`; }).join('') || '<li><span>No games found on this PC yet.</span></li>';
-    return `<div class="side-sec"><h4>${inst.length} Installed Game${inst.length === 1 ? '' : 's'}</h4><a data-action="detect-games" class="side-more side-detect" title="Detect Games: look for installed games on this PC">Detect</a></div><ul class="games launch">${games}</ul>`;
+      : inst.map(g => { const id = ensureGame(g.id, g.name); return `<li data-tip="${esc(g.game_path || g.detect_path || '')}"><i class="gi">${gameIcon(id)}</i><span>${esc(g.name)}</span>${g.can_launch ? `<a data-action="launch" data-game="${esc(g.id)}">Launch</a>` : ''}</li>`; }).join('') || '<li><span>No games found on this PC yet.</span></li>';
+    return `<div class="side-sec"><h4>${inst.length} Installed Game${inst.length === 1 ? '' : 's'}</h4><a data-action="detect-games" class="side-more side-detect" data-tip="Detect Games: look for installed games on this PC">Detect</a></div><ul class="games launch">${games}</ul>`;
   }
   function fmtMins(m) { m = Math.max(0, Math.round(m)); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; }
   function agoText(iso) {
@@ -636,7 +636,7 @@
     return sampleStart[f.id];
   }
   // val is HTML (already escaped); plain values also get a title so a clipped value can be read
-  const kv = (label, val) => val ? `<div class="sf-kv"><span>${label}</span><b${/</.test(val) ? '' : ` title="${val}"`}>${val}</b></div>` : '';
+  const kv = (label, val) => val ? `<div class="sf-kv"><span>${label}</span><b${/</.test(val) ? '' : ` data-tip="${val}"`}>${val}</b></div>` : '';
   const sfSec = title => `<div class="side-sec"><h4>${title}</h4></div>`;
   const hrsText = sec => sec == null ? '' : fmtHrs(sec) + 'h';
   /* Profile pictures (dev.19), drawn like the website: an uploaded picture (fetched and
@@ -658,7 +658,7 @@
   function avColor(f) { if (f.avatar && f.avatar.color != null) return f.avatar.color % 6; const n = String(f.handle || f.name || ''); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0; return h % 6; }
   function avatarHtml(f, size = 48, cls = 'sf-av') {
     const a = f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
-    if (a.kind === 'upload') { const src = avImg(size > 32 ? a.url_64 : a.url_32); if (src) return `<i class="fav-av ${cls} c${c}" style="${st}"><img src="${src}" alt=""></i>`; }
+    if (a.kind === 'upload') { const src = avImg(size > 32 ? a.url_64 : a.url_32); if (src) return `<i class="fav-av up ${cls}" style="${st}"><img src="${src}" alt=""></i>`; }
     if (a.kind === 'preset') return `<i class="fav-av ${cls} p c${a.preset % 6}" style="${st};font-size:${Math.round(size * .46)}px">${AV_GLYPHS[a.preset % 12]}</i>`;
     return `<i class="fav-av ${cls} c${c}" style="${st}"><img class="mk" src="brand/v28-mark.svg" alt=""></i>`;
   }
@@ -684,12 +684,12 @@
     const H = esc(f.handle || f.name), playing = f.kind === 'playing' || f.kind === 'fof';
     const [dot, stText] = friendStatus(f);
     const since = f.since ? 'Friends since ' + new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    let h = `<div class="sf-head" title="${esc(since)}">${avatarHtml(f, 48)}<div class="sf-id"><div class="sf-name">${esc(f.name)}</div>${f.handle || f.real ? `<div class="sf-user">@${H}</div>` : ''}<div class="sf-st"><i class="sf-dot ${dot}"></i>${esc(stText)}</div></div></div>`;
+    let h = `<div class="sf-head" data-tip="${esc(since)}">${avatarHtml(f, 48)}<div class="sf-id"><div class="sf-name">${esc(f.name)}</div>${f.handle || f.real ? `<div class="sf-user">@${H}</div>` : ''}<div class="sf-st"><i class="sf-dot ${dot}"></i>${esc(stText)}</div></div></div>`;
     if (f.kind === 'req') return h + `<p class="sf-note">Wants to be your friend.</p><div class="sf-foot"><button class="dk-btn" data-action="friend-accept" data-handle="${H}">Accept</button><button class="dk-btn" data-action="friend-decline" data-handle="${H}">Decline</button><a class="sf-small" data-action="friend-block" data-handle="${H}">Block</a></div>`;
     if (f.kind === 'out') return h + `<p class="sf-note">Friend request sent. They'll show up here once they accept.</p><div class="sf-foot"><a class="sf-small" data-action="friend-remove" data-handle="${H}">Cancel request</a></div>`;
     if (playing) {
       const t0 = sessionStart(f);
-      h += sfSec('Playing Game') + `<div class="sf-game"><i class="gi sf-gi">${friendGameIcon(f.game)}</i><div class="sf-gn"><b title="${esc(gameLabel(f))}">${esc(gameLabel(f))}</b></div></div>`;
+      h += sfSec('Playing Game') + `<div class="sf-game"><i class="gi sf-gi">${friendGameIcon(f.game)}</i><div class="sf-gn"><b data-tip="${esc(gameLabel(f))}">${esc(gameLabel(f))}</b></div></div>`;
       if (realmOf(f)) h += kv('Realm', esc(realmOf(f)));
       h += kv('Playing for', t0 ? `<span class="sf-timer" data-start="${t0}">${fmtT(Date.now() - t0)}</span>` : '');
     }
@@ -748,7 +748,7 @@
     const open = force ?? !app.classList.contains('side-open');
     app.classList.toggle('side-open', open); requestAnimationFrame(SS.update);
     if (TAURI) FLB.scale(currentZoom(), open);
-    $('#nub').title = open ? 'Hide Info Panel' : 'Show Info Panel';
+    $('#nub').dataset.tip = open ? 'Hide Info Panel' : 'Show Info Panel';
     placeChat();
   }
 
@@ -889,8 +889,8 @@
   ];
   function histRow(r, max) {
     const t = TIERS[r.tier];
-    const total = r.tier === 'estimated' ? `<span class="est" title="Estimated with the history calculator; excluded from ranks and achievements">~${nf(r.total)} hrs</span>` : `${r.total >= 1000 ? nf(r.total) : r.total.toFixed(1)} hrs`;
-    return `<tr><td><span class="gi">${gameIcon(r.game)}</span> <a>${esc(GAMES[r.game].name)}</a>${r.note ? `<div class="pf-note">“${esc(r.note)}”</div>` : ''}</td><td>${r.week.toFixed(1)} hrs</td><td class="bar"><i style="width:${max ? (r.week / max * 100) : 0}%"></i></td><td>${total}</td><td><span class="tb tb-${r.tier}" title="${esc(r.src)}">${t.sym} ${t.label}</span></td></tr>`;
+    const total = r.tier === 'estimated' ? `<span class="est" data-tip="Estimated with the history calculator; excluded from ranks and achievements">~${nf(r.total)} hrs</span>` : `${r.total >= 1000 ? nf(r.total) : r.total.toFixed(1)} hrs`;
+    return `<tr><td><span class="gi">${gameIcon(r.game)}</span> <a>${esc(GAMES[r.game].name)}</a>${r.note ? `<div class="pf-note">“${esc(r.note)}”</div>` : ''}</td><td>${r.week.toFixed(1)} hrs</td><td class="bar"><i style="width:${max ? (r.week / max * 100) : 0}%"></i></td><td>${total}</td><td><span class="tb tb-${r.tier}" data-tip="${esc(r.src)}">${t.sym} ${t.label}</span></td></tr>`;
   }
   function profilePage(theme) {
     const tw = sumBy(MY_HOURS, r => r.week);
@@ -914,7 +914,7 @@
       </div><div class="wp-main">
         <div class="wp-box" data-sec="miniprofile"><h3>Miniprofile <small class="h3n">signature image for forums, READMEs &amp; Twitch panels</small></h3><div class="pf-sig">${signatureSVG(theme)}
           <div class="pf-embed"><label>Image URL<input readonly value="https://playfraglink.com/sig/lucrona.png"></label><label>BBCode<input readonly value="[url=https://playfraglink.com/u/lucrona][img]https://playfraglink.com/sig/lucrona.png[/img][/url]"></label><span>Also: Markdown · HTML · 320×100 Twitch panel · 350×20 userbar</span></div></div></div>
-        <div class="wp-box" data-sec="achievements"><h3>Achievements <small class="h3n">24 of 35 tiers · play-time only · estimated hours never count</small></h3><div class="pf-ach">${ACH.map(a => `<div class="ach ach-${a.c}" title="${esc(a.k)} · ${a.tier}"><i><b>${esc(a.g)}</b></i><div><b>${esc(a.k)}</b><span class="t">${a.tier}</span><small>${esc(a.prog)}</small></div></div>`).join('')}</div></div>
+        <div class="wp-box" data-sec="achievements"><h3>Achievements <small class="h3n">24 of 35 tiers · play-time only · estimated hours never count</small></h3><div class="pf-ach">${ACH.map(a => `<div class="ach ach-${a.c}" data-tip="${esc(a.k)} · ${a.tier}"><i><b>${esc(a.g)}</b></i><div><b>${esc(a.k)}</b><span class="t">${a.tier}</span><small>${esc(a.prog)}</small></div></div>`).join('')}</div></div>
         <div class="wp-box" data-sec="history"><h3>Gaming History</h3><table class="wp-t pf-hist"><tr><th>Game</th><th>Past 7 Days</th><th></th><th>Total</th><th>Source</th></tr>
           ${MY_HOURS.map(r => histRow(r, max)).join('')}
           <tr class="tot"><td>Overall Hours</td><td>${tw.toFixed(1)} hrs</td><td></td><td>${nf(VERIFIED)} hrs</td><td>verified</td></tr>
@@ -938,7 +938,7 @@
   function estimatorModal() {
     const tot = sumBy(EST.eras, eraHours);
     const opts = ['cs', 'wow', 'd2', 'wc3', 'q3', 'ut', 'bfv'].map(g => `<option value="${g}" ${g === EST.game ? 'selected' : ''}>${esc(GAMES[g].name)}</option>`).join('');
-    return `<div class="est-ovl" id="est"><div class="est-box"><h3>Estimate your history <button data-est="close" title="Close">×</button></h3><div class="est-body">
+    return `<div class="est-ovl" id="est"><div class="est-box"><h3>Estimate your history <button data-est="close" data-tip="Close">×</button></h3><div class="est-body">
       <p class="est-intro">Played before Fraglink? Tell us roughly how much. Estimates show on your profile as <span class="est">~hours</span> with an <span class="tb tb-estimated">~ Estimated</span> badge and never count toward ranks, leaderboards or achievements.</p>
       <label class="est-game">Game <span class="gi">${gameIcon(EST.game)}</span><select data-est="game">${opts}</select></label>
       <table class="est-t"><tr><th>From</th><th>To</th><th>Hours / week</th><th>Weeks</th><th>Estimate</th><th></th></tr>
@@ -1078,7 +1078,7 @@
     try {
       const [cands, games] = await Promise.all([FLB.candidates(), FLB.games()]);
       candSel = null; $('#tag-name').value = '';
-      $('#cand-list').innerHTML = cands.length ? cands.map(c => `<div class="g-row cand" data-exe="${esc(c.exe)}" title="${esc(c.path)}"><b>${esc(c.exe)}</b><small>${esc(c.path)}</small></div>`).join('')
+      $('#cand-list').innerHTML = cands.length ? cands.map(c => `<div class="g-row cand" data-exe="${esc(c.exe)}" data-tip="${esc(c.path)}"><b>${esc(c.exe)}</b><small>${esc(c.path)}</small></div>`).join('')
         : '<div class="g-row">Nothing unknown is running. Start the game first, then press Refresh.</div>';
       $('#known-list').innerHTML = games.length ? games.map(g => `<div class="g-row known ${g.excluded ? 'ex' : ''}"><span><b>${esc(g.name)}</b><small>${fmtHrs(g.total_seconds)} h · ${esc(g.source)}${g.excluded ? ' · excluded' : ''}</small></span><button class="hw" type="button" data-exclude="${esc(g.id)}" data-ex="${g.excluded ? 0 : 1}">${g.excluded ? 'Include' : 'Exclude'}</button></div>`).join('')
         : '<div class="g-row">No games yet.</div>';
@@ -1146,7 +1146,7 @@
         Object.assign(A, { busy: false, out: String(e && e.message || e) || "Couldn't send the request. Try again.", bad: true }); renderAddFriend();
       }
     },
-    'update-now': a => { a.disabled = true; a.classList.add('busy'); a.title = 'Restarting…'; FLB.installUpdate().catch(e => { a.disabled = false; a.classList.remove('busy'); a.title = 'Update ready - click to restart'; toastErr(e); }); },
+    'update-now': a => { a.disabled = true; a.classList.add('busy'); a.dataset.tip = 'Restarting…'; FLB.installUpdate().catch(e => { a.disabled = false; a.classList.remove('busy'); a.dataset.tip = 'Update ready - click to restart'; toastErr(e); }); },
     // Help > Check for Updates: "You're up to date", or the update downloads, installs and restarts.
     'check-updates': async () => {
       notice('Check for Updates', '<p class="upd-msg" id="upd-msg">Checking for updates…</p>');
@@ -1283,7 +1283,7 @@
     if (!bar) { bar = document.createElement('div'); bar.id = 'track-ask'; bar.className = 'fl-ask'; document.body.appendChild(bar); }
     const name = exeName(c.exe);
     bar.innerHTML = `Track <b>${esc(name)}</b> as a game? <span class="fl-ask-b"><button type="button" data-yes="1">Yes</button><button type="button" data-yes="0">Not a game</button></span>`;
-    bar.title = c.path || c.exe; bar.hidden = false;
+    bar.dataset.tip = c.path || c.exe; bar.hidden = false;
     bar.querySelectorAll('button').forEach(b => b.onclick = async () => {
       bar.hidden = true;
       try { await FLB.trackAnswer(c.exe, b.dataset.yes === '1', name); refreshSoon(); } catch (e) { toastErr(e); }
@@ -1325,6 +1325,30 @@
   list.addEventListener('mouseleave', hideTip);
   list.addEventListener('mousedown', hideTip);
   list.addEventListener('wheel', hideTip, { passive: true });
+  /* Every other hover hint uses the same dark tooltip (no native title attributes in this window:
+     they'd show a second, cream tooltip on Windows). Text that is its own hint shows only when cut off. */
+  const stip = $('#stip'); let stipTimer = null, stipEl = null;
+  function hideSTip() { clearTimeout(stipTimer); stipEl = null; stip.hidden = true; }
+  document.addEventListener('mouseover', e => {
+    let el = e.target.closest ? e.target.closest('[data-tip],[title]') : null;
+    if (el && el.hasAttribute('title')) { if (!el.dataset.tip) el.dataset.tip = el.getAttribute('title'); el.removeAttribute('title'); }
+    if (el && el.closest('.xf-row[data-friend]')) el = null; // friend rows have the rich tooltip
+    if (el === stipEl) return;
+    hideSTip(); if (!el || !el.dataset.tip) return;
+    const t = el.dataset.tip;
+    if (t.trim() === el.textContent.trim() && el.scrollWidth <= el.clientWidth + 1) return;
+    stipEl = el; const mx = e.clientX, my = e.clientY;
+    stipTimer = setTimeout(() => {
+      if (!el.isConnected || stipEl !== el) return;
+      stip.textContent = el.dataset.tip; stip.hidden = false;
+      const tw = stip.offsetWidth, th = stip.offsetHeight;
+      stip.style.left = Math.max(2, Math.min(mx + 4, innerWidth - tw - 2)) + 'px';
+      stip.style.top = (my + 20 + th <= innerHeight ? my + 20 : Math.max(2, my - th - 6)) + 'px';
+    }, 450);
+  }, true);
+  document.addEventListener('mousedown', hideSTip, true);
+  document.addEventListener('wheel', hideSTip, { passive: true, capture: true });
+  addEventListener('blur', hideSTip);
   /* Menus: real native Windows popup menus in the app (like the tray menu); the browser
      preview draws the same items itself. items: {id, label, disabled, checked, sep, items}. */
   const ctx = $('#ctx');
@@ -1431,13 +1455,13 @@
     // hover: the game with its detail (WoW realm), e.g. "Playing World of Warcraft: Forever · Frostmourne"
     const detail = SHOW_REALM && game && np.detail ? ' · ' + np.detail : '';
     const tipTxt = detail && txt.includes(game) ? txt.replace(game, game + detail) : txt;
-    btn.querySelector('span').textContent = txt; btn.title = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
+    btn.querySelector('span').textContent = txt; btn.dataset.tip = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();
     const me = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
     // nickname shown, username (permanent) in the hover; click either to change the nickname
     const nick = (realMode() ? LIVE.meNick : ME.nick) || me;
     $('#username').textContent = nick + statusLabel();
-    for (const s of ['#username', '#px-user']) { const m = $(s); if (m) { m.title = `@${me} · click to change your nickname`; m.classList.add('nick-edit'); } }
+    for (const s of ['#username', '#px-user']) { const m = $(s); if (m) { m.dataset.tip = `@${me} · click to change your nickname`; m.classList.add('nick-edit'); } }
     if (realMode() && FLB.accountInfo && LIVE.meAvFor !== me) { LIVE.meAvFor = me; FLB.accountInfo().then(a => { LIVE.meAv = a && a.avatar; LIVE.meNick = a && a.display_name || ''; syncStatus(); }).catch(() => {}); }
     const meAv = avatarHtml({ handle: me, avatar: realMode() ? LIVE.meAv : ME.avatar }, 16, 'me-av-i');
     for (const s of ['#me-av', '#px-av']) { const m = $(s); if (m) m.innerHTML = meAv; }
@@ -1604,7 +1628,7 @@
     // Auto-update: Rust downloads + verifies quietly (startup + every 6 h); then a green arrow
     // in the title bar installs and restarts in one click. No prompt.
     const askUpdate = v => { const b = $('#upd-ready'); if (!b || !v) return;
-      b.title = 'Update ready - click to restart'; b.dataset.version = devVer(v); b.hidden = false; document.body.classList.add('has-upd'); };
+      b.dataset.tip = 'Update ready - click to restart'; b.dataset.version = devVer(v); b.hidden = false; document.body.classList.add('has-upd'); };
     FLB.on('fraglink://update-found', v => { const m = $('#upd-msg'); if (m) m.innerHTML = `Downloading Fraglink ${esc(v)}…<br><small>Fraglink restarts when it's done.</small>`; });
     FLB.on('fraglink://update-progress', p => { const m = $('#upd-msg small'); if (m && p != null && m.parentNode.textContent.startsWith('Downloading')) m.textContent = `${p}% · Fraglink restarts when it's done.`; });
     // Automatic Away after 10 minutes without input (Rust watches; like Discord).

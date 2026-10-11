@@ -12,6 +12,7 @@ pub mod art;
 pub mod auth;
 pub mod avatars;
 pub mod config;
+pub mod connect;
 pub mod error;
 pub mod friends;
 pub mod game_overrides;
@@ -140,6 +141,7 @@ pub fn router(state: AppState) -> Router {
         .merge(avatars::routes())
         .merge(home::routes())
         .merge(art::routes())
+        .merge(connect::routes())
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(state)
 }
