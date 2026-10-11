@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+- **Friends list back to the classic look:** a friend's game icon sits in front of their name while they play (a blank space otherwise); pictures stay in the side panel, next to your own name and in pop-ups.
+
 ### Added
 - **Nicknames:** your username is your permanent sign-in name and profile address; your nickname is the name everyone sees, in the friends list, side panel, pop-ups, activity, on the website and on your signature image. Change it any time: click your own name in the app, Options > Account, or Settings on the website (up to 32 characters, 3 changes a day; it can't be someone else's name or look like staff). The side panel shows the @username under the nickname, and profiles list "Previously known as" (you can hide that in Privacy). People can be found by either name.
 

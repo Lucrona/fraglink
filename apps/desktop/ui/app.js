@@ -280,10 +280,10 @@
     return 'Offline';
   }
   function row(f, cls = '') {
-    const icon = avatarHtml(f, 16, 'row-av');
-    const gIcon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '';
+    // classic: the game icon sits before the name while playing, a blank slot otherwise
+    const icon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}<span class="nm" title="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" title="${esc(statusText(f))}">${gIcon}${esc(statusText(f))}</span><span class="c-info" title="${esc(info)}">${esc(info)}</span></div>`;
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" title="Favourite">★</i>' : ''}<span class="nm" title="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" title="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" title="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
