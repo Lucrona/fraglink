@@ -461,3 +461,4 @@ table.achs td:nth-child(2){width:34%}
 .achs .an{display:flex;flex-direction:column}.achs .an small{display:block}
 .mact .ma-row span{flex:1;min-width:0}.mact .ma-tm{color:#8ea2b8}
 .pbar i{min-width:0}
+.flag,.inset img,.inset .gico{display:inline-block!important}
