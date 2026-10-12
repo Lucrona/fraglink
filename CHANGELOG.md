@@ -5,11 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0-dev.21] - 2026-10-12
+Test update (builds report `0.2.0-21`).
+
 ### Added
 - **Linked accounts in the app:** Options > Connections now shows your Steam, Battle.net and Discord links. Connect opens your browser to that service's sign-in page, and the app shows the linked name with a Disconnect button. Spotify is still coming soon.
 - **Same privacy switches in the app and on the website:** Options > Privacy has every "show on my profile" switch from the website (private profile, Now Playing, games and hours, activity, friends, achievements, top players, gaming rig, previous nicknames and personal details). A change in one place shows in the other.
 - A "When someone sends me a friend request" pop-up switch, shared with the website's notification settings, as is "a friend comes online or starts a game".
 - Options > Account links to the website for your profile picture, two-step sign-in, signed-in devices and email notifications, and shows whether two-step sign-in is on. Options > Connections links to downloading your account data.
+
+### Changed
+- **Website:** long lists (games on a profile, played games, friends) load a page at a time with search and sorting.
 
 ## [0.2.0-dev.20] - 2026-10-12
 Test update (builds report `0.2.0-20`).
