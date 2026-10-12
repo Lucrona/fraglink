@@ -496,7 +496,7 @@ pages.profile = async () => {
   const miniprofile = p.public_profile
     ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere: forums, blogs, Discord. It updates with what ${self ? "you're" : "they're"} playing.</div>
         <img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png${sigBust()}" alt="Signature for ${esc(p.handle)}" width="460" height="100">
-        <div class="codes">${codes.map(([l, v]) => `<div class="code"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
+        <div class="mpcodes">${codes.map(([l, v]) => `<div class="code"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
     : self ? sec("Miniprofile", `<div class="body empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></div>`) : "";
 
   // Details + inset box
@@ -535,10 +535,10 @@ pages.profile = async () => {
   if (A && A.rows) {
     const AI = { clocked_in: "&#9201;", no_days_off: "&#128197;", game_hopper: "&#127918;", regular_circuit: "&#128260;", one_more_round: "&#9203;", night_owl: "&#127769;" };
     const unit = (r, n) => r.unit === "hours" ? `${n} hour${n === 1 ? "" : "s"}` : `${n} ${r.unit.replace(/s$/, "")}${n === 1 ? "" : "s"}`;
-    ach = sec("Achievements", `<div class="body ach"><div class="ach-top"><span><b>${A.unlocked}</b> of ${A.total_tiers} tiers unlocked</span><span><b>${A.points}</b> points · ${A.mastered} / ${A.tracks} mastered</span></div>
+    ach = sec("Achievements", `<div class="body achv"><div class="achv-top"><span><b>${A.unlocked}</b> of ${A.total_tiers} tiers unlocked</span><span><b>${A.points}</b> points · ${A.mastered} / ${A.tracks} mastered</span></div>
       <table class="achs"><thead><tr><th>Achievement</th><th>Progress</th><th class="n">Tier</th></tr></thead><tbody>${A.rows.map(r => `<tr><td><span class="ai">${AI[r.key] || "&#9733;"}</span><div class="an"><b>${esc(r.name)}</b><small>${unit(r, r.value)}${r.next_at != null ? ` · ${unit(r, r.remaining)} to ${esc(r.next_tier)}` : " · maxed"}</small></div></td>
         <td><div class="pbar"><i style="width:${r.progress}%"></i></div><small>${r.progress}%</small></td><td class="n"><span class="tierb ${r.tier ? r.tier.toLowerCase() : "none"}">${r.tier ? esc(r.tier) : "—"}</span></td></tr>`).join("")}</tbody></table>
-      ${A.next ? `<div class="ach-next"><span>Next unlock: <b>${esc(A.next.name)} · ${esc(A.next.next_tier)}</b></span><span>${unit(A.next, A.next.remaining)} to go</span><div class="pbar big"><i style="width:${A.next.progress}%"></i></div></div>` : ""}</div>`);
+      ${A.next ? `<div class="achv-next"><span>Next unlock: <b>${esc(A.next.name)} · ${esc(A.next.next_tier)}</b></span><span>${unit(A.next, A.next.remaining)} to go</span><div class="pbar big"><i style="width:${A.next.progress}%"></i></div></div>` : ""}</div>`);
   }
 
   // Mini activity: last 3 days, events + per-game daily totals
@@ -566,7 +566,7 @@ pages.profile = async () => {
     lastDay = lbl;
     if (it.old) { act += `<div class="olda" hidden>${blk}</div>`; older++; } else act += blk;
   });
-  const mini = sec("Mini activity", `<div class="body mini">${act || `<span class="empty">${p.history_visible ? "Nothing in the last few days." : "Activity is visible to friends when shared."}</span>`}${older ? `<div class="seemore"><a href="#" data-seemore>See more</a></div>` : ""}</div>`);
+  const mini = sec("Mini activity", `<div class="body mact">${act || `<span class="empty">${p.history_visible ? "Nothing in the last few days." : "Activity is visible to friends when shared."}</span>`}${older ? `<div class="seemore"><a href="#" data-seemore>See more</a></div>` : ""}</div>`);
 
   const fr = Array.isArray(p.friends) ? sec("Friends", `<div class="body">${p.friends.length ? `<div class="flist">${p.friends.map(f => `<div class="fi"><a href="/u/${encodeURIComponent(f.handle)}">${avatar(f.avatar, 32)}</a><div><a href="/u/${encodeURIComponent(f.handle)}">${esc(f.display_name || f.handle)}</a><div class="st ${f.game_name ? "pl" : f.status === "online" ? "on" : ""}">${f.game_name ? esc(f.game_name) : f.status === "online" ? "Online" : f.status === "away" ? "Away" : "Offline"}</div></div></div>`).join("")}</div>` : `<span class="empty">No friends yet.</span>`}</div>`, self ? `<a href="/friends">See all friends</a>` : `${p.friend_count}`) : "";
   const RIG = [["manufacturer", "Manufacturer"], ["cpu", "Processor"], ["gpu", "Video card"], ["memory", "Memory"], ["storage", "Storage"], ["motherboard", "Motherboard"], ["monitor", "Monitor"], ["headset", "Headset"], ["keyboard", "Keyboard"], ["mouse", "Mouse"], ["mousepad", "Mouse pad"], ["case", "Case"], ["os", "Operating system"]];
@@ -884,12 +884,12 @@ pages.settings = async () => {
       else if (b.matches("[data-mfa-enable]")) {
         const r = await api("/me/mfa/enable", { method: "POST", body: { code: $('[name="enable_code"]').value.trim() } });
         await refresh();
-        $("[data-mfa]").innerHTML = `${msg}<div class="frm">${row("Status", `<b style="color:var(--online)">On</b>`)}${row("Backup codes", `<div class="codes">${r.backup_codes.map(c => `<span>${esc(c)}</span>`).join("")}</div>`, "Save these somewhere safe. Each one signs you in once if you lose your phone. They won't be shown again.")}${row("", `<button class="btn" type="button" onclick="location.reload()">Done</button>`)}</div>`;
+        $("[data-mfa]").innerHTML = `${msg}<div class="frm">${row("Status", `<b style="color:var(--online)">On</b>`)}${row("Backup codes", `<div class="mpcodes">${r.backup_codes.map(c => `<span>${esc(c)}</span>`).join("")}</div>`, "Save these somewhere safe. Each one signs you in once if you lose your phone. They won't be shown again.")}${row("", `<button class="btn" type="button" onclick="location.reload()">Done</button>`)}</div>`;
       }
       else if (b.matches("[data-mfa-off]") || b.matches("[data-mfa-codes]")) {
         const body = { password: $('[data-mfa] [name="password"]').value, code: $('[data-mfa] [name="code"]').value.trim() };
         if (b.matches("[data-mfa-off]")) { await api("/me/mfa/disable", { method: "POST", body }); await refresh(); render(); ok($("#pane"), "Two-step sign-in is off."); }
-        else { const r = await api("/me/mfa/backup_codes", { method: "POST", body }); $("[data-mfa-step]").innerHTML = `<div class="frm">${row("New backup codes", `<div class="codes">${r.backup_codes.map(c => `<span>${esc(c)}</span>`).join("")}</div>`, "The old ones no longer work.")}</div>`; }
+        else { const r = await api("/me/mfa/backup_codes", { method: "POST", body }); $("[data-mfa-step]").innerHTML = `<div class="frm">${row("New backup codes", `<div class="mpcodes">${r.backup_codes.map(c => `<span>${esc(c)}</span>`).join("")}</div>`, "The old ones no longer work.")}</div>`; }
       }
       else if (b.matches("[data-revoke]")) { const id = b.closest("[data-id]").dataset.id; await api("/me/sessions/" + encodeURIComponent(id), { method: "DELETE" }); b.closest("[data-id]").remove(); }
       else if (b.matches("[data-revoke-all]")) { if (!confirm("Sign out every other browser and desktop app?")) return; const r = await api("/me/sessions/revoke_all", { method: "POST" }); loadSessions(pane); setTimeout(() => ok($("[data-sess]"), `${plural(r.revoked, "session")} signed out.`), 300); }
