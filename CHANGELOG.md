@@ -5,18 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Fixed
-- Hovering a friend (or a button) showed two tooltips at once on Windows; now there's only the dark one, and cut-off text shows its full version there.
-- Menu labels lost a space in some places ("Check forUpdates", "Always onTop", "SignOut"); they read properly now.
-- Long side panel headings such as "Friends of Friends Playing" wrap instead of being cut off.
-
-### Changed
-- **One look:** the Classic Silver skin is gone and everyone uses the dark look (Tools > Skin is removed; the colour choice under Tools > Theme stays).
-- Tidier wording: the Add Friend results list "Nickname", the tray says "Sign Out" like the main menu, Help > Contents explains the newer features, and the unused "Music Status (coming soon)" entry and the old nickname box in Options > General are gone (change your nickname by clicking your name or in Options > Account).
-- **Friends list back to the classic look:** a friend's game icon sits in front of their name while they play (a blank space otherwise); pictures stay in the side panel, next to your own name and in pop-ups.
+## [0.2.0-dev.20] - 2026-10-12
+Test update (builds report `0.2.0-20`).
 
 ### Added
-- **Nicknames:** your username is your permanent sign-in name and profile address; your nickname is the name everyone sees, in the friends list, side panel, pop-ups, activity, on the website and on your signature image. Change it any time: click your own name in the app, Options > Account, or Settings on the website (up to 32 characters, 3 changes a day; it can't be someone else's name or look like staff). The side panel shows the @username under the nickname, and profiles list "Previously known as" (you can hide that in Privacy). People can be found by either name.
+- **Nicknames:** your username is your permanent sign-in name and profile address; your nickname is the name everyone sees, in the friends list, side panel, pop-ups, activity, on the website and on your signature image. Change it by clicking your own name in the app, in Options > Account, or in Settings on the website (up to 32 characters, 3 changes a day in total; it can't be someone else's name or look like staff). The side panel shows the @username under the nickname, and people can find you by either name.
+- **A new profile page on the website:** a cleaner layout with more details you choose to share, achievements, recent activity, a small profile card you can embed elsewhere, and a way to report a profile.
+- **Linked accounts:** connect your Steam account in your website settings so it shows on your profile.
+- **Picture cropping:** when you upload a profile picture you can position and crop it first.
+
+### Changed
+- **One look:** the Classic Silver skin is gone and everyone uses the dark look. Tools > Skin is removed; the accent colour under Tools > Theme stays.
+- **Friends list back to the classic look:** a friend's game icon sits in front of their name while they play (a blank space otherwise). Pictures stay in the side panel, next to your own name and in pop-ups.
+- Tidier wording throughout: the tray says "Sign Out" like the main menu, Help > Contents covers the newer features, and the unused "Music Status (coming soon)" entry is gone.
+
+### Fixed
+- Hovering a friend or a button showed two tooltips at once; now there's only one, and cut-off text shows in full there.
+- Some menu items were missing a space ("Check forUpdates", "Always onTop", "SignOut").
+- Long side panel headings such as "Friends of Friends Playing" wrap instead of being cut off.
 
 ## [0.2.0-dev.19] - 2026-10-12
 Test update (builds report `0.2.0-19`).
