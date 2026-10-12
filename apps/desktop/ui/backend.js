@@ -40,6 +40,11 @@
       friendRemove: (handle) => inv('friend_remove', { handle }),
       friendBlock: (handle, block) => inv('friend_block', { handle, block }),
       accountInfo: () => inv('account_info'),
+      privacy: (patch) => inv('account_privacy', { patch }),
+      notifications: (patch) => inv('account_notifications', { patch }),
+      connections: () => inv('connections'),
+      connectStart: (provider) => inv('connect_start', { provider }),
+      connectUnlink: (provider) => inv('connect_unlink', { provider }),
       changePassword: (current, next) => inv('account_change_password', { current, new: next }),
       changeEmail: (current, email) => inv('account_change_email', { current, email }),
       setNickname: (name) => inv('account_set_nickname', { name }),
@@ -143,7 +148,7 @@
     friendAdd: (h) => { mockFriends.outgoing.push({ handle: h, display_name: h, created_at: new Date().toISOString() }); return ok('pending'); },
     friendRespond: (h, a) => { const r = mockFriends.incoming.find(x => x.handle === h); mockFriends.incoming = mockFriends.incoming.filter(x => x !== r); if (a && r) mockFriends.friends.push({ handle: h, display_name: r.display_name, since: new Date().toISOString(), presence: { status: 'online' } }); return ok(); },
     friendRemove: (h) => { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.outgoing = mockFriends.outgoing.filter(f => f.handle !== h); return ok(); },
-    accountInfo: () => ok({ handle: 'Lucrona', display_name: 'Lucrona', email: 'lucrona@example.com', email_verified: false, share_activity: settings.share_activity_mock !== '0', avatar: { kind: 'upload', color: 0, url_64: '/api/v1/avatars/m/me-64.webp', url_32: '/api/v1/avatars/m/me-32.webp' } }),
+    accountInfo: () => ok({ ...mockPriv, mfa: { enabled: true, backup_codes_left: 8 }, handle: 'Lucrona', display_name: 'Lucrona', email: 'lucrona@example.com', email_verified: false, share_activity: settings.share_activity_mock !== '0', avatar: { kind: 'upload', color: 0, url_64: '/api/v1/avatars/m/me-64.webp', url_32: '/api/v1/avatars/m/me-32.webp' } }),
     changePassword: (c, n) => c === 'wrong' ? Promise.reject("Your current password isn't right.") : ok({ ok: true, signed_out_other_sessions: 1 }),
     setNickname: (n) => /admin|staff|mod\b/i.test(n) ? Promise.reject("Nicknames can't look like a staff title or Fraglink itself.") : ok({ display_name: n.trim() || 'Lucrona', changes_left: 2 }),
     changeEmail: (c, e) => c === 'wrong' ? Promise.reject("Your current password isn't right.") : ok({ ok: true, email: e, email_verified: false }),
@@ -171,6 +176,11 @@
     launchGame: () => ok(),
     pickExe: () => ok('C:\\Games\\MyIndie\\MyIndie.exe'),
     openWebsite: () => ok(),
+    privacy: (patch) => { const m = mockPriv; if (patch.privacy) Object.assign(m.privacy, patch.privacy); for (const k of ['public_profile', 'share_activity', 'show_friends']) if (k in patch) m[k] = patch[k]; return ok(m); },
+    notifications: (patch) => ok(patch),
+    connections: () => ok(mockConn),
+    connectStart: (p) => { mockConn[p].linked = { uid: '765', display: p === 'steam' ? 'Lucrona' : 'Lucrona#1234', verified: true }; return ok(); },
+    connectUnlink: (p) => { mockConn[p].linked = null; return ok(); },
     joinGame: () => ok(),
     popup: null, // the page draws its own menu in the preview
     sideWidth: () => ok(),
@@ -219,6 +229,8 @@
     grimm: { shares: false },
   };
   const hist = h => { const x = HIST[h.toLowerCase()] || { week: (h.length * 7919 % 20 + 3), total: h.length * 37, top: 'Dota 2', games: [['steam:570', 'Dota 2', h.length * 30, 0]] }; return { shares: true, ...x }; };
+  const mockPriv = { public_profile: true, share_activity: true, show_friends: true, privacy: { real_name: false, age: false } };
+  const mockConn = { steam: { available: true, linked: { uid: '7656119', display: 'Lucrona', verified: true } }, discord: { available: false, linked: null }, bnet: { available: true, linked: null } };
   const mockFriends = {
     friends: [
       { handle: 'diZZ_Spinner', display_name: 'Dizz', avatar: { kind: 'upload', color: 0, url_184: '/api/v1/avatars/m/dizz-184.webp', url_64: '/api/v1/avatars/m/dizz-64.webp', url_32: '/api/v1/avatars/m/dizz-32.webp' }, since: iso(400 * 86400), presence: { status: 'online', game_id: 'wow', game_name: 'World of Warcraft', game_detail: 'Frostmourne', session_started_at: iso(48 * 60 + 12) } },

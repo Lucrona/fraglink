@@ -143,3 +143,11 @@ body.dark .conn-tx small { color: #8d939c; }
 body.dark .conn .soon { color: #e0b44a; }
 .hint-link { color: #2a6fdb; cursor: pointer; text-decoration: underline; }
 body.dark .hint-link { color: #7fa8ff; }
+/* dev.21: profile privacy (same switches as the website), linked accounts, website links */
+.pv-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; margin: 2px 0 4px; }
+.pv-cols label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#pv-box .line { align-items: center; }
+.conn .soon.ok { color: #5fbf6a; }
+body.dark .conn .soon.ok { color: #6fd27b; }
+.conn small.linked { color: inherit; font-weight: bold; }
+.web-links { flex-wrap: wrap; gap: 6px; }

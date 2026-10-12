@@ -23,7 +23,8 @@
     $$('.op-tabs button').forEach(b => b.classList.toggle('on', b.dataset.page === page));
     $$('section[data-page]').forEach(s => { s.hidden = s.dataset.page !== page; });
     if (page === 'account') renderSync();
-    if (page === 'privacy') { renderBlocked(); renderShare(); }
+    if (page === 'privacy') { renderBlocked(); renderPrivacy(); }
+    if (page === 'connections') renderConnections();
     if (page === 'games' && !catalog && !detecting) detect();
   }
 
@@ -35,7 +36,7 @@
       autostart: st.autostart ? '1' : '0', start_minimized: on(s, 'start_minimized', '0'), minimize_to_tray: on(s, 'minimize_to_tray', '0'),
       show_offline: on(s, 'show_offline'), show_fof: on(s, 'show_fof'), language: s.language || 'en-AU',
       toasts: on(s, 'toasts'), friend_toasts: on(s, 'friend_toasts'), friend_toasts_logon: on(s, 'friend_toasts_logon'), connection_alerts: on(s, 'connection_alerts', '0'), friend_toasts_dnd: on(s, 'friend_toasts_dnd'),
-      share_game: on(s, 'share_game'), share_profile: on(s, 'share_profile'), share_fof: on(s, 'share_fof'),
+      share_game: on(s, 'share_game'), friend_request_toasts: on(s, 'friend_request_toasts'), share_fof: on(s, 'share_fof'),
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
       zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
       theme: s.theme || 'blue', always_on_top: on(s, 'always_on_top', '0'),
@@ -60,11 +61,7 @@
   document.addEventListener('change', e => {
     const t = e.target;
     if (t.id === 'g-sort') { sortBy = SORTS.includes(t.value) ? t.value : 'az'; localStorage.setItem('fl_games_sort', sortBy); renderTree(); return; }
-    if (t.id === 'share-activity') {
-      FLB.setShareActivity(t.checked).then(() => { $('#share-msg').textContent = t.checked ? 'Friends can see your recent games and hours this week.' : 'Friends only see what you are playing right now.'; })
-        .catch(err => { t.checked = !t.checked; $('#share-msg').textContent = String(err); });
-      return;
-    }
+    if (t.matches('[data-pv], [data-pv-top]')) { savePrivacy(t); return; }
     const el = t.closest('[data-key]');
     $('#apply').disabled = false;
     if (el) { pending.set(el.dataset.key, value(el)); return; }
@@ -83,6 +80,10 @@
         else await FLB.set(k, v);
       } catch (e) { alert(`Could not save ${k}: ${e}`); return false; }
     }
+    const nt = {};
+    if (pending.has('friend_request_toasts')) nt.friend_request_client = pending.get('friend_request_toasts') === '1';
+    if (pending.has('friend_toasts') || pending.has('friend_toasts_logon')) nt.friend_online_client = $('[data-key=friend_toasts]').checked || $('[data-key=friend_toasts_logon]').checked;
+    if (Object.keys(nt).length && FLB.notifications && await signedIn()) FLB.notifications(nt).catch(() => {});
     pending.clear(); $('#apply').disabled = true;
     return true;
   }
@@ -171,13 +172,62 @@
   }
 
   /* ---- Privacy: share recent games + weekly hours with friends (server setting, saved at once) ---- */
-  async function renderShare() {
-    const cb = $('#share-activity'), m = $('#share-msg');
-    let signed = false; try { signed = !!(FLB.syncStatus && (await FLB.syncStatus()).signed_in); } catch (e) {}
-    cb.disabled = !signed;
-    if (!signed) { cb.checked = false; m.textContent = 'Sign in (Account tab) to choose what friends see.'; return; }
-    try { const a = await FLB.accountInfo(); cb.checked = a.share_activity !== false; m.textContent = ''; } catch (e) { m.textContent = String(e); }
+  // Profile privacy: the very same switches as Settings > Privacy on the website (saved at once).
+  const signedIn = async () => { try { return !!(FLB.syncStatus && (await FLB.syncStatus()).signed_in); } catch (e) { return false; } };
+  function paintPrivacy(a) {
+    const pv = a.privacy || {};
+    $$('[data-pv]').forEach(c => { c.checked = pv[c.dataset.pv] !== false; });
+    const top = { private: a.public_profile === false, share_activity: a.share_activity !== false, show_friends: a.show_friends !== false };
+    $$('[data-pv-top]').forEach(c => { c.checked = !!top[c.dataset.pvTop]; });
   }
+  async function renderPrivacy() {
+    const m = $('#pv-msg'), boxes = $$('#pv-box input');
+    const signed = await signedIn();
+    boxes.forEach(c => { c.disabled = !signed; });
+    if (!signed) { boxes.forEach(c => { c.checked = false; }); m.textContent = 'Sign in (Account tab) to choose what others see.'; return; }
+    try { paintPrivacy(await FLB.accountInfo()); m.textContent = 'Saved as soon as you click.'; } catch (e) { m.textContent = String(e); }
+  }
+  async function savePrivacy(c) {
+    const m = $('#pv-msg'), k = c.dataset.pv, top = c.dataset.pvTop;
+    const patch = k ? { privacy: { [k]: c.checked } } : top === 'private' ? { public_profile: !c.checked } : { [top]: c.checked };
+    c.disabled = true;
+    try { const r = await FLB.privacy(patch); paintPrivacy(r); m.textContent = 'Saved. It shows on the website straight away.'; }
+    catch (e) { c.checked = !c.checked; m.textContent = String(e); }
+    c.disabled = false;
+  }
+
+  /* ---- Connections: linked accounts, the same as Settings > Connections on the website ---- */
+  const CONN = [['steam', 'Steam', 'S', '#1b2838', 'Verify your Steam account; it shows as a badge on your profile'],
+    ['bnet', 'Battle.net', 'B', '#148eff', 'Show your BattleTag on your profile'],
+    ['discord', 'Discord', 'D', '#5865f2', 'Show your Discord name on your profile']];
+  async function renderConnections() {
+    const box = $('#conn-list'), m = $('#conn-msg');
+    const signed = await signedIn();
+    let c = {};
+    if (signed) { try { c = await FLB.connections(); } catch (e) { m.textContent = String(e); } }
+    box.innerHTML = CONN.map(([p, name, ic, col, blurb]) => {
+      const v = c[p] || {}, l = v.linked;
+      const who = l ? `<small class="linked">${esc(l.display || l.uid)}${l.verified ? ' · verified' : ''}</small>` : `<small>${blurb}</small>`;
+      const right = !signed ? '<button type="button" disabled>Connect</button><span class="soon">sign in first</span>'
+        : l ? `<button type="button" data-unlink="${p}">Disconnect</button><span class="soon ok">linked</span>`
+        : v.available ? `<button type="button" data-link="${p}">Connect</button><span class="soon"></span>`
+        : '<button type="button" disabled>Connect</button><span class="soon">coming soon</span>';
+      return `<div class="conn"><i class="conn-ic" style="--c:${col}">${ic}</i><div class="conn-tx"><b>${name}</b>${who}</div>${right}</div>`;
+    }).join('');
+  }
+  $('#conn-list').addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b) return; const m = $('#conn-msg');
+    const p = b.dataset.link || b.dataset.unlink, name = (CONN.find(x => x[0] === p) || [])[1];
+    try {
+      if (b.dataset.link) { b.disabled = true; await FLB.connectStart(p); m.textContent = `Finish signing in to ${name} in your browser, then come back here.`; setTimeout(() => { b.disabled = false; }, 4000); }
+      else if (b.dataset.unlink) { if (!confirm(`Disconnect ${name}?`)) return; await FLB.connectUnlink(p); m.textContent = `${name} disconnected.`; renderConnections(); }
+    } catch (x) { b.disabled = false; m.textContent = String(x); }
+  });
+  // Coming back from the browser: show the new state.
+  addEventListener('focus', () => {
+    if (!$('section[data-page=connections]').hidden) renderConnections();
+    if (!$('section[data-page=privacy]').hidden) renderPrivacy();
+  });
   /* ---- Account: optional sync ---- */
   async function renderSync() {
     if (!FLB.syncStatus) return;
@@ -203,11 +253,12 @@
 
   /* ---- Account: change password / email (signed in only) ---- */
   async function renderAccount(signedIn) {
-    $('#acct-pw').hidden = $('#acct-email').hidden = $('#acct-nick').hidden = !signedIn;
+    $('#acct-pw').hidden = $('#acct-email').hidden = $('#acct-nick').hidden = $('#acct-web').hidden = !signedIn;
     if (!signedIn || !FLB.accountInfo) return;
     try {
       const a = await FLB.accountInfo();
       $('#nk-user').value = a.handle ? '@' + a.handle : ''; $('#nk-new').value = a.display_name || a.handle || '';
+      const mf = a.mfa || {}; $('#mfa-line').textContent = mf.enabled ? `Two-step sign-in is on (${mf.backup_codes_left} backup codes left).` : 'Two-step sign-in is off. Turn it on in the website settings.';
       $('#em-cur').value = a.email ? a.email + (a.email_verified ? '' : ' (not verified)') : '(none)';
     } catch (e) { $('#em-cur').value = ''; say('em', String(e), true); }
   }
@@ -284,6 +335,7 @@
     const n = e.target.closest('[data-node]'); if (n) { open[n.dataset.node] = !open[n.dataset.node]; renderTree(); return; }
     const l = e.target.closest('[data-g]'); if (l) { gsel = l.dataset.g; renderTree(); renderDetail(); return; }
     const d = e.target.closest('[data-do]'); if (d && acts[d.dataset.do]) acts[d.dataset.do]();
+    const w = e.target.closest('[data-web]'); if (w && FLB.openWebsite) FLB.openWebsite(w.dataset.web).catch(fail);
   });
   $('#cands').addEventListener('change', e => { if (!$('#man-name').value) $('#man-name').value = prettyExe(e.target.value); });
   // custom title bar: drag the window, resize from the edges
@@ -299,6 +351,17 @@
 
   (async () => {
     try { st = await FLB.settings(); load(); } catch (e) { fail(e); }
+    // Notification switches the website also shows (Settings > Notifications > Desktop app): the
+    // account's choice wins, so a change on the site shows up here.
+    if (await signedIn()) {
+      try {
+        const n = (await FLB.accountInfo()).notify_prefs || {}, set = async (k, v) => { if (st.settings[k] !== v) { await FLB.set(k, v); st.settings[k] = v; } };
+        if (typeof n.friend_request_client === 'boolean') await set('friend_request_toasts', n.friend_request_client ? '1' : '0');
+        if (n.friend_online_client === false) { await set('friend_toasts', '0'); await set('friend_toasts_logon', '0'); }
+        else if (n.friend_online_client === true && st.settings.friend_toasts === '0' && st.settings.friend_toasts_logon === '0') { await set('friend_toasts', '1'); await set('friend_toasts_logon', '1'); }
+        load();
+      } catch (e) { /* offline: keep this PC's choices */ }
+    }
     if (FLB.tauri) document.body.classList.add('tauri');
     const ts = st && st.settings && st.settings.text_size; if (ts) document.body.style.zoom = { large: 1.1, larger: 1.2 }[ts] || '';
     applyTheme();

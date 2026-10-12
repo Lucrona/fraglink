@@ -506,7 +506,10 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
         } => {
             refresh(app, client);
             let p = prefs(app);
-            if p.toasts && p.friend_toasts && !p.muted.contains(&handle.to_lowercase()) {
+            if p.toasts
+                && setting(app, "friend_request_toasts").as_deref() != Some("0")
+                && !p.muted.contains(&handle.to_lowercase())
+            {
                 crate::windows::show_toast(
                     app,
                     ToastPayload {

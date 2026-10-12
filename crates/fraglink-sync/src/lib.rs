@@ -405,6 +405,36 @@ impl Client {
         )
     }
 
+    /// Privacy switches, same as the website's Settings > Privacy (`POST /api/v1/me/privacy`).
+    /// `patch` may hold `share_activity`, `public_profile`, `show_friends` and a `privacy`
+    /// object of per-item switches; only the ones sent change.
+    pub fn set_privacy(&self, patch: serde_json::Value) -> Result<serde_json::Value, SyncError> {
+        self.call("POST", "/api/v1/me/privacy", Some(patch))
+    }
+
+    /// Notification preferences shared with the website (`POST /api/v1/me/notifications`).
+    pub fn set_notifications(
+        &self,
+        patch: serde_json::Value,
+    ) -> Result<serde_json::Value, SyncError> {
+        self.call("POST", "/api/v1/me/notifications", Some(patch))
+    }
+
+    /// Linked accounts (Steam, Discord, Battle.net): `{provider: {available, linked}}`.
+    pub fn connections(&self) -> Result<serde_json::Value, SyncError> {
+        self.call("GET", "/api/v1/connect", None)
+    }
+
+    /// Start linking `provider`; returns `{url}` to open in the browser.
+    pub fn connect_start(&self, provider: &str) -> Result<serde_json::Value, SyncError> {
+        self.call("POST", &format!("/api/v1/connect/{provider}/start"), None)
+    }
+
+    /// Unlink `provider`.
+    pub fn connect_unlink(&self, provider: &str) -> Result<serde_json::Value, SyncError> {
+        self.call("DELETE", &format!("/api/v1/connect/{provider}"), None)
+    }
+
     /// Server-side per-game totals by trust tier (`GET /api/v1/stats`).
     pub fn stats(&self) -> Result<serde_json::Value, SyncError> {
         self.call("GET", "/api/v1/stats", None)

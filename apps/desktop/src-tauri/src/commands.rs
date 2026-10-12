@@ -262,7 +262,7 @@ const ALLOWED: &[&str] = &[
     // stored but not used yet (see CHANGELOG)
     "nickname",
     "language",
-    "share_profile",
+    "friend_request_toasts",
     "share_fof",
     "sound_signin",
     "sound_signout",
@@ -493,6 +493,61 @@ pub async fn friend_profile(app: AppHandle, handle: String) -> CmdResult<serde_j
 #[tauri::command]
 pub async fn set_share_activity(app: AppHandle, on: bool) -> CmdResult<serde_json::Value> {
     account_call(app, move |c| c.set_share_activity(on)).await
+}
+
+/// Options > Privacy: the same switches as the website (only the keys sent change).
+#[tauri::command]
+pub async fn account_privacy(
+    app: AppHandle,
+    patch: serde_json::Value,
+) -> CmdResult<serde_json::Value> {
+    if !patch.is_object() {
+        return Err("bad privacy patch".into());
+    }
+    account_call(app, move |c| c.set_privacy(patch)).await
+}
+
+/// Options > General: notification choices shared with the website.
+#[tauri::command]
+pub async fn account_notifications(
+    app: AppHandle,
+    patch: serde_json::Value,
+) -> CmdResult<serde_json::Value> {
+    if !patch.is_object() {
+        return Err("bad notification patch".into());
+    }
+    account_call(app, move |c| c.set_notifications(patch)).await
+}
+
+const PROVIDERS: [&str; 3] = ["steam", "discord", "bnet"];
+
+/// Options > Connections: linked accounts from the server.
+#[tauri::command]
+pub async fn connections(app: AppHandle) -> CmdResult<serde_json::Value> {
+    account_call(app, |c| c.connections()).await
+}
+
+/// Options > Connections > Connect: starts the website's own link flow (Steam sign-in /
+/// OAuth) and opens it in the browser. The server ties it to this account.
+#[tauri::command]
+pub async fn connect_start(app: AppHandle, provider: String) -> CmdResult<()> {
+    if !PROVIDERS.contains(&provider.as_str()) {
+        return Err("unknown service".into());
+    }
+    let v = account_call(app, move |c| c.connect_start(&provider)).await?;
+    let url = v["url"].as_str().unwrap_or_default().to_string();
+    if !url.starts_with("https://") {
+        return Err("The server didn't return a sign-in link.".into());
+    }
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(err)
+}
+
+#[tauri::command]
+pub async fn connect_unlink(app: AppHandle, provider: String) -> CmdResult<serde_json::Value> {
+    if !PROVIDERS.contains(&provider.as_str()) {
+        return Err("unknown service".into());
+    }
+    account_call(app, move |c| c.connect_unlink(&provider)).await
 }
 
 #[tauri::command]
@@ -760,6 +815,9 @@ pub async fn account_info(app: AppHandle) -> CmdResult<serde_json::Value> {
             "handle": u["handle"], "display_name": u["display_name"],
             "email": u["email"], "email_verified": u["email_verified"],
             "share_activity": u["share_activity"], "avatar": u["avatar"],
+            "public_profile": u["public_profile"], "show_friends": u["show_friends"],
+            "privacy": u["privacy"], "notify_prefs": u["notify_prefs"],
+            "mfa": u["mfa"],
         }))
     })
     .await
@@ -1020,7 +1078,7 @@ pub const WEBSITE: &str = "https://playfraglink.com";
 pub async fn open_website(page: String) -> CmdResult<()> {
     let page: String = page
         .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_'))
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '#'))
         .take(100)
         .collect();
     tauri_plugin_opener::open_url(
