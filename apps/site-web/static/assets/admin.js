@@ -209,18 +209,7 @@ async function editGame(id) {
     <div class="row"><button class="btn dl">Save</button><span class="dimt">Edits stay in place when the games list refreshes.</span></div>
     <div class="alert" id="gmsg" hidden></div></form>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
-    <div class="f"><label>Icon</label>
-      <div class="icons-prev"><img src="${esc(g.icon64.replace("/64/", "/16/"))}${bust}" width="16" height="16" alt="" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('noimg');this.title='No icon yet'"><img src="${esc(g.icon)}${bust}" width="32" height="32" alt="" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('noimg');this.title='No icon yet'"><img src="${esc(g.icon64)}${bust}" width="64" height="64" alt="" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('noimg');this.title='No icon yet'"></div>
-      <div class="row"><input type="file" id="gicon" accept="image/png,image/jpeg"><button class="btn" id="gup" type="button">Upload</button>${o.has_icon ? `<button class="btn danger" id="gdel" type="button">Remove uploaded icon</button>` : ""}</div>
-      <small>PNG or JPEG up to 1 MB, square works best. Stored on our server and resized to 16, 32 and 64 px. Browsers may keep the old icon for a while.</small>
-      <div class="alert" id="imsg" hidden></div></div>
-    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
-    <div class="f"><label>Banner art <span class="dimt">(now: ${esc({ override: "uploaded here", steam: "Steam store header", discord: "Discord app directory cover", none: "none: gradient with icon" }[g.art_source] || g.art_source || "?")})</span></label>
-      <img id="gartimg" src="/api/v1/game-art/${encodeURIComponent(id)}.jpg${bust}" width="230" height="108" alt="" style="border:1px solid var(--line);border-radius:3px;object-fit:cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'dimt',textContent:'No art found.'}))">
-      <div class="row"><input type="file" id="gart" accept="image/png,image/jpeg,image/webp,image/gif"><button class="btn" id="gartup" type="button">Upload</button></div>
-      <div class="row"><input type="text" class="in" id="garturl" placeholder="https://… link to a picture" style="flex:1"><button class="btn" id="garturlb" type="button">Use link</button>${g.art_source === "override" ? `<button class="btn danger" id="gartdel" type="button">Remove override</button>` : ""}</div>
-      <small>Any size; cropped to 460×215 (Steam header shape), up to 2 MB.</small>
-      <div class="alert" id="amsg" hidden></div></div>
+    <div id="media"><div class="dimt">Loading pictures…</div></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     ${statusHtml(g)}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${retireHtml(g)}
@@ -252,17 +241,7 @@ async function editGame(id) {
       msg($("#gmsg"), "Saved.", true); listGames($("#gs").q.value.trim());
     } catch (x) { msg($("#gmsg"), x.message); }
   });
-  $("#gup").addEventListener("click", async () => {
-    const file = $("#gicon").files[0]; if (!file) return msg($("#imsg"), "Pick an image first.");
-    try {
-      const r = await fetch(FL.API + "/admin/games/" + encodeURIComponent(id) + "/icon", { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream" }, body: file });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.message || "Upload failed (HTTP " + r.status + ").");
-      editGame(id); listGames($("#gs").q.value.trim());
-    } catch (x) { msg($("#imsg"), x.message); }
-  });
-  const del = $("#gdel");
-  if (del) del.addEventListener("click", () => act(del, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/icon", { method: "DELETE" }); editGame(id); }));
+  renderMedia(id, g);
   const gd = $("#gdelete");
   if (gd) gd.addEventListener("click", () => {
     const typed = prompt(`Delete "${g.public_name || g.name || id}"${g.sessions ? ` and ${g.sessions} session(s) from ${g.players} player(s)` : ""}? This can't be undone.\n\nType the game id to confirm:\n${id}`);
@@ -270,18 +249,6 @@ async function editGame(id) {
     if (typed.trim() !== id) return msg($("#dmsg"), "The id didn't match; nothing was deleted.");
     act(gd, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/delete", { method: "POST", body: { confirm: typed.trim() } }); $("#gedit").innerHTML = `<h2>Edit game</h2><div class="body empty">Deleted ${esc(id)}.</div>`; listGames($("#gs").q.value.trim()); }).catch(x => msg($("#dmsg"), x.message));
   });
-  $("#gartup").addEventListener("click", async () => {
-    const file = $("#gart").files[0]; if (!file) return msg($("#amsg"), "Pick an image first.");
-    try {
-      const r = await fetch(FL.API + gid + "/art", { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream" }, body: file });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.message || "Upload failed (HTTP " + r.status + ").");
-      editGame(id);
-    } catch (x) { msg($("#amsg"), x.message); }
-  });
-  $("#garturlb").addEventListener("click", () => act($("#garturlb"), async () => { await api(gid + "/art/url", { method: "POST", body: { url: $("#garturl").value.trim() } }); editGame(id); }).catch(x => msg($("#amsg"), x.message)));
-  const adel = $("#gartdel");
-  if (adel) adel.addEventListener("click", () => act(adel, async () => { await api(gid + "/art", { method: "DELETE" }); editGame(id); }).catch(x => msg($("#amsg"), x.message)));
 }
 
 /* ---------- 3. users ---------- */
@@ -479,3 +446,60 @@ async function staff() {
 route();
 if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] }))]).then(([d, u]) => badge("approvals", d.suggestions.length + u.unknown.length)).catch(() => {});
 };
+
+// Edit game > Pictures: pick where the icon and the banner art come from.
+async function renderMedia(id, g) {
+  const box = $("#media"), gid = "/admin/games/" + encodeURIComponent(id), t = "?t=" + Date.now();
+  let m;
+  try { m = await api(gid + "/media"); } catch (x) { box.innerHTML = `<div class="alert">${esc(x.message)}</div>`; return; }
+  const own = { icon: g.icon64 + t, art: `/api/v1/game-art/${encodeURIComponent(id)}.jpg${t}` };
+  const ph = k => `<span class="mtile-none ${k}">none</span>`;
+  const img = (k, src) => src ? `<img class="${k}" src="${esc(src)}" alt="" onerror="this.outerHTML='<span class=&quot;mtile-none ${k}&quot;>none</span>'">` : ph(k);
+  const tile = (k, v, label, src, note) => {
+    const on = m[k].pref === v, dis = v !== "auto" && v !== "custom" && !src;
+    return `<label class="mtile${on ? " on" : ""}${dis ? " dis" : ""}"><input type="radio" name="${k}src" value="${v}" ${on ? "checked" : ""} ${dis ? "disabled" : ""}>${img(k, src)}<b>${label}</b><small>${note}</small></label>`;
+  };
+  const block = (k, title, help, accept) => `<div class="f mpick" data-k="${k}"><label>${title} <span class="dimt">${help}</span></label>
+    <div class="mtiles">
+      ${tile(k, "auto", "Automatic", own[k], "Best available")}
+      ${tile(k, "games_list", "Games list", m[k].games_list, m[k].games_list ? "From the games list" : "Not in games list")}
+      ${tile(k, "steam", "Steam", m[k].steam, m[k].steam ? "Steam app " + m.steam_appid : "No Steam app id")}
+      ${tile(k, "custom", "Link / Upload", m[k].custom ? (k === "icon" ? own.icon : own.art) : "", m[k].custom ? "Your picture" : "Add one below")}
+    </div>
+    <div class="row"><input type="text" class="in" data-url placeholder="https://… link to a picture" style="flex:1"><button class="btn" type="button" data-link>Use link</button>
+      <input type="file" data-file accept="${accept}"><button class="btn" type="button" data-up>Upload</button></div>
+    <div class="alert" data-msg hidden></div></div>`;
+  box.innerHTML = `${block("icon", "Icon", "(shown at 16, 32 and 64 px; PNG or JPEG up to 1 MB)", "image/png,image/jpeg")}
+    ${block("art", "Banner art", "(cropped to 460×215; up to 2 MB)", "image/png,image/jpeg,image/webp,image/gif")}
+    <div class="f"><label>Steam app id <span class="dimt">(used for Steam pictures)</span></label>
+      <div class="row"><input type="number" class="in" id="msteam" min="0" value="${m.steam_appid_set || ""}" placeholder="${m.steam_appid ? "auto: " + m.steam_appid : "none found"}" style="width:180px">
+      ${m.steam_suggest ? `<button class="btn" type="button" id="msug">Use ${m.steam_suggest.appid} (${esc(m.steam_suggest.name)})</button>` : ""}
+      ${m.steam_appid ? `<a class="lnk" href="https://store.steampowered.com/app/${m.steam_appid}" target="_blank" rel="noopener">Steam page</a>` : ""}</div>
+      <small>Leave empty to find it automatically. A suggestion from a Steam search shows when none was found.</small></div>
+    <div class="row"><button class="btn dl" type="button" id="msave">Save pictures</button><span class="dimt">Automatic picks the best available source.</span></div>
+    <div class="alert" id="mmsg" hidden></div>`;
+  const sug = $("#msug", box);
+  if (sug) sug.addEventListener("click", () => { $("#msteam").value = m.steam_suggest.appid; });
+  $("#msave", box).addEventListener("click", e => act(e.target, async () => {
+    const v = k => (box.querySelector(`input[name=${k}src]:checked`) || {}).value || "auto";
+    if (v("icon") === "custom" && !m.icon.custom) throw new Error("Add an icon by link or upload first.");
+    if (v("art") === "custom" && !m.art.custom) throw new Error("Add banner art by link or upload first.");
+    const sid = $("#msteam").value.trim();
+    await api(gid + "/media", { method: "POST", body: { icon: v("icon"), art: v("art"), steam_appid: sid ? +sid : 0 } });
+    renderMedia(id, g); listGames($("#gs").q.value.trim());
+  }).catch(x => msg($("#mmsg"), x.message)));
+  box.querySelectorAll(".mpick").forEach(p => {
+    const k = p.dataset.k, out = $("[data-msg]", p);
+    const pick = async () => { await api(gid + "/media", { method: "POST", body: { [k]: "custom" } }); renderMedia(id, g); };
+    $("[data-link]", p).addEventListener("click", e => act(e.target, async () => {
+      await api(gid + (k === "icon" ? "/icon/url" : "/art/url"), { method: "POST", body: { url: $("[data-url]", p).value.trim() } }); await pick();
+    }).catch(x => msg(out, x.message)));
+    $("[data-up]", p).addEventListener("click", e => act(e.target, async () => {
+      const file = $("[data-file]", p).files[0]; if (!file) throw new Error("Pick an image first.");
+      const r = await fetch(FL.API + gid + (k === "icon" ? "/icon" : "/art"), { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream" }, body: file });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.message || "Upload failed (HTTP " + r.status + ").");
+      await pick();
+    }).catch(x => msg(out, x.message)));
+  });
+}

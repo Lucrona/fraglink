@@ -105,7 +105,7 @@ pub async fn fetch(url: &str) -> Option<Vec<u8>> {
 }
 
 /// Cover/splash image URL for a Discord application id (public, no auth).
-async fn discord_cover(app_id: &str) -> Option<String> {
+pub async fn discord_cover(app_id: &str) -> Option<String> {
     let base = std::env::var("FRAGLINK_DISCORD_API")
         .unwrap_or_else(|_| "https://discord.com/api/v9".into());
     let cdn = std::env::var("FRAGLINK_DISCORD_CDN")
@@ -124,10 +124,11 @@ async fn discord_cover(app_id: &str) -> Option<String> {
 
 /// Which source would be used for `id` (for the Games admin). Network-free.
 pub async fn source_of(st: &AppState, id: &str) -> &'static str {
-    if override_path(st, id).exists() {
+    let pref = pref(st, id).await;
+    if use_override(pref.as_deref()) && override_path(st, id).exists() {
         return "override";
     }
-    let s = crate::icons::sources(st, id).await;
+    let s = crate::icons::only(crate::icons::sources(st, id).await, pref.as_deref());
     if s.steam_appid.is_some() {
         "steam"
     } else if s.app_icon.is_some() {
@@ -137,8 +138,25 @@ pub async fn source_of(st: &AppState, id: &str) -> &'static str {
     }
 }
 
+async fn pref(st: &AppState, id: &str) -> Option<String> {
+    crate::game_overrides::media(st, id).await.1
+}
+fn use_override(pref: Option<&str>) -> bool {
+    matches!(pref, None | Some("custom"))
+}
+
+/// Forget cached art (after a source change).
+pub fn purge(st: &AppState, id: &str) {
+    let (d, k) = (dir(st), key(id));
+    let _ = std::fs::remove_file(d.join(format!("{k}.jpg")));
+    let _ = std::fs::remove_file(d.join(format!("{k}.miss")));
+}
+
 async fn resolve(st: &AppState, id: &str) -> Option<Vec<u8>> {
-    let s = crate::icons::sources(st, id).await;
+    let s = crate::icons::only(
+        crate::icons::sources(st, id).await,
+        pref(st, id).await.as_deref(),
+    );
     if let Some(appid) = s.steam_appid {
         let url = format!("{}/{appid}/header.jpg", st.cfg.steam_art_cdn);
         if let Some(b) = fetch(&url).await {
@@ -159,8 +177,10 @@ async fn resolve(st: &AppState, id: &str) -> Option<Vec<u8>> {
 
 /// Art bytes for a game (override, cache or fresh fetch), or None.
 pub async fn bytes(st: &AppState, id: &str) -> Option<Vec<u8>> {
-    if let Ok(b) = tokio::fs::read(override_path(st, id)).await {
-        return Some(b);
+    if use_override(pref(st, id).await.as_deref()) {
+        if let Ok(b) = tokio::fs::read(override_path(st, id)).await {
+            return Some(b);
+        }
     }
     let d = dir(st);
     let k = key(id);
@@ -194,8 +214,10 @@ pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Resp
         return StatusCode::NOT_FOUND.into_response();
     };
     let ov = override_path(&st, id);
-    if let Ok(b) = tokio::fs::read(&ov).await {
-        return send(b, 3600);
+    if use_override(pref(&st, id).await.as_deref()) {
+        if let Ok(b) = tokio::fs::read(&ov).await {
+            return send(b, 3600);
+        }
     }
     let d = dir(&st);
     let k = key(id);

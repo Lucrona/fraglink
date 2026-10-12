@@ -51,6 +51,10 @@ impl Sources {
 pub async fn sources(st: &AppState, id: &str) -> Sources {
     let idx = st.games.icon_index();
     let mut s = Sources::default();
+    // a Steam app id staff set in Edit game wins
+    if let (_, _, Some(a)) = crate::game_overrides::media(st, id).await {
+        s.steam_appid = Some(a);
+    }
     let take = |src: &IconSrc, s: &mut Sources| {
         if s.app_icon.is_none() {
             s.app_icon = src.icon_hash.clone().map(|h| (src.app_id.clone(), h));
@@ -98,6 +102,56 @@ pub async fn sources(st: &AppState, id: &str) -> Sources {
         s.steam_hash = row.and_then(|r| r.1);
     }
     s
+}
+
+/// Keep only the source staff picked ("games_list" or "steam"); anything else: all.
+pub fn only(mut s: Sources, pref: Option<&str>) -> Sources {
+    match pref {
+        Some("games_list") => {
+            s.steam_appid = None;
+            s.steam_hash = None;
+        }
+        Some("steam") => s.app_icon = None,
+        _ => {}
+    }
+    s
+}
+
+/// Icon sources after the staff choice.
+pub async fn icon_sources(st: &AppState, id: &str) -> Sources {
+    let (pref, _, _) = crate::game_overrides::media(st, id).await;
+    only(sources(st, id).await, pref.as_deref())
+}
+
+/// Forget the cached official icon (after a source change).
+pub fn purge(st: &AppState, id: &str) {
+    let (dir, k) = (cache_dir(st), key(id));
+    for px in SIZES {
+        let _ = std::fs::remove_file(dir.join(format!("{k}-{px}.png")));
+    }
+    let _ = std::fs::remove_file(dir.join(format!("{k}.miss")));
+}
+
+/// Preview URLs (games list icon, Steam icon) for the Edit game picker.
+pub async fn preview_urls(st: &AppState, s: &Sources) -> (Option<String>, Option<String>) {
+    let gl = s.app_icon.as_ref().map(|(app, hash)| {
+        format!(
+            "{}/app-icons/{app}/{hash}.png?size=64",
+            st.cfg.app_icon_cdn_url.trim_end_matches('/')
+        )
+    });
+    let mut steam = None;
+    if let Some(appid) = s.steam_appid {
+        let hash = match &s.steam_hash {
+            Some(h) => Some(h.clone()),
+            None => steam_icon_hash(st, appid).await,
+        };
+        if let Some(h) = hash {
+            steam =
+                fraglink_core::icons::steam_cdn_icon_url(&st.cfg.steam_cdn_url, appid, &h, false);
+        }
+    }
+    (gl, steam)
 }
 
 /// The path apps fetch for a game's icon.
@@ -266,8 +320,11 @@ pub async fn get(st: &AppState, id: &str, size: u32) -> Option<Vec<u8>> {
     let k = key(id);
     // an icon uploaded by staff comes first
     let custom = crate::game_overrides::custom_icon_dir(st).join(format!("{k}-{size}.png"));
-    if let Ok(b) = std::fs::read(&custom) {
-        return Some(b);
+    let (pref, _, _) = crate::game_overrides::media(st, id).await;
+    if matches!(pref.as_deref(), None | Some("custom")) {
+        if let Ok(b) = std::fs::read(&custom) {
+            return Some(b);
+        }
     }
     let dir = cache_dir(st);
     let file = dir.join(format!("{k}-{size}.png"));
@@ -276,7 +333,7 @@ pub async fn get(st: &AppState, id: &str, size: u32) -> Option<Vec<u8>> {
             // keep serving the old one; refresh in the background
             let (st2, id2) = (st.clone(), id.to_string());
             tokio::spawn(async move {
-                let s = sources(&st2, &id2).await;
+                let s = icon_sources(&st2, &id2).await;
                 if !s.is_empty() {
                     refresh(&st2, &id2, &s).await;
                 }
@@ -287,7 +344,7 @@ pub async fn get(st: &AppState, id: &str, size: u32) -> Option<Vec<u8>> {
     if age(&dir.join(format!("{k}.miss"))).is_some_and(|a| a < MISS_TTL) {
         return None;
     }
-    let s = sources(st, id).await;
+    let s = icon_sources(st, id).await;
     if s.is_empty() || !refresh(st, id, &s).await {
         return None;
     }
@@ -310,7 +367,7 @@ pub async fn available(st: &AppState, id: &str) -> bool {
     if age(&dir.join(format!("{k}.miss"))).is_some_and(|a| a < MISS_TTL) {
         return false;
     }
-    !sources(st, id).await.is_empty()
+    !icon_sources(st, id).await.is_empty()
 }
 
 fn etag_of(b: &[u8]) -> String {

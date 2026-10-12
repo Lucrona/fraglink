@@ -18,6 +18,9 @@ pub struct GameOverride {
     pub hidden: bool,
     pub extra_exes: Vec<String>,
     pub has_icon: bool,
+    pub icon_pref: Option<String>,
+    pub art_pref: Option<String>,
+    pub steam_appid: Option<i32>,
 }
 
 pub type Map = Arc<HashMap<String, GameOverride>>;
@@ -39,7 +42,7 @@ impl OverrideCache {
 /// Re-read every override from the database.
 pub async fn reload(st: &AppState) -> ApiResult<Map> {
     let rows: Vec<GameOverride> =
-        sqlx::query_as("SELECT game_id, name, hidden, extra_exes, has_icon FROM game_overrides")
+        sqlx::query_as("SELECT game_id, name, hidden, extra_exes, has_icon, icon_pref, art_pref, steam_appid FROM game_overrides")
             .fetch_all(&st.db)
             .await?;
     let m: Map = Arc::new(rows.into_iter().map(|o| (o.game_id.clone(), o)).collect());
@@ -57,4 +60,12 @@ pub async fn current(st: &AppState) -> ApiResult<Map> {
 
 pub fn custom_icon_dir(st: &AppState) -> std::path::PathBuf {
     st.cfg.data_dir.join("icon-custom")
+}
+
+/// Media choices for a game: (icon source, art source, Steam app id), all optional.
+pub async fn media(st: &AppState, id: &str) -> (Option<String>, Option<String>, Option<u32>) {
+    match current(st).await.ok().and_then(|m| m.get(id).cloned()) {
+        Some(o) => (o.icon_pref, o.art_pref, o.steam_appid.map(|a| a as u32)),
+        None => (None, None, None),
+    }
 }

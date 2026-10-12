@@ -36,6 +36,11 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/games", get(games_search))
         .route("/api/v1/admin/games/{id}", get(game_detail).post(game_save))
         .route("/api/v1/admin/games/{id}/delete", post(game_delete))
+        .route(
+            "/api/v1/admin/games/{id}/media",
+            get(media_get).post(media_set),
+        )
+        .route("/api/v1/admin/games/{id}/icon/url", post(game_icon_url))
         .route("/api/v1/admin/unknown_games", get(unknown_list))
         .route("/api/v1/admin/unknown_games/{id}/map", post(unknown_map))
         .route(
@@ -706,7 +711,8 @@ async fn game_save(
     // nothing left to keep: drop the row
     sqlx::query(
         "DELETE FROM game_overrides WHERE game_id = $1 AND name IS NULL AND NOT hidden
-           AND extra_exes = '{}' AND NOT has_icon",
+           AND extra_exes = '{}' AND NOT has_icon
+           AND icon_pref IS NULL AND art_pref IS NULL AND steam_appid IS NULL",
     )
     .bind(&id)
     .execute(&st.db)
@@ -1042,7 +1048,8 @@ async fn game_icon_delete(
     .await?;
     sqlx::query(
         "DELETE FROM game_overrides WHERE game_id = $1 AND name IS NULL AND NOT hidden
-           AND extra_exes = '{}' AND NOT has_icon",
+           AND extra_exes = '{}' AND NOT has_icon
+           AND icon_pref IS NULL AND art_pref IS NULL AND steam_appid IS NULL",
     )
     .bind(&id)
     .execute(&st.db)
@@ -2295,6 +2302,166 @@ async fn game_status_save(
     )
     .await?;
     Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
+}
+
+// ------------------------------------------------------------------ icon / art source picker
+
+fn check_link(raw: &str) -> ApiResult<reqwest::Url> {
+    let u = reqwest::Url::parse(raw.trim())
+        .map_err(|_| AppError::bad_request("bad_url", "That isn't a link."))?;
+    let host = u.host_str().unwrap_or("");
+    if u.scheme() != "https"
+        || host.is_empty()
+        || host == "localhost"
+        || host.parse::<std::net::IpAddr>().is_ok()
+    {
+        return Err(AppError::bad_request(
+            "bad_url",
+            "Use an https link to a picture.",
+        ));
+    }
+    Ok(u)
+}
+
+async fn game_icon_url(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Json(r): Json<ArtUrl>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let u = check_link(&r.url)?;
+    let b = crate::art::fetch(u.as_str())
+        .await
+        .ok_or_else(|| AppError::bad_request("bad_url", "Couldn't download that picture."))?;
+    game_icon_upload(State(st), s, Path(id), Bytes::from(b)).await
+}
+
+/// Steam store search by name: (appid, name) of the best match.
+async fn steam_find(name: &str) -> Option<(u32, String)> {
+    let base = std::env::var("FRAGLINK_STEAM_STORE")
+        .unwrap_or_else(|_| "https://store.steampowered.com".into());
+    let v: Value = reqwest::Client::new()
+        .get(format!("{base}/api/storesearch/"))
+        .query(&[("term", name), ("cc", "US"), ("l", "english")])
+        .timeout(std::time::Duration::from_secs(8))
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    let it = v["items"].as_array()?.first()?;
+    Some((it["id"].as_u64()? as u32, it["name"].as_str()?.to_string()))
+}
+
+/// What each icon/art source would show for this game, and the current choice.
+async fn media_get(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let g = game_info(&st, &id).await?.ok_or_else(AppError::not_found)?;
+    let (icon_pref, art_pref, appid_set) = game_overrides::media(&st, &id).await;
+    let src = crate::icons::sources(&st, &id).await;
+    let (icon_gl, icon_steam) = crate::icons::preview_urls(&st, &src).await;
+    let art_gl = match &src.app_icon {
+        Some((app, _)) => crate::art::discord_cover(app).await,
+        None => None,
+    };
+    let art_steam = src
+        .steam_appid
+        .map(|a| format!("{}/{a}/header.jpg", st.cfg.steam_art_cdn));
+    let k = crate::icons::key(&id);
+    let custom_icon = game_overrides::custom_icon_dir(&st)
+        .join(format!("{k}-64.png"))
+        .exists();
+    let custom_art = crate::art::override_path(&st, &id).exists();
+    let suggest = if src.steam_appid.is_none() {
+        let name = g["public_name"]
+            .as_str()
+            .or(g["name"].as_str())
+            .unwrap_or("")
+            .to_string();
+        if name.is_empty() || name == names::UNLISTED_TITLE {
+            None
+        } else {
+            steam_find(&name).await
+        }
+    } else {
+        None
+    };
+    Ok(Json(json!({
+        "steam_appid": src.steam_appid, "steam_appid_set": appid_set,
+        "steam_suggest": suggest.map(|(a, n)| json!({ "appid": a, "name": n })),
+        "icon": { "pref": icon_pref.unwrap_or_else(|| "auto".into()), "games_list": icon_gl, "steam": icon_steam, "custom": custom_icon },
+        "art": { "pref": art_pref.unwrap_or_else(|| "auto".into()), "games_list": art_gl, "steam": art_steam, "custom": custom_art },
+    })))
+}
+
+#[derive(Deserialize)]
+struct MediaReq {
+    icon: Option<String>,
+    art: Option<String>,
+    /// Some(0) clears it
+    steam_appid: Option<u32>,
+}
+
+fn pref_val(v: &str) -> ApiResult<Option<String>> {
+    match v {
+        "auto" => Ok(None),
+        "games_list" | "steam" | "custom" => Ok(Some(v.to_string())),
+        _ => Err(AppError::bad_request("bad_source", "Unknown source.")),
+    }
+}
+
+async fn media_set(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Json(r): Json<MediaReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    game_info(&st, &id).await?.ok_or_else(AppError::not_found)?;
+    let (bi, ba, bs) = game_overrides::media(&st, &id).await;
+    let icon = match &r.icon {
+        Some(v) => pref_val(v)?,
+        None => bi.clone(),
+    };
+    let art = match &r.art {
+        Some(v) => pref_val(v)?,
+        None => ba.clone(),
+    };
+    let appid = match r.steam_appid {
+        Some(0) => None,
+        Some(a) => Some(a),
+        None => bs,
+    };
+    sqlx::query(
+        "INSERT INTO game_overrides(game_id, icon_pref, art_pref, steam_appid, updated_by) VALUES($1, $2, $3, $4, $5)
+         ON CONFLICT (game_id) DO UPDATE SET icon_pref = $2, art_pref = $3, steam_appid = $4, updated_at = now(), updated_by = $5",
+    )
+    .bind(&id)
+    .bind(&icon)
+    .bind(&art)
+    .bind(appid.map(|a| a as i32))
+    .bind(s.user.id)
+    .execute(&st.db)
+    .await?;
+    game_overrides::reload(&st).await?;
+    crate::icons::purge(&st, &id);
+    crate::art::purge(&st, &id);
+    audit(
+        &st,
+        &s,
+        "game.media",
+        &format!("game:{id}"),
+        json!({ "icon": bi, "art": ba, "steam_appid": bs }),
+        json!({ "icon": icon, "art": art, "steam_appid": appid }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
 }
 
 // ------------------------------------------------------------------ unknown game ids
