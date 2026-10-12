@@ -496,7 +496,7 @@ pages.profile = async () => {
   const miniprofile = p.public_profile
     ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere: forums, blogs, Discord. It updates with what ${self ? "you're" : "they're"} playing.</div>
         <img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png${sigBust()}" alt="Signature for ${esc(p.handle)}" width="460" height="100">
-        <div class="codes">${codes.map(([l, v]) => `<div class="share"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
+        <div class="codes">${codes.map(([l, v]) => `<div class="code"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
     : self ? sec("Miniprofile", `<div class="body empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></div>`) : "";
 
   // Details + inset box
@@ -536,9 +536,9 @@ pages.profile = async () => {
     const AI = { clocked_in: "&#9201;", no_days_off: "&#128197;", game_hopper: "&#127918;", regular_circuit: "&#128260;", one_more_round: "&#9203;", night_owl: "&#127769;" };
     const unit = (r, n) => r.unit === "hours" ? `${n} hour${n === 1 ? "" : "s"}` : `${n} ${r.unit.replace(/s$/, "")}${n === 1 ? "" : "s"}`;
     ach = sec("Achievements", `<div class="body ach"><div class="ach-top"><span><b>${A.unlocked}</b> of ${A.total_tiers} tiers unlocked</span><span><b>${A.points}</b> points · ${A.mastered} / ${A.tracks} mastered</span></div>
-      <table class="achs"><thead><tr><th>Achievement</th><th>Progress</th><th class="n">Tier</th></tr></thead><tbody>${A.rows.map(r => `<tr><td><span class="ai">${AI[r.key] || "&#9733;"}</span><div><b>${esc(r.name)}</b><small>${unit(r, r.value)}${r.next_at != null ? ` · ${unit(r, r.remaining)} to ${esc(r.next_tier)}` : " · maxed"}</small></div></td>
-        <td><div class="bar"><i style="width:${r.progress}%"></i></div><small>${r.progress}%</small></td><td class="n"><span class="tierb ${r.tier ? r.tier.toLowerCase() : "none"}">${r.tier ? esc(r.tier) : "—"}</span></td></tr>`).join("")}</tbody></table>
-      ${A.next ? `<div class="ach-next"><span>Next unlock: <b>${esc(A.next.name)} · ${esc(A.next.next_tier)}</b></span><span>${unit(A.next, A.next.remaining)} to go</span><div class="bar big"><i style="width:${A.next.progress}%"></i></div></div>` : ""}</div>`);
+      <table class="achs"><thead><tr><th>Achievement</th><th>Progress</th><th class="n">Tier</th></tr></thead><tbody>${A.rows.map(r => `<tr><td><span class="ai">${AI[r.key] || "&#9733;"}</span><div class="an"><b>${esc(r.name)}</b><small>${unit(r, r.value)}${r.next_at != null ? ` · ${unit(r, r.remaining)} to ${esc(r.next_tier)}` : " · maxed"}</small></div></td>
+        <td><div class="pbar"><i style="width:${r.progress}%"></i></div><small>${r.progress}%</small></td><td class="n"><span class="tierb ${r.tier ? r.tier.toLowerCase() : "none"}">${r.tier ? esc(r.tier) : "—"}</span></td></tr>`).join("")}</tbody></table>
+      ${A.next ? `<div class="ach-next"><span>Next unlock: <b>${esc(A.next.name)} · ${esc(A.next.next_tier)}</b></span><span>${unit(A.next, A.next.remaining)} to go</span><div class="pbar big"><i style="width:${A.next.progress}%"></i></div></div>` : ""}</div>`);
   }
 
   // Mini activity: last 3 days, events + per-game daily totals
@@ -558,11 +558,11 @@ pages.profile = async () => {
   });
   daysM.forEach(d => d.games.forEach(g => items.push({ at: g.at, old: g.at < cut, html: `${icon(g.id, g.name)}<span>Played ${isUnlisted(g.id) ? "a game" : `<span class="gl">${esc(g.name)}</span>`} for ${dur(g.secs)}</span>` })));
   items.sort((x, y) => y.at - x.at);
-  let act = live ? `<div class="day">Now</div><div class="act">${icon(pres.game_id, pres.game_name)}<span>${isUnlisted(pres.game_id) ? "Playing a game now" : `Playing <span class="gl">${esc(pres.game_name)}</span> now`}${pres.session_started_at ? ` <span class="tm">for ${since(pres.session_started_at)}</span>` : ""}</span></div>` : "";
+  let act = live ? `<div class="ma-day">Now</div><div class="ma-row">${icon(pres.game_id, pres.game_name)}<span>${isUnlisted(pres.game_id) ? "Playing a game now" : `Playing <span class="gl">${esc(pres.game_name)}</span> now`}${pres.session_started_at ? ` <span class="ma-tm">for ${since(pres.session_started_at)}</span>` : ""}</span></div>` : "";
   let lastDay = "", older = 0;
   items.forEach(it => {
     const lbl = dayLabel(it.at);
-    const blk = (lbl !== lastDay ? `<div class="day">${lbl}</div>` : "") + `<div class="act">${it.html}</div>`;
+    const blk = (lbl !== lastDay ? `<div class="ma-day">${lbl}</div>` : "") + `<div class="ma-row">${it.html}</div>`;
     lastDay = lbl;
     if (it.old) { act += `<div class="olda" hidden>${blk}</div>`; older++; } else act += blk;
   });
