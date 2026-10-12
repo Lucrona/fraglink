@@ -519,3 +519,6 @@ body.skin-dark .sf-head .sf-name { white-space: normal; display: -webkit-box; -w
 /* dev.20 QA: long section titles ("Friends of Friends Playing") wrap instead of being cut off */
 body.skin-dark .side-scroll .side-sec { height: auto; min-height: 17px; }
 body.skin-dark .side-scroll .side-sec h4 { white-space: normal; overflow-wrap: anywhere; }
+/* dev.21: game icon before "Playing …" in your own status (16 px, like the friends list) */
+body.skin-dark .st-btn .st-gi { display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: -4px; }
+body.skin-dark .st-btn .st-gi svg, body.skin-dark .st-btn .st-gi img { width: 16px; height: 16px; display: block; }

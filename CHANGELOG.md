@@ -15,6 +15,8 @@ Test update (builds report `0.2.0-21`).
 - Options > Account links to the website for your profile picture, two-step sign-in, signed-in devices and email notifications, and shows whether two-step sign-in is on. Options > Connections links to downloading your account data.
 
 ### Changed
+- **Bigger pop-ups:** the bottom-right pop-ups are now the same size as Steam's (283 × 70, a little taller for long game names) with a larger picture or game icon and easier-to-read text. They grow with Windows display scaling.
+- **Your game's icon in your status:** while you play, the game's small icon sits right before "Playing …" next to your name.
 - **Website:** long lists (games on a profile, played games, friends) load a page at a time with search and sorting.
 
 ## [0.2.0-dev.20] - 2026-10-12

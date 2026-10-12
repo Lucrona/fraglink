@@ -1441,7 +1441,9 @@
     // hover: the game with its detail (WoW realm), e.g. "Playing World of Warcraft: Forever · Frostmourne"
     const detail = SHOW_REALM && game && np.detail ? ' · ' + np.detail : '';
     const tipTxt = detail && txt.includes(game) ? txt.replace(game, game + detail) : txt;
-    btn.querySelector('span').textContent = txt; btn.dataset.tip = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
+    // dev.21: the game's 16 px icon right before "Playing …" (nothing when not in a game)
+    const stIcon = game && !auto && txt.startsWith('Playing ') ? `<i class="st-gi">${gameIcon(ensureGame(np.game_id, np.name))}</i>` : '';
+    btn.querySelector('span').innerHTML = stIcon + esc(txt); btn.dataset.tip = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();
     const me = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
     // nickname shown, username (permanent) in the hover; click either to change the nickname

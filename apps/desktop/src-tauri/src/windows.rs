@@ -54,10 +54,12 @@ pub fn side_extra(app: &AppHandle) -> f64 {
         .clamp(SIDE_PANEL_MIN, SIDE_PANEL_MAX);
     (DARK_SIDE_W + (w - SIDE_PANEL_MIN)) * tz
 }
-const TOAST_W: f64 = 226.0;
-// Tall enough for the Steam-style 3-line toast with a 2-line game name (dev.18); the
-// window is transparent and the toast sits at its bottom, as tall as its text.
-const TOAST_H: f64 = 100.0;
+// dev.21: Steam's desktop toast is 283 x 70 CSS px (90 for the taller kinds), scaled with the
+// display (Steam client: DesktopToastContainer, `ApplyBrowserScaleToDimensions`). The box is
+// that size; the transparent window adds 4 px each side for the shadow. Sizes are logical
+// pixels, so Windows display scaling enlarges it like Steam's.
+const TOAST_W: f64 = 283.0 + 8.0;
+const TOAST_H: f64 = 90.0 + 8.0;
 
 /// A "1"/"0" checkbox setting from Options.
 pub fn flag(app: &AppHandle, key: &str) -> bool {

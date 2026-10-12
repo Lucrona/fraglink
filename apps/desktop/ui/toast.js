@@ -56,7 +56,7 @@
   document.getElementById('toast-close').addEventListener('click', e => { e.stopPropagation(); close(); });
   el.addEventListener('click', e => { e.preventDefault(); if (T) T.core.invoke('toast_clicked'); else close(); });
   (async () => {
-    if (!T) { document.body.className = 'toast-page skin-' + (localStorage.getItem('fl-skin') || 'dark'); el.style.cssText = 'inset:auto;right:8px;bottom:8px;width:226px;box-sizing:border-box;left:auto;right:8px;bottom:8px;animation:none'; // preview: native window width, height grows
+    if (!T) { document.body.className = 'toast-page skin-dark'; el.style.cssText = 'inset:auto;right:4px;bottom:4px;width:283px;box-sizing:border-box;left:auto;animation:none'; // preview: native window width, height grows
       const q = new URLSearchParams(location.search), t = q.get('t') || (q.get('logon') ? 'online' : 'playing');
       show(({ played: { kind: 'friend:you', title: 'You', line: 'played 1h 33m of', game_id: 'wow', game: 'World of Warcraft: Forever - Beta', icon: q.get('icon') || '' },
         long: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'x', game: 'The Elder Scrolls V: Skyrim Special Edition Anniversary Upgrade Bundle Deluxe', icon: '' },

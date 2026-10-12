@@ -144,3 +144,18 @@ body.toast-page .toast-body .av.c3 { background-color: #4a3d5e; } body.toast-pag
 body.toast-page .toast-body .av.p { background-image: linear-gradient(135deg, transparent, #14181d); }
 body.toast-page .toast-body .gi.lead-g { position: relative; overflow: visible; }
 body.toast-page.skin-dark .toast-body .gi.lead-g .av.mini { position: absolute; right: -4px; bottom: -4px; width: 15px; height: 15px; margin: 0; border: 1px solid #1a1c21; border-radius: 3px; box-shadow: 0 0 0 1px #1a1c21; }
+
+/* dev.21: Steam's desktop toast size (Steam client CSS, DesktopToastTemplate): box 283 x 70
+   (grows to 90 for a 2-line game name), 10 px padding, 44 px picture/icon, 12 px gap,
+   name 12 px, other lines 11 px with 15 px line height. */
+body.toast-page.skin-dark .xf-toast { left: 4px; right: 4px; bottom: 4px; width: auto; min-height: 70px; max-height: 90px; box-sizing: border-box; display: flex; align-items: center; }
+body.toast-page.skin-dark .toast-body { flex: 1; min-width: 0; box-sizing: border-box; padding: 10px 24px 10px 10px; gap: 12px; align-items: center; font-size: 11px; }
+body.toast-page.skin-dark .toast-body .gi, body.toast-page.skin-dark .toast-body .av, body.toast-page.skin-dark .toast-body .av.fav { width: 44px; height: 44px; flex: none; }
+body.toast-page.skin-dark .toast-body .gi svg, body.toast-page.skin-dark .toast-body .gi img { width: 44px; height: 44px; }
+body.toast-page .toast-body .av.fav { font-size: 22px; }
+body.toast-page.skin-dark .toast-body .gi.lead-g .av.mini { width: 18px; height: 18px; right: -5px; bottom: -5px; }
+body.toast-page.skin-dark .toast-body .tx { line-height: 15px; }
+body.toast-page.skin-dark .toast-body .tx b { font-size: 12px; font-weight: bold; }
+body.toast-page.skin-dark .toast-body .ln { color: #8b929a; font-size: 11px; }
+body.toast-page.skin-dark .toast-body .g { font-size: 11px; }
+body.toast-page.skin-dark .toast-body small { font-size: 11px; }
