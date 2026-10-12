@@ -494,7 +494,7 @@ pages.profile = async () => {
   const shareUrl = siteBase() + "/u/" + encodeURIComponent(p.handle), sig = sigUrl(p.handle);
   const codes = [["Link", shareUrl], ["BBCode", `[url=${shareUrl}][img]${sig}[/img][/url]`], ["HTML", `<a href="${shareUrl}"><img src="${sig}" alt="${p.display_name || p.handle} on Fraglink" width="460" height="100"></a>`]];
   const miniprofile = p.public_profile
-    ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere: forums, blogs, Discord. It updates with what ${self ? "you're" : "they're"} playing.</div>
+    ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere (forums, blogs, Discord). It updates live.</div>
         <img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png${sigBust()}" alt="Signature for ${esc(p.handle)}" width="460" height="100">
         <div class="mpcodes">${codes.map(([l, v]) => `<div class="code"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
     : self ? sec("Miniprofile", `<div class="body empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></div>`) : "";
@@ -574,7 +574,7 @@ pages.profile = async () => {
     : self ? sec("Gaming rig", `<div class="body empty">Show off your setup. <a href="/settings#rig">Add your gaming rig</a>.</div>`) : "";
   const discord = sec("Discord server", `<div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div>`);
 
-  root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${miniprofile}${details}${games}${ach}</div><aside class="col">${mini}${fr}${rig}${discord}</aside></div></div>`;
+  root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${ach}${miniprofile}</div><aside class="col">${mini}${fr}${rig}${discord}</aside></div></div>`;
   const sm = $("[data-seemore]", root);
   if (sm) sm.addEventListener("click", e => { e.preventDefault(); $$(".olda", root).forEach(x => x.hidden = false); sm.parentNode.remove(); });
   const rp = $("[data-report-profile]", root);
@@ -585,7 +585,16 @@ pages.profile = async () => {
   const add = $("[data-add]", root), acc = $("[data-accept]", root), more = $("[data-more]", root), rep = $("[data-report]", root);
   if (add) add.addEventListener("click", async () => { if (!token()) return requireLogin(); add.disabled = true; try { await api("/friends/request", { method: "POST", body: { handle: p.handle } }); add.textContent = "Friend request sent"; } catch (e) { add.disabled = false; alert(e.message); } });
   if (acc) acc.addEventListener("click", async () => { acc.disabled = true; try { await api("/friends/respond", { method: "POST", body: { handle: p.handle, accept: true } }); location.reload(); } catch (e) { acc.disabled = false; alert(e.message); } });
-  if (more) more.addEventListener("click", e => { e.preventDefault(); $("tbody.more", root).hidden = false; more.parentNode.remove(); });
+  if (more) {
+    const n = more.dataset.n || more.textContent.match(/\d+/)[0];
+    more.addEventListener("click", e => {
+      e.preventDefault();
+      const tb = $("tbody.more", root), open = tb.hidden;
+      tb.hidden = !open;
+      more.textContent = open ? "Show less" : `Show entire gaming history (${n} more)`;
+      if (!open) { const t = more.closest("section"); if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: "start" }); }
+    });
+  }
   if (rep) rep.addEventListener("click", async e => {
     e.preventDefault(); const reason = prompt("Report this picture to the Fraglink moderators. What's wrong with it? (optional)"); if (reason === null) return;
     try { await api("/users/" + encodeURIComponent(p.handle) + "/avatar/report", { method: "POST", body: { reason } }); rep.textContent = "Reported. Thanks."; } catch (x) { alert(x.message); }

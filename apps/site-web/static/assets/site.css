@@ -462,3 +462,8 @@ table.achs td:nth-child(2){width:34%}
 .mact .ma-row span{flex:1;min-width:0}.mact .ma-tm{color:#8ea2b8}
 .pbar i{min-width:0}
 .flag,.inset img,.inset .gico{display:inline-block!important}
+.mp{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;text-align:left}
+.mp .mpt{grid-column:1/-1;margin:0 0 2px}
+.mp .sigimg{width:230px;height:auto;margin:0}
+.mp .mpcodes .code{margin:2px 0}.mp .mpcodes b{width:46px}
+@media(max-width:700px){.mp{grid-template-columns:1fr}}
