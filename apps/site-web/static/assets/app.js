@@ -481,7 +481,7 @@ pages.profile = async () => {
       <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
   const sec = (title, body, right, cls) => `<section class="panel sx${cls ? " " + cls : ""}"><h2><span class="tab">${title}</span>${right ? `<span class="rt">${right}</span>` : ""}</h2>${body}</section>`;
   const report = !self && token() ? `<div class="avlinks">${p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : ""}<a href="#" class="report flagit" data-report-profile>&#9873; Report this profile</a></div>` : "";
-  const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div><b>${hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}<div><b>${p.friend_count}</b><span>Friends</span></div></div>`;
+  const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div><b>${hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}${Array.isArray(p.friends) ? `<a href="#friends" class="kf" data-friends><b>${p.friend_count}</b><span>Friends</span></a>` : `<div><b>${p.friend_count}</b><span>Friends</span></div>`}</div>`;
   const nick = p.display_name || p.handle, prevs = (p.previous_names || []).filter(n => n.toLowerCase() !== nick.toLowerCase() && n.toLowerCase() !== p.handle.toLowerCase());
   const head = `<section class="ph${bannerG ? "" : " noart"}"${bannerG ? ` style="background:${artBg(bannerG.game_id, bannerG.name)}"` : ""}><div class="inr">
       <div>${avatar(p.avatar, 184)}${report}</div>
@@ -504,7 +504,7 @@ pages.profile = async () => {
   const kv = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";
   const loc = [p.location ? esc(p.location) : (p.country ? esc(countryName(p.country)) : ""), flag(p.country)].filter(Boolean).join(" ");
   const inset = `<div class="inset">${pres ? `<b>${live ? "Playing" : "Status"}</b><div>${live ? `${icon(pres.game_id, pres.game_name)} ${isUnlisted(pres.game_id) ? "A game" : `<span class="gl">${esc(pres.game_name)}</span>`}` : statusText(pres)}</div>` : ""}
-      ${p.member_since ? `<b>Member since</b><div>${fullDate.format(new Date(p.member_since))}</div>` : ""}<div class="fc">${p.friend_count} friend${p.friend_count === 1 ? "" : "s"}</div></div>`;
+      ${p.member_since ? `<b>Member since</b><div>${fullDate.format(new Date(p.member_since))}</div>` : ""}${Array.isArray(p.friends) ? `<a href="#friends" class="fc" data-friends>${p.friend_count} friend${p.friend_count === 1 ? "" : "s"}</a>` : ""}</div>`;
   const details = sec("Details", `<div class="body details2"><dl class="kv">
       ${kv("Name", `${esc(nick)}${nick !== p.handle ? ` <span class="mut">(${esc(p.handle)})</span>` : ""}`)}
       ${kv("Location", loc)}${kv("Age", p.age != null ? String(p.age) : "")}${kv("Gender", p.gender ? esc(p.gender) : "")}${kv("Real name", p.real_name ? esc(p.real_name) : "")}
@@ -573,6 +573,18 @@ pages.profile = async () => {
   const discord = sec("Discord server", `<div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div>`);
 
   root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${ach}${miniprofile}</div><aside class="col">${mini}${fr}${rig}${discord}</aside></div></div>`;
+  const openFriends = () => {
+    const nm = esc(p.display_name || p.handle), list = p.friends || [];
+    const m = document.createElement("div"); m.className = "crop-modal fl-modal";
+    m.innerHTML = `<div class="crop-box fl-box" role="dialog" aria-label="Friends"><h2>${nm}'s friends (${p.friend_count})<a href="#" class="x" data-x aria-label="Close">&times;</a></h2><div class="body">${list.length ? list.map(f => `<a class="flrow" href="/u/${encodeURIComponent(f.handle)}">${avatar(f.avatar, 32)}<span class="n"><b>${esc(f.display_name || f.handle)}</b>${f.display_name && f.display_name !== f.handle ? ` <small>${esc(f.handle)}</small>` : ""}</span><span class="st ${f.game_name ? "pl" : f.status === "online" ? "on" : ""}">${f.game_name ? "Playing " + esc(f.game_name) : f.status === "online" ? "Online" : f.status === "away" ? "Away" : "Offline"}</span></a>`).join("") : `<span class="empty">No friends yet.</span>`}
+      ${p.friend_count > list.length ? `<div class="note">Showing ${list.length} of ${p.friend_count}.</div>` : ""}</div></div>`;
+    const close = () => { m.remove(); if (location.hash === "#friends") history.replaceState(null, "", location.pathname + location.search); document.removeEventListener("keydown", esc_); };
+    const esc_ = e => { if (e.key === "Escape") close(); };
+    m.addEventListener("click", e => { if (e.target === m || e.target.closest("[data-x]")) { e.preventDefault(); close(); } });
+    document.addEventListener("keydown", esc_); document.body.appendChild(m);
+  };
+  $$("[data-friends]", root).forEach(a => a.addEventListener("click", e => { e.preventDefault(); history.replaceState(null, "", "#friends"); openFriends(); }));
+  if (location.hash === "#friends" && Array.isArray(p.friends)) openFriends();
   const sm = $("[data-seemore]", root);
   if (sm) sm.addEventListener("click", e => { e.preventDefault(); $$(".olda", root).forEach(x => x.hidden = false); sm.parentNode.remove(); });
   const rp = $("[data-report-profile]", root);
