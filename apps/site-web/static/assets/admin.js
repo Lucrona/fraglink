@@ -377,15 +377,16 @@ async function server() {
 async function announcements() {
   const d = await api("/admin/announcements");
   const a = d.active;
-  view.innerHTML = `<div class="split"><section class="panel"><h2>Site banner</h2><div class="body">
+  view.innerHTML = `<div class="split"><section class="panel"><h2>Announcement</h2><div class="body">
     ${a ? `<p class="muted">Showing now:</p><div class="announce ${esc(a.style)}" style="border:1px solid;border-radius:3px"><div class="wrap" style="padding:6px 10px"><span>${esc(a.message)}${a.link ? ` <a href="${esc(a.link)}">More</a>` : ""}</span></div></div>
-      <p class="dimt">${a.ends_at ? "Ends " + when(a.ends_at) : "No end time"}</p><button class="btn danger" id="clr">Clear banner</button>` : `<p class="empty">No banner is showing.</p>`}
+      <p class="dimt">${a.ends_at ? "Ends " + when(a.ends_at) : "No end time"}</p><button class="btn danger" id="clr">Clear announcement</button>` : `<p class="empty">No announcement is showing.</p>`}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+    <p class="note">Where it shows: <b>(1)</b> a banner at the top of every website page, <b>(2)</b> in the desktop app as a one-time pop-up (toast) within about 15 minutes for everyone signed in (shown once per announcement; clicking it opens the link), <b>(3)</b> in the News box on the website home page. It disappears everywhere at the end time or when you clear it.</p>
     <form class="f" id="af"><label>Message<input type="text" name="message" maxlength="300" required placeholder="Servers restart at 10 pm AEDT for an update."></label>
       <div class="row"><label>Style<select class="in" name="style"><option value="info">Info (blue)</option><option value="warning">Warning (amber)</option></select></label>
       <label>Ends (optional)<input class="in" type="datetime-local" name="ends"></label></div>
       <label>Link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
-      <div class="row"><button class="btn dl">Publish</button><span class="dimt">Replaces the current banner. Shown on every page of the website; apps can read it from /api/v1/announcement.</span></div>
+      <div class="row"><button class="btn dl">Publish</button><span class="dimt">Replaces the current announcement.</span></div>
       <div class="alert" id="anmsg" hidden></div></form></div></section>
     <section class="panel"><h2>Recent</h2>${d.recent.length ? d.recent.map(r => `<div class="fr"><div class="who"><div class="nm"><span>${esc(r.message)}</span></div><div class="gm"><span class="pill ${r.style === "warning" ? "warn" : ""}">${esc(r.style)}</span> ${when(r.created_at)}${r.cleared_at ? " · cleared " + when(r.cleared_at) : r.ends_at ? " · ends " + when(r.ends_at) : ""}</div></div></div>`).join("") : `<div class="body empty">None yet.</div>`}</section></div>`;
   const clr = $("#clr");
