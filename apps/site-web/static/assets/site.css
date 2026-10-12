@@ -483,3 +483,4 @@ table.achs td:nth-child(2){width:34%}
 .flrow{display:flex;align-items:center;gap:10px;padding:6px 4px;border-bottom:1px solid #1b2836;color:#dbe3ec;text-decoration:none}.flrow:hover{background:#142131;text-decoration:none}
 .flrow .n{flex:1;min-width:0}.flrow .n b{color:#f0b429;font-weight:600}.flrow small{color:#8395a8}
 .flrow .st{font-size:11.5px;color:#8395a8}.flrow .st.pl{color:var(--online)}.flrow .st.on{color:#9fd3ff}
+.kpi a.kf{background:#0d1622cc;border:1px solid #2d4560;border-radius:4px;padding:8px 14px;text-align:center}.kpi a.kf:hover{border-color:#4f7aa3}.fl-box h2{padding-right:12px}
