@@ -538,9 +538,8 @@ pages.profile = async () => {
     const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
       <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const many = (p.games_total || p.games.length) > GPAGE;
-    games = sec("Games", `${many ? `<div class="lbar gq">${searchBox("Search " + (self ? "your" : "their") + " games", "gt-q")}
-        <select class="t sm" data-gsort aria-label="Sort"><option value="total">Most played</option><option value="recent">Recently played</option><option value="week">Past 7 days</option><option value="name">Name A–Z</option></select></div>` : ""}
-      <table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total</th><th class="n hide-sm">Last played</th></tr></thead>
+    games = sec("Games", `
+      <table class="gt" style="width:100%;border-collapse:collapse"><thead><tr>${[["name", "Game", ""], ["week", "Past 7 days", "n"], ["total", "Total", "n"], ["recent", "Last played", "n hide-sm"]].map(([k, l, c]) => many ? `<th class="${c} srt${k === "total" ? " on" : ""}" data-gs="${k}" tabindex="0" role="button">${l}<i>${k === "total" ? " ▾" : ""}</i></th>` : `<th class="${c}">${l}</th>`).join("")}</tr></thead>
       <tbody data-gbody>${p.games.map(row).join("")}</tbody>
       <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
       ${many ? `<div data-gpager>${pagerHtml(0, GPAGE, p.games_total)}</div>` : ""}
@@ -604,25 +603,24 @@ pages.profile = async () => {
   const add = $("[data-add]", root), acc = $("[data-accept]", root), more = $("[data-more]", root), rep = $("[data-report]", root);
   if (add) add.addEventListener("click", async () => { if (!token()) return requireLogin(); add.disabled = true; try { await api("/friends/request", { method: "POST", body: { handle: p.handle } }); add.textContent = "Friend request sent"; } catch (e) { add.disabled = false; alert(e.message); } });
   if (acc) acc.addEventListener("click", async () => { acc.disabled = true; try { await api("/friends/respond", { method: "POST", body: { handle: p.handle, accept: true } }); location.reload(); } catch (e) { acc.disabled = false; alert(e.message); } });
-  const gq = $("#gt-q", root);
-  if (gq) {
-    const st = { offset: 0 }, sortSel = $("[data-gsort]", root), body = $("[data-gbody]", root), pg = $("[data-gpager]", root);
+  const gbody = $("[data-gbody]", root), gpg = $("[data-gpager]", root);
+  if (gbody && gpg) {
+    const st = { offset: 0, sort: "total" };
     const load = async keepPos => {
-      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: sortSel.value, q: gq.value.trim() });
-      body.style.opacity = .5;
+      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: st.sort });
+      gbody.style.opacity = .5;
       try {
         const r = await api("/users/" + encodeURIComponent(p.handle) + "/profile?" + qs, { keepSession: true });
         await loadIcons(r.games.map(g => g.game_id));
-        body.innerHTML = r.games.length ? r.games.map(gamesRow).join("") : `<tr><td colspan="4" class="empty">No games match “${esc(gq.value.trim())}”. <a href="#" data-gclear>Clear search</a></td></tr>`;
-        pg.innerHTML = pagerHtml(st.offset, GPAGE, r.total, gq.value.trim());
-        if (keepPos) { const t = body.closest("section"); if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: "start" }); }
-      } catch (x) { pg.textContent = x.message; }
-      body.style.opacity = 1;
+        gbody.innerHTML = r.games.map(gamesRow).join("");
+        gpg.innerHTML = pagerHtml(st.offset, GPAGE, r.total);
+        if (keepPos) { const t = gbody.closest("section"); if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: "start" }); }
+      } catch (x) { gpg.textContent = x.message; }
+      gbody.style.opacity = 1;
     };
-    let t; wireSearch(gq, () => { clearTimeout(t); t = setTimeout(() => { st.offset = 0; load(); }, 200); });
-    sortSel.onchange = () => { st.offset = 0; load(); };
-    pg.addEventListener("click", e => { const b = e.target.closest("[data-off]"); if (!b) return; e.preventDefault(); st.offset = +b.dataset.off; load(true); });
-    body.addEventListener("click", e => { if (e.target.closest("[data-gclear]")) { e.preventDefault(); gq.value = ""; gq.dispatchEvent(new Event("input")); } });
+    gpg.addEventListener("click", e => { const b = e.target.closest("[data-off]"); if (!b) return; e.preventDefault(); st.offset = +b.dataset.off; load(true); });
+    const sortBy = th => { st.sort = th.dataset.gs; st.offset = 0; $$("th.srt", root).forEach(x => { x.classList.toggle("on", x === th); x.querySelector("i").textContent = x === th ? (st.sort === "name" ? " ▴" : " ▾") : ""; }); load(); };
+    $$("th.srt", root).forEach(th => { th.addEventListener("click", () => sortBy(th)); th.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sortBy(th); } }); });
   }
   if (rep) rep.addEventListener("click", async e => {
     e.preventDefault(); const reason = prompt("Report this picture to the Fraglink moderators. What's wrong with it? (optional)"); if (reason === null) return;
