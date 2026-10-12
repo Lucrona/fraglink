@@ -414,6 +414,14 @@ pages.verify = async () => {
 };
 
 /* ----- profile ----- */
+function COUNTRIES() {
+  if (COUNTRIES.c) return COUNTRIES.c;
+  const dn = new Intl.DisplayNames(["en"], { type: "region" }), out = [];
+  for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) { const c = String.fromCharCode(a, b); try { const n = dn.of(c); if (n && n !== c && !/Unknown/.test(n)) out.push([c, n]); } catch (e) { } }
+  return (COUNTRIES.c = out.filter(([c]) => !["AA", "QM", "QN", "QO", "QP", "QQ", "QR", "QS", "QT", "QU", "QV", "QW", "QX", "QY", "QZ", "XA", "XB", "XK", "ZZ", "EU", "EZ", "UN"].includes(c) || c === "XK").sort((x, y) => x[1].localeCompare(y[1])));
+}
+function countryName(c) { try { return new Intl.DisplayNames(["en"], { type: "region" }).of(c); } catch (e) { return c; } }
+function flag(c) { return c && /^[A-Z]{2}$/.test(c) ? `<img class="flag" src="https://flagcdn.com/20x15/${c.toLowerCase()}.png" width="20" height="15" alt="" loading="lazy">` : ""; }
 pages.profile = async () => {
   const root = $("#profile");
   const handle = decodeURIComponent(location.pathname.replace(/^\/u\/?/, "").replace(/\/$/, ""));
@@ -463,10 +471,16 @@ pages.profile = async () => {
   let sub = pres ? `<span class="status"><span class="dot ${esc(st)}"></span>${statusText(pres)}</span>` : "";
   if (p.member_since) sub += (sub ? " · " : "") + `member since ${fullDate.format(new Date(p.member_since))}`;
   if (p.location) sub += " · " + esc(p.location);
-  const badges = (p.linked || []).length ? `<div class="badges">${p.linked.map(l => `<span>${l.provider === "steam" ? "Steam" : l.provider === "discord" ? "Discord" : l.provider === "bnet" ? "Battle.net" : esc(l.provider)} ✓${l.display ? ": " + esc(l.display) : ""}</span>`).join("")}</div>` : "";
+  const BRAND = { steam: ["Steam", "#66c0f4", "M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"], bnet: ["Battle.net", "#148eff", "M18.94 8.296C15.9 6.892 11.534 6 7.426 6.332c.206-1.36.714-2.308 1.548-2.508 1.148-.275 2.4.48 3.594 1.854.782.102 1.71.28 2.355.429C12.747 2.013 9.828-.282 7.607.565c-1.688.644-2.553 2.97-2.448 6.094-2.2.468-3.915 1.3-5.013 2.495-.056.065-.181.227-.137.305.034.058.146-.008.194-.04 1.274-.89 2.904-1.373 5.027-1.676.303 3.333 1.713 7.56 4.055 10.952-1.28.502-2.356.536-2.946-.087-.812-.856-.784-2.318-.19-4.04a26.764 26.764 0 0 1-.807-2.254c-2.459 3.934-2.986 7.61-1.143 9.11 1.402 1.14 3.847.725 6.502-.926 1.505 1.672 3.083 2.74 4.667 3.094.084.015.287.043.332-.034.034-.06-.08-.124-.131-.149-1.408-.657-2.64-1.828-3.964-3.515 2.735-1.929 5.691-5.263 7.457-8.988 1.076.86 1.64 1.773 1.398 2.595-.336 1.131-1.615 1.84-3.403 2.185a27.697 27.697 0 0 1-1.548 1.826c4.634.16 8.08-1.22 8.458-3.565.286-1.786-1.295-3.696-4.053-5.17.696-2.139.832-4.04.346-5.588-.029-.08-.106-.27-.196-.27-.068 0-.067.13-.063.187.135 1.547-.263 3.2-1.062 5.19zm-8.533 9.869c-1.96-3.145-3.09-6.849-3.082-10.594 3.702-.124 7.474.748 10.714 2.627-1.743 3.269-4.385 6.1-7.633 7.966h.001z"], discord: ["Discord", "#5865f2", "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"] };
+  const badges = (p.linked || []).filter(l => BRAND[l.provider]).length ? `<div class="lbadges">${p.linked.filter(l => BRAND[l.provider]).map(l => {
+    const [nm, col, path] = BRAND[l.provider], tip = esc(nm + (l.display ? ": " + l.display : " (verified)"));
+    const inner = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg><i class="vt" aria-hidden="true">✓</i>`;
+    return l.url ? `<a class="lb" href="${esc(l.url)}" target="_blank" rel="noopener" style="--bc:${col}" data-tip="${tip}" aria-label="${tip}">${inner}</a>` : `<span class="lb" tabindex="0" style="--bc:${col}" data-tip="${tip}" aria-label="${tip}">${inner}</span>`;
+  }).join("")}</div>` : "";
   const np = live ? `<div class="np">${gameArt(pres.game_id, pres.game_name, "npa")}<div><div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8">Now playing</div>
       <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
-  const report = !self && token() && p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : "";
+  const sec = (title, body, right, cls) => `<section class="panel sx${cls ? " " + cls : ""}"><h2><span class="tab">${title}</span>${right ? `<span class="rt">${right}</span>` : ""}</h2>${body}</section>`;
+  const report = !self && token() ? `<div class="avlinks">${p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : ""}<a href="#" class="report flagit" data-report-profile>&#9873; Report this profile</a></div>` : "";
   const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div><b>${hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}<div><b>${p.friend_count}</b><span>Friends</span></div></div>`;
   const head = `<section class="ph${bannerG ? "" : " noart"}"${bannerG ? ` style="background:${artBg(bannerG.game_id, bannerG.name)}"` : ""}><div class="inr">
       <div>${avatar(p.avatar, 184)}${report}</div>
@@ -476,68 +490,98 @@ pages.profile = async () => {
   const welcome = qs("welcome") && self ? `<div class="alert ok" style="margin-bottom:12px">Welcome to Fraglink. <a href="/download">Download the app</a> and sign in with the same account to start tracking. You can pick a picture in <a href="/settings">Settings</a>.</div>` : "";
   const pendingDelete = self && p.delete_after ? `<div class="alert err" style="margin-bottom:12px">This account will be deleted on ${fullDate.format(new Date(p.delete_after))}. Sign in again to keep it.</div>` : "";
 
-  const details = `<section class="panel"><h2>Details</h2><div class="body details"><div><dl class="kv">
-      <dt>Username</dt><dd>${esc(p.handle)}</dd>
-      ${p.display_name && p.display_name !== p.handle ? `<dt>Nickname</dt><dd>${esc(p.display_name)}</dd>` : ""}
-      ${(p.previous_names || []).length ? `<dt>Previously known as</dt><dd>${p.previous_names.map(esc).join(", ")}</dd>` : ""}
-      ${main ? `<dt>Main game</dt><dd>${esc(main.name)}</dd>` : ""}
-      ${p.gaming_style ? `<dt>Gaming style</dt><dd>${esc(p.gaming_style)}</dd>` : ""}
-      ${p.location ? `<dt>Location</dt><dd>${esc(p.location)}</dd>` : ""}
-      <dt>Status</dt><dd>${pres ? statusText(pres) + (live ? " · " + presenceLine(pres) : "") : "Only friends can see this"}</dd>
-    </dl>${p.about ? `<p style="margin:10px 0 0;white-space:pre-line">${esc(p.about)}</p>` : ""}</div></div></section>`;
+  // Miniprofile: the live signature image + embed codes (public profiles only)
+  const shareUrl = siteBase() + "/u/" + encodeURIComponent(p.handle), sig = sigUrl(p.handle);
+  const codes = [["Link", shareUrl], ["BBCode", `[url=${shareUrl}][img]${sig}[/img][/url]`], ["HTML", `<a href="${shareUrl}"><img src="${sig}" alt="${p.display_name || p.handle} on Fraglink" width="460" height="100"></a>`]];
+  const miniprofile = p.public_profile
+    ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere: forums, blogs, Discord. It updates with what ${self ? "you're" : "they're"} playing.</div>
+        <img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png${sigBust()}" alt="Signature for ${esc(p.handle)}" width="460" height="100">
+        <div class="codes">${codes.map(([l, v]) => `<div class="share"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
+    : self ? sec("Miniprofile", `<div class="body empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></div>`) : "";
+
+  // Details + inset box
+  const kv = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";
+  const loc = [p.location ? esc(p.location) : (p.country ? esc(countryName(p.country)) : ""), flag(p.country)].filter(Boolean).join(" ");
+  const inset = `<div class="inset">${pres ? `<b>${live ? "Playing" : "Status"}</b><div>${live ? `${icon(pres.game_id, pres.game_name)} ${isUnlisted(pres.game_id) ? "A game" : `<span class="gl">${esc(pres.game_name)}</span>`}` : statusText(pres)}</div>` : ""}
+      ${p.member_since ? `<b>Member since</b><div>${fullDate.format(new Date(p.member_since))}</div>` : ""}<div class="fc">${p.friend_count} friend${p.friend_count === 1 ? "" : "s"}</div></div>`;
+  const details = sec("Details", `<div class="body details2"><dl class="kv">
+      ${kv("Username", esc(p.handle))}
+      ${p.display_name && p.display_name !== p.handle ? kv("Nickname", esc(p.display_name)) : ""}
+      ${(p.previous_names || []).length ? kv("Previously known as", p.previous_names.map(esc).join(", ")) : ""}
+      ${kv("Location", loc)}${kv("Age", p.age != null ? String(p.age) : "")}${kv("Gender", p.gender ? esc(p.gender) : "")}${kv("Real name", p.real_name ? esc(p.real_name) : "")}
+      ${kv("Gaming style", p.gaming_style ? esc(p.gaming_style) : "")}${main ? kv("Main game", esc(main.name)) : ""}
+    </dl>${inset}</div>${p.about ? `<p class="about">${esc(p.about)}</p>` : ""}`);
 
   let games;
-  if (!p.history_visible) {
+  if (!p.history_visible && !p.games_visible) {
     const why = p.relation === "friend" || p.relation === "public" ? `${esc(p.handle)} keeps their play history private.` : `Add ${esc(p.handle)} as a friend to see their games and hours.`;
-    games = `<section class="panel"><h2>Games</h2><div class="body empty">${why}</div></section>`;
+    games = sec("Games", `<div class="body empty">${why}</div>`);
   } else if (!p.games || !p.games.length) {
-    games = `<section class="panel"><h2>Games</h2><div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div></section>`;
+    games = sec("Games", `<div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div>`);
   } else {
     const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
       <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const top = p.games.slice(0, 8), rest = p.games.slice(8);
-    games = `<section class="panel"><h2>Games</h2><table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total ▾</th><th class="n hide-sm">Last played</th></tr></thead>
+    games = sec("Games", `<table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total ▾</th><th class="n hide-sm">Last played</th></tr></thead>
       <tbody>${top.map(row).join("")}</tbody>${rest.length ? `<tbody class="more" hidden>${rest.map(row).join("")}</tbody>` : ""}
       <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
       ${rest.length ? `<div class="body" style="padding-top:6px"><a href="#" data-more>Show entire gaming history (${rest.length} more)</a></div>` : ""}
-      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters. Estimates are never added to totals.</div></section>`;
+      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters. Estimates are never added to totals.</div>`);
   }
 
-  // Mini activity report: per day, per game (total time and sessions)
-  let act = "";
-  if (p.history_visible) {
-    const days = new Map();
-    (p.recent || []).forEach(r => {
-      const d = new Date(r.ended_at), k = d.toDateString();
-      if (!days.has(k)) days.set(k, { at: d, games: new Map() });
-      const g = days.get(k).games, gk = r.game_id + "|" + r.game_name;
-      const cur = g.get(gk) || { id: r.game_id, name: r.game_name, secs: 0, n: 0 };
-      cur.secs += r.duration_s || 0; cur.n += 1; g.set(gk, cur);
-    });
-    if (live) act += `<div class="day">Now</div><div class="act">${icon(pres.game_id, pres.game_name)}<span>${isUnlisted(pres.game_id) ? "Playing a game now" : `Playing <b>${esc(pres.game_name)}</b> now`}</span>${pres.session_started_at ? `<span class="tm">for ${since(pres.session_started_at)}</span>` : ""}</div>`;
-    Array.from(days.values()).slice(0, 7).forEach(d => {
-      act += `<div class="day">${dayLabel(d.at)}</div>`;
-      Array.from(d.games.values()).sort((a, b) => b.secs - a.secs).forEach(g => {
-        act += `<div class="act">${icon(g.id, g.name)}<span>Played ${isUnlisted(g.id) ? "a game" : `<b>${esc(g.name)}</b>`} for ${dur(g.secs)}</span></div>`;
-      });
-    });
+  // Achievements
+  let ach = "";
+  const A = p.achievements;
+  if (A && A.rows) {
+    const AI = { clocked_in: "&#9201;", no_days_off: "&#128197;", game_hopper: "&#127918;", regular_circuit: "&#128260;", one_more_round: "&#9203;", night_owl: "&#127769;" };
+    const unit = (r, n) => r.unit === "hours" ? `${n} hour${n === 1 ? "" : "s"}` : `${n} ${r.unit.replace(/s$/, "")}${n === 1 ? "" : "s"}`;
+    ach = sec("Achievements", `<div class="body ach"><div class="ach-top"><span><b>${A.unlocked}</b> of ${A.total_tiers} tiers unlocked</span><span><b>${A.points}</b> points · ${A.mastered} / ${A.tracks} mastered</span></div>
+      <table class="achs"><thead><tr><th>Achievement</th><th>Progress</th><th class="n">Tier</th></tr></thead><tbody>${A.rows.map(r => `<tr><td><span class="ai">${AI[r.key] || "&#9733;"}</span><div><b>${esc(r.name)}</b><small>${unit(r, r.value)}${r.next_at != null ? ` · ${unit(r, r.remaining)} to ${esc(r.next_tier)}` : " · maxed"}</small></div></td>
+        <td><div class="bar"><i style="width:${r.progress}%"></i></div><small>${r.progress}%</small></td><td class="n"><span class="tierb ${r.tier ? r.tier.toLowerCase() : "none"}">${r.tier ? esc(r.tier) : "—"}</span></td></tr>`).join("")}</tbody></table>
+      ${A.next ? `<div class="ach-next"><span>Next unlock: <b>${esc(A.next.name)} · ${esc(A.next.next_tier)}</b></span><span>${unit(A.next, A.next.remaining)} to go</span><div class="bar big"><i style="width:${A.next.progress}%"></i></div></div>` : ""}</div>`);
   }
-  const mini = `<section class="panel"><h2>Mini activity report</h2><div class="body" style="padding-top:2px">${act || `<span class="empty">${p.history_visible ? "Nothing in the last two weeks." : "Activity is visible to friends when shared."}</span>`}</div></section>`;
 
-  const fr = Array.isArray(p.friends) ? `<section class="panel"><h2>Friends (${p.friend_count})${self ? ` <a class="more" href="/friends">See all</a>` : ""}</h2><div class="body">${p.friends.length ? `<div class="fg">${p.friends.map(f => `<div><a href="/u/${encodeURIComponent(f.handle)}">${avatar(f.avatar, 56)}${esc(f.display_name || f.handle)}</a><div class="st ${f.game_name ? "pl" : f.status === "online" ? "on" : ""}">${f.game_name ? esc(f.game_name) : f.status === "online" ? "Online" : f.status === "away" ? "Away" : "Offline"}</div></div>`).join("")}</div>` : `<span class="empty">No friends yet.</span>`}</div></section>` : "";
+  // Mini activity: last 3 days, events + per-game daily totals
+  const cut = Date.now() - 3 * 86400e3;
+  const items = [];
+  (p.events || []).forEach(e => {
+    const at = new Date(e.at);
+    if (e.kind === "friend") items.push({ at, html: `<span class="ev">&#128101;</span><span><b>${esc(p.display_name || p.handle)}</b> is now friends with <a href="/u/${encodeURIComponent(e.handle)}">${esc(e.display_name || e.handle)}</a></span>` });
+    if (e.kind === "first_play") { const g = (p.games || []).find(x => x.game_id === e.game_id); if (g && g.listed !== false) items.push({ at, html: `${icon(g.game_id, g.name)}<span><b>${esc(p.display_name || p.handle)}</b> played <span class="gl">${esc(g.name)}</span> for the first time</span>` }); }
+  });
+  const daysM = new Map();
+  if (p.history_visible) (p.recent || []).forEach(r => {
+    const d = new Date(r.ended_at), k = d.toDateString();
+    if (!daysM.has(k)) daysM.set(k, { at: d, games: new Map() });
+    const g = daysM.get(k).games, gk = r.game_id + "|" + r.game_name, cur = g.get(gk) || { id: r.game_id, name: r.game_name, secs: 0, at: d };
+    cur.secs += r.duration_s || 0; if (d > cur.at) cur.at = d; g.set(gk, cur);
+  });
+  daysM.forEach(d => d.games.forEach(g => items.push({ at: g.at, old: g.at < cut, html: `${icon(g.id, g.name)}<span>Played ${isUnlisted(g.id) ? "a game" : `<span class="gl">${esc(g.name)}</span>`} for ${dur(g.secs)}</span>` })));
+  items.sort((x, y) => y.at - x.at);
+  let act = live ? `<div class="day">Now</div><div class="act">${icon(pres.game_id, pres.game_name)}<span>${isUnlisted(pres.game_id) ? "Playing a game now" : `Playing <span class="gl">${esc(pres.game_name)}</span> now`}${pres.session_started_at ? ` <span class="tm">for ${since(pres.session_started_at)}</span>` : ""}</span></div>` : "";
+  let lastDay = "", older = 0;
+  items.forEach(it => {
+    const lbl = dayLabel(it.at);
+    const blk = (lbl !== lastDay ? `<div class="day">${lbl}</div>` : "") + `<div class="act">${it.html}</div>`;
+    lastDay = lbl;
+    if (it.old) { act += `<div class="olda" hidden>${blk}</div>`; older++; } else act += blk;
+  });
+  const mini = sec("Mini activity", `<div class="body mini">${act || `<span class="empty">${p.history_visible ? "Nothing in the last few days." : "Activity is visible to friends when shared."}</span>`}${older ? `<div class="seemore"><a href="#" data-seemore>See more</a></div>` : ""}</div>`);
+
+  const fr = Array.isArray(p.friends) ? sec("Friends", `<div class="body">${p.friends.length ? `<div class="flist">${p.friends.map(f => `<div class="fi"><a href="/u/${encodeURIComponent(f.handle)}">${avatar(f.avatar, 32)}</a><div><a href="/u/${encodeURIComponent(f.handle)}">${esc(f.display_name || f.handle)}</a><div class="st ${f.game_name ? "pl" : f.status === "online" ? "on" : ""}">${f.game_name ? esc(f.game_name) : f.status === "online" ? "Online" : f.status === "away" ? "Away" : "Offline"}</div></div></div>`).join("")}</div>` : `<span class="empty">No friends yet.</span>`}</div>`, self ? `<a href="/friends">See all friends</a>` : `${p.friend_count}`) : "";
   const RIG = [["manufacturer", "Manufacturer"], ["cpu", "Processor"], ["gpu", "Video card"], ["memory", "Memory"], ["storage", "Storage"], ["motherboard", "Motherboard"], ["monitor", "Monitor"], ["headset", "Headset"], ["keyboard", "Keyboard"], ["mouse", "Mouse"], ["mousepad", "Mouse pad"], ["case", "Case"], ["os", "Operating system"]];
-  const rig = p.rig ? `<section class="panel"><h2>Gaming rig${self ? ` <a class="more" href="/settings#rig">Edit</a>` : ""}</h2><div class="body"><dl class="rig">${RIG.filter(([k]) => p.rig[k]).map(([k, l]) => `<dt>${l}</dt><dd>${esc(p.rig[k])}</dd>`).join("")}</dl></div></section>`
-    : self ? `<section class="panel"><h2>Gaming rig</h2><div class="body empty">Show off your setup. <a href="/settings#rig">Add your gaming rig</a>.</div></section>` : "";
-  const shareUrl = siteBase() + "/u/" + encodeURIComponent(p.handle);
-  const share = self ? `<section class="panel"><h2>Share your profile</h2><div class="body">${p.public_profile
-      ? `<div class="share"><input class="t" readonly value="${esc(shareUrl)}"><button class="btn sm" data-copy="${esc(shareUrl)}">Copy</button></div>
-         <p style="margin:10px 0 4px;color:var(--muted)">Signature image (updates with what you're playing):</p><img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png${sigBust()}" alt="Signature" width="460" height="100">
-         <div class="share" style="margin-top:6px"><input class="t" readonly value="${esc(sigUrl(p.handle))}"><button class="btn sm" data-copy="${esc(sigUrl(p.handle))}">Copy</button></div>`
-      : `<span class="empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></span>`}</div></section>` : "";
-  const discord = `<section class="panel"><h2>Discord server</h2><div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div></section>`;
+  const rig = p.rig ? sec("Gaming rig", `<div class="body"><dl class="rig">${RIG.filter(([k]) => p.rig[k]).map(([k, l]) => `<dt>${l}</dt><dd>${esc(p.rig[k])}</dd>`).join("")}</dl></div>`, self ? `<a href="/settings#rig">Edit</a>` : "")
+    : self ? sec("Gaming rig", `<div class="body empty">Show off your setup. <a href="/settings#rig">Add your gaming rig</a>.</div>`) : "";
+  const discord = sec("Discord server", `<div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div>`);
 
-  root.innerHTML = head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${mini}</div><aside class="col">${fr}${rig}${share}${discord}</aside></div>`;
-
+  root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${miniprofile}${details}${games}${ach}</div><aside class="col">${mini}${fr}${rig}${discord}</aside></div></div>`;
+  const sm = $("[data-seemore]", root);
+  if (sm) sm.addEventListener("click", e => { e.preventDefault(); $$(".olda", root).forEach(x => x.hidden = false); sm.parentNode.remove(); });
+  const rp = $("[data-report-profile]", root);
+  if (rp) rp.addEventListener("click", async e => {
+    e.preventDefault(); const reason = prompt("Report this profile to the Fraglink moderators. What's wrong? (name, about text, impersonation...)"); if (reason === null) return;
+    try { await api("/users/" + encodeURIComponent(p.handle) + "/report", { method: "POST", body: { reason } }); rp.textContent = "Reported. Thanks."; } catch (x) { alert(x.message); }
+  });
   const add = $("[data-add]", root), acc = $("[data-accept]", root), more = $("[data-more]", root), rep = $("[data-report]", root);
   if (add) add.addEventListener("click", async () => { if (!token()) return requireLogin(); add.disabled = true; try { await api("/friends/request", { method: "POST", body: { handle: p.handle } }); add.textContent = "Friend request sent"; } catch (e) { add.disabled = false; alert(e.message); } });
   if (acc) acc.addEventListener("click", async () => { acc.disabled = true; try { await api("/friends/respond", { method: "POST", body: { handle: p.handle, accept: true } }); location.reload(); } catch (e) { acc.disabled = false; alert(e.message); } });
@@ -646,6 +690,10 @@ pages.settings = async () => {
     <h3>About you</h3><form data-f="about">${msg}<div class="frm">
       ${row("About me", `<textarea class="t" name="about" maxlength="300">${esc(u.about || "")}</textarea>`, "Up to 300 characters.")}
       ${row("Location", `<input class="t" name="location" maxlength="40" value="${esc(u.location || "")}" placeholder="e.g. Sydney, Australia">`, "Optional. Shown on your profile as typed.")}
+      ${row("Country", `<select class="t" name="country"><option value="">(not shown)</option>${COUNTRIES().map(([c, n]) => `<option value="${c}" ${(u.details || {}).country === c ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>`, "Shows a small flag next to your location.")}
+      ${row("Real name", `<input class="t" name="real_name" maxlength="40" value="${esc((u.details || {}).real_name || "")}">`, "Optional.")}
+      ${row("Gender", `<input class="t" name="gender" maxlength="20" value="${esc((u.details || {}).gender || "")}">`, "Optional, as you'd like it shown.")}
+      ${row("Birthday", `<input class="t" type="date" name="birth_date" value="${esc((u.details || {}).birth_date || "")}">`, "Optional. Only your age is shown, never the date. Hide it in Privacy.")}
       ${row("Gaming style", `<select class="t" name="gaming_style"><option value="">(none)</option>${STYLES.map(s => `<option ${u.gaming_style === s ? "selected" : ""}>${s}</option>`).join("")}</select>`)}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
     <h3>Change email</h3><form data-f="email">${msg}<div class="frm">
@@ -686,7 +734,8 @@ pages.settings = async () => {
     return `<h3>Privacy</h3><form data-f="privacy">${msg}<div class="frm">
       ${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""}>Only my friends can see my profile</label>`, "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page lists, and your signature image is switched off.")}
       ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}${sw("name_history", "Previous nicknames (\"Previously known as\")")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
-      ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location")}${sw("gaming_style", "Gaming style")}`)}
+      ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location &amp; country")}${sw("gaming_style", "Gaming style")}${sw("real_name", "Real name")}${sw("gender", "Gender")}${sw("age", "Age")}`)}
+      ${row("Achievements", `${sw("achievements", "Show my achievements")}`, "Needs Games &amp; hours shown.")}
       ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
       ${row("Your link", `<div class="share"><input class="t" readonly value="${esc(share)}"><button class="btn sm" type="button" data-copy="${esc(share)}">Copy</button></div>`)}
       ${!priv ? row("Signature image", `<img class="sigimg" src="/api/v1/sig/${encodeURIComponent(u.handle)}.png${sigBust()}" alt="" width="460" height="100"><div class="share" style="margin-top:6px"><input class="t" readonly value="${esc(sigUrl(u.handle))}"><button class="btn sm" type="button" data-copy="${esc(sigUrl(u.handle))}">Copy</button></div>`, "Paste the image link into forum signatures. It refreshes within about 30 seconds.") : ""}
@@ -776,6 +825,7 @@ pages.settings = async () => {
       else if (k === "about" || k === "rig") {
         const rig = Object.assign({}, u.rig || {}); if (k === "rig") RIG_FIELDS.forEach(([n]) => { rig[n] = v(n); });
         const body = { about: k === "about" ? v("about") : u.about, location: k === "about" ? v("location") : u.location, gaming_style: (k === "about" ? v("gaming_style") : u.gaming_style) || null, rig };
+        if (k === "about") Object.assign(body, { country: v("country"), real_name: v("real_name"), gender: v("gender"), birth_date: v("birth_date") });
         const r = await api("/me/profile", { method: "POST", body }); Object.assign(u, r); ok(f, "Saved.");
       }
       else if (k === "email") { await api("/me/email", { method: "POST", body: { current_password: v("current_password"), new_email: v("new_email").trim() } }); await refresh(); render(); ok($("#pane"), "Email changed."); }

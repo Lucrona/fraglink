@@ -5,6 +5,7 @@
 #![allow(clippy::type_complexity)]
 
 pub mod account;
+pub mod achievements;
 pub mod activity;
 pub mod admin;
 pub mod api;

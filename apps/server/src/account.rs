@@ -108,6 +108,7 @@ pub async fn me_extra(st: &AppState, uid: Uuid) -> ApiResult<Value> {
         "notify_prefs": notify_defaults(&prefs),
         "delete_after": delete_after, "created_at": created,
         "mfa": mfa::status(st, uid).await?,
+        "details": details_json(st, uid).await?,
         "mail_live": mailer::live(st),
         "avatar_upload_allowed": avatars::upload_block_reason(st, uid).await?.is_none(),
         "avatar_upload_block": avatars::upload_block_reason(st, uid).await?,
@@ -319,6 +320,11 @@ struct ProfileReq {
     location: Option<String>,
     gaming_style: Option<String>,
     rig: Option<Map<String, Value>>,
+    // Absent = unchanged; "" or null = cleared.
+    real_name: Option<Value>,
+    gender: Option<Value>,
+    birth_date: Option<Value>,
+    country: Option<Value>,
 }
 
 fn clean(s: Option<String>, max: usize) -> Option<String> {
@@ -368,6 +374,60 @@ async fn save_profile(
     .bind(Value::Object(rig))
     .execute(&st.db)
     .await?;
+    let txt = |v: &Value| v.as_str().map(String::from);
+    if let Some(v) = &r.real_name {
+        sqlx::query("UPDATE users SET real_name = $2 WHERE id = $1")
+            .bind(a.user.id)
+            .bind(clean(txt(v), 40))
+            .execute(&st.db)
+            .await?;
+    }
+    if let Some(v) = &r.gender {
+        sqlx::query("UPDATE users SET gender = $2 WHERE id = $1")
+            .bind(a.user.id)
+            .bind(clean(txt(v), 20))
+            .execute(&st.db)
+            .await?;
+    }
+    if let Some(v) = &r.country {
+        let c = clean(txt(v), 2).map(|c| c.to_ascii_uppercase());
+        if c.as_ref()
+            .is_some_and(|c| c.len() != 2 || !c.chars().all(|x| x.is_ascii_uppercase()))
+        {
+            return Err(AppError::bad_request(
+                "invalid_country",
+                "Pick a country from the list.",
+            ));
+        }
+        sqlx::query("UPDATE users SET country = $2 WHERE id = $1")
+            .bind(a.user.id)
+            .bind(c)
+            .execute(&st.db)
+            .await?;
+    }
+    if let Some(v) = &r.birth_date {
+        let d = match clean(txt(v), 10) {
+            None => None,
+            Some(s) => {
+                let d = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").map_err(|_| {
+                    AppError::bad_request("invalid_birth_date", "Birthday must be a date.")
+                })?;
+                let age = (Utc::now().date_naive() - d).num_days() / 365;
+                if !(13..=120).contains(&age) {
+                    return Err(AppError::bad_request(
+                        "invalid_birth_date",
+                        "You must be at least 13 to give a birthday.",
+                    ));
+                }
+                Some(d)
+            }
+        };
+        sqlx::query("UPDATE users SET birth_date = $2 WHERE id = $1")
+            .bind(a.user.id)
+            .bind(d)
+            .execute(&st.db)
+            .await?;
+    }
     me_extra(&st, a.user.id).await.map(Json)
 }
 
@@ -614,10 +674,24 @@ pub async fn purge_loop(st: AppState) {
     }
 }
 
+/// Real name, gender, birthday and country as stored (owner's own view).
+pub async fn details_json(st: &AppState, uid: Uuid) -> ApiResult<Value> {
+    let (rn, g, b, c): (
+        Option<String>,
+        Option<String>,
+        Option<chrono::NaiveDate>,
+        Option<String>,
+    ) = sqlx::query_as("SELECT real_name, gender, birth_date, country FROM users WHERE id = $1")
+        .bind(uid)
+        .fetch_one(&st.db)
+        .await?;
+    Ok(json!({ "real_name": rn, "gender": g, "birth_date": b, "country": c }))
+}
+
 // ------------------------------------------------------------------ per-feature privacy
 
 /// Per-feature visibility switches stored in `users.privacy` (missing key = shown).
-pub const PRIVACY_KEYS: [&str; 8] = [
+pub const PRIVACY_KEYS: [&str; 12] = [
     "now_playing",
     "games",
     "rig",
@@ -626,6 +700,10 @@ pub const PRIVACY_KEYS: [&str; 8] = [
     "gaming_style",
     "leaderboards",
     "name_history",
+    "real_name",
+    "gender",
+    "age",
+    "achievements",
 ];
 
 /// Whether `key` is shown (true unless explicitly switched off).

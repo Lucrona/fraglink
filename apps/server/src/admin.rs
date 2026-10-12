@@ -72,6 +72,11 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/staff/transfer", post(staff_transfer))
         .route("/api/v1/admin/audit", get(audit_list))
         .route("/api/v1/admin/avatar_reports", get(avatar_reports))
+        .route("/api/v1/admin/profile_reports", get(profile_reports))
+        .route(
+            "/api/v1/admin/profile_reports/{id}/dismiss",
+            post(profile_dismiss),
+        )
         .route(
             "/api/v1/admin/avatar_reports/{id}/dismiss",
             post(avatar_dismiss),
@@ -2215,6 +2220,53 @@ async fn game_status_save(
     )
     .await?;
     Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
+}
+
+// ------------------------------------------------------------------ profile reports
+
+async fn profile_reports(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let rows: Vec<(Uuid, String, i64, DateTime<Utc>, Option<String>)> = sqlx::query_as(
+        "SELECT u.id, u.handle, count(*), max(r.created_at),
+                (array_agg(r.reason ORDER BY r.created_at DESC) FILTER (WHERE r.reason IS NOT NULL))[1]
+         FROM profile_reports r JOIN users u ON u.id = r.target
+         WHERE r.resolved_at IS NULL AND u.deleted_at IS NULL
+         GROUP BY u.id, u.handle ORDER BY max(r.created_at) DESC LIMIT 200",
+    )
+    .fetch_all(&st.db)
+    .await?;
+    let list: Vec<Value> = rows
+        .into_iter()
+        .map(|(id, h, n, at, reason)| json!({ "user_id": id, "handle": h, "reports": n, "last_at": at, "reason": reason }))
+        .collect();
+    Ok(Json(json!({ "reports": list })))
+}
+
+async fn profile_dismiss(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let (handle, _, _) = target(&st, id).await?;
+    let n = sqlx::query(
+        "UPDATE profile_reports SET resolved_at = now(), resolved_by = $2 WHERE target = $1 AND resolved_at IS NULL",
+    )
+    .bind(id)
+    .bind(s.user.id)
+    .execute(&st.db)
+    .await?
+    .rows_affected();
+    audit(
+        &st,
+        &s,
+        "profile_report.dismiss",
+        &format!("user:{handle}"),
+        Value::Null,
+        json!({ "reports": n }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
 }
 
 // ------------------------------------------------------------------ avatars & two-step

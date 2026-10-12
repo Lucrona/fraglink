@@ -903,3 +903,107 @@ async fn connect_steam_start_and_unlink(pool: PgPool) {
         .json();
     assert!(c["discord"]["linked"].is_null());
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn profile_details_events_achievements_report(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let a = signup(&app, "pd1@example.com", "pda").await;
+    let b = signup(&app, "pd2@example.com", "pdb").await;
+    for (t, h) in [(&a, "pdb"), (&b, "pda")] {
+        api(
+            &app,
+            "POST",
+            "/api/v1/friends/request",
+            Some(t),
+            Some(json!({"handle": h})),
+        )
+        .await;
+    }
+    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true) ON CONFLICT DO NOTHING")
+        .execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s)
+         SELECT gen_random_uuid(), id, 'wow', now() - interval '13 hours', now() - interval '1 hour', 43200 FROM users WHERE handle = 'pda'",
+    )
+    .execute(&pool).await.unwrap();
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/me/profile",
+        Some(&a),
+        Some(json!({
+            "about": null, "location": "Sydney", "gaming_style": null, "rig": {},
+            "country": "au", "real_name": "Al", "gender": "Male", "birth_date": "2000-01-15"
+        })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["details"]["country"], "AU");
+    let bad = api(
+        &app,
+        "POST",
+        "/api/v1/me/profile",
+        Some(&a),
+        Some(json!({"birth_date": "2024-01-01"})),
+    )
+    .await;
+    assert_eq!(bad.status, StatusCode::BAD_REQUEST);
+    let p = api(&app, "GET", "/api/v1/users/pda/profile", Some(&b), None)
+        .await
+        .json();
+    assert_eq!(p["country"], "AU");
+    assert_eq!(p["real_name"], "Al");
+    assert!(p["age"].as_i64().unwrap() >= 25);
+    let kinds: Vec<&str> = p["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e["kind"].as_str())
+        .collect();
+    assert!(
+        kinds.contains(&"friend") && kinds.contains(&"first_play"),
+        "{kinds:?}"
+    );
+    assert_eq!(p["achievements"]["rows"][0]["tier"], "Bronze"); // 12 hours
+    assert_eq!(p["achievements"]["rows"][4]["tier"], "Platinum"); // 12-hour session
+                                                                  // hide age + achievements
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&a),
+        Some(json!({"privacy": {"age": false, "achievements": false}})),
+    )
+    .await;
+    let p = api(&app, "GET", "/api/v1/users/pda/profile", Some(&b), None)
+        .await
+        .json();
+    assert!(p["age"].is_null() && p["achievements"].is_null());
+    // report
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/users/pda/report",
+        Some(&b),
+        Some(json!({"reason": "rude"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(
+        api(
+            &app,
+            "POST",
+            "/api/v1/users/pda/report",
+            Some(&a),
+            Some(json!({}))
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM profile_reports")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+}

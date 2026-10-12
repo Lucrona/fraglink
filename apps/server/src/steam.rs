@@ -328,6 +328,42 @@ pub struct ImportResult {
     pub minutes_total: i64,
 }
 
+/// Look up a Steam persona name (public community XML, no key needed) and store it as
+/// the link's display name. Best effort: failures leave the old value.
+pub async fn refresh_persona(state: &AppState, user_id: Uuid, steamid: u64) {
+    let base = std::env::var("FRAGLINK_STEAM_COMMUNITY")
+        .unwrap_or_else(|_| "https://steamcommunity.com".into());
+    let Ok(http) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+    else {
+        return;
+    };
+    let Ok(r) = http
+        .get(format!("{base}/profiles/{steamid}?xml=1"))
+        .send()
+        .await
+    else {
+        return;
+    };
+    let body = r.text().await.unwrap_or_default();
+    let name = body
+        .split_once("<steamID><![CDATA[")
+        .and_then(|(_, t)| t.split_once("]]>"))
+        .map(|(n, _)| n.trim().chars().take(64).collect::<String>())
+        .filter(|n| !n.is_empty());
+    if let Some(n) = name {
+        let _ = sqlx::query(
+            "UPDATE linked_accounts SET display = $3 WHERE user_id = $1 AND provider = 'steam' AND provider_uid = $2",
+        )
+        .bind(user_id)
+        .bind(steamid.to_string())
+        .bind(n)
+        .execute(&state.db)
+        .await;
+    }
+}
+
 /// Save (or refresh) a Steam link.
 pub async fn link(state: &AppState, user_id: Uuid, steamid: u64, verified: bool) -> ApiResult<()> {
     if verified {

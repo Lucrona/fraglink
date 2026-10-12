@@ -96,7 +96,14 @@ async function avatarReports() {
     const b = e.target.closest("button"); if (!b) return; const tr = b.closest("tr[data-id]"); const id = tr.dataset.id;
     if (b.matches("[data-rm]")) await act(b, async () => { await api(`/admin/users/${id}/avatar/remove`, { method: "POST" }); tr.remove(); });
     else if (b.matches("[data-ok]")) await act(b, async () => { await api(`/admin/avatar_reports/${id}/dismiss`, { method: "POST" }); tr.remove(); });
+    else if (b.matches("[data-pok]")) await act(b, async () => { await api(`/admin/profile_reports/${id}/dismiss`, { method: "POST" }); tr.remove(); });
   };
+  const pr = await api("/admin/profile_reports");
+  view.insertAdjacentHTML("beforeend", `<section class="panel"><h2>Reported profiles</h2><div class="note">From "Report this profile". Open the player to change their nickname, ban them or reset details; Dismiss closes the reports.</div>
+    ${pr.reports.length ? `<table><thead><tr><th>Player</th><th class="num">Reports</th><th>Latest reason</th><th>Last report</th><th class="num"></th></tr></thead><tbody>
+    ${pr.reports.map(r => `<tr data-id="${esc(r.user_id)}"><td><a href="#user/${esc(r.user_id)}">${esc(r.handle)}</a> · <a href="/u/${encodeURIComponent(r.handle)}" target="_blank">profile</a></td><td class="num">${r.reports}</td><td>${esc(r.reason || "")}</td><td>${when(r.last_at)}</td>
+      <td class="num"><button class="btn sm" data-pok>Dismiss</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No open reports.</div>`}</section>`);
+  badge("avatars", d.reports.length + pr.reports.length);
 }
 function badge(tab, n) { const s = $(`.tabs a[data-tab=${tab}] .n`); if (s) { s.textContent = n; s.hidden = !n; } }
 

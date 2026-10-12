@@ -174,7 +174,9 @@ async fn finish(
                     .steam
                     .verify_openid_at(&return_url(&st, "steam"), &q)
                     .await?;
-                crate::steam::link(&st, uid, id, true).await
+                crate::steam::link(&st, uid, id, true).await?;
+                crate::steam::refresh_persona(&st, uid, id).await;
+                Ok(())
             }
             "discord" | "bnet" => {
                 let code = q.get("code").ok_or_else(|| {

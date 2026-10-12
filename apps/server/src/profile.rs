@@ -25,6 +25,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/users/{handle}/profile", get(profile))
         .route("/api/v1/me/display_name", post(set_display_name))
+        .route("/api/v1/users/{handle}/report", post(report_profile))
 }
 
 #[derive(Deserialize)]
@@ -349,6 +350,63 @@ async fn profile(
             }));
         }
     }
+    // Extra details (each behind its own switch) and age from the birthday.
+    let (real_name, gender, birth, country): (
+        Option<String>,
+        Option<String>,
+        Option<chrono::NaiveDate>,
+        Option<String>,
+    ) = sqlx::query_as("SELECT real_name, gender, birth_date, country FROM users WHERE id = $1")
+        .bind(p.id)
+        .fetch_one(&st.db)
+        .await?;
+    let age = birth.map(|b| {
+        let t = Utc::now().date_naive();
+        use chrono::Datelike;
+        t.year() - b.year() - i32::from((t.month(), t.day()) < (b.month(), b.day()))
+    });
+    // Mini activity events for the last 3 days: new friends and first plays.
+    let mut events: Vec<Value> = Vec::new();
+    if is_self || show_friends {
+        let rows: Vec<(String, String, DateTime<Utc>)> = sqlx::query_as(
+            "SELECT u.handle, u.display_name, f.accepted_at FROM friendships f
+             JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END
+             WHERE (f.user_a = $1 OR f.user_b = $1) AND f.status = 'accepted'
+               AND f.accepted_at > now() - interval '3 days' AND u.delete_after IS NULL AND u.banned_at IS NULL
+             ORDER BY f.accepted_at DESC LIMIT 10",
+        )
+        .bind(p.id)
+        .fetch_all(&st.db)
+        .await?;
+        events.extend(rows.into_iter().map(
+            |(h, d, at)| json!({ "kind": "friend", "at": at, "handle": h, "display_name": d }),
+        ));
+    }
+    if can_see_history && can_see_games {
+        let rows: Vec<(String, DateTime<Utc>)> = sqlx::query_as(
+            "SELECT game_id, min(started_at) FROM sessions WHERE user_id = $1 AND NOT (game_id = ANY($2))
+             GROUP BY game_id HAVING min(started_at) > now() - interval '3 days' ORDER BY 2 DESC LIMIT 10",
+        )
+        .bind(p.id)
+        .bind(&hidden)
+        .fetch_all(&st.db)
+        .await?;
+        events.extend(
+            rows.into_iter()
+                // only games the viewer can see by name (never leak an unlisted id)
+                .filter(|(g, _)| {
+                    games
+                        .iter()
+                        .any(|x| x["game_id"] == g.as_str() && x["listed"] == true)
+                })
+                .map(|(g, at)| json!({ "kind": "first_play", "at": at, "game_id": g })),
+        );
+    }
+    let achievements = if can_see_games && show("achievements") {
+        crate::achievements::for_user(&st, p.id, &hidden).await?
+    } else {
+        Value::Null
+    };
     if can_see_history {
         recent = recent_sessions(&st, p.id, is_self).await?;
         recent.retain(|r| {
@@ -391,13 +449,35 @@ async fn profile(
         friend_grid = json!(list);
     }
 
-    let linked: Value = sqlx::query_scalar(
-        "SELECT coalesce(jsonb_agg(jsonb_build_object('provider', provider, 'display', display)), '[]'::jsonb)
-         FROM linked_accounts WHERE user_id = $1 AND verified AND show_on_profile",
+    // Never expose a raw SteamID as a name: until the persona name is known, display is null
+    // (and a lookup runs in the background).
+    let rows: Vec<(String, Option<String>, String)> = sqlx::query_as(
+        "SELECT provider, display, provider_uid FROM linked_accounts
+         WHERE user_id = $1 AND verified AND show_on_profile ORDER BY array_position(ARRAY['steam','bnet','discord'], provider)",
     )
     .bind(p.id)
-    .fetch_one(&st.db)
+    .fetch_all(&st.db)
     .await?;
+    let linked: Value = rows
+        .into_iter()
+        .map(|(prov, display, puid)| {
+            let raw = display.as_deref().is_none_or(|d| d == puid);
+            if prov == "steam" {
+                if raw {
+                    if let Ok(sid) = puid.parse::<u64>() {
+                        let (st2, uid) = (st.clone(), p.id);
+                        tokio::spawn(
+                            async move { crate::steam::refresh_persona(&st2, uid, sid).await },
+                        );
+                    }
+                }
+                json!({ "provider": prov, "display": if raw { None } else { display },
+                        "url": format!("https://steamcommunity.com/profiles/{puid}") })
+            } else {
+                json!({ "provider": prov, "display": display })
+            }
+        })
+        .collect();
     let has_rig = rig.as_object().is_some_and(|o| !o.is_empty());
 
     Ok(Json(json!({
@@ -421,6 +501,12 @@ async fn profile(
         "about": if show("about") { about } else { None },
         "location": if show("location") { location } else { None },
         "gaming_style": if show("gaming_style") { style } else { None },
+        "real_name": if show("real_name") { real_name } else { None },
+        "gender": if show("gender") { gender } else { None },
+        "age": if show("age") { age } else { None },
+        "country": if show("location") { country } else { None },
+        "events": events,
+        "achievements": achievements,
         "rig": if has_rig && show("rig") { rig } else { Value::Null },
         "friends": friend_grid,
         "linked": linked,
@@ -455,4 +541,53 @@ async fn recent_sessions(st: &AppState, user: Uuid, is_self: bool) -> ApiResult<
             json!({ "game_id": id, "game_name": name, "ended_at": ended, "duration_s": secs })
         })
         .collect())
+}
+
+#[derive(Deserialize)]
+struct ReportReq {
+    reason: Option<String>,
+}
+
+/// Report a profile to the moderators (one open report per reporter and profile).
+async fn report_profile(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Path(handle): Path<String>,
+    Json(r): Json<ReportReq>,
+) -> ApiResult<Json<Value>> {
+    api::check_origin(&a, &headers, &st)?;
+    st.rate_limit(
+        format!("profile-report:{}", a.user.id),
+        10,
+        std::time::Duration::from_secs(3600),
+    )?;
+    let p = friends::find_by_handle(&st, &handle).await?;
+    if p.id == a.user.id {
+        return Err(AppError::bad_request(
+            "own_profile",
+            "You can't report yourself.",
+        ));
+    }
+    let reason: Option<String> = r
+        .reason
+        .map(|s| {
+            s.chars()
+                .filter(|c| !c.is_control())
+                .take(300)
+                .collect::<String>()
+                .trim()
+                .to_string()
+        })
+        .filter(|s| !s.is_empty());
+    sqlx::query(
+        "INSERT INTO profile_reports(target, reporter, reason) VALUES($1, $2, $3)
+         ON CONFLICT (target, reporter) WHERE resolved_at IS NULL DO UPDATE SET reason = excluded.reason",
+    )
+    .bind(p.id)
+    .bind(a.user.id)
+    .bind(reason)
+    .execute(&st.db)
+    .await?;
+    Ok(Json(json!({ "ok": true })))
 }
