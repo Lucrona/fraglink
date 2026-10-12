@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+Next release: 0.3.0-beta.1 (the first beta; releases are now numbered 0.3.0-beta.1, 0.3.0-beta.2, …).
+
+### Added
+- Announcements from the Fraglink team now show as a slim banner under the header. Click it to open the link, or × to hide it.
+
+### Changed
+- Friends you put in your own groups still show under Friends Online when they're on, like Steam.
+- Your groups show how many are online out of everyone in them, e.g. (2/5).
+- Your own status shows just the game icon and name while you play.
+- Hovering a friend shows their nickname with their @username next to it.
+
 ## [0.2.0-dev.21] - 2026-10-12
 Test update (builds report `0.2.0-21`).
 

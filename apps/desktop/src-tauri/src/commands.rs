@@ -519,6 +519,21 @@ pub async fn account_notifications(
     account_call(app, move |c| c.set_notifications(patch)).await
 }
 
+/// The staff announcement (the website's banner) for the banner under the app's header.
+#[tauri::command]
+pub async fn announcement(app: AppHandle) -> CmdResult<serde_json::Value> {
+    account_call(app, |c| c.announcement()).await
+}
+
+/// Opens the announcement's link (https only; staff set it on the website).
+#[tauri::command]
+pub fn open_link(url: String) -> CmdResult<()> {
+    if !url.starts_with("https://") || url.len() > 300 || url.chars().any(|c| c.is_whitespace()) {
+        return Err("not a web link".into());
+    }
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(err)
+}
+
 const PROVIDERS: [&str; 3] = ["steam", "discord", "bnet"];
 
 /// Options > Connections: linked accounts from the server.

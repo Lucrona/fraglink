@@ -844,6 +844,8 @@ pub fn run() {
             commands::account_privacy,
             commands::account_notifications,
             commands::connections,
+            commands::announcement,
+            commands::open_link,
             commands::connect_start,
             commands::connect_unlink,
             commands::sync_login,

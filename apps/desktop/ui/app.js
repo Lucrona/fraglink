@@ -303,22 +303,27 @@
     const inGroup = f => groups.includes(moved[f.handle || f.id]);
     const favs = jsonList('favorite_friends');
     F = F.map(f => favs.includes(f.handle || f.id) ? { ...f, fav: true } : f);
-    const custom = Object.fromEntries(groups.map(g => [g, sorted(F.filter(f => moved[f.handle || f.id] === g))]));
-    F = F.filter(f => !inGroup(f));
+    // Steam-style: a friend in your own group is listed there AND still under Friends Online /
+    // Friends Offline, so the online list always shows everyone who's on.
+    const custom = Object.fromEntries(groups.map(g => [g, sortedOnlineFirst(F.filter(f => moved[f.handle || f.id] === g))]));
+    void inGroup;
     const on = sorted(F.filter(f => f.kind === 'playing')).concat(sorted(F.filter(f => f.kind === 'online')));
     const fof = sorted(F.filter(f => f.kind === 'fof')), reqs = F.filter(f => f.kind === 'req' || f.kind === 'out'), off = sorted(F.filter(f => f.kind === 'off'));
-    const block = (key, label, cls, rows, rowCls = '') => {
+    const block = (key, label, cls, rows, rowCls = '', count) => {
       if (hidden.includes(key)) return '';
-      return sec(key, label, cls, rows.length) + (state.collapsed[key] ? '' : rows.map(f => row(f, rowCls)).join(''));
+      return sec(key, label, cls, count != null ? count : rows.length) + (state.collapsed[key] ? '' : rows.map(f => row(f, rowCls || (f.kind === 'off' ? 'off' : ''))).join(''));
     };
+    const onlineOf = rows => rows.filter(f => f.kind === 'playing' || f.kind === 'online').length;
     let h = note || '';
     h += block('online', GROUP_NAMES.online, 's-on', on);
     if (setOn('show_fof')) h += block('fof', 'Friends of Friends Playing', 's-fof', fof, 'fof');
     if (reqs.length) h += block('req', GROUP_NAMES.req, 's-fof', reqs, 'req');
-    for (const g of groups) h += block('c:' + g, esc(g), 's-cus', custom[g]);
+    // your groups count who's on out of everyone in it, e.g. (2/5)
+    for (const g of groups) h += block('c:' + g, esc(g), 's-cus', custom[g], '', `${onlineOf(custom[g])}/${custom[g].length}`);
     if (setOn('show_offline')) h += block('off', GROUP_NAMES.off, 's-off', off, 'off');
     return h;
   }
+  const sortedOnlineFirst = arr => sorted(arr.filter(f => f.kind === 'playing')).concat(sorted(arr.filter(f => f.kind === 'online')), sorted(arr.filter(f => f.kind !== 'playing' && f.kind !== 'online')));
   function sorted(arr) {
     const { key, dir } = state.sort;
     return [...arr].sort((a, b) => (key === 'name' ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) : statusText(a).localeCompare(statusText(b))) * dir);
@@ -994,6 +999,27 @@
   document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#username, #px-user')) openNickname(); });
   // a nickname changed in Options (or on the website) shows up when the window is next focused
   addEventListener('focus', () => { if (realMode()) { LIVE.meAvFor = null; syncStatus(); } });
+  /* Staff announcement banner under the header (the website's banner). Hidden ones stay hidden. */
+  let newsCur = null;
+  async function loadNews() {
+    if (!FLB.announcement || (TAURI && !realMode())) return showNews(null);
+    try { const r = await FLB.announcement(); showNews(r && r.announcement); } catch (e) { /* offline: keep what's shown */ }
+  }
+  function showNews(a) {
+    const el = $('#news'), gone = (localStorage.getItem('fl-news-hidden') || '') === String(a && a.id);
+    newsCur = a && a.message && !gone ? a : null;
+    el.hidden = !newsCur; document.body.classList.toggle('has-news', !!newsCur);
+    if (!newsCur) return;
+    el.className = 'fl-news ' + (/^(warn|warning|alert)$/.test(a.style || '') ? 'warn' : 'info') + (a.link ? ' linked' : '');
+    el.querySelector('.nw-t').textContent = String(a.message).slice(0, 200);
+    el.dataset.tip = a.link ? 'Click to open' : '';
+  }
+  $('#news').addEventListener('click', e => {
+    if (!newsCur) return;
+    if (e.target.closest('.nw-x')) { localStorage.setItem('fl-news-hidden', String(newsCur.id)); showNews(null); return; }
+    if (newsCur.link && /^https:\/\//.test(newsCur.link)) { if (FLB.openUrl) FLB.openUrl(newsCur.link).catch(() => {}); else open(newsCur.link, '_blank'); }
+  });
+  setTimeout(loadNews, 1500); setInterval(loadNews, 15 * 60 * 1000); addEventListener('focus', () => loadNews());
   function notice(title, html) {
     const foot = $('#notice .dlg-foot'); foot.innerHTML = `<button class="hw" data-action="notice-close" type="button">OK</button>`;
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false; placeDlg($('#notice'));
@@ -1280,8 +1306,9 @@
   const mutualOf = f => (f.mutual || ((f.info || '').match(/via ([^·]+)/) || [])[1] || '').split(',').map(x => x.trim()).filter(Boolean);
   function tipHtml(f) {
     const L = (k, v) => v ? `<div><b>${k}</b> ${esc(v)}</div>` : '';
-    const user = f.handle || f.name, nick = f.handle && f.name !== f.handle ? f.name : '';
-    let h = L('Username:', user) + L('Nickname:', nick);
+    // nickname first, the permanent @username beside it
+    const user = f.handle || f.name, nick = f.name || user;
+    let h = `<div class="tip-who"><b>${esc(nick)}</b> <span>@${esc(user)}</span></div>`;
     if (f.kind === 'playing' || f.kind === 'fof') {
       h += L('Playing:', GAMES[f.game] && gameLabel(f)) + L('Realm:', realmOf(f));
       if (f.real) h += L('Session:', f.server);
@@ -1437,13 +1464,13 @@
     btn.disabled = signedOut();
     if (btn.disabled) { btn.querySelector('span').textContent = 'Offline'; btn.dataset.user = '(Offline)'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
     const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? np.name : '';
-    const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? 'Playing ' + game : 'Online';
+    const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? game : 'Online';
     // hover: the game with its detail (WoW realm), e.g. "Playing World of Warcraft: Forever · Frostmourne"
     const detail = SHOW_REALM && game && np.detail ? ' · ' + np.detail : '';
     const tipTxt = detail && txt.includes(game) ? txt.replace(game, game + detail) : txt;
-    // dev.21: the game's 16 px icon right before "Playing …" (nothing when not in a game)
-    const stIcon = game && !auto && txt.startsWith('Playing ') ? `<i class="st-gi">${gameIcon(ensureGame(np.game_id, np.name))}</i>` : '';
-    btn.querySelector('span').innerHTML = stIcon + esc(txt); btn.dataset.tip = (detail ? '' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
+    // the game's 16 px icon and its name (no "Playing"; the hover says it), nothing when not in a game
+    const stIcon = game && txt.startsWith(game) ? `<i class="st-gi">${gameIcon(ensureGame(np.game_id, np.name))}</i>` : '';
+    btn.querySelector('span').innerHTML = stIcon + esc(txt); btn.dataset.tip = (detail ? '' : game && txt.startsWith(game) ? 'Playing ' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();
     const me = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
     // nickname shown, username (permanent) in the hover; click either to change the nickname

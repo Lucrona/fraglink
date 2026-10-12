@@ -43,6 +43,8 @@
       privacy: (patch) => inv('account_privacy', { patch }),
       notifications: (patch) => inv('account_notifications', { patch }),
       connections: () => inv('connections'),
+      announcement: () => inv('announcement'),
+      openUrl: (url) => inv('open_link', { url }),
       connectStart: (provider) => inv('connect_start', { provider }),
       connectUnlink: (provider) => inv('connect_unlink', { provider }),
       changePassword: (current, next) => inv('account_change_password', { current, new: next }),
@@ -106,6 +108,7 @@
     { id: 1, ts: now() - 12 * 86400, kind: 'stopped', game_id: 'cs2', game_name: 'Counter-Strike 2', payload: { active_seconds: 7300 } },
   ];
   const settings = { skin: localStorage.getItem('fl-skin') || 'dark', friend_toasts: '1', friend_toasts_dnd: '1', zoom: '2', toasts: '1', status: 'online' };
+  try { Object.assign(settings, JSON.parse(new URLSearchParams(location.search).get('set') || '{}')); } catch (e) { /* preview only */ }
   let paused = false;
   const ok = v => Promise.resolve(v);
   window.FL = {
@@ -179,6 +182,7 @@
     privacy: (patch) => { const m = mockPriv; if (patch.privacy) Object.assign(m.privacy, patch.privacy); for (const k of ['public_profile', 'share_activity', 'show_friends']) if (k in patch) m[k] = patch[k]; return ok(m); },
     notifications: (patch) => ok(patch),
     connections: () => ok(mockConn),
+    announcement: () => ok({ announcement: new URLSearchParams(location.search).get('news') ? { id: 7, message: new URLSearchParams(location.search).get('news'), style: 'info', link: 'https://playfraglink.com/' } : null }),
     connectStart: (p) => { mockConn[p].linked = { uid: '765', display: p === 'steam' ? 'Lucrona' : 'Lucrona#1234', verified: true }; return ok(); },
     connectUnlink: (p) => { mockConn[p].linked = null; return ok(); },
     joinGame: () => ok(),

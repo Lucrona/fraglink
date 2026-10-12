@@ -522,3 +522,16 @@ body.skin-dark .side-scroll .side-sec h4 { white-space: normal; overflow-wrap: a
 /* dev.21: game icon before "Playing …" in your own status (16 px, like the friends list) */
 body.skin-dark .st-btn .st-gi { display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: -4px; }
 body.skin-dark .st-btn .st-gi svg, body.skin-dark .st-btn .st-gi img { width: 16px; height: 16px; display: block; }
+.fl-tip .tip-who { margin-bottom: 2px; } .fl-tip .tip-who span { color: #8b929a; font-size: 10px; }
+/* staff announcement under the header; pushes the rest of the window down while shown */
+body.skin-dark .fl-news { position: absolute; left: 6px; right: 6px; top: 110px; height: 21px; display: flex; align-items: center; gap: 6px; padding: 0 4px 0 8px; box-sizing: border-box;
+  border: 1px solid #000; border-radius: 2px; background: linear-gradient(#21456f, #183456); color: #e8f1ff; font: 11px/19px var(--font); z-index: 4; }
+body.skin-dark .fl-news.warn { background: linear-gradient(#6a4a12, #4e360c); color: #fff3d6; }
+body.skin-dark .fl-news.linked { cursor: pointer; } body.skin-dark .fl-news.linked .nw-t { text-decoration: underline dotted; }
+body.skin-dark .fl-news .nw-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.skin-dark .fl-news .nw-x { flex: none; width: 16px; height: 16px; border: 0; border-radius: 3px; background: none; color: inherit; opacity: .7; font: 14px/14px Tahoma, sans-serif; cursor: pointer; }
+body.skin-dark .fl-news .nw-x:hover { opacity: 1; background: rgba(255,255,255,.15); }
+body.skin-dark.has-news .xf-identity { top: 135px; }
+body.skin-dark.has-news .xf-status { top: 136px; }
+body.skin-dark.has-news .dk-vtabs, body.skin-dark.has-news .dk-sechead { top: 159px; }
+body.skin-dark.has-news .xf-list { top: 177px; }
