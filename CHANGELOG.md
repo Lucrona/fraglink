@@ -5,16 +5,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-Next release: 0.3.0-beta.1 (the first beta; releases are now numbered 0.3.0-beta.1, 0.3.0-beta.2, …).
+## [0.3.0-beta.1] - 2026-10-12
+
+The first Fraglink beta. From now on releases are numbered 0.3.0-beta.1, 0.3.0-beta.2, and so on.
+
+### Major features
+- **Nicknames**: pick the name your friends see and change it any time; your @username stays the same.
+- **New profiles and website**: profile pages with your games and hours, profile pictures, and a refreshed playfraglink.com.
+- **Linked accounts**: connect Steam, Battle.net and Discord from the app or the website.
+- **Privacy in sync**: the same privacy switches in the app and on the website, so changing one changes both.
+- **Steam-sized pop-ups**: bigger, cleaner notifications when friends come online or start a game.
+- **Announcement banner**: news from the Fraglink team shows under the app's header.
+- **Groups like Steam**: friends in your own groups still show under Friends Online, and groups show who's on.
 
 ### Added
-- Announcements from the Fraglink team now show as a slim banner under the header. Click it to open the link, or × to hide it.
+- Announcements now show as a slim banner under the header. Click it to open the link, or × to hide it.
 
 ### Changed
-- Friends you put in your own groups still show under Friends Online when they're on, like Steam.
+- Friends you put in your own groups still show under Friends Online when they're on.
 - Your groups show how many are online out of everyone in them, e.g. (2/5).
 - Your own status shows just the game icon and name while you play.
 - Hovering a friend shows their nickname with their @username next to it.
+
+### Fixed
+- Updates now move cleanly from the earlier test builds to the beta.
 
 ## [0.2.0-dev.21] - 2026-10-12
 Test update (builds report `0.2.0-21`).
