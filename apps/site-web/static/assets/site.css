@@ -467,3 +467,11 @@ table.achs td:nth-child(2){width:34%}
 .mp .sigimg{width:230px;height:auto;margin:0}
 .mp .mpcodes .code{margin:2px 0}.mp .mpcodes b{width:46px}
 @media(max-width:700px){.mp{grid-template-columns:1fr}}
+/* details: calmer */
+.details2 .kv{display:grid;grid-template-columns:90px 1fr;gap:3px 10px;font-size:12.5px}
+.details2 .kv dt{color:#8395a8!important;font-weight:400!important;font-size:11.5px;padding-top:1px}
+.details2 .kv dd{color:#dbe3ec!important;margin:0}
+.details2 .mut{color:#8395a8}.details2 .prev{color:#6f8193;font-size:11px;margin-top:1px}
+.inset{border:1px solid #233243!important;background:#0f151c!important;font-size:11.5px;min-width:160px;padding:7px 10px}
+.inset b{font-weight:400!important;color:#8395a8!important;font-size:11px;margin-top:5px}
+.inset .fc{color:#8395a8!important}

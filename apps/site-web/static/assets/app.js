@@ -504,14 +504,12 @@ pages.profile = async () => {
   const loc = [p.location ? esc(p.location) : (p.country ? esc(countryName(p.country)) : ""), flag(p.country)].filter(Boolean).join(" ");
   const inset = `<div class="inset">${pres ? `<b>${live ? "Playing" : "Status"}</b><div>${live ? `${icon(pres.game_id, pres.game_name)} ${isUnlisted(pres.game_id) ? "A game" : `<span class="gl">${esc(pres.game_name)}</span>`}` : statusText(pres)}</div>` : ""}
       ${p.member_since ? `<b>Member since</b><div>${fullDate.format(new Date(p.member_since))}</div>` : ""}<div class="fc">${p.friend_count} friend${p.friend_count === 1 ? "" : "s"}</div></div>`;
+  const nick = p.display_name || p.handle, prevs = (p.previous_names || []).filter(n => n.toLowerCase() !== nick.toLowerCase() && n.toLowerCase() !== p.handle.toLowerCase());
   const details = sec("Details", `<div class="body details2"><dl class="kv">
-      ${kv("Username", esc(p.handle))}
-      ${p.display_name && p.display_name !== p.handle ? kv("Nickname", esc(p.display_name)) : ""}
-      ${(p.previous_names || []).length ? kv("Previously known as", p.previous_names.map(esc).join(", ")) : ""}
+      ${kv("Name", `${esc(nick)}${nick !== p.handle ? ` <span class="mut">(${esc(p.handle)})</span>` : ""}${prevs.length ? `<div class="prev">Previously ${prevs.map(esc).join(", ")}</div>` : ""}`)}
       ${kv("Location", loc)}${kv("Age", p.age != null ? String(p.age) : "")}${kv("Gender", p.gender ? esc(p.gender) : "")}${kv("Real name", p.real_name ? esc(p.real_name) : "")}
-      ${kv("Gaming style", p.gaming_style ? esc(p.gaming_style) : "")}${main ? kv("Main game", esc(main.name)) : ""}
+      ${kv("Style", p.gaming_style ? esc(p.gaming_style) : "")}${main ? kv("Main game", esc(main.name)) : ""}
     </dl>${inset}</div>${p.about ? `<p class="about">${esc(p.about)}</p>` : ""}`);
-
   let games;
   if (!p.history_visible && !p.games_visible) {
     const why = p.relation === "friend" || p.relation === "public" ? `${esc(p.handle)} keeps their play history private.` : `Add ${esc(p.handle)} as a friend to see their games and hours.`;

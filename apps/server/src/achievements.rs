@@ -18,7 +18,7 @@ const TRACKS: [(&str, &str, &str, &str, [i64; 4]); 6] = [
     (
         "clocked_in",
         "Clocked In",
-        "hours played",
+        "hours tracked",
         "hours",
         [10, 50, 250, 1000],
     ),
