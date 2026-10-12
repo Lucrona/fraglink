@@ -52,7 +52,13 @@ second (dev.11+; older builds only the IP) at startup and every hour. Caddy serv
 `/var/log/caddy/updates-https.log` and `updates-ip.log` (only `/updates/*` requests). The repo is private, so GitHub release URLs
 aren't reachable by clients; that's why the files live here.
 
-Release flow: push the tag, let CI build (it signs the update files with the `TAURI_SIGNING_PRIVATE_KEY` /
+**Versions (from 0.3.0):** releases are `0.3.0-beta.1`, `0.3.0-beta.2`, … with tags `v0.3.0-beta.N` and
+CHANGELOG headings `## [0.3.0-beta.N] - YYYY-MM-DD`. Set the version with `scripts/bump-version.sh 0.3.0-beta.N`
+(Cargo.toml, package.json, tauri.conf.json and the numeric MSI version `0.3.0.N`). The updater compares
+plain semver, so `0.3.0-beta.1` is newer than the old `0.2.0-N` test builds (unit test in
+`apps/desktop/src-tauri/src/updater.rs`). `latest.json` just carries the version string; nothing else changes.
+
+Release flow: bump the version and commit, push the tag, let CI build (it signs the update files with the `TAURI_SIGNING_PRIVATE_KEY` /
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets and writes `latest.json`), create the GitHub release, then
 
 ```sh

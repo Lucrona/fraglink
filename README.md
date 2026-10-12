@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/hero.png" alt="Fraglink" width="100%"></p>
 
 <p align="center"><b>PLAY. CONNECT. TRACK.</b><br>A small Windows tray client that tracks your hours in every launcher and shows what your friends are playing.<br>
-<sub>Early development · current pre-release <b>0.2.0-dev.21</b> · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
+<sub>Early development · current pre-release <b>0.2.0-dev.21</b> (next: 0.3.0-beta.1) · <a href="https://github.com/Lucrona/fraglink/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></sub></p>
 
 ---
 

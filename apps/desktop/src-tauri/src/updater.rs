@@ -196,7 +196,9 @@ async fn detect_games(app: &AppHandle) {
 
 /// Ask the server; `Ok(Some)` = a newer build exists (not downloaded yet).
 async fn find(app: &AppHandle) -> Result<Option<Update>, String> {
-    app.updater()
+    app.updater_builder()
+        .version_comparator(|current, remote| is_newer(&current, &remote.version))
+        .build()
         .map_err(|e| e.to_string())?
         .check()
         .await
@@ -434,4 +436,30 @@ pub fn check_from_tray(app: &AppHandle) {
             .kind(kind)
             .show(|_| {});
     });
+}
+
+/// Whether the server's build is newer than this one: plain semver order, so the beta
+/// channel (0.3.0-beta.N) is newer than every 0.2.0-N test build and beta.10 > beta.9.
+pub fn is_newer(current: &semver::Version, remote: &semver::Version) -> bool {
+    remote > current
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_newer;
+    fn v(s: &str) -> semver::Version {
+        semver::Version::parse(s).unwrap()
+    }
+
+    #[test]
+    fn beta_channel_is_newer_than_the_old_test_builds() {
+        assert!(is_newer(&v("0.2.0-21"), &v("0.3.0-beta.1")));
+        assert!(is_newer(&v("0.2.0-9"), &v("0.3.0-beta.1")));
+        assert!(is_newer(&v("0.3.0-beta.1"), &v("0.3.0-beta.2")));
+        assert!(is_newer(&v("0.3.0-beta.9"), &v("0.3.0-beta.10")));
+        assert!(is_newer(&v("0.3.0-beta.12"), &v("0.3.0")));
+        assert!(!is_newer(&v("0.3.0-beta.1"), &v("0.2.0-21")));
+        assert!(!is_newer(&v("0.3.0-beta.2"), &v("0.3.0-beta.2")));
+        assert!(!is_newer(&v("0.3.0"), &v("0.3.0-beta.5")));
+    }
 }

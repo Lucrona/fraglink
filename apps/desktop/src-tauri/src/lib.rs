@@ -121,7 +121,7 @@ pub fn is_sim(app: &AppHandle) -> bool {
     app.try_state::<AppState>().is_some_and(|s| s.sim)
 }
 
-/// "0.2.0-10" -> "0.2.0-dev.10" (how the release is named).
+/// "0.2.0-10" -> "0.2.0-dev.10" (how those test releases were named); "0.3.0-beta.1" stays as it is.
 pub fn dev_version(v: &str) -> String {
     match v.split_once('-') {
         Some((base, n)) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => {

@@ -1456,7 +1456,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-core"
-version = "0.2.0-21"
+version = "0.3.0-beta.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1475,7 +1475,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-desktop"
-version = "0.2.0-21"
+version = "0.3.0-beta.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1484,6 +1484,7 @@ dependencies = [
  "fraglink-sync",
  "image",
  "log",
+ "semver",
  "serde",
  "serde_json",
  "tauri",
@@ -1500,7 +1501,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-server"
-version = "0.2.0-21"
+version = "0.3.0-beta.1"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -1538,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "fraglink-sync"
-version = "0.2.0-21"
+version = "0.3.0-beta.1"
 dependencies = [
  "base64 0.22.1",
  "fraglink-core",
