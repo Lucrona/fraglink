@@ -510,3 +510,5 @@ table.gt th.srt{cursor:pointer;user-select:none}table.gt th.srt:hover{color:#fff
 .pv3 a.btn:hover,.kpi a.kf:hover{text-decoration:none}
 .kpi a.kf{cursor:pointer}.kpi a.kf span{text-decoration:underline dotted #9fb2c6}
 .panel.flash{box-shadow:0 0 0 2px #f0b429;transition:box-shadow .3s}
+th.srt{cursor:pointer;user-select:none}th.srt:hover{color:#fff}th.srt.on{color:#ffd166}
+img.noimg{background:#1b2531 url(/assets/mark.svg) center/60% no-repeat;border:1px dashed #33465c;border-radius:3px;display:inline-block}

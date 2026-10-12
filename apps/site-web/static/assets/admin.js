@@ -54,8 +54,16 @@ async function approvals() {
   const decided = sessionStorage.getItem("adm_sugg") === "decided";
   const d = await api("/admin/suggestions" + (decided ? "?status=decided" : ""));
   const rows = d.suggestions;
-  if (!decided) badge("approvals", rows.length);
-  view.innerHTML = `<section class="panel"><h2>${decided ? "Decided" : "Pending"} game suggestions <span class="more"><a href="#" data-flip>${decided ? "Show pending" : "Show decided"}</a></span></h2>
+  const unk = decided ? [] : (await api("/admin/unknown_games").catch(() => ({ unknown: [] }))).unknown;
+  if (!decided) badge("approvals", rows.length + unk.length);
+  const unkHtml = unk.length ? `<section class="panel"><h2>Unknown game IDs from the app (${unk.length})</h2>
+    <div class="note">The app reported a game id the server doesn't know. Until you decide, it shows as "Playing a game". Map it to an existing game (moves its sessions, and future reports go there), approve it as a new game, or reject it.</div>
+    <table><thead><tr><th>Game id</th><th>Exe</th><th class="num">Players</th><th class="num">Hours</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
+    ${unk.map(u => `<tr data-unk="${esc(u.game_id)}"><td class="mono">${esc(u.game_id)}</td><td class="mono dimt">${esc(u.exe || "unknown")}</td><td class="num">${u.players}</td><td class="num">${hrs(u.seconds / 60)}</td><td>${day(u.first_seen)}</td>
+      <td class="num"><div class="acts"><input class="in" list="unk-games" data-map placeholder="Map to game…" size="20" aria-label="Map to existing game"><button class="btn sm" data-domap>Map</button>
+        <input class="in" data-uname placeholder="Official name" size="16" aria-label="Name for a new game"><button class="btn sm dl" data-uapprove>Approve new</button><button class="btn sm danger" data-ureject>Reject</button></div></td></tr>`).join("")}</tbody></table>
+    <datalist id="unk-games"></datalist></section>` : "";
+  view.innerHTML = unkHtml + `<section class="panel"><h2>${decided ? "Decided" : "Pending"} game suggestions <span class="more"><a href="#" data-flip>${decided ? "Show pending" : "Show decided"}</a></span></h2>
     <div class="note">When someone picks "Track it as a game?" in the app, the program lands here. Approve it with an official name and every app detects it and shows that name. "Not a game" keeps it as "Playing a game".</div>
     ${rows.length ? `<table><thead><tr><th>Program</th><th>Names submitted</th><th class="num">Reports</th><th class="num">Users</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
     ${rows.map(r => {
@@ -69,7 +77,20 @@ async function approvals() {
           : `<input class="in" name="name" value="${esc(top)}" maxlength="80" size="22" aria-label="Official name"><button class="btn sm dl" data-approve>Approve</button><button class="btn sm danger" data-reject>Not a game</button>`}</div></td></tr>`;
     }).join("")}</tbody></table>` : `<div class="body empty">${decided ? "Nothing decided yet." : "No pending suggestions."}</div>`}</section>`;
   $("[data-flip]", view).addEventListener("click", e => { e.preventDefault(); sessionStorage.setItem("adm_sugg", decided ? "pending" : "decided"); approvals(); });
+  let mt;
+  view.oninput = e => {
+    const i = e.target.closest("[data-map]"); if (!i) return; clearTimeout(mt);
+    mt = setTimeout(async () => { const v = i.value.trim(); if (v.length < 2) return; const d2 = await api("/admin/games?q=" + encodeURIComponent(v)); $("#unk-games").innerHTML = d2.games.filter(g => g.source !== "unlisted").map(g => `<option value="${esc(g.id)}">${esc(g.public_name || g.name)}</option>`).join(""); }, 250);
+  };
   view.onclick = async e => {
+    const ut = e.target.closest("tr[data-unk]");
+    if (ut) {
+      const id = ut.dataset.unk, b = e.target.closest("button"); if (!b) return;
+      if (b.matches("[data-domap]")) { const to = $("[data-map]", ut).value.trim(); if (!to) return alert("Type a game and pick it from the list."); if (!confirm(`Move everything recorded as ${id} to ${to}?`)) return; await act(b, async () => { await api(`/admin/unknown_games/${encodeURIComponent(id)}/map`, { method: "POST", body: { to } }); ut.remove(); }); }
+      else if (b.matches("[data-uapprove]")) { const name = $("[data-uname]", ut).value.trim(); if (!name) return alert("Enter the official name first."); await act(b, async () => { await api(`/admin/unknown_games/${encodeURIComponent(id)}/approve`, { method: "POST", body: { name } }); ut.remove(); }); }
+      else if (b.matches("[data-ureject]")) await act(b, async () => { await api(`/admin/unknown_games/${encodeURIComponent(id)}/reject`, { method: "POST" }); ut.remove(); });
+      return;
+    }
     const tr = e.target.closest("tr[data-exe]"); if (!tr) return;
     const exe = tr.dataset.exe, b = e.target.closest("button"); if (!b) return;
     if (b.matches("[data-approve]")) {
@@ -111,13 +132,17 @@ function badge(tab, n) { const s = $(`.tabs a[data-tab=${tab}] .n`); if (s) { s.
 async function games(q) {
   q = q || "";
   view.innerHTML = `<div class="split"><section class="panel"><h2>Games</h2>
-    <form class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off"></form>
+    <form class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off">
+      <select class="in" id="gshow" aria-label="Show"><option value="">All games with hours</option><option value="edited">Edited / retired / status set</option></select></form>
     <div id="glist"><div class="body empty">Loading…</div></div></section>
     <section class="panel" id="gedit"><h2>Edit game</h2><div class="body empty">Pick a game on the left.</div></section></div>`;
   $("#gs").addEventListener("submit", e => { e.preventDefault(); history.replaceState(null, "", "#games/" + encodeURIComponent(e.target.q.value.trim())); listGames(e.target.q.value.trim()); });
   liveSearch($("#gs"));
+  GS.offset = 0;
+  $("#gshow").onchange = e => { GS.show = e.target.value; GS.offset = 0; listGames($("#gs").q.value.trim()); };
   listGames(q);
 }
+const GS = { sort: "players", show: "", offset: 0, lastQ: "" };
 /* Search as you type (debounced); Enter still works. */
 function liveSearch(form) {
   let t; const i = form.q; i.type = "search";
@@ -125,21 +150,30 @@ function liveSearch(form) {
 }
 async function listGames(q) {
   const box = $("#glist");
-  const d = await api("/admin/games?q=" + encodeURIComponent(q));
-  if (!d.games.length) { box.innerHTML = `<div class="body empty">No games match.</div>`; return; }
-  box.innerHTML = `<div class="note">${q ? "Matches" : "Edited games, then the most played in the last 30 days."}</div>
-    <table><thead><tr><th></th><th>Name</th><th>Id</th><th>Source</th><th class="num">Players</th><th class="num">Hours</th></tr></thead><tbody>
+  if (q !== GS.lastQ) { GS.offset = 0; GS.lastQ = q; }
+  const d = await api("/admin/games?" + new URLSearchParams({ q, sort: GS.sort, show: GS.show, offset: GS.offset }));
+  if (!d.games.length) { box.innerHTML = `<div class="body empty">${q ? `No games match “${esc(q)}”.` : "No games."}</div>`; return; }
+  const th = (k, l, c) => `<th class="${c || ""} srt${GS.sort === k ? " on" : ""}" data-sort="${k}" title="Sort by ${l.toLowerCase()}">${l}${GS.sort === k ? (k === "name" ? " ▴" : " ▾") : ""}</th>`;
+  const from = GS.offset + 1, to = GS.offset + d.games.length;
+  box.innerHTML = `<div class="note">${q ? "Matches" : GS.show ? "Edited, retired or with a status" : "Every game with hours"} · players and hours count all tiers (tracked, imported, estimated; best figure per player).</div>
+    <table><thead><tr><th></th>${th("name", "Name")}<th>Id</th><th>Source</th>${th("players", "Players", "num")}${th("hours", "Hours", "num")}${th("recent", "Last played", "num")}</tr></thead><tbody>
     ${d.games.map(g => {
       const o = g.override || {};
       const flags = (o.name ? `<span class="pill warn">renamed</span>` : "") + (o.hidden ? `<span class="pill bad">hidden</span>` : "") +
         (o.has_icon ? `<span class="pill">icon</span>` : "") + ((o.extra_exes || []).length ? `<span class="pill">+${o.extra_exes.length} exe</span>` : "") +
         (g.retired ? `<span class="pill bad">${g.retired.partial ? "exe retired" : "retired"}</span>` : "") +
         (g.status && g.status.lifecycle !== "live" ? `<span class="pill ${g.status.lifecycle === "ended" ? "bad" : "warn"}">${esc(LIFE[g.status.lifecycle] || g.status.lifecycle)}</span>` : "");
+      const bd = [["tracked", g.tracked_min], ["imported", g.imported_min], ["estimated", g.estimated_min]].filter(x => x[1] > 0).map(([k, m]) => `${k} ${hrs(m)}`).join(" · ");
       return `<tr class="click" data-id="${esc(g.id)}"><td class="ic"><img src="${esc(g.icon)}" width="20" height="20" alt="" onerror="this.style.visibility='hidden'"></td>
         <td>${esc(g.public_name || g.name)}${flags}</td><td class="mono dimt">${esc(g.id)}</td><td class="muted">${esc(g.source)}</td>
-        <td class="num">${g.players}</td><td class="num">${hrs(g.tracked_min)}</td></tr>`;
-    }).join("")}</tbody></table>`;
-  box.onclick = e => { const tr = e.target.closest("tr[data-id]"); if (tr) editGame(tr.dataset.id); };
+        <td class="num">${g.players}</td><td class="num" title="${esc(bd || "no hours")}">${hrs(g.total_min)}${bd ? `<div class="dimt" style="font-size:10.5px;white-space:nowrap">${esc(bd)}</div>` : ""}</td><td class="num dimt">${g.last_played_at ? day(g.last_played_at) : "-"}</td></tr>`;
+    }).join("")}</tbody></table>
+    ${d.total > d.limit ? `<div class="pager"><button class="btn sm" data-goff="${Math.max(0, GS.offset - d.limit)}" ${GS.offset ? "" : "disabled"}>‹ Prev</button><span>${from}–${to} of ${d.total.toLocaleString("en")}</span><button class="btn sm" data-goff="${GS.offset + d.limit}" ${to < d.total ? "" : "disabled"}>Next ›</button></div>` : ""}`;
+  box.onclick = e => {
+    const s_ = e.target.closest("th[data-sort]"); if (s_) { GS.sort = s_.dataset.sort; GS.offset = 0; listGames(q); return; }
+    const pg = e.target.closest("[data-goff]"); if (pg) { GS.offset = +pg.dataset.goff; listGames(q).then(() => box.scrollIntoView({ block: "start" })); return; }
+    const tr = e.target.closest("tr[data-id]"); if (tr) editGame(tr.dataset.id);
+  };
 }
 const LIFE = { live: "Live", beta: "Beta", test: "Test", early_access: "Early Access", ended: "Ended" };
 function statusHtml(g) {
@@ -168,7 +202,7 @@ async function editGame(id) {
   const o = g.override || {};
   const bust = "?t=" + Date.now();
   box.innerHTML = `<h2>Edit game</h2><div class="body"><form class="f" id="gf">
-    <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">From: ${esc(g.source)} · ${g.players} players · ${hrs(g.tracked_min)} tracked</div></div>
+    <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">From: ${esc(g.source)} · ${g.players} players · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)} · estimated ${hrs(g.estimated_min)})</div></div>
     <label>Display name override<input type="text" name="name" maxlength="80" value="${esc(o.name || "")}" placeholder="${esc(g.name)}"><small>Leave empty to use the list name.</small></label>
     <label class="check"><input type="checkbox" name="hidden" ${o.hidden ? "checked" : ""}> Hide from public (shown as "Playing a game")</label>
     <label>Extra exe names (one per line)<textarea class="in" name="exes" placeholder="GameClient-Win64.exe">${esc((o.extra_exes || []).join("\n"))}</textarea><small>Apps detect these as this game (picked up within a day or on restart).</small></label>
@@ -176,7 +210,7 @@ async function editGame(id) {
     <div class="alert" id="gmsg" hidden></div></form>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     <div class="f"><label>Icon</label>
-      <div class="icons-prev"><img src="${esc(g.icon64.replace("/64/", "/16/"))}${bust}" width="16" height="16" alt=""><img src="${esc(g.icon)}${bust}" width="32" height="32" alt=""><img src="${esc(g.icon64)}${bust}" width="64" height="64" alt=""></div>
+      <div class="icons-prev"><img src="${esc(g.icon64.replace("/64/", "/16/"))}${bust}" width="16" height="16" alt="" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('noimg');this.title='No icon yet'"><img src="${esc(g.icon)}${bust}" width="32" height="32" alt="" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('noimg');this.title='No icon yet'"><img src="${esc(g.icon64)}${bust}" width="64" height="64" alt="" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('noimg');this.title='No icon yet'"></div>
       <div class="row"><input type="file" id="gicon" accept="image/png,image/jpeg"><button class="btn" id="gup" type="button">Upload</button>${o.has_icon ? `<button class="btn danger" id="gdel" type="button">Remove uploaded icon</button>` : ""}</div>
       <small>PNG or JPEG up to 1 MB, square works best. Stored on our server and resized to 16, 32 and 64 px. Browsers may keep the old icon for a while.</small>
       <div class="alert" id="imsg" hidden></div></div>
@@ -189,7 +223,10 @@ async function editGame(id) {
       <div class="alert" id="amsg" hidden></div></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     ${statusHtml(g)}
-    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${retireHtml(g)}</div>`;
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${retireHtml(g)}
+    ${g.deletable ? `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0"><div class="f"><label>Delete</label>
+      <div class="dimt">Removes this unlisted entry for good${g.sessions ? `, including <b>${g.sessions} session${g.sessions === 1 ? "" : "s"}</b> from <b>${g.players} player${g.players === 1 ? "" : "s"}</b> (${hrs(g.total_min)})` : " (no sessions recorded)"}. Logged in the audit log.</div>
+      <div class="row"><button class="btn danger" id="gdelete" type="button">Delete game…</button></div><div class="alert" id="dmsg" hidden></div></div>` : ""}</div>`;
   const gid = "/admin/games/" + encodeURIComponent(id);
   $("#gst").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
@@ -226,6 +263,13 @@ async function editGame(id) {
   });
   const del = $("#gdel");
   if (del) del.addEventListener("click", () => act(del, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/icon", { method: "DELETE" }); editGame(id); }));
+  const gd = $("#gdelete");
+  if (gd) gd.addEventListener("click", () => {
+    const typed = prompt(`Delete "${g.public_name || g.name || id}"${g.sessions ? ` and ${g.sessions} session(s) from ${g.players} player(s)` : ""}? This can't be undone.\n\nType the game id to confirm:\n${id}`);
+    if (typed === null) return;
+    if (typed.trim() !== id) return msg($("#dmsg"), "The id didn't match; nothing was deleted.");
+    act(gd, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/delete", { method: "POST", body: { confirm: typed.trim() } }); $("#gedit").innerHTML = `<h2>Edit game</h2><div class="body empty">Deleted ${esc(id)}.</div>`; listGames($("#gs").q.value.trim()); }).catch(x => msg($("#dmsg"), x.message));
+  });
   $("#gartup").addEventListener("click", async () => {
     const file = $("#gart").files[0]; if (!file) return msg($("#amsg"), "Pick an image first.");
     try {
@@ -433,5 +477,5 @@ async function staff() {
 }
 
 route();
-if (can.approvals && !location.hash.startsWith("#approvals")) api("/admin/suggestions").then(d => badge("approvals", d.suggestions.length)).catch(() => {});
+if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] }))]).then(([d, u]) => badge("approvals", d.suggestions.length + u.unknown.length)).catch(() => {});
 };

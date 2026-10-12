@@ -112,7 +112,24 @@ pub fn public_pair(id: &str, names: &HashMap<String, String>) -> (String, String
 /// Make sure a `games` row exists for a recorded session (the name is only a
 /// fallback for the database; display always goes through [`public_names`]).
 pub async fn ensure_game_row(st: &AppState, id: &str) -> ApiResult<()> {
-    let name = list_name(st, id).unwrap_or_else(|| UNLISTED_TITLE.to_string());
+    let listed = list_name(st, id);
+    // An id nobody knows (not in the games list, not steam:/exe:/manual:) is queued in
+    // Game approvals; until someone decides it shows as "Playing a game".
+    if listed.is_none()
+        && !id.starts_with("steam:")
+        && !id.starts_with("exe:")
+        && !id.starts_with("manual:")
+        && crate::steam::sigs().get(id).is_none()
+    {
+        sqlx::query(
+            "INSERT INTO unknown_games(game_id) SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM games WHERE id = $1 AND verified)
+             ON CONFLICT (game_id) DO UPDATE SET last_at = now()",
+        )
+        .bind(id)
+        .execute(&st.db)
+        .await?;
+    }
+    let name = listed.unwrap_or_else(|| UNLISTED_TITLE.to_string());
     let appid = id
         .strip_prefix("steam:")
         .and_then(|a| a.parse::<i32>().ok());
@@ -234,6 +251,18 @@ pub async fn unapprove(db: &sqlx::PgPool, exe: &str) -> anyhow::Result<u64> {
             .await?
             .rows_affected(),
     )
+}
+
+/// Where sessions for `id` should go: an unknown id an admin mapped to a real game.
+pub async fn resolve_alias(st: &AppState, id: &str) -> ApiResult<String> {
+    let m: Option<String> = sqlx::query_scalar(
+        "SELECT mapped_to FROM unknown_games WHERE game_id = $1 AND status = 'mapped'",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?
+    .flatten();
+    Ok(m.unwrap_or_else(|| id.to_string()))
 }
 
 #[cfg(test)]

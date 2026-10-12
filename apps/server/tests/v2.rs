@@ -1094,3 +1094,133 @@ async fn paged_lists(pool: PgPool) {
     .json();
     assert_eq!(f["total"], 0);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn admin_game_totals_count_all_tiers(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "ag@example.com", "agboss").await;
+    let u = signup(&app, "ag2@example.com", "agplayer").await;
+    let _ = u;
+    sqlx::query("UPDATE users SET role = 'owner' WHERE handle = 'agboss'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('rivals', 'Marvel Rivals', true), ('tiny', 'Tiny', true) ON CONFLICT DO NOTHING")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO steam_playtime (user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at) SELECT id, 1, 'rivals', 46800, 0, now() FROM users WHERE handle = 'agplayer'")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO hours_entries (id, user_id, game_id, tier, source, minutes) SELECT gen_random_uuid(), id, 'tiny', 'estimated', 'manual', 60 FROM users WHERE handle = 'agplayer'")
+        .execute(&pool).await.unwrap();
+    let r = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games?sort=hours",
+        Some(&t),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let g = r.json();
+    assert_eq!(g["games"][0]["id"], "rivals");
+    assert_eq!(g["games"][0]["players"], 1);
+    assert_eq!(g["games"][0]["total_min"], 46800);
+    assert_eq!(g["games"][1]["estimated_min"], 60, "{g}");
+    let s = api(&app, "GET", "/api/v1/admin/games?q=tiny", Some(&t), None)
+        .await
+        .json();
+    let tiny = s["games"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["id"] == "tiny")
+        .cloned()
+        .unwrap();
+    assert_eq!(tiny["total_min"], 60);
+    let d = api(&app, "GET", "/api/v1/admin/games/rivals", Some(&t), None)
+        .await
+        .json();
+    assert_eq!(d["players"], 1);
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn unknown_ids_and_game_delete(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "ug@example.com", "ugboss").await;
+    sqlx::query("UPDATE users SET role = 'owner' WHERE handle = 'ugboss'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('weird-id', 'Unlisted game', false), ('bogus', 'Unlisted game', false), ('real', 'Real Game', true) ON CONFLICT DO NOTHING")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO unknown_games (game_id) VALUES ('weird-id')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for g in ["weird-id", "bogus"] {
+        sqlx::query("INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s) SELECT gen_random_uuid(), id, $1, now() - interval '1 hour', now(), 3600 FROM users WHERE handle = 'ugboss'")
+            .bind(g).execute(&pool).await.unwrap();
+    }
+    let u = api(&app, "GET", "/api/v1/admin/unknown_games", Some(&t), None)
+        .await
+        .json();
+    assert_eq!(u["unknown"][0]["game_id"], "weird-id");
+    assert_eq!(u["unknown"][0]["players"], 1);
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/admin/unknown_games/weird-id/map",
+        Some(&t),
+        Some(json!({"to": "real"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE game_id = 'real'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+    // delete: needs the id typed; only unlisted entries
+    let d = api(&app, "GET", "/api/v1/admin/games/bogus", Some(&t), None)
+        .await
+        .json();
+    assert_eq!(d["deletable"], true);
+    assert_eq!(d["sessions"], 1);
+    assert_eq!(
+        api(
+            &app,
+            "POST",
+            "/api/v1/admin/games/bogus/delete",
+            Some(&t),
+            Some(json!({"confirm": "nope"}))
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        api(
+            &app,
+            "POST",
+            "/api/v1/admin/games/real/delete",
+            Some(&t),
+            Some(json!({"confirm": "real"}))
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/admin/games/bogus/delete",
+        Some(&t),
+        Some(json!({"confirm": "bogus"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM games WHERE id = 'bogus'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+}

@@ -326,6 +326,7 @@ pub async fn record_live_session(
     if (end - start).num_seconds() < MIN_LIVE_SECS {
         return Ok(());
     }
+    let game_id = &crate::names::resolve_alias(st, game_id).await?;
     crate::names::ensure_game_row(st, game_id).await?;
     let mut from = start;
     while from < end {

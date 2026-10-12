@@ -65,6 +65,10 @@ fn cache() -> &'static Mutex<HashMap<Uuid, (Instant, Value)>> {
     C.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+pub fn clear_all() {
+    cache().lock().unwrap().clear();
+}
+
 pub fn forget(user: Uuid) {
     cache().lock().unwrap().remove(&user);
 }

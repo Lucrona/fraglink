@@ -35,6 +35,17 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/suggestions/undo", post(undo_suggestion))
         .route("/api/v1/admin/games", get(games_search))
         .route("/api/v1/admin/games/{id}", get(game_detail).post(game_save))
+        .route("/api/v1/admin/games/{id}/delete", post(game_delete))
+        .route("/api/v1/admin/unknown_games", get(unknown_list))
+        .route("/api/v1/admin/unknown_games/{id}/map", post(unknown_map))
+        .route(
+            "/api/v1/admin/unknown_games/{id}/approve",
+            post(unknown_approve),
+        )
+        .route(
+            "/api/v1/admin/unknown_games/{id}/reject",
+            post(unknown_reject),
+        )
         .route(
             "/api/v1/admin/games/{id}/art",
             post(game_art_upload).delete(game_art_clear),
@@ -407,7 +418,38 @@ async fn undo_suggestion(
 struct SearchQ {
     #[serde(default)]
     q: String,
+    #[serde(default)]
+    sort: Option<String>,
+    #[serde(default)]
+    show: Option<String>,
+    #[serde(default)]
+    offset: Option<i64>,
 }
+
+/// Per-game totals over every trust tier. Per player we count their best known figure
+/// (max of tracked/imported, or the estimate when that's all there is) so tiers never
+/// double count; the breakdown sums each tier on its own.
+const GAME_TOTALS: &str = "SELECT game_id,
+        count(*) FILTER (WHERE display_min > 0 OR estimated_min > 0 OR minutes_7d > 0) AS players,
+        sum(GREATEST(display_min, estimated_min))::bigint AS total_min,
+        sum(tracked_min)::bigint AS tracked_min, sum(imported_min)::bigint AS imported_min,
+        sum(estimated_min)::bigint AS estimated_min, max(last_played_at) AS last_played_at
+    FROM user_game_stats";
+
+type Totals = (String, i64, i64, i64, i64, i64, Option<DateTime<Utc>>);
+
+fn put_totals(v: &mut Value, t: Option<&Totals>) {
+    let z = (String::new(), 0, 0, 0, 0, 0, None);
+    let t = t.unwrap_or(&z);
+    v["players"] = json!(t.1);
+    v["total_min"] = json!(t.2);
+    v["tracked_min"] = json!(t.3);
+    v["imported_min"] = json!(t.4);
+    v["estimated_min"] = json!(t.5);
+    v["last_played_at"] = json!(t.6);
+}
+
+const ADMIN_PAGE: i64 = 50;
 
 fn valid_game_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 120 && !id.chars().any(char::is_control)
@@ -474,83 +516,110 @@ async fn games_search(
     Query(q): Query<SearchQ>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
-    let q = q.q.trim().to_lowercase();
+    let sort = match q.sort.as_deref() {
+        Some("hours") => "total_min DESC, players DESC",
+        Some("recent") => "last_played_at DESC NULLS LAST",
+        Some("name") => "lower(coalesce(gm.name, t.game_id))",
+        _ => "players DESC, total_min DESC",
+    };
+    let offset = q.offset.unwrap_or(0).max(0);
+    let term = q.q.trim().to_lowercase();
     let ov = game_overrides::current(&st).await?;
+    let edited_only = q.show.as_deref() == Some("edited");
     let mut ids: Vec<String> = Vec::new();
-    if q.is_empty() {
-        // edited games first, then the most played
-        let mut e: Vec<String> = ov.keys().cloned().collect();
-        e.extend(
-            sqlx::query_scalar::<_, String>(
-                "SELECT game_id FROM game_status UNION SELECT game_id FROM game_retirements",
-            )
-            .fetch_all(&st.db)
-            .await?,
-        );
-        e.sort();
-        e.dedup();
-        ids.extend(e);
-        let top: Vec<String> = sqlx::query_scalar(
-            "SELECT game_id FROM sessions WHERE started_at > now() - interval '30 days'
-             GROUP BY game_id ORDER BY count(DISTINCT user_id) DESC, sum(duration_s) DESC LIMIT 40",
-        )
+    let (rows, total): (Vec<Totals>, i64) = if term.is_empty() && !edited_only {
+        // every game with any hours, aggregated and paged in the database
+        let rows: Vec<Totals> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "WITH t AS ({GAME_TOTALS} GROUP BY game_id)
+             SELECT t.game_id, t.players, t.total_min, t.tracked_min, t.imported_min, t.estimated_min, t.last_played_at
+             FROM t LEFT JOIN games gm ON gm.id = t.game_id
+             WHERE t.game_id NOT LIKE 'manual:%' AND (t.players > 0 OR t.total_min > 0)
+             ORDER BY {sort} LIMIT $1 OFFSET $2"
+        )))
+        .bind(ADMIN_PAGE)
+        .bind(offset)
         .fetch_all(&st.db)
         .await?;
-        ids.extend(top);
+        let total: i64 = sqlx::query_scalar(
+            "SELECT count(DISTINCT game_id) FROM user_game_stats WHERE game_id NOT LIKE 'manual:%'
+               AND (display_min > 0 OR estimated_min > 0 OR minutes_7d > 0)",
+        )
+        .fetch_one(&st.db)
+        .await?;
+        ids = rows.iter().map(|r| r.0.clone()).collect();
+        (rows, total)
     } else {
-        if let Some(b) = st.games.current() {
-            let mut hits: Vec<(&String, &String)> = b
-                .names
-                .iter()
-                .filter(|(id, n)| n.to_lowercase().contains(&q) || id.contains(&q))
-                .collect();
-            // exact and prefix matches first, then shorter names
-            hits.sort_by_key(|(id, n)| {
-                let n = n.to_lowercase();
-                (n != q && **id != q, !n.starts_with(&q), n.len())
-            });
-            ids.extend(hits.into_iter().take(40).map(|(id, _)| id.clone()));
-        }
-        let db: Vec<String> = sqlx::query_scalar(
-            "SELECT id FROM games WHERE lower(name) LIKE $1 OR lower(id) LIKE $1
-             ORDER BY verified DESC, length(name) LIMIT 40",
-        )
-        .bind(like_pattern(&q))
-        .fetch_all(&st.db)
-        .await?;
-        ids.extend(db);
-        for (id, o) in ov.iter() {
-            if o.name
-                .as_deref()
-                .is_some_and(|n| n.to_lowercase().contains(&q))
-                || o.extra_exes.iter().any(|e| e.contains(&q))
-            {
-                ids.push(id.clone());
+        if edited_only {
+            let mut e: Vec<String> = ov.keys().cloned().collect();
+            e.extend(
+                sqlx::query_scalar::<_, String>(
+                    "SELECT game_id FROM game_status UNION SELECT game_id FROM game_retirements",
+                )
+                .fetch_all(&st.db)
+                .await?,
+            );
+            ids.extend(e);
+        } else {
+            if let Some(b) = st.games.current() {
+                let mut hits: Vec<(&String, &String)> = b
+                    .names
+                    .iter()
+                    .filter(|(id, n)| n.to_lowercase().contains(&term) || id.contains(&term))
+                    .collect();
+                hits.sort_by_key(|(id, n)| {
+                    let n = n.to_lowercase();
+                    (n != term && **id != term, !n.starts_with(&term), n.len())
+                });
+                ids.extend(hits.into_iter().take(200).map(|(id, _)| id.clone()));
+            }
+            let db: Vec<String> = sqlx::query_scalar(
+                "SELECT id FROM games WHERE lower(name) LIKE $1 OR lower(id) LIKE $1
+                 ORDER BY verified DESC, length(name) LIMIT 200",
+            )
+            .bind(like_pattern(&term))
+            .fetch_all(&st.db)
+            .await?;
+            ids.extend(db);
+            for (id, o) in ov.iter() {
+                if o.name
+                    .as_deref()
+                    .is_some_and(|n| n.to_lowercase().contains(&term))
+                    || o.extra_exes.iter().any(|e| e.contains(&term))
+                {
+                    ids.push(id.clone());
+                }
             }
         }
-    }
-    let mut seen = std::collections::HashSet::new();
-    ids.retain(|i| !i.starts_with("manual:") && seen.insert(i.clone()));
-    ids.truncate(60);
-    let counts: Vec<(String, i64, i64)> = sqlx::query_as(
-        "SELECT game_id, count(DISTINCT user_id), (sum(duration_s) / 60)::bigint FROM sessions
-         WHERE game_id = ANY($1) GROUP BY game_id",
-    )
-    .bind(&ids)
-    .fetch_all(&st.db)
-    .await?;
-    let counts: std::collections::HashMap<String, (i64, i64)> =
-        counts.into_iter().map(|(g, u, m)| (g, (u, m))).collect();
+        let mut seen = std::collections::HashSet::new();
+        ids.retain(|i| !i.starts_with("manual:") && seen.insert(i.clone()));
+        let rows: Vec<Totals> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "WITH t AS ({GAME_TOTALS} WHERE game_id = ANY($1) GROUP BY game_id),
+                  ids AS (SELECT unnest($1::text[]) AS game_id)
+             SELECT ids.game_id, coalesce(t.players, 0), coalesce(t.total_min, 0)::bigint, coalesce(t.tracked_min, 0)::bigint,
+                    coalesce(t.imported_min, 0)::bigint, coalesce(t.estimated_min, 0)::bigint, t.last_played_at
+             FROM ids LEFT JOIN t ON t.game_id = ids.game_id LEFT JOIN games gm ON gm.id = ids.game_id
+             ORDER BY {sort} LIMIT $2 OFFSET $3"
+        ).replace("t.game_id)", "ids.game_id)")))
+        .bind(&ids)
+        .bind(ADMIN_PAGE)
+        .bind(offset)
+        .fetch_all(&st.db)
+        .await?;
+        let total = ids.len() as i64;
+        ids = rows.iter().map(|r| r.0.clone()).collect();
+        (rows, total)
+    };
     let mut out = Vec::new();
-    for id in &ids {
-        if let Some(mut v) = game_info(&st, id).await? {
-            let (u, m) = counts.get(id).copied().unwrap_or((0, 0));
-            v["players"] = json!(u);
-            v["tracked_min"] = json!(m);
+    let _ = &ids;
+    for r in &rows {
+        if let Some(mut v) = game_info(&st, &r.0).await? {
+            put_totals(&mut v, Some(r));
             out.push(v);
         }
     }
-    Ok(Json(json!({ "games": out })))
+    Ok(Json(
+        json!({ "games": out, "total": total, "offset": offset, "limit": ADMIN_PAGE }),
+    ))
 }
 
 async fn game_detail(
@@ -560,14 +629,19 @@ async fn game_detail(
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
     let mut v = game_info(&st, &id).await?.ok_or_else(AppError::not_found)?;
-    let (u, m): (i64, i64) = sqlx::query_as(
-        "SELECT count(DISTINCT user_id), coalesce(sum(duration_s) / 60, 0)::bigint FROM sessions WHERE game_id = $1",
-    )
+    let t: Option<Totals> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{GAME_TOTALS} WHERE game_id = $1 GROUP BY game_id"
+    )))
     .bind(&id)
-    .fetch_one(&st.db)
+    .fetch_optional(&st.db)
     .await?;
-    v["players"] = json!(u);
-    v["tracked_min"] = json!(m);
+    put_totals(&mut v, t.as_ref());
+    let sessions: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE game_id = $1")
+        .bind(&id)
+        .fetch_one(&st.db)
+        .await?;
+    v["sessions"] = json!(sessions);
+    v["deletable"] = json!(deletable(&v));
     v["art_source"] = json!(crate::art::source_of(&st, &id).await);
     Ok(Json(v))
 }
@@ -1722,7 +1796,8 @@ async fn server(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> 
         .fetch_one(&st.db)
         .await?;
     let pending: i64 = sqlx::query_scalar(
-        "SELECT count(DISTINCT lower(exe)) FROM game_suggestions WHERE status = 'new'",
+        "SELECT (SELECT count(DISTINCT lower(exe)) FROM game_suggestions WHERE status = 'new')
+              + (SELECT count(*) FROM unknown_games WHERE status = 'new')",
     )
     .fetch_one(&st.db)
     .await?;
@@ -2220,6 +2295,241 @@ async fn game_status_save(
     )
     .await?;
     Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
+}
+
+// ------------------------------------------------------------------ unknown game ids
+
+async fn unknown_list(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let rows: Vec<(String, Option<String>, DateTime<Utc>, DateTime<Utc>, i64, i64)> = sqlx::query_as(
+        "SELECT u.game_id, u.exe, u.first_at, u.last_at,
+                (SELECT count(DISTINCT user_id) FROM sessions WHERE game_id = u.game_id)
+                  + (SELECT count(*) FROM presence p WHERE p.game_id = u.game_id
+                       AND NOT EXISTS (SELECT 1 FROM sessions x WHERE x.game_id = u.game_id AND x.user_id = p.user_id)),
+                (SELECT coalesce(sum(duration_s), 0)::bigint FROM sessions WHERE game_id = u.game_id)
+         FROM unknown_games u WHERE u.status = 'new' ORDER BY u.last_at DESC LIMIT 300",
+    )
+    .fetch_all(&st.db)
+    .await?;
+    let items: Vec<Value> = rows
+        .into_iter()
+        .map(|(id, exe, f, l, p, secs)| json!({ "game_id": id, "exe": exe, "first_seen": f, "last_seen": l, "players": p, "seconds": secs }))
+        .collect();
+    Ok(Json(json!({ "unknown": items })))
+}
+
+async fn unknown_pending(st: &AppState, id: &str) -> ApiResult<()> {
+    let ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM unknown_games WHERE game_id = $1 AND status = 'new')",
+    )
+    .bind(id)
+    .fetch_one(&st.db)
+    .await?;
+    if ok {
+        Ok(())
+    } else {
+        Err(AppError::not_found())
+    }
+}
+
+#[derive(Deserialize)]
+struct MapReq {
+    to: String,
+}
+
+/// Move everything recorded under an unknown id to an existing game; future reports of
+/// the id are recorded under that game too.
+async fn unknown_map(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Json(r): Json<MapReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    unknown_pending(&st, &id).await?;
+    let to = r.to.trim().to_string();
+    if to == id || game_info(&st, &to).await?.is_none() {
+        return Err(AppError::bad_request(
+            "bad_target",
+            "Pick an existing game to map to.",
+        ));
+    }
+    names::ensure_game_row(&st, &to).await?;
+    let mut tx = st.db.begin().await?;
+    let moved = sqlx::query("UPDATE sessions SET game_id = $2 WHERE game_id = $1")
+        .bind(&id)
+        .bind(&to)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+    for q in [
+        "UPDATE hours_entries SET game_id = $2 WHERE game_id = $1",
+        "INSERT INTO hidden_games(user_id, game_id) SELECT user_id, $2 FROM hidden_games WHERE game_id = $1 ON CONFLICT DO NOTHING",
+        "DELETE FROM hidden_games WHERE game_id = $1 AND $2::text IS NOT NULL",
+        "UPDATE presence SET game_id = $2, game_name = NULL WHERE game_id = $1",
+        "UPDATE unknown_games SET status = 'mapped', mapped_to = $2, decided_at = now() WHERE game_id = $1",
+    ] {
+        sqlx::query(q).bind(&id).bind(&to).execute(&mut *tx).await?;
+    }
+    sqlx::query("UPDATE unknown_games SET decided_by = $2 WHERE game_id = $1")
+        .bind(&id)
+        .bind(s.user.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM games WHERE id = $1 AND NOT verified AND NOT EXISTS (SELECT 1 FROM steam_playtime WHERE game_id = $1)")
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    crate::achievements::clear_all();
+    audit(
+        &st,
+        &s,
+        "unknown_game.map",
+        &format!("game:{id}"),
+        Value::Null,
+        json!({ "to": to, "sessions": moved }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true, "sessions": moved })))
+}
+
+#[derive(Deserialize)]
+struct NameReq {
+    name: String,
+}
+
+async fn unknown_approve(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Json(r): Json<NameReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    unknown_pending(&st, &id).await?;
+    let name: String = r.name.trim().chars().take(80).collect();
+    if name.is_empty() {
+        return Err(AppError::bad_request("name", "Enter the official name."));
+    }
+    sqlx::query(
+        "INSERT INTO games(id, name, verified) VALUES($1, $2, true)
+         ON CONFLICT (id) DO UPDATE SET name = excluded.name, verified = true",
+    )
+    .bind(&id)
+    .bind(&name)
+    .execute(&st.db)
+    .await?;
+    sqlx::query("UPDATE unknown_games SET status = 'approved', decided_by = $2, decided_at = now() WHERE game_id = $1")
+        .bind(&id)
+        .bind(s.user.id)
+        .execute(&st.db)
+        .await?;
+    audit(
+        &st,
+        &s,
+        "unknown_game.approve",
+        &format!("game:{id}"),
+        Value::Null,
+        json!({ "name": name }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn unknown_reject(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    unknown_pending(&st, &id).await?;
+    sqlx::query("UPDATE unknown_games SET status = 'rejected', decided_by = $2, decided_at = now() WHERE game_id = $1")
+        .bind(&id)
+        .bind(s.user.id)
+        .execute(&st.db)
+        .await?;
+    audit(
+        &st,
+        &s,
+        "unknown_game.reject",
+        &format!("game:{id}"),
+        Value::Null,
+        Value::Null,
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ------------------------------------------------------------------ delete game
+
+/// Only entries nobody curated can be deleted: unlisted (auto-created) ids and manual ones.
+fn deletable(v: &Value) -> bool {
+    v["source"] == "unlisted" || v["id"].as_str().is_some_and(|i| i.starts_with("manual:"))
+}
+
+#[derive(Deserialize)]
+struct DeleteGameReq {
+    confirm: String,
+}
+
+/// Delete an unlisted game entry and everything recorded against it (sessions, hours,
+/// Steam rows, hidden flags, overrides, status). Needs the id typed back. Audited.
+async fn game_delete(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Json(r): Json<DeleteGameReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let v = game_info(&st, &id).await?.ok_or_else(AppError::not_found)?;
+    if !deletable(&v) {
+        return Err(AppError::bad_request(
+            "not_deletable",
+            "Only unlisted entries can be deleted. Games from the games list or Steam can be hidden or retired instead.",
+        ));
+    }
+    if r.confirm.trim() != id {
+        return Err(AppError::bad_request(
+            "confirm",
+            "Type the game id exactly to confirm.",
+        ));
+    }
+    let impact: (i64, i64, i64) = sqlx::query_as(
+        "SELECT count(DISTINCT user_id), count(*), coalesce(sum(duration_s), 0)::bigint FROM sessions WHERE game_id = $1",
+    )
+    .bind(&id)
+    .fetch_one(&st.db)
+    .await?;
+    let mut tx = st.db.begin().await?;
+    for q in [
+        "DELETE FROM sessions WHERE game_id = $1",
+        "DELETE FROM hours_entries WHERE game_id = $1",
+        "DELETE FROM steam_playtime WHERE game_id = $1",
+        "DELETE FROM hidden_games WHERE game_id = $1",
+        "DELETE FROM game_overrides WHERE game_id = $1",
+        "DELETE FROM game_status WHERE game_id = $1",
+        "DELETE FROM game_retirements WHERE game_id = $1 OR successor_id = $1",
+        "UPDATE presence SET game_id = NULL, game_name = NULL, game_detail = NULL, session_started_at = NULL WHERE game_id = $1",
+        "DELETE FROM unknown_games WHERE game_id = $1",
+        "DELETE FROM games WHERE id = $1",
+    ] {
+        sqlx::query(q).bind(&id).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    game_overrides::reload(&st).await.ok();
+    crate::achievements::clear_all();
+    audit(
+        &st,
+        &s,
+        "game.delete",
+        &format!("game:{id}"),
+        json!({ "name": v["name"], "source": v["source"], "exes": v["exes"] }),
+        json!({ "players": impact.0, "sessions": impact.1, "seconds": impact.2 }),
+    )
+    .await?;
+    Ok(Json(
+        json!({ "ok": true, "players": impact.0, "sessions": impact.1 }),
+    ))
 }
 
 // ------------------------------------------------------------------ profile reports
