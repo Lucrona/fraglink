@@ -504,3 +504,9 @@ select.t.sm{width:auto;padding:4px 6px}
 .gq{margin:8px 12px 2px}.empty-v2[data-frnone]{margin:6px 0}
 .pager{display:flex;align-items:center;justify-content:center;gap:12px;padding:8px;font-size:12px;color:#9fb0c2}.pager .btn[disabled]{opacity:.35;pointer-events:none}
 table.gt th.srt{cursor:pointer;user-select:none}table.gt th.srt:hover{color:#fff}table.gt th.srt.on{color:#ffd166}
+/* clickable things look clickable */
+.inset a.fc{display:inline-block;color:var(--gold,#f0b429)!important;cursor:pointer}
+.pv3 a:hover,.inset a.fc:hover{text-decoration:underline}
+.pv3 a.btn:hover,.kpi a.kf:hover{text-decoration:none}
+.kpi a.kf{cursor:pointer}.kpi a.kf span{text-decoration:underline dotted #9fb2c6}
+.panel.flash{box-shadow:0 0 0 2px #f0b429;transition:box-shadow .3s}
