@@ -432,7 +432,17 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         .filter_map(|o| o.name.as_ref().map(|n| (&o.game_id, n)))
         .collect();
     let detached = crate::retire::detached_exes(st).await?;
-    if approved.is_empty() && extra.is_empty() && renamed.is_empty() && detached.is_empty() {
+    let merged: Vec<(String, String)> = sqlx::query_as(
+        "SELECT game_id, successor_id FROM game_retirements WHERE merged ORDER BY game_id",
+    )
+    .fetch_all(&st.db)
+    .await?;
+    if approved.is_empty()
+        && extra.is_empty()
+        && renamed.is_empty()
+        && detached.is_empty()
+        && merged.is_empty()
+    {
         return Ok(s);
     }
     let mut f: overrides::OverrideFile = match serde_json::from_str(&s) {
@@ -505,6 +515,36 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
                     note: Some(format!("detached from {game}")),
                 },
             );
+        }
+    }
+    // merged games: the old entry's programs are detected as the target game
+    for (old, target) in &merged {
+        let name = ov
+            .get(target)
+            .and_then(|o| o.name.clone())
+            .or_else(|| crate::names::list_name(st, target))
+            .unwrap_or_else(|| target.clone());
+        let mut found = false;
+        for r in f.rules.iter_mut().filter(|r| &r.id == old) {
+            r.id = target.clone();
+            r.name = name.clone();
+            found = true;
+        }
+        if found {
+            continue;
+        }
+        for (exes, paths) in rename_patterns(st, old) {
+            if exes.is_empty() {
+                continue;
+            }
+            f.rules.push(overrides::Rule {
+                id: target.clone(),
+                name: name.clone(),
+                exes,
+                paths,
+                channel: None,
+                note: Some(format!("merged from {old}")),
+            });
         }
     }
     Ok(serde_json::to_string_pretty(&f).unwrap_or(s))

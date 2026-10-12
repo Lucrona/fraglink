@@ -835,7 +835,11 @@ async fn ensure_game(
     game_id: Option<&str>,
     game_name: Option<&str>,
 ) -> ApiResult<String> {
-    if let Some(id) = game_id.map(str::trim).filter(|s| !s.is_empty()) {
+    let eff = match game_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(id) => Some(crate::retire::effective_id(st, id).await?),
+        None => None,
+    };
+    if let Some(id) = eff.as_deref() {
         // Another user's private `manual:` game is off limits.
         if id.starts_with("manual:") && !id.starts_with(&format!("manual:{}:", user_id.simple())) {
             return Err(AppError::bad_request(

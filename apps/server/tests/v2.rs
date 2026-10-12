@@ -1224,3 +1224,150 @@ async fn unknown_ids_and_game_delete(pool: PgPool) {
         .unwrap();
     assert_eq!(n, 0);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn merge_game_into_another(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "mg@example.com", "mgboss").await;
+    sqlx::query("UPDATE users SET role = 'owner' WHERE handle = 'mgboss'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('oldgame', 'Old Game', true), ('newgame', 'New Game', true)")
+        .execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO game_overrides (game_id, extra_exes) VALUES ('oldgame', '{oldgame.exe}')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'mgboss'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        sqlx::query("INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s) VALUES (gen_random_uuid(), $1, 'oldgame', now() - interval '1 hour', now(), 3600)")
+            .bind(uid).execute(&pool).await.unwrap();
+    }
+    sqlx::query("INSERT INTO hidden_games (user_id, game_id) VALUES ($1, 'oldgame')")
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let p = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games/oldgame/merge?into=newgame",
+        Some(&t),
+        None,
+    )
+    .await;
+    assert_eq!(p.status, StatusCode::OK, "{}", p.text);
+    let p = p.json();
+    assert_eq!(p["from"]["totals"]["sessions"], 2);
+    assert_eq!(p["from"]["totals"]["players"], 1);
+    assert_eq!(p["from"]["totals"]["tracked_min"], 120);
+    assert_eq!(p["from"]["totals"]["hidden_by"], 1);
+    assert_eq!(
+        api(
+            &app,
+            "GET",
+            "/api/v1/admin/games/oldgame/merge?into=oldgame",
+            Some(&t),
+            None
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    let body = json!({"into": "newgame", "confirm": "nope"});
+    assert_eq!(
+        api(
+            &app,
+            "POST",
+            "/api/v1/admin/games/oldgame/merge",
+            Some(&t),
+            Some(body)
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    let body = json!({"into": "newgame", "confirm": "oldgame"});
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/admin/games/oldgame/merge",
+        Some(&t),
+        Some(body),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE game_id = 'newgame'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 2);
+    let h: i64 = sqlx::query_scalar("SELECT count(*) FROM hidden_games WHERE game_id = 'newgame'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(h, 1);
+    let m: bool =
+        sqlx::query_scalar("SELECT merged FROM game_retirements WHERE game_id = 'oldgame'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(m);
+    // a second merge of the same game is refused; unretire is refused
+    let body = json!({"into": "newgame", "confirm": "oldgame"});
+    assert_eq!(
+        api(
+            &app,
+            "POST",
+            "/api/v1/admin/games/oldgame/merge",
+            Some(&t),
+            Some(body)
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        api(
+            &app,
+            "POST",
+            "/api/v1/admin/games/oldgame/unretire",
+            Some(&t),
+            None
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    // detection rules: the old program is detected as the target game
+    let o = api(&app, "GET", "/api/v1/games/overrides", Some(&t), None).await;
+    assert!(o.text.contains("oldgame.exe"));
+    let v: serde_json::Value = serde_json::from_str(&o.text).unwrap();
+    let rule = v["rules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| {
+            r["exes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|e| e == "oldgame.exe")
+        })
+        .unwrap();
+    assert_eq!(rule["id"], "newgame");
+    // the audit log has it
+    let a: i64 = sqlx::query_scalar("SELECT count(*) FROM admin_audit WHERE action = 'game.merge'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(a, 1);
+}

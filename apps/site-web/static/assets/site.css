@@ -520,3 +520,4 @@ img.noimg{background:#1b2531 url(/assets/mark.svg) center/60% no-repeat;border:1
 .mtile img.art,.mtile .mtile-none.art{width:132px;height:62px;object-fit:cover;border-radius:3px;background:#1b1f26}
 .mtile-none{display:flex;align-items:center;justify-content:center;color:#5b6b7d;font-size:11px;border:1px dashed #33465c}
 .mtile b{font-size:12px}.mtile small{font-size:11px;color:#8193a8}
+table.mrgt{width:100%;margin:6px 0;font-size:12px}table.mrgt td,table.mrgt th{padding:3px 6px}

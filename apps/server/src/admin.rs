@@ -58,6 +58,10 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/games/{id}/art/url", post(game_art_url))
         .route("/api/v1/admin/games/{id}/retire", post(game_retire))
         .route("/api/v1/admin/games/{id}/unretire", post(game_unretire))
+        .route(
+            "/api/v1/admin/games/{id}/merge",
+            get(merge_preview).post(merge_into),
+        )
         .route("/api/v1/admin/games/{id}/status", post(game_status_save))
         .route(
             "/api/v1/admin/games/{id}/icon",
@@ -489,19 +493,26 @@ async fn game_info(st: &AppState, id: &str) -> ApiResult<Option<Value>> {
         .or_else(|| row.as_ref().map(|r| r.0.clone()))
         .unwrap_or_default();
     let public = names::public_name(st, id).await?;
-    let retired: Option<(String, DateTime<Utc>, Vec<String>, bool)> = sqlx::query_as(
-        "SELECT successor_id, retired_at, exes, partial FROM game_retirements WHERE game_id = $1",
+    let merged_from: Vec<String> =
+        sqlx::query_scalar("SELECT game_id FROM game_retirements WHERE successor_id = $1 AND merged ORDER BY retired_at")
+            .bind(id)
+            .fetch_all(&st.db)
+            .await?;
+    let retired: Option<(String, DateTime<Utc>, Vec<String>, bool, bool)> = sqlx::query_as(
+        "SELECT successor_id, retired_at, exes, partial, merged FROM game_retirements WHERE game_id = $1",
     )
     .bind(id)
     .fetch_optional(&st.db)
     .await?;
-    let retired_from: Option<String> =
-        sqlx::query_scalar("SELECT game_id FROM game_retirements WHERE successor_id = $1")
-            .bind(id)
-            .fetch_optional(&st.db)
-            .await?;
+    let retired_from: Option<String> = sqlx::query_scalar(
+        "SELECT game_id FROM game_retirements WHERE successor_id = $1 AND NOT merged",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
     Ok(Some(json!({
-        "retired": retired.map(|(s, at, exes, partial)| json!({ "successor": s, "at": at, "exes": exes, "partial": partial })),
+        "retired": retired.map(|(s, at, exes, partial, merged)| json!({ "successor": s, "at": at, "exes": exes, "partial": partial, "merged": merged })),
+        "merged_from": merged_from,
         "exes": crate::retire::all_exes(st, id).await?,
         "status": crate::game_status::get(st, id).await?,
         "retired_from": retired_from,
@@ -919,15 +930,21 @@ async fn game_unretire(
     Path(id): Path<String>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
-    let row: Option<(String, Vec<String>, bool)> = sqlx::query_as(
-        "SELECT successor_id, exes, partial FROM game_retirements WHERE game_id = $1",
+    let row: Option<(String, Vec<String>, bool, bool)> = sqlx::query_as(
+        "SELECT successor_id, exes, partial, merged FROM game_retirements WHERE game_id = $1",
     )
     .bind(&id)
     .fetch_optional(&st.db)
     .await?;
-    let Some((successor, exes, partial)) = row else {
+    let Some((successor, exes, partial, merged)) = row else {
         return Err(bad("not_retired", "This game isn't retired."));
     };
+    if merged {
+        return Err(bad(
+            "merged",
+            "This game was merged into another; its play now lives there.",
+        ));
+    }
     let mut new_ids = vec![successor.clone()];
     if partial {
         new_ids = exes.iter().map(|e| format!("exe:{e}")).collect();
@@ -2302,6 +2319,147 @@ async fn game_status_save(
     )
     .await?;
     Ok(Json(game_info(&st, &id).await?.unwrap_or(Value::Null)))
+}
+
+// ------------------------------------------------------------------ merge into another game
+
+#[derive(Deserialize)]
+struct MergeQ {
+    into: String,
+}
+
+async fn totals_of(st: &AppState, id: &str) -> ApiResult<Value> {
+    let t: Option<Totals> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{GAME_TOTALS} WHERE game_id = $1 GROUP BY game_id"
+    )))
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let mut v = json!({});
+    put_totals(&mut v, t.as_ref());
+    let (sessions, users): (i64, i64) =
+        sqlx::query_as("SELECT count(*), count(DISTINCT user_id) FROM sessions WHERE game_id = $1")
+            .bind(id)
+            .fetch_one(&st.db)
+            .await?;
+    v["sessions"] = json!(sessions);
+    v["session_players"] = json!(users);
+    let (hours, imports, hidden): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM hours_entries WHERE game_id = $1),
+                (SELECT count(*) FROM steam_playtime WHERE game_id = $1),
+                (SELECT count(*) FROM hidden_games WHERE game_id = $1)",
+    )
+    .bind(id)
+    .fetch_one(&st.db)
+    .await?;
+    v["hours_entries"] = json!(hours);
+    v["steam_imports"] = json!(imports);
+    v["hidden_by"] = json!(hidden);
+    Ok(v)
+}
+
+/// Why `id` can't be merged into `into`, if it can't.
+async fn merge_check(st: &AppState, id: &str, into: &str) -> ApiResult<(Value, Value)> {
+    let from = game_info(st, id).await?.ok_or_else(AppError::not_found)?;
+    let to = game_info(st, into)
+        .await?
+        .ok_or_else(|| bad("bad_target", "Pick an existing game to merge into."))?;
+    if id == into {
+        return Err(bad("bad_target", "Pick a different game."));
+    }
+    let retired: Option<String> = sqlx::query_scalar(
+        "SELECT successor_id FROM game_retirements WHERE game_id = $1 AND NOT partial",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    if retired.is_some() {
+        return Err(bad("retired", "This game is already retired or merged."));
+    }
+    if crate::retire::effective_id(st, into).await? != into {
+        return Err(bad(
+            "bad_target",
+            "That game is retired; merge into the game that replaced it.",
+        ));
+    }
+    Ok((from, to))
+}
+
+async fn merge_preview(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Query(q): Query<MergeQ>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let (from, to) = merge_check(&st, &id, q.into.trim()).await?;
+    Ok(Json(json!({
+        "from": { "id": id, "name": from["public_name"].as_str().or(from["name"].as_str()), "totals": totals_of(&st, &id).await? },
+        "into": { "id": q.into.trim(), "name": to["public_name"].as_str().or(to["name"].as_str()), "totals": totals_of(&st, q.into.trim()).await? },
+    })))
+}
+
+#[derive(Deserialize)]
+struct MergeReq {
+    into: String,
+    confirm: String,
+}
+
+/// Move everything recorded under `id` to `into` and retire `id` as merged: future
+/// reports of `id` (and its detection rules) count for `into`.
+async fn merge_into(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+    Json(r): Json<MergeReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let into = r.into.trim().to_string();
+    let (from, to) = merge_check(&st, &id, &into).await?;
+    if r.confirm.trim() != id {
+        return Err(bad(
+            "confirm",
+            "Type the id of the game being merged to confirm.",
+        ));
+    }
+    let before = totals_of(&st, &id).await?;
+    names::ensure_game_row(&st, &into).await?;
+    names::ensure_game_row(&st, &id).await?;
+    let mut tx = st.db.begin().await?;
+    for q in [
+        "UPDATE sessions SET game_id = $2 WHERE game_id = $1",
+        "UPDATE hours_entries SET game_id = $2 WHERE game_id = $1",
+        "UPDATE steam_playtime SET game_id = $2 WHERE game_id = $1",
+        "INSERT INTO hidden_games(user_id, game_id) SELECT user_id, $2 FROM hidden_games WHERE game_id = $1 ON CONFLICT DO NOTHING",
+        "DELETE FROM hidden_games WHERE game_id = $1 AND $2::text IS NOT NULL",
+        "UPDATE presence SET game_id = $2, game_name = NULL WHERE game_id = $1",
+        "UPDATE game_retirements SET successor_id = $2 WHERE successor_id = $1 AND merged",
+        "UPDATE unknown_games SET status = 'mapped', mapped_to = $2, decided_at = now() WHERE game_id = $1",
+    ] {
+        sqlx::query(q).bind(&id).bind(&into).execute(&mut *tx).await?;
+    }
+    sqlx::query(
+        "INSERT INTO game_retirements(game_id, successor_id, retired_by, exes, partial, merged)
+         VALUES($1, $2, $3, '{}', false, true)",
+    )
+    .bind(&id)
+    .bind(&into)
+    .bind(s.user.id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    crate::retire::reload(&st).await?;
+    crate::achievements::clear_all();
+    audit(
+        &st,
+        &s,
+        "game.merge",
+        &format!("game:{id}"),
+        json!({ "name": from["public_name"].as_str().or(from["name"].as_str()), "totals": before }),
+        json!({ "into": into, "into_name": to["public_name"].as_str().or(to["name"].as_str()) }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true, "moved": before })))
 }
 
 // ------------------------------------------------------------------ icon / art source picker

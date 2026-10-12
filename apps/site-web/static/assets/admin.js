@@ -188,9 +188,11 @@ function statusHtml(g) {
 }
 function retireHtml(g) {
   const r = g.retired, exes = g.exes || [];
+  if (r && r.merged) return `<div class="f"><label>Merged</label><div>Merged into <a href="#" data-goto="${esc(r.successor)}" class="mono">${esc(r.successor)}</a> on ${day(r.at)}. Its play and hours live there now, and apps reporting this id count for that game.</div></div>`;
+  const mf = (g.merged_from || []).length ? `<div class="dimt">Merged in: ${g.merged_from.map(x => `<a href="#" data-goto="${esc(x)}" class="mono">${esc(x)}</a>`).join(", ")}</div>` : "";
   if (r) return `<div class="f"><label>Retired</label><div>${r.partial ? `Detached ${r.exes.map(e => `<span class="mono">${esc(e)}</span>`).join(", ")} on ${day(r.at)}; the game stays live.` : `Retired ${day(r.at)}. New play goes to <a href="#" data-goto="${esc(r.successor)}" class="mono">${esc(r.successor)}</a>.`}</div>
     <div class="row"><button class="btn" id="gunret" type="button">Undo retire</button><small>Only while the new entry has no hours.</small></div><div class="alert" id="rmsg" hidden></div></div>`;
-  return `<div class="f"><label>Retire</label>${g.retired_from ? `<div class="dimt">New entry for retired <a href="#" data-goto="${esc(g.retired_from)}" class="mono">${esc(g.retired_from)}</a>.</div>` : ""}
+  return `<div class="f"><label>Retire</label>${mf}${g.retired_from ? `<div class="dimt">New entry for retired <a href="#" data-goto="${esc(g.retired_from)}" class="mono">${esc(g.retired_from)}</a>.</div>` : ""}
     ${exes.length ? `<div>Programs to detach:</div>${exes.map(e => `<label class="check"><input type="checkbox" name="rx" value="${esc(e)}" checked> <span class="mono">${esc(e)}</span></label>`).join("")}` : `<div class="dimt">No known program names; add an extra exe first.</div>`}
     <div class="row"><button class="btn danger" id="gret" type="button"${exes.length ? "" : " disabled"}>Retire…</button></div>
     <small>All programs: the entry is frozen (name, icon and hours stay) and new play starts a fresh entry in Game approvals. Some programs: only those move to fresh entries; the game stays live.</small>
@@ -213,6 +215,9 @@ async function editGame(id) {
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     ${statusHtml(g)}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${retireHtml(g)}
+    ${g.retired ? "" : `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0"><div class="f" id="mrg"><label>Merge into… <span class="dimt">(for a game the games list re-added under a new id)</span></label>
+      <div class="row"><input class="in" id="mrgq" list="mrg-games" placeholder="Search the game to keep…" style="flex:1" autocomplete="off"><datalist id="mrg-games"></datalist><button class="btn" type="button" id="mrgp">Preview</button></div>
+      <div id="mrgout"></div><div class="alert" id="mrgmsg" hidden></div></div>`}
     ${g.deletable ? `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0"><div class="f"><label>Delete</label>
       <div class="dimt">Removes this unlisted entry for good${g.sessions ? `, including <b>${g.sessions} session${g.sessions === 1 ? "" : "s"}</b> from <b>${g.players} player${g.players === 1 ? "" : "s"}</b> (${hrs(g.total_min)})` : " (no sessions recorded)"}. Logged in the audit log.</div>
       <div class="row"><button class="btn danger" id="gdelete" type="button">Delete game…</button></div><div class="alert" id="dmsg" hidden></div></div>` : ""}</div>`;
@@ -242,6 +247,7 @@ async function editGame(id) {
     } catch (x) { msg($("#gmsg"), x.message); }
   });
   renderMedia(id, g);
+  wireMerge(id);
   const gd = $("#gdelete");
   if (gd) gd.addEventListener("click", () => {
     const typed = prompt(`Delete "${g.public_name || g.name || id}"${g.sessions ? ` and ${g.sessions} session(s) from ${g.players} player(s)` : ""}? This can't be undone.\n\nType the game id to confirm:\n${id}`);
@@ -442,6 +448,33 @@ async function staff() {
     if (!confirm("Hand ownership to " + tf.handle.value.trim() + "? You'll become an admin.")) return;
     try { await api("/admin/staff/transfer", { method: "POST", body: { handle: tf.handle.value.trim(), confirm: tf.confirm.value.trim() } }); location.reload(); } catch (x) { msg($("#tmsg"), x.message); }
   });
+}
+
+// Edit game > Merge into…: preview what moves, then a typed confirm.
+function wireMerge(id) {
+  const q = $("#mrgq"); if (!q) return;
+  const gid = "/admin/games/" + encodeURIComponent(id), out = $("#mrgout"), m = $("#mrgmsg");
+  let tm;
+  q.addEventListener("input", () => { clearTimeout(tm); tm = setTimeout(async () => {
+    const v = q.value.trim(); if (v.length < 2) return;
+    const d = await api("/admin/games?q=" + encodeURIComponent(v)).catch(() => ({ games: [] }));
+    $("#mrg-games").innerHTML = d.games.filter(x => x.id !== id).map(x => `<option value="${esc(x.id)}">${esc(x.public_name || x.name)}</option>`).join("");
+  }, 250); });
+  const row = (label, t) => `<tr><td>${esc(label)}</td><td class="num">${t.players}</td><td class="num">${t.sessions}</td><td class="num">${hrs(t.tracked_min)}</td><td class="num">${hrs(t.imported_min)}</td><td class="num">${hrs(t.estimated_min)}</td><td class="num">${t.hidden_by}</td></tr>`;
+  $("#mrgp").addEventListener("click", e => act(e.target, async () => {
+    const into = q.value.trim(); if (!into) throw new Error("Pick the game to merge into.");
+    const p = await api(gid + "/merge?into=" + encodeURIComponent(into));
+    out.innerHTML = `<table class="mrgt"><thead><tr><th></th><th class="num">Players</th><th class="num">Sessions</th><th class="num">Tracked</th><th class="num">Imported</th><th class="num">Estimated</th><th class="num">Hidden by</th></tr></thead><tbody>
+      ${row("Moves from " + (p.from.name || id), p.from.totals)}${row("Into " + (p.into.name || into) + " (now)", p.into.totals)}</tbody></table>
+      <div class="dimt">Everything above moves to <b>${esc(p.into.name || into)}</b> <span class="mono">${esc(into)}</span>. This entry is retired, and apps that still report <span class="mono">${esc(id)}</span> count for the target from now on. Logged in the audit log.</div>
+      <div class="row"><button class="btn danger" type="button" id="mrgdo">Merge…</button></div>`;
+    $("#mrgdo").addEventListener("click", ev => {
+      const typed = prompt(`Merge "${p.from.name || id}" into "${p.into.name || into}"? This can't be undone.\n\nType the id of the game being merged to confirm:\n${id}`);
+      if (typed === null) return;
+      if (typed.trim() !== id) return msg(m, "The id didn't match; nothing was merged.");
+      act(ev.target, async () => { await api(gid + "/merge", { method: "POST", body: { into, confirm: typed.trim() } }); listGames($("#gs").q.value.trim()); editGame(into); }).catch(x => msg(m, x.message));
+    });
+  }).catch(x => msg(m, x.message)));
 }
 
 // Edit game > Pictures: pick where the icon and the banner art come from.
