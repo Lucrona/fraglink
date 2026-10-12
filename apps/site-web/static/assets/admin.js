@@ -444,10 +444,6 @@ async function staff() {
   });
 }
 
-route();
-if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] }))]).then(([d, u]) => badge("approvals", d.suggestions.length + u.unknown.length)).catch(() => {});
-};
-
 // Edit game > Pictures: pick where the icon and the banner art come from.
 async function renderMedia(id, g) {
   const box = $("#media"), gid = "/admin/games/" + encodeURIComponent(id), t = "?t=" + Date.now();
@@ -504,3 +500,7 @@ async function renderMedia(id, g) {
     }).catch(x => msg(out, x.message)));
   });
 }
+
+route();
+if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] }))]).then(([d, u]) => badge("approvals", d.suggestions.length + u.unknown.length)).catch(() => {});
+};
