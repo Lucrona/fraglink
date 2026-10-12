@@ -195,8 +195,10 @@ async fn profile(
     m: MaybeUser,
     headers: HeaderMap,
     Path(handle): Path<String>,
+    axum::extract::Query(pq): axum::extract::Query<crate::paging::PageQuery>,
 ) -> ApiResult<Json<Value>> {
     let viewer = m.0.as_ref().map(|a| a.user.id);
+    let games_only = pq.show.as_deref() == Some("games");
     let key = viewer
         .map(|v| v.to_string())
         .unwrap_or_else(|| crate::client_ip(&headers));
@@ -350,6 +352,22 @@ async fn profile(
             }));
         }
     }
+    // One page of the games table (search/sort on the server). `show=games` returns only that.
+    let games_all = games.len();
+    let games_page = {
+        let mut g = games.clone();
+        if pq.sort.is_some() {
+            crate::paging::sort_games(&mut g, pq.sort.as_deref());
+        }
+        let default = if games_only { 50 } else { 8 };
+        crate::paging::page(g, &pq.term(), &["name"], pq.offset(), pq.limit(default))
+    };
+    if games_only {
+        return Ok(Json(json!({
+            "games": games_page.0, "total": games_page.1, "all": games_all, "offset": pq.offset(),
+            "visible": can_see_games,
+        })));
+    }
     // Extra details (each behind its own switch) and age from the birthday.
     let (real_name, gender, birth, country): (
         Option<String>,
@@ -399,7 +417,13 @@ async fn profile(
                         .iter()
                         .any(|x| x["game_id"] == g.as_str() && x["listed"] == true)
                 })
-                .map(|(g, at)| json!({ "kind": "first_play", "at": at, "game_id": g })),
+                .map(|(g, at)| {
+                    let name = games
+                        .iter()
+                        .find(|x| x["game_id"] == g.as_str())
+                        .map(|x| x["name"].clone());
+                    json!({ "kind": "first_play", "at": at, "game_id": g, "name": name })
+                }),
         );
     }
     let achievements = if can_see_games && show("achievements") {
@@ -493,7 +517,8 @@ async fn profile(
         "previous_names": previous,
         "privacy": if is_self { crate::account::privacy_view(&privacy) } else { Value::Null },
         "presence": presence,
-        "games": games,
+        "games": games_page.0,
+        "games_total": games_all,
         "overall": { "total_min": total_min, "minutes_7d": min_7d },
         "recent": recent,
         "recent_days": RECENT_DAYS,

@@ -47,6 +47,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/export", get(export))
         .route("/api/v1/export.zip", get(export_zip))
         .route("/api/v1/friends", get(friends_list))
+        .route("/api/v1/friends/page", get(friends_page))
         .route("/api/v1/friends/request", post(friend_request))
         .route("/api/v1/friends/respond", post(friend_respond))
         .route("/api/v1/friends/activity", get(friends_activity))
@@ -1463,4 +1464,56 @@ async fn game_icons(
         );
     }
     Ok(Json(Value::Object(out)))
+}
+
+/// One page of your friends for the website: playing first, then online, away, offline;
+/// search by name; requests and blocks capped at 100 each (with counts).
+async fn friends_page(
+    State(st): State<AppState>,
+    a: AuthUser,
+    Query(pq): Query<crate::paging::PageQuery>,
+) -> ApiResult<Json<Value>> {
+    let fl = friends::list(&st, a.user.id).await?;
+    let rank = |f: &friends::FriendView| match (
+        f.presence.status.as_str(),
+        f.presence.game_name.is_some(),
+    ) {
+        ("online", true) => 0,
+        ("online", false) => 1,
+        ("away", _) => 2,
+        _ => 3,
+    };
+    let mut fr: Vec<&friends::FriendView> = fl.friends.iter().collect();
+    fr.sort_by(|x, y| {
+        rank(x).cmp(&rank(y)).then_with(|| {
+            x.display_name
+                .to_lowercase()
+                .cmp(&y.display_name.to_lowercase())
+        })
+    });
+    let online = fr.iter().filter(|f| rank(f) < 3).count();
+    let all = fr.len();
+    let items: Vec<Value> = fr
+        .into_iter()
+        .filter(|f| match pq.show.as_deref() {
+            Some("online") => rank(f) < 3,
+            Some("offline") => rank(f) == 3,
+            _ => true,
+        })
+        .map(|f| serde_json::to_value(f).unwrap_or(Value::Null))
+        .collect();
+    let (page, total) = crate::paging::page(
+        items,
+        &pq.term(),
+        &["handle", "display_name"],
+        pq.offset(),
+        pq.limit(50),
+    );
+    let cap = |v: &Vec<friends::RequestView>| json!(v.iter().take(100).collect::<Vec<_>>());
+    Ok(Json(json!({
+        "friends": page, "total": total, "all": all, "online": online, "offset": pq.offset(),
+        "incoming": cap(&fl.incoming), "incoming_count": fl.incoming.len(),
+        "outgoing": cap(&fl.outgoing), "outgoing_count": fl.outgoing.len(),
+        "blocked": fl.blocked.iter().take(100).collect::<Vec<_>>(), "blocked_count": fl.blocked.len(),
+    })))
 }

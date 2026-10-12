@@ -1007,3 +1007,90 @@ async fn profile_details_events_achievements_report(pool: PgPool) {
         .unwrap();
     assert_eq!(n, 1);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn paged_lists(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let a = signup(&app, "pg1@example.com", "pga").await;
+    let b = signup(&app, "pg2@example.com", "pgb").await;
+    for (t, h) in [(&a, "pgb"), (&b, "pga")] {
+        api(
+            &app,
+            "POST",
+            "/api/v1/friends/request",
+            Some(t),
+            Some(json!({"handle": h})),
+        )
+        .await;
+    }
+    for i in 0..30 {
+        sqlx::query(
+            "INSERT INTO games (id, name, verified) VALUES ($1, $2, true) ON CONFLICT DO NOTHING",
+        )
+        .bind(format!("g{i}"))
+        .bind(format!("Game {i}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s)
+             SELECT gen_random_uuid(), id, $1, now() - make_interval(secs => $2 + 60), now() - interval '1 minute', $2 FROM users WHERE handle = 'pga'",
+        )
+        .bind(format!("g{i}")).bind(((i + 1) * 600) as f64).execute(&pool).await.unwrap();
+    }
+    let r = api(
+        &app,
+        "GET",
+        "/api/v1/me/games?limit=10&q=game%202&sort=name",
+        Some(&a),
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(r["total"], 11); // Game 2, 20-29
+    assert_eq!(r["games"].as_array().unwrap().len(), 10);
+    assert_eq!(r["all"], 30);
+    let p = api(
+        &app,
+        "GET",
+        "/api/v1/users/pga/profile?limit=10",
+        Some(&b),
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(p["games"].as_array().unwrap().len(), 10);
+    assert_eq!(p["games_total"], 30);
+    let g = api(
+        &app,
+        "GET",
+        "/api/v1/users/pga/profile?show=games&limit=5&offset=25",
+        Some(&b),
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(g["games"].as_array().unwrap().len(), 5);
+    assert_eq!(g["total"], 30);
+    let f = api(
+        &app,
+        "GET",
+        "/api/v1/friends/page?q=PGB&limit=5",
+        Some(&a),
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(f["total"], 1);
+    assert_eq!(f["all"], 1);
+    let f = api(
+        &app,
+        "GET",
+        "/api/v1/friends/page?show=online",
+        Some(&a),
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(f["total"], 0);
+}

@@ -288,7 +288,7 @@ pages.home = async () => {
   const ids = [].concat(h.most_played.map(g => g.game_id), h.now_playing.map(n => n.game_id));
   let fl = null, act = null;
   if (u && token()) {
-    [fl, act] = await Promise.all([api("/friends").catch(() => null), api("/friends/activity?tz=" + encodeURIComponent(TZ)).catch(() => null)]);
+    [fl, act] = await Promise.all([api("/friends/page?show=online&limit=10").catch(() => null), api("/friends/activity?tz=" + encodeURIComponent(TZ)).catch(() => null)]);
     if (fl) fl.friends.forEach(f => f.presence && ids.push(f.presence.game_id));
     if (act) act.items.forEach(i => ids.push(i.game_id));
   }
@@ -322,7 +322,7 @@ pages.home = async () => {
   let friendsBox = "", actBox = "";
   if (fl) {
     const on = fl.friends.filter(f => f.presence && f.presence.status !== "offline").sort((a, b) => rank(b.presence) - rank(a.presence));
-    friendsBox = panel(`Friends online (${on.length})`, on.length ? `<div class="feed2">${on.slice(0, 10).map(f => `<div>${avatar(f.avatar, 24)}<span><a href="/u/${encodeURIComponent(f.handle)}">${esc(f.display_name || f.handle)}</a><br>${f.presence.game_name ? (isUnlisted(f.presence.game_id) ? "Playing a game" : `${icon(f.presence.game_id, f.presence.game_name)} ${esc(f.presence.game_name)}`) : `<span style="color:var(--online)">Online</span>`}</span></div>`).join("")}</div>` : `<span class="empty">${fl.friends.length ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</span>`, ` <a class="more" href="/friends">All friends</a>`);
+    friendsBox = panel(`Friends online (${fl.online})`, on.length ? `<div class="feed2">${on.slice(0, 10).map(f => `<div>${avatar(f.avatar, 24)}<span><a href="/u/${encodeURIComponent(f.handle)}">${esc(f.display_name || f.handle)}</a><br>${f.presence.game_name ? (isUnlisted(f.presence.game_id) ? "Playing a game" : `${icon(f.presence.game_id, f.presence.game_name)} ${esc(f.presence.game_name)}`) : `<span style="color:var(--online)">Online</span>`}</span></div>`).join("")}</div>` : `<span class="empty">${fl.all ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</span>`, ` <a class="more" href="/friends">All friends</a>`);
   }
   if (act && act.items.length) {
     let f = "", last = "";
@@ -414,6 +414,15 @@ pages.verify = async () => {
 };
 
 /* ----- profile ----- */
+const GPAGE = 10;
+/* Pager: "‹ Prev  11–20 of 248  Next ›" (buttons carry data-off). */
+function pagerHtml(off, lim, total, term) {
+  if (!total) return "";
+  const from = off + 1, to = Math.min(off + lim, total), nf_ = n => n.toLocaleString("en");
+  return `<div class="pager"><button type="button" class="btn sm" data-off="${Math.max(0, off - lim)}" ${off ? "" : "disabled"}>‹ Prev</button>
+    <span>${nf_(from)}–${nf_(to)} of ${nf_(total)}${term ? ` matching “${esc(term)}”` : ""}</span>
+    <button type="button" class="btn sm" data-off="${off + lim}" ${to < total ? "" : "disabled"}>Next ›</button></div>`;
+}
 /* Search box with clear (x): filters as you type. */
 function searchBox(ph, id) { return `<span class="sbox"><input class="t" type="search" id="${id}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false"><button type="button" class="sx-clear" aria-label="Clear search" hidden>&times;</button></span>`; }
 function wireSearch(input, onChange) {
@@ -437,7 +446,7 @@ pages.profile = async () => {
   if (!handle) { location.replace(me() ? "/u/" + encodeURIComponent(me().handle) : "/login"); return; }
   document.title = handle + " · Fraglink";
   let p;
-  try { p = await api("/users/" + encodeURIComponent(handle) + "/profile", { keepSession: true }); }
+  try { p = await api("/users/" + encodeURIComponent(handle) + "/profile?limit=" + GPAGE, { keepSession: true }); }
   catch (e) {
     if (e.status === 401) {
       root.innerHTML = `<div class="narrow panel"><h2>${esc(handle)}</h2><div class="body"><p>This profile is only visible to signed-in Fraglink players.</p><p><a class="btn" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in</a> <a class="btn dl" href="/signup">Create an account</a></p></div></div>`;
@@ -519,7 +528,7 @@ pages.profile = async () => {
       ${kv("Location", loc)}${kv("Age", p.age != null ? String(p.age) : "")}${kv("Gender", p.gender ? esc(p.gender) : "")}${kv("Real name", p.real_name ? esc(p.real_name) : "")}
       ${kv("Style", p.gaming_style ? esc(p.gaming_style) : "")}${main ? kv("Main game", esc(main.name)) : ""}
     </dl>${inset}</div>${p.about ? `<p class="about">${esc(p.about)}</p>` : ""}`);
-  let games;
+  let games, gamesRow;
   if (!p.history_visible && !p.games_visible) {
     const why = p.relation === "friend" || p.relation === "public" ? `${esc(p.handle)} keeps their play history private.` : `Add ${esc(p.handle)} as a friend to see their games and hours.`;
     games = sec("Games", `<div class="body empty">${why}</div>`);
@@ -528,12 +537,15 @@ pages.profile = async () => {
   } else {
     const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
       <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
-    const top = p.games.slice(0, 8), rest = p.games.slice(8);
-    games = sec("Games", `${p.games.length > 8 ? `<div class="lbar gq">${searchBox("Search " + (self ? "your" : "their") + " games", "gt-q")}<span class="lcount" data-gtc></span></div>` : ""}<table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total ▾</th><th class="n hide-sm">Last played</th></tr></thead>
-      <tbody>${top.map(row).join("")}</tbody>${rest.length ? `<tbody class="more" hidden>${rest.map(row).join("")}</tbody>` : ""}
+    const many = (p.games_total || p.games.length) > GPAGE;
+    games = sec("Games", `${many ? `<div class="lbar gq">${searchBox("Search " + (self ? "your" : "their") + " games", "gt-q")}
+        <select class="t sm" data-gsort aria-label="Sort"><option value="total">Most played</option><option value="recent">Recently played</option><option value="week">Past 7 days</option><option value="name">Name A–Z</option></select></div>` : ""}
+      <table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total</th><th class="n hide-sm">Last played</th></tr></thead>
+      <tbody data-gbody>${p.games.map(row).join("")}</tbody>
       <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
-      ${rest.length ? `<div class="body" style="padding-top:6px"><a href="#" data-more>Show entire gaming history (${rest.length} more)</a></div>` : ""}
-      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters. Estimates are never added to totals.</div>`, rest.length ? `<a href="#" data-less hidden>Show less</a>` : "");
+      ${many ? `<div data-gpager>${pagerHtml(0, GPAGE, p.games_total)}</div>` : ""}
+      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters. Estimates are never added to totals.</div>`);
+    gamesRow = row;
   }
 
   // Achievements
@@ -554,7 +566,7 @@ pages.profile = async () => {
   (p.events || []).forEach(e => {
     const at = new Date(e.at);
     if (e.kind === "friend") items.push({ at, html: `<span class="ev">&#128101;</span><span><b>${esc(p.display_name || p.handle)}</b> is now friends with <a href="/u/${encodeURIComponent(e.handle)}">${esc(e.display_name || e.handle)}</a></span>` });
-    if (e.kind === "first_play") { const g = (p.games || []).find(x => x.game_id === e.game_id); if (g && g.listed !== false) items.push({ at, html: `${icon(g.game_id, g.name)}<span><b>${esc(p.display_name || p.handle)}</b> played <span class="gl">${esc(g.name)}</span> for the first time</span>` }); }
+    if (e.kind === "first_play") { const g = e.name ? { game_id: e.game_id, name: e.name } : null; if (g) items.push({ at, html: `${icon(g.game_id, g.name)}<span><b>${esc(p.display_name || p.handle)}</b> played <span class="gl">${esc(g.name)}</span> for the first time</span>` }); }
   });
   const daysM = new Map();
   if (p.history_visible) (p.recent || []).forEach(r => {
@@ -593,26 +605,24 @@ pages.profile = async () => {
   if (add) add.addEventListener("click", async () => { if (!token()) return requireLogin(); add.disabled = true; try { await api("/friends/request", { method: "POST", body: { handle: p.handle } }); add.textContent = "Friend request sent"; } catch (e) { add.disabled = false; alert(e.message); } });
   if (acc) acc.addEventListener("click", async () => { acc.disabled = true; try { await api("/friends/respond", { method: "POST", body: { handle: p.handle, accept: true } }); location.reload(); } catch (e) { acc.disabled = false; alert(e.message); } });
   const gq = $("#gt-q", root);
-  if (gq) wireSearch(gq, term => {
-    const tbs = $$("table.gt tbody", root), mt = $("tbody.more", root), mb = more && more.parentNode;
-    let n = 0;
-    tbs.forEach(tb => $$("tr", tb).forEach(tr => { const hit = !term || tr.cells[0].textContent.toLowerCase().includes(term); tr.hidden = !hit; if (hit) n++; }));
-    if (term) { if (mt) mt.hidden = false; if (mb) mb.hidden = true; const lt = $("[data-less]", root); if (lt) lt.hidden = true; }
-    else { if (mt) mt.hidden = true; if (mb) { mb.hidden = false; more.textContent = more.textContent.startsWith("Show less") ? `Show entire gaming history (${mt.rows.length} more)` : more.textContent; } }
-    $("[data-gtc]", root).textContent = term ? (n ? `${n} match${n === 1 ? "" : "es"}` : "No games match") : "";
-  });
-  const lessTop = $("[data-less]", root);
-  if (lessTop && more) lessTop.addEventListener("click", e => { e.preventDefault(); more.click(); });
-  if (more) {
-    const n = more.dataset.n || more.textContent.match(/\d+/)[0];
-    more.addEventListener("click", e => {
-      e.preventDefault();
-      const tb = $("tbody.more", root), open = tb.hidden;
-      tb.hidden = !open;
-      more.textContent = open ? "Show less" : `Show entire gaming history (${n} more)`;
-      const top = $("[data-less]", root); if (top) top.hidden = !open;
-      if (!open) { const t = more.closest("section"); if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: "start" }); }
-    });
+  if (gq) {
+    const st = { offset: 0 }, sortSel = $("[data-gsort]", root), body = $("[data-gbody]", root), pg = $("[data-gpager]", root);
+    const load = async keepPos => {
+      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: sortSel.value, q: gq.value.trim() });
+      body.style.opacity = .5;
+      try {
+        const r = await api("/users/" + encodeURIComponent(p.handle) + "/profile?" + qs, { keepSession: true });
+        await loadIcons(r.games.map(g => g.game_id));
+        body.innerHTML = r.games.length ? r.games.map(gamesRow).join("") : `<tr><td colspan="4" class="empty">No games match “${esc(gq.value.trim())}”. <a href="#" data-gclear>Clear search</a></td></tr>`;
+        pg.innerHTML = pagerHtml(st.offset, GPAGE, r.total, gq.value.trim());
+        if (keepPos) { const t = body.closest("section"); if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: "start" }); }
+      } catch (x) { pg.textContent = x.message; }
+      body.style.opacity = 1;
+    };
+    let t; wireSearch(gq, () => { clearTimeout(t); t = setTimeout(() => { st.offset = 0; load(); }, 200); });
+    sortSel.onchange = () => { st.offset = 0; load(); };
+    pg.addEventListener("click", e => { const b = e.target.closest("[data-off]"); if (!b) return; e.preventDefault(); st.offset = +b.dataset.off; load(true); });
+    body.addEventListener("click", e => { if (e.target.closest("[data-gclear]")) { e.preventDefault(); gq.value = ""; gq.dispatchEvent(new Event("input")); } });
   }
   if (rep) rep.addEventListener("click", async e => {
     e.preventDefault(); const reason = prompt("Report this picture to the Fraglink moderators. What's wrong with it? (optional)"); if (reason === null) return;
@@ -634,13 +644,13 @@ function friendRow(f, opts) {
 pages.friends = async () => {
   if (!requireLogin()) return;
   const root = $("#friends"), msg = $("#msg");
+  const FP = 50, fs = { offset: 0, q: "", show: "all" };
   async function load() {
     let fl, act;
-    try { [fl, act] = await Promise.all([api("/friends"), api("/friends/activity?tz=" + encodeURIComponent(TZ)).catch(() => ({ items: [] }))]); }
+    const qs = new URLSearchParams({ limit: FP, offset: fs.offset, q: fs.q, show: fs.show });
+    try { [fl, act] = await Promise.all([api("/friends/page?" + qs), api("/friends/activity?tz=" + encodeURIComponent(TZ)).catch(() => ({ items: [] }))]); }
     catch (e) { if (!token()) return requireLogin(); showErr(msg, e); return; }
     await loadIcons([].concat(fl.friends.map(f => f.presence && f.presence.game_id), act.items.map(i => i.game_id)));
-    const sorted = fl.friends.slice().sort((a, b) => rank(b.presence) - rank(a.presence) || a.handle.localeCompare(b.handle));
-    const on = sorted.filter(f => rank(f.presence) > 0), off = sorted.filter(f => rank(f.presence) === 0);
     const btns = `<button class="btn sm" data-act="remove">Remove</button>`;
     const reqIn = fl.incoming.map(r => `<div class="fr" data-h="${esc(r.handle)}"><div class="fa ${tint(r.handle)}">${initial(r.display_name || r.handle)}</div><div class="who"><div class="nm"><a href="/u/${encodeURIComponent(r.handle)}">${esc(r.display_name || r.handle)}</a></div><div class="gm">wants to be friends</div></div>
       <div class="acts"><button class="btn sm dl" data-act="accept">Accept</button><button class="btn sm" data-act="decline">Decline</button><button class="btn sm" data-act="block">Block</button></div></div>`).join("");
@@ -652,23 +662,26 @@ pages.friends = async () => {
       feed += `<div class="ev">${icon(i.game_id, i.game_name)}<p><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${actText(i)}</p></div>`;
     });
     root.innerHTML = `<div class="grid"><div class="col">
-      ${fl.incoming.length ? `<section class="panel"><h2>Friend requests (${fl.incoming.length})</h2><div>${reqIn}</div></section>` : ""}
-      ${fl.friends.length > 5 ? `<div class="lbar">${searchBox("Find a friend", "fr-q")}<span class="lcount" data-frc></span></div><div class="empty-v2" data-frnone hidden>No friends match. <a href="/u/" data-frlook>Look up this player</a></div>` : ""}
-      <section class="panel"><h2>Online (${on.length})</h2><div>${on.length ? on.map(f => friendRow(f, { actions: btns })).join("") : `<div class="body empty">Nobody's online right now.</div>`}</div></section>
-      <section class="panel"><h2>Offline (${off.length})</h2><div>${off.length ? off.map(f => friendRow(f, { actions: btns })).join("") : `<div class="body empty">${fl.friends.length ? "Everyone's online." : "No friends yet. Add someone by their Fraglink username."}</div>`}</div></section>
-      ${fl.outgoing.length ? `<section class="panel"><h2>Sent requests (${fl.outgoing.length})</h2><div>${reqOut}</div></section>` : ""}
+      ${fl.incoming.length ? `<section class="panel"><h2>Friend requests (${fl.incoming_count})</h2><div>${reqIn}</div></section>` : ""}
+      <section class="panel"><h2>Friends (${fl.all})${fl.all ? ` <span class="more" style="text-transform:none">${fl.online} online</span>` : ""}</h2>
+        ${fl.all > 0 ? `<div class="lbar" style="padding:0 10px">${searchBox("Find a friend", "fr-q")}<select class="t sm" data-fshow aria-label="Show"><option value="all">Everyone</option><option value="online">Online</option><option value="offline">Offline</option></select></div>` : ""}
+        <div data-flist>${fl.friends.length ? fl.friends.map(f => friendRow(f, { actions: btns })).join("") : `<div class="body empty">${fs.q ? `No friends match “${esc(fs.q)}”. <a href="#" data-fclear>Clear search</a> · <a href="/u/${encodeURIComponent(fs.q)}">Look up “${esc(fs.q)}”</a>` : fl.all ? (fs.show === "online" ? "Nobody's online right now." : "Everyone's online.") : "No friends yet. Add someone by their Fraglink username."}</div>`}</div>
+        <div data-fpager>${fl.total > FP ? pagerHtml(fs.offset, FP, fl.total, fs.q) : ""}</div></section>
+      ${fl.outgoing.length ? `<section class="panel"><h2>Sent requests (${fl.outgoing_count})</h2><div>${reqOut}</div></section>` : ""}
     </div><aside class="col">
       <section class="panel"><h2>Add a friend</h2><div class="body"><form class="f" id="addf"><label>Username<input type="text" name="handle" maxlength="20" required placeholder="their Fraglink username" autocomplete="off"></label><div class="row"><button class="btn">Send request</button></div></form></div></section>
       <section class="panel"><h2>Friends' activity</h2><div>${feed || `<div class="body empty">Nothing in the last 7 days.</div>`}</div></section>
       ${fl.blocked.length ? `<section class="panel"><h2>Blocked</h2><div>${fl.blocked.map(h => `<div class="fr" data-h="${esc(h)}"><div class="who">${esc(h)}</div><div class="acts"><button class="btn sm" data-act="unblock">Unblock</button></div></div>`).join("")}</div></section>` : ""}
     </aside></div>`;
-    const fq = $("#fr-q");
-    if (fq) wireSearch(fq, term => {
-      let n = 0;
-      $$(".fr[data-h]", root).forEach(r => { if (!r.closest("section") || /Blocked/.test(r.closest("section").querySelector("h2").textContent)) return; const hit = !term || r.textContent.toLowerCase().includes(term) || r.dataset.h.toLowerCase().includes(term); r.hidden = !hit; if (hit) n++; });
-      $("[data-frc]").textContent = term ? `${n} match${n === 1 ? "" : "es"}` : "";
-      const none = $("[data-frnone]"); none.hidden = !term || n > 0; $("[data-frlook]").href = "/u/" + encodeURIComponent(fq.value.trim());
-    });
+    const fq = $("#fr-q"), fsel = $("[data-fshow]");
+    if (fq) {
+      fq.value = fs.q; fsel.value = fs.show; if (fs.q) { fq.parentNode.querySelector(".sx-clear").hidden = false; }
+      let t; wireSearch(fq, () => { clearTimeout(t); t = setTimeout(() => { fs.q = fq.value.trim(); fs.offset = 0; load().then(() => { const n = $("#fr-q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); }, 250); });
+      fsel.onchange = () => { fs.show = fsel.value; fs.offset = 0; load(); };
+    }
+    const fpg = $("[data-fpager]");
+    if (fpg) fpg.addEventListener("click", e => { const b = e.target.closest("[data-off]"); if (!b) return; fs.offset = +b.dataset.off; load().then(() => $("[data-flist]").closest("section").scrollIntoView({ block: "start" })); });
+    const fcl = $("[data-fclear]"); if (fcl) fcl.addEventListener("click", e => { e.preventDefault(); fs.q = ""; fs.offset = 0; load(); });
     $("#addf").addEventListener("submit", async e => {
       e.preventDefault(); const h = e.target.handle.value.trim().replace(/^@/, ""); if (!h) return;
       try { const r = await api("/friends/request", { method: "POST", body: { handle: h } });
@@ -750,45 +763,53 @@ pages.settings = async () => {
       ${row("", `<button class="btn dl">Save rig</button>`, "Shown on your profile. Leave everything empty to hide the box.")}</div></form>`;
   }
   async function gamesTab(el) {
+    const PG = 50, st = { offset: 0 };
     el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">Loading…</div>`;
-    let g; try { g = await api("/me/games"); } catch (e) { bad(el, e); return; }
-    await loadIcons(g.games.map(x => x.game_id));
-    const games = g.games;
-    if (!games.length) { el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">No games yet. Games show up here after you play with the Fraglink app running.</div>`; return; }
+    let first; try { first = await api(`/me/games?limit=${PG}`); } catch (e) { bad(el, e); return; }
+    if (!first.all) { el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">No games yet. Games show up here after you play with the Fraglink app running.</div>`; return; }
     el.innerHTML = `<h3>Played games</h3>${msg}
       <p class="pg-help">Switch a game off to hide it from your profile, signature image and the home page. It still counts in your own totals.</p>
       <div class="lbar">${searchBox("Search your games", "pg-q")}
         <select class="t sm" data-sort aria-label="Sort"><option value="total">Most played</option><option value="recent">Recently played</option><option value="week">Past 7 days</option><option value="name">Name A–Z</option></select>
         <select class="t sm" data-show aria-label="Show"><option value="all">All games</option><option value="shown">On profile</option><option value="hidden">Hidden</option></select>
         <span class="lcount" data-count></span></div>
-      <div class="pg2" data-list></div><div class="empty-v2" data-none hidden>No games match “<span data-term></span>”. <a href="#" data-clear>Clear search</a></div>`;
-    const list = $("[data-list]", el), q = $("#pg-q", el), sortSel = $("[data-sort]", el), showSel = $("[data-show]", el);
+      <div class="pg2" data-list></div><div class="empty-v2" data-none hidden></div><div data-pager></div>`;
+    const list = $("[data-list]", el), q = $("#pg-q", el), sortSel = $("[data-sort]", el), showSel = $("[data-show]", el), pager = $("[data-pager]", el), none = $("[data-none]", el);
+    let rows = [];
     const rowH = x => `<div class="pgr${x.hidden ? " hid" : ""}" data-g="${esc(x.game_id)}"><span class="gico">${icon(x.game_id, x.name)}</span>
         <span class="nm">${esc(x.name)}<small>${hours(x.total_min)} total · ${x.minutes_7d ? hours(x.minutes_7d) + " this week · " : ""}${lastPlayed(x.last_played_at)}</small></span>
         <label class="sw" title="${x.hidden ? "Hidden from your profile" : "Shown on your profile"}"><input type="checkbox" data-show-g ${x.hidden ? "" : "checked"}><i></i><span>${x.hidden ? "Hidden" : "On profile"}</span></label>
         <button class="lnk danger" type="button" data-reset title="Delete all hours for this game">Reset hours</button></div>`;
-    const draw = () => {
-      const term = q.value.trim().toLowerCase(), show = showSel.value, sort = sortSel.value;
-      let v = games.filter(x => (!term || x.name.toLowerCase().includes(term)) && (show === "all" || (show === "hidden") === !!x.hidden));
-      const by = { total: (a, b) => b.total_min - a.total_min, week: (a, b) => b.minutes_7d - a.minutes_7d || b.total_min - a.total_min, recent: (a, b) => new Date(b.last_played_at || 0) - new Date(a.last_played_at || 0), name: (a, b) => a.name.localeCompare(b.name) }[sort];
-      v.sort(by);
-      list.innerHTML = v.map(rowH).join("");
-      $("[data-count]", el).textContent = `${v.length} of ${games.length} game${games.length === 1 ? "" : "s"}`;
-      const none = $("[data-none]", el); none.hidden = v.length > 0; $("[data-term]", el).textContent = q.value.trim() || (show === "hidden" ? "hidden" : "");
-      if (!v.length && !term) none.innerHTML = show === "hidden" ? "No hidden games." : "No games here.";
+    const render = async (r, keepPos) => {
+      rows = r.games; await loadIcons(rows.map(x => x.game_id));
+      list.innerHTML = rows.map(rowH).join("");
+      const term = q.value.trim();
+      $("[data-count]", el).textContent = `${r.all} game${r.all === 1 ? "" : "s"}${r.hidden ? ` · ${r.hidden} hidden` : ""}`;
+      none.hidden = rows.length > 0;
+      none.innerHTML = term ? `No games match “${esc(term)}”. <a href="#" data-clear>Clear search</a>` : showSel.value === "hidden" ? "No hidden games." : "No games here.";
+      pager.innerHTML = r.total > PG ? pagerHtml(st.offset, PG, r.total, term) : "";
+      if (keepPos && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: "start" });
     };
-    wireSearch(q, draw); sortSel.onchange = draw; showSel.onchange = draw;
-    $("[data-clear]", el).addEventListener("click", e => { e.preventDefault(); q.value = ""; q.dispatchEvent(new Event("input")); q.focus(); });
-    draw();
+    const load = async keepPos => {
+      const qs = new URLSearchParams({ limit: PG, offset: st.offset, sort: sortSel.value, show: showSel.value, q: q.value.trim() });
+      list.style.opacity = .5;
+      try { await render(await api("/me/games?" + qs), keepPos); } catch (x) { bad(el, x); }
+      list.style.opacity = 1;
+    };
+    let t; wireSearch(q, () => { clearTimeout(t); t = setTimeout(() => { st.offset = 0; load(); }, 200); });
+    sortSel.onchange = showSel.onchange = () => { st.offset = 0; load(); };
+    pager.addEventListener("click", e => { const b = e.target.closest("[data-off]"); if (b) { st.offset = +b.dataset.off; load(true); } });
+    none.addEventListener("click", e => { if (e.target.closest("[data-clear]")) { e.preventDefault(); q.value = ""; q.dispatchEvent(new Event("input")); q.focus(); } });
+    render(first);
     list.addEventListener("change", async e => {
-      const c = e.target.closest("[data-show-g]"); if (!c) return; const r = c.closest(".pgr"), x = games.find(y => y.game_id === r.dataset.g), hidden = !c.checked;
+      const c = e.target.closest("[data-show-g]"); if (!c) return; const r = c.closest(".pgr"), x = rows.find(y => y.game_id === r.dataset.g), hidden = !c.checked;
       try { await api("/me/games/hide", { method: "POST", body: { game_id: x.game_id, hidden } }); x.hidden = hidden; r.classList.toggle("hid", hidden); r.querySelector(".sw span").textContent = hidden ? "Hidden" : "On profile"; }
       catch (err) { c.checked = !c.checked; bad(el, err); }
     });
     list.addEventListener("click", async e => {
-      const b = e.target.closest("[data-reset]"); if (!b) return; const r = b.closest(".pgr"), x = games.find(y => y.game_id === r.dataset.g);
+      const b = e.target.closest("[data-reset]"); if (!b) return; const r = b.closest(".pgr"), x = rows.find(y => y.game_id === r.dataset.g);
       const pw = prompt(`Delete every hour recorded for ${x.name}? This can't be undone.\n\nEnter your password to confirm:`); if (!pw) return;
-      try { await api("/me/games/reset", { method: "POST", body: { game_id: x.game_id, password: pw } }); games.splice(games.indexOf(x), 1); draw(); ok(el, `Hours for ${x.name} reset.`); } catch (err) { bad(el, err); }
+      try { await api("/me/games/reset", { method: "POST", body: { game_id: x.game_id, password: pw } }); ok(el, `Hours for ${x.name} reset.`); load(); } catch (err) { bad(el, err); }
     });
   }
   function privacyTab() {

@@ -26,6 +26,7 @@ pub mod icons;
 pub mod mailer;
 pub mod mfa;
 pub mod names;
+pub mod paging;
 pub mod presence;
 pub mod profile;
 pub mod realms;

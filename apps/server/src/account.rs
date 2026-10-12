@@ -528,7 +528,11 @@ pub async fn hidden_games(st: &AppState, uid: Uuid) -> ApiResult<Vec<String>> {
     )
 }
 
-async fn my_games(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
+async fn my_games(
+    State(st): State<AppState>,
+    a: AuthUser,
+    axum::extract::Query(pq): axum::extract::Query<crate::paging::PageQuery>,
+) -> ApiResult<Json<Value>> {
     let rows = api::game_stats(&st, a.user.id).await?;
     let hidden = hidden_games(&st, a.user.id).await?;
     let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
@@ -544,7 +548,26 @@ async fn my_games(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Val
             })
         })
         .collect();
-    Ok(Json(json!({ "games": games })))
+    // Paging is opt-in (limit given); without it the whole list comes back as before.
+    if pq.limit.is_none() && pq.q.is_none() {
+        return Ok(Json(json!({ "games": games })));
+    }
+    let all = games.len();
+    let hidden_n = games.iter().filter(|g| g["hidden"] == true).count();
+    let mut games: Vec<Value> = games
+        .into_iter()
+        .filter(|g| match pq.show.as_deref() {
+            Some("hidden") => g["hidden"] == true,
+            Some("shown") => g["hidden"] != true,
+            _ => true,
+        })
+        .collect();
+    crate::paging::sort_games(&mut games, pq.sort.as_deref());
+    let (games, total) =
+        crate::paging::page(games, &pq.term(), &["name"], pq.offset(), pq.limit(50));
+    Ok(Json(
+        json!({ "games": games, "total": total, "all": all, "hidden": hidden_n, "offset": pq.offset() }),
+    ))
 }
 
 #[derive(Deserialize)]
