@@ -414,6 +414,15 @@ pages.verify = async () => {
 };
 
 /* ----- profile ----- */
+/* Search box with clear (x): filters as you type. */
+function searchBox(ph, id) { return `<span class="sbox"><input class="t" type="search" id="${id}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false"><button type="button" class="sx-clear" aria-label="Clear search" hidden>&times;</button></span>`; }
+function wireSearch(input, onChange) {
+  const x = input.parentNode.querySelector(".sx-clear");
+  const run = () => { if (x) x.hidden = !input.value; onChange(input.value.trim().toLowerCase()); };
+  input.addEventListener("input", run);
+  input.addEventListener("keydown", e => { if (e.key === "Escape" && input.value) { e.preventDefault(); input.value = ""; run(); } });
+  if (x) x.addEventListener("click", () => { input.value = ""; run(); input.focus(); });
+}
 function COUNTRIES() {
   if (COUNTRIES.c) return COUNTRIES.c;
   const dn = new Intl.DisplayNames(["en"], { type: "region" }), out = [];
@@ -520,7 +529,7 @@ pages.profile = async () => {
     const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
       <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const top = p.games.slice(0, 8), rest = p.games.slice(8);
-    games = sec("Games", `<table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total ▾</th><th class="n hide-sm">Last played</th></tr></thead>
+    games = sec("Games", `${p.games.length > 8 ? `<div class="lbar gq">${searchBox("Search " + (self ? "your" : "their") + " games", "gt-q")}<span class="lcount" data-gtc></span></div>` : ""}<table class="gt" style="width:100%;border-collapse:collapse"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total ▾</th><th class="n hide-sm">Last played</th></tr></thead>
       <tbody>${top.map(row).join("")}</tbody>${rest.length ? `<tbody class="more" hidden>${rest.map(row).join("")}</tbody>` : ""}
       <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
       ${rest.length ? `<div class="body" style="padding-top:6px"><a href="#" data-more>Show entire gaming history (${rest.length} more)</a></div>` : ""}
@@ -595,6 +604,15 @@ pages.profile = async () => {
   const add = $("[data-add]", root), acc = $("[data-accept]", root), more = $("[data-more]", root), rep = $("[data-report]", root);
   if (add) add.addEventListener("click", async () => { if (!token()) return requireLogin(); add.disabled = true; try { await api("/friends/request", { method: "POST", body: { handle: p.handle } }); add.textContent = "Friend request sent"; } catch (e) { add.disabled = false; alert(e.message); } });
   if (acc) acc.addEventListener("click", async () => { acc.disabled = true; try { await api("/friends/respond", { method: "POST", body: { handle: p.handle, accept: true } }); location.reload(); } catch (e) { acc.disabled = false; alert(e.message); } });
+  const gq = $("#gt-q", root);
+  if (gq) wireSearch(gq, term => {
+    const tbs = $$("table.gt tbody", root), mt = $("tbody.more", root), mb = more && more.parentNode;
+    let n = 0;
+    tbs.forEach(tb => $$("tr", tb).forEach(tr => { const hit = !term || tr.cells[0].textContent.toLowerCase().includes(term); tr.hidden = !hit; if (hit) n++; }));
+    if (term) { if (mt) mt.hidden = false; if (mb) mb.hidden = true; const lt = $("[data-less]", root); if (lt) lt.hidden = true; }
+    else { if (mt) mt.hidden = true; if (mb) { mb.hidden = false; more.textContent = more.textContent.startsWith("Show less") ? `Show entire gaming history (${mt.rows.length} more)` : more.textContent; } }
+    $("[data-gtc]", root).textContent = term ? (n ? `${n} match${n === 1 ? "" : "es"}` : "No games match") : "";
+  });
   const lessTop = $("[data-less]", root);
   if (lessTop && more) lessTop.addEventListener("click", e => { e.preventDefault(); more.click(); });
   if (more) {
@@ -647,6 +665,7 @@ pages.friends = async () => {
     });
     root.innerHTML = `<div class="grid"><div class="col">
       ${fl.incoming.length ? `<section class="panel"><h2>Friend requests (${fl.incoming.length})</h2><div>${reqIn}</div></section>` : ""}
+      ${fl.friends.length > 5 ? `<div class="lbar">${searchBox("Find a friend", "fr-q")}<span class="lcount" data-frc></span></div><div class="empty-v2" data-frnone hidden>No friends match. <a href="/u/" data-frlook>Look up this player</a></div>` : ""}
       <section class="panel"><h2>Online (${on.length})</h2><div>${on.length ? on.map(f => friendRow(f, { actions: btns })).join("") : `<div class="body empty">Nobody's online right now.</div>`}</div></section>
       <section class="panel"><h2>Offline (${off.length})</h2><div>${off.length ? off.map(f => friendRow(f, { actions: btns })).join("") : `<div class="body empty">${fl.friends.length ? "Everyone's online." : "No friends yet. Add someone by their Fraglink username."}</div>`}</div></section>
       ${fl.outgoing.length ? `<section class="panel"><h2>Sent requests (${fl.outgoing.length})</h2><div>${reqOut}</div></section>` : ""}
@@ -655,6 +674,13 @@ pages.friends = async () => {
       <section class="panel"><h2>Friends' activity</h2><div>${feed || `<div class="body empty">Nothing in the last 7 days.</div>`}</div></section>
       ${fl.blocked.length ? `<section class="panel"><h2>Blocked</h2><div>${fl.blocked.map(h => `<div class="fr" data-h="${esc(h)}"><div class="who">${esc(h)}</div><div class="acts"><button class="btn sm" data-act="unblock">Unblock</button></div></div>`).join("")}</div></section>` : ""}
     </aside></div>`;
+    const fq = $("#fr-q");
+    if (fq) wireSearch(fq, term => {
+      let n = 0;
+      $$(".fr[data-h]", root).forEach(r => { if (!r.closest("section") || /Blocked/.test(r.closest("section").querySelector("h2").textContent)) return; const hit = !term || r.textContent.toLowerCase().includes(term) || r.dataset.h.toLowerCase().includes(term); r.hidden = !hit; if (hit) n++; });
+      $("[data-frc]").textContent = term ? `${n} match${n === 1 ? "" : "es"}` : "";
+      const none = $("[data-frnone]"); none.hidden = !term || n > 0; $("[data-frlook]").href = "/u/" + encodeURIComponent(fq.value.trim());
+    });
     $("#addf").addEventListener("submit", async e => {
       e.preventDefault(); const h = e.target.handle.value.trim().replace(/^@/, ""); if (!h) return;
       try { const r = await api("/friends/request", { method: "POST", body: { handle: h } });
@@ -739,14 +765,43 @@ pages.settings = async () => {
     el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">Loading…</div>`;
     let g; try { g = await api("/me/games"); } catch (e) { bad(el, e); return; }
     await loadIcons(g.games.map(x => x.game_id));
-    el.innerHTML = `<h3>Played games</h3>${msg}<p class="empty-v2" style="margin:0">Hidden games stay in your own totals but disappear from your profile, signature and the home page. Resetting deletes every hour recorded for that game.</p>
-      ${g.games.length ? `<table class="pg"><thead><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total</th><th class="n">Last played</th><th></th></tr></thead><tbody>${g.games.map(x => `<tr data-g="${esc(x.game_id)}" class="${x.hidden ? "hid" : ""}"><td>${icon(x.game_id, x.name)} ${esc(x.name)}</td><td class="n">${hours(x.minutes_7d)}</td><td class="n">${hours(x.total_min)}</td><td class="n">${lastPlayed(x.last_played_at)}</td>
-        <td class="n" style="white-space:nowrap"><label style="margin-right:8px"><input type="checkbox" data-hide ${x.hidden ? "checked" : ""}> Hide</label><button class="btn sm" type="button" data-reset>Reset hours</button></td></tr>`).join("")}</tbody></table>` : `<div class="empty-v2">No games yet.</div>`}`;
-    el.addEventListener("change", async e => { const c = e.target.closest("[data-hide]"); if (!c) return; const tr = c.closest("tr");
-      try { await api("/me/games/hide", { method: "POST", body: { game_id: tr.dataset.g, hidden: c.checked } }); tr.classList.toggle("hid", c.checked); } catch (x) { c.checked = !c.checked; bad(el, x); } });
-    el.addEventListener("click", async e => { const b = e.target.closest("[data-reset]"); if (!b) return; const tr = b.closest("tr");
-      const pw = prompt(`Delete every hour recorded for ${tr.cells[0].textContent.trim()}? This can't be undone.\n\nEnter your password to confirm:`); if (!pw) return;
-      try { await api("/me/games/reset", { method: "POST", body: { game_id: tr.dataset.g, password: pw } }); tr.remove(); ok(el, "Hours reset."); } catch (x) { bad(el, x); } });
+    const games = g.games;
+    if (!games.length) { el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">No games yet. Games show up here after you play with the Fraglink app running.</div>`; return; }
+    el.innerHTML = `<h3>Played games</h3>${msg}
+      <p class="pg-help">Switch a game off to hide it from your profile, signature image and the home page. It still counts in your own totals.</p>
+      <div class="lbar">${searchBox("Search your games", "pg-q")}
+        <select class="t sm" data-sort aria-label="Sort"><option value="total">Most played</option><option value="recent">Recently played</option><option value="week">Past 7 days</option><option value="name">Name A–Z</option></select>
+        <select class="t sm" data-show aria-label="Show"><option value="all">All games</option><option value="shown">On profile</option><option value="hidden">Hidden</option></select>
+        <span class="lcount" data-count></span></div>
+      <div class="pg2" data-list></div><div class="empty-v2" data-none hidden>No games match “<span data-term></span>”. <a href="#" data-clear>Clear search</a></div>`;
+    const list = $("[data-list]", el), q = $("#pg-q", el), sortSel = $("[data-sort]", el), showSel = $("[data-show]", el);
+    const rowH = x => `<div class="pgr${x.hidden ? " hid" : ""}" data-g="${esc(x.game_id)}"><span class="gico">${icon(x.game_id, x.name)}</span>
+        <span class="nm">${esc(x.name)}<small>${hours(x.total_min)} total · ${x.minutes_7d ? hours(x.minutes_7d) + " this week · " : ""}${lastPlayed(x.last_played_at)}</small></span>
+        <label class="sw" title="${x.hidden ? "Hidden from your profile" : "Shown on your profile"}"><input type="checkbox" data-show-g ${x.hidden ? "" : "checked"}><i></i><span>${x.hidden ? "Hidden" : "On profile"}</span></label>
+        <button class="lnk danger" type="button" data-reset title="Delete all hours for this game">Reset hours</button></div>`;
+    const draw = () => {
+      const term = q.value.trim().toLowerCase(), show = showSel.value, sort = sortSel.value;
+      let v = games.filter(x => (!term || x.name.toLowerCase().includes(term)) && (show === "all" || (show === "hidden") === !!x.hidden));
+      const by = { total: (a, b) => b.total_min - a.total_min, week: (a, b) => b.minutes_7d - a.minutes_7d || b.total_min - a.total_min, recent: (a, b) => new Date(b.last_played_at || 0) - new Date(a.last_played_at || 0), name: (a, b) => a.name.localeCompare(b.name) }[sort];
+      v.sort(by);
+      list.innerHTML = v.map(rowH).join("");
+      $("[data-count]", el).textContent = `${v.length} of ${games.length} game${games.length === 1 ? "" : "s"}`;
+      const none = $("[data-none]", el); none.hidden = v.length > 0; $("[data-term]", el).textContent = q.value.trim() || (show === "hidden" ? "hidden" : "");
+      if (!v.length && !term) none.innerHTML = show === "hidden" ? "No hidden games." : "No games here.";
+    };
+    wireSearch(q, draw); sortSel.onchange = draw; showSel.onchange = draw;
+    $("[data-clear]", el).addEventListener("click", e => { e.preventDefault(); q.value = ""; q.dispatchEvent(new Event("input")); q.focus(); });
+    draw();
+    list.addEventListener("change", async e => {
+      const c = e.target.closest("[data-show-g]"); if (!c) return; const r = c.closest(".pgr"), x = games.find(y => y.game_id === r.dataset.g), hidden = !c.checked;
+      try { await api("/me/games/hide", { method: "POST", body: { game_id: x.game_id, hidden } }); x.hidden = hidden; r.classList.toggle("hid", hidden); r.querySelector(".sw span").textContent = hidden ? "Hidden" : "On profile"; }
+      catch (err) { c.checked = !c.checked; bad(el, err); }
+    });
+    list.addEventListener("click", async e => {
+      const b = e.target.closest("[data-reset]"); if (!b) return; const r = b.closest(".pgr"), x = games.find(y => y.game_id === r.dataset.g);
+      const pw = prompt(`Delete every hour recorded for ${x.name}? This can't be undone.\n\nEnter your password to confirm:`); if (!pw) return;
+      try { await api("/me/games/reset", { method: "POST", body: { game_id: x.game_id, password: pw } }); games.splice(games.indexOf(x), 1); draw(); ok(el, `Hours for ${x.name} reset.`); } catch (err) { bad(el, err); }
+    });
   }
   function privacyTab() {
     const share = siteBase() + "/u/" + encodeURIComponent(u.handle);

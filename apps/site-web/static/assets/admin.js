@@ -111,11 +111,17 @@ function badge(tab, n) { const s = $(`.tabs a[data-tab=${tab}] .n`); if (s) { s.
 async function games(q) {
   q = q || "";
   view.innerHTML = `<div class="split"><section class="panel"><h2>Games</h2>
-    <form class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off"><button class="btn">Search</button></form>
+    <form class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off"></form>
     <div id="glist"><div class="body empty">Loading…</div></div></section>
     <section class="panel" id="gedit"><h2>Edit game</h2><div class="body empty">Pick a game on the left.</div></section></div>`;
   $("#gs").addEventListener("submit", e => { e.preventDefault(); history.replaceState(null, "", "#games/" + encodeURIComponent(e.target.q.value.trim())); listGames(e.target.q.value.trim()); });
+  liveSearch($("#gs"));
   listGames(q);
+}
+/* Search as you type (debounced); Enter still works. */
+function liveSearch(form) {
+  let t; const i = form.q; i.type = "search";
+  i.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => form.requestSubmit(), 300); });
 }
 async function listGames(q) {
   const box = $("#glist");
@@ -238,9 +244,13 @@ async function editGame(id) {
 async function users(q) {
   q = q || "";
   view.innerHTML = `<section class="panel"><h2>Users</h2>
-    <form class="tools" id="us"><input class="in grow" name="q" value="${esc(q)}" placeholder="Username, display name or email" autocomplete="off"><button class="btn">Search</button></form>
+    <form class="tools" id="us"><input class="in grow" name="q" value="${esc(q)}" placeholder="Username, display name or email" autocomplete="off"></form>
     <div id="ulist"></div></section>`;
-  $("#us").addEventListener("submit", e => { e.preventDefault(); location.hash = "users/" + encodeURIComponent(e.target.q.value.trim()); });
+  $("#us").addEventListener("submit", e => { e.preventDefault(); const v = e.target.q.value.trim(); history.replaceState(null, "", "#users/" + encodeURIComponent(v)); listUsers(v); });
+  liveSearch($("#us"));
+  listUsers(q);
+}
+async function listUsers(q) {
   const d = await api("/admin/users?q=" + encodeURIComponent(q));
   $("#ulist").innerHTML = d.users.length ? `<div class="note">${q ? "Matches" : "Newest accounts"}</div><table><thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Joined</th><th>Status</th></tr></thead><tbody>
     ${d.users.map(u => `<tr class="click" data-id="${esc(u.id)}"><td><a href="#user/${esc(u.id)}">${esc(u.handle)}</a>${rolePill(u.role)}${u.banned ? `<span class="pill bad">banned</span>` : ""}</td>
