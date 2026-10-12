@@ -524,7 +524,7 @@ pages.profile = async () => {
       <tbody>${top.map(row).join("")}</tbody>${rest.length ? `<tbody class="more" hidden>${rest.map(row).join("")}</tbody>` : ""}
       <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
       ${rest.length ? `<div class="body" style="padding-top:6px"><a href="#" data-more>Show entire gaming history (${rest.length} more)</a></div>` : ""}
-      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters. Estimates are never added to totals.</div>`);
+      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters. Estimates are never added to totals.</div>`, rest.length ? `<a href="#" data-less hidden>Show less</a>` : "");
   }
 
   // Achievements
@@ -583,6 +583,8 @@ pages.profile = async () => {
   const add = $("[data-add]", root), acc = $("[data-accept]", root), more = $("[data-more]", root), rep = $("[data-report]", root);
   if (add) add.addEventListener("click", async () => { if (!token()) return requireLogin(); add.disabled = true; try { await api("/friends/request", { method: "POST", body: { handle: p.handle } }); add.textContent = "Friend request sent"; } catch (e) { add.disabled = false; alert(e.message); } });
   if (acc) acc.addEventListener("click", async () => { acc.disabled = true; try { await api("/friends/respond", { method: "POST", body: { handle: p.handle, accept: true } }); location.reload(); } catch (e) { acc.disabled = false; alert(e.message); } });
+  const lessTop = $("[data-less]", root);
+  if (lessTop && more) lessTop.addEventListener("click", e => { e.preventDefault(); more.click(); });
   if (more) {
     const n = more.dataset.n || more.textContent.match(/\d+/)[0];
     more.addEventListener("click", e => {
@@ -590,6 +592,7 @@ pages.profile = async () => {
       const tb = $("tbody.more", root), open = tb.hidden;
       tb.hidden = !open;
       more.textContent = open ? "Show less" : `Show entire gaming history (${n} more)`;
+      const top = $("[data-less]", root); if (top) top.hidden = !open;
       if (!open) { const t = more.closest("section"); if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: "start" }); }
     });
   }
