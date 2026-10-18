@@ -32,6 +32,8 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/admin/settings",
             get(settings_get).post(settings_set),
         )
+        .route("/api/v1/admin/alerts", get(alerts_get).post(alerts_set))
+        .route("/api/v1/admin/alerts/test", post(alerts_test))
         .route("/api/v1/admin/me", get(me))
         .route("/api/v1/admin/suggestions", get(suggestions))
         .route("/api/v1/admin/suggestions/approve", post(approve))
@@ -3155,4 +3157,90 @@ async fn settings_set(
     )
     .await?;
     Ok(Json(crate::features::admin_list(&st).await?))
+}
+
+// ---------------------------------------------------------------------------
+// email alerts (shown on the Site settings page)
+
+/// `GET /api/v1/admin/alerts`: switches, recipient, today's count and recent sends.
+async fn alerts_get(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    Ok(Json(crate::alerts::admin_view(&st).await?))
+}
+
+#[derive(serde::Deserialize)]
+struct AlertReq {
+    key: Option<String>,
+    enabled: Option<bool>,
+    recipient: Option<String>,
+}
+
+/// `POST /api/v1/admin/alerts` `{key, enabled}` or `{recipient}`: admins only; audited.
+async fn alerts_set(
+    State(st): State<AppState>,
+    s: Staff,
+    Json(r): Json<AlertReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    if let Some(to) = r.recipient {
+        let before = crate::alerts::recipient(&st).await;
+        crate::alerts::set_recipient(&st, &to, s.user.id).await?;
+        audit(
+            &st,
+            &s,
+            "alert_setting",
+            crate::alerts::EMAIL_KEY,
+            json!({ "recipient": before }),
+            json!({ "recipient": to.trim() }),
+        )
+        .await?;
+    } else {
+        let (Some(key), Some(on)) = (r.key, r.enabled) else {
+            return Err(AppError::bad_request(
+                "bad_request",
+                "Send key and enabled, or recipient.",
+            ));
+        };
+        if !crate::alerts::is_key(&key) {
+            return Err(AppError::bad_request("unknown_setting", "No such alert."));
+        }
+        let before = crate::alerts::enabled(&st, &key).await;
+        crate::features::set(&st, &key, on, s.user.id).await?;
+        audit(
+            &st,
+            &s,
+            "alert_setting",
+            &key,
+            json!({ "enabled": before }),
+            json!({ "enabled": on }),
+        )
+        .await?;
+    }
+    Ok(Json(crate::alerts::admin_view(&st).await?))
+}
+
+/// `POST /api/v1/admin/alerts/test`: one test alert to the recipient (counts toward the cap).
+async fn alerts_test(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    st.rate_limit(
+        format!("alerttest:{}", s.user.id),
+        3,
+        std::time::Duration::from_secs(3600),
+    )?;
+    let mut e = crate::alerts::daily_email(&st).await?;
+    e.subject = format!("[Test] {}", e.subject);
+    let ok = crate::alerts::send(&st, "test", &e).await?;
+    let to = crate::alerts::recipient(&st).await;
+    audit(
+        &st,
+        &s,
+        "alert_test",
+        &to,
+        Value::Null,
+        json!({ "sent": ok }),
+    )
+    .await?;
+    let mut v = crate::alerts::admin_view(&st).await?;
+    v["test_sent"] = json!(ok);
+    Ok(Json(v))
 }

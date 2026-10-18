@@ -383,15 +383,30 @@ async function server() {
 
 /* ---------- site settings (feature switches) ---------- */
 async function siteSettings() {
-  const d = await api("/admin/settings");
   const edit = !!can.settings_edit;
-  const row = s => `<tr><td style="width:56px"><label class="switch"><input type="checkbox" data-key="${esc(s.key)}" ${s.enabled ? "checked" : ""} ${edit ? "" : "disabled"}><i></i></label></td>
-    <td><b>${esc(s.label)}</b>${s.key === "maintenance" && s.enabled ? ` <span class="pill bad">ON</span>` : ""}${s.enabled !== s.default ? ` <span class="pill">changed</span>` : ""}<div class="dimt">${esc(s.help)}</div></td>
+  const [d, al] = await Promise.all([api("/admin/settings"), edit ? api("/admin/alerts").catch(() => null) : null]);
+  const row = (s, kind) => `<tr><td style="width:56px"><label class="switch"><input type="checkbox" data-${kind}="${esc(s.key)}" ${s.enabled ? "checked" : ""} ${edit ? "" : "disabled"}><i></i></label></td>
+    <td><b>${esc(s.label)}</b>${s.key === "maintenance" && s.enabled ? ` <span class="pill bad">ON</span>` : ""}${s.default !== undefined && s.enabled !== s.default ? ` <span class="pill">changed</span>` : ""}<div class="dimt">${esc(s.help)}</div></td>
     <td class="dimt" style="white-space:nowrap">${s.updated_at ? `${when(s.updated_at)}${s.updated_by ? " by " + esc(s.updated_by) : ""}` : "default"}</td></tr>`;
+  const alerts = al ? `<section class="panel"><h2>Email alerts</h2><div class="body">
+    <p class="note">Staff alerts by email, using the site's sending address. To keep within Cloudflare's 200 emails a day, alerts are batched (see each one) and capped at ${al.cap} a day. Sent in the last 24 hours: <b>${al.sent_24h}</b> of ${al.cap}.${al.mail_live ? "" : ` <span class="pill bad">Email sending is off on the server</span>`}</p>
+    <form class="f" id="al-to" style="max-width:560px"><label>Send alerts to<div class="row"><input class="in" type="email" name="to" value="${esc(al.recipient)}" required maxlength="200" style="flex:1"><button class="btn">Save</button></div></label>
+      <div class="dimt">Default: ${esc(al.default_recipient)}</div><div class="alert" id="al-msg" hidden></div></form>
+    <table class="settings"><tbody>${al.alerts.map(a => row(a, "alert")).join("")}</tbody></table>
+    <div class="row" style="margin-top:12px"><button class="btn" id="al-test">Send a test alert</button><span class="dimt">Sends today's summary marked [Test] to the address above. Counts toward the daily cap.</span></div>
+    ${al.recent.length ? `<h3 style="margin:16px 0 6px">Recent alerts</h3><table class="t"><tbody>${al.recent.map(r => `<tr><td class="dimt" style="white-space:nowrap">${when(r.at)}</td><td>${esc(r.subject)}</td><td>${r.ok ? `<span class="pill ok">sent</span>` : `<span class="pill warn" title="${esc(r.error || "")}">not sent</span>`}</td></tr>`).join("")}</tbody></table>` : ""}
+    </div></section>` : "";
   view.innerHTML = `<section class="panel"><h2>Site settings</h2><div class="body">
     <p class="note">Switches apply to the website and the desktop app within about 30 seconds, and the server enforces them (hiding a button is not the only effect). Every change is written to the audit log.${edit ? "" : " Only admins can change them."}</p>
-    <table class="settings"><tbody>${d.settings.map(row).join("")}</tbody></table></div></section>`;
+    <table class="settings"><tbody>${d.settings.map(s => row(s, "key")).join("")}</tbody></table></div></section>${alerts}`;
   view.onchange = async e => {
+    const a = e.target.closest("input[data-alert]");
+    if (a) {
+      const on = a.checked; a.disabled = true;
+      try { await api("/admin/alerts", { method: "POST", body: { key: a.dataset.alert, enabled: on } }); siteSettings(); }
+      catch (x) { a.checked = !on; a.disabled = false; alert(x.message); }
+      return;
+    }
     const c = e.target.closest("input[data-key]"); if (!c) return;
     const on = c.checked, key = c.dataset.key;
     if (key === "maintenance" && on && !confirm("Turn on maintenance mode? Everyone except staff will see a maintenance page and the app will stop syncing.")) { c.checked = false; return; }
@@ -399,6 +414,17 @@ async function siteSettings() {
     try { await api("/admin/settings", { method: "POST", body: { key, enabled: on } }); siteSettings(); }
     catch (x) { c.checked = !on; c.disabled = false; alert(x.message); }
   };
+  const f = $("#al-to");
+  if (f) f.addEventListener("submit", async e => {
+    e.preventDefault();
+    try { await api("/admin/alerts", { method: "POST", body: { recipient: f.to.value.trim() } }); await siteSettings(); msg($("#al-msg"), "Saved.", true); }
+    catch (x) { msg($("#al-msg"), x.message); }
+  });
+  const t = $("#al-test");
+  if (t) t.addEventListener("click", () => act(t, async () => {
+    const r = await api("/admin/alerts/test", { method: "POST" });
+    await siteSettings(); alert(r.test_sent ? "Test alert sent to " + r.recipient + "." : "Not sent: " + ((r.recent[0] && r.recent[0].error) || "unknown reason"));
+  }));
 }
 
 /* ---------- 6. announcements ---------- */

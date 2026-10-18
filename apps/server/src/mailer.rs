@@ -81,6 +81,24 @@ pub fn send_email(st: &AppState, to: &str, e: &crate::emails::Email) {
     deliver_mail(st, to, &e.subject, &e.text, Some(e.html.clone()));
 }
 
+/// Send now and report the result (admin alerts use this to log and cap what they send).
+/// Err when mail is off or no provider is set, without sending.
+pub async fn send_now(st: &AppState, to: &str, e: &crate::emails::Email) -> anyhow::Result<()> {
+    if !st.cfg.mail_enabled {
+        anyhow::bail!("mail is off (FRAGLINK_MAIL)");
+    }
+    let Some(p) = settings().provider.clone() else {
+        anyhow::bail!("no email provider configured");
+    };
+    let m = Mail {
+        to: to.to_string(),
+        subject: e.subject.clone(),
+        body: e.text.clone(),
+        html: Some(e.html.clone()),
+    };
+    deliver(&p, &m).await
+}
+
 fn deliver_mail(st: &AppState, to: &str, subject: &str, body: &str, html: Option<String>) {
     if to.trim().is_empty() {
         return;

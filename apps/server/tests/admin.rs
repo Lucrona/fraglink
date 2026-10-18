@@ -559,3 +559,103 @@ async fn retire_some_programs_and_game_status(pool: PgPool) {
     .unwrap();
     assert_eq!(acts, ["game.retire", "game.unretire", "game.status"]);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn email_alert_settings(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let owner = signup(&app, "o@example.com", "olive").await;
+    let moder = signup(&app, "m@example.com", "moe").await;
+    set_role(&pool, "olive", Some("owner")).await;
+    set_role(&pool, "moe", Some("moderator")).await;
+
+    let r = api(&app, "GET", "/api/v1/admin/alerts", Some(&owner), None).await;
+    assert_eq!(r.status, StatusCode::OK);
+    let v = r.json();
+    assert_eq!(v["recipient"], "support@playfraglink.com");
+    assert_eq!(v["alerts"].as_array().unwrap().len(), 4);
+    assert!(v["alerts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|a| a["enabled"] == true));
+
+    // moderators can't see or change alerts
+    assert_eq!(
+        api(&app, "GET", "/api/v1/admin/alerts", Some(&moder), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/admin/alerts",
+        Some(&owner),
+        Some(json!({ "key": "alert_errors", "enabled": false })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    let off = r.json()["alerts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["key"] == "alert_errors")
+        .unwrap()["enabled"]
+        .clone();
+    assert_eq!(off, false);
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/admin/alerts",
+        Some(&owner),
+        Some(json!({ "recipient": "ops@example.com" })),
+    )
+    .await;
+    assert_eq!(r.json()["recipient"], "ops@example.com");
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/admin/alerts",
+        Some(&owner),
+        Some(json!({ "recipient": "not an email" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/admin/alerts",
+        Some(&owner),
+        Some(json!({ "key": "maintenance", "enabled": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+
+    // alert switches stay out of the public feature list
+    let f = api(&app, "GET", "/api/v1/features", None, None)
+        .await
+        .json();
+    assert!(f["features"].get("alert_errors").is_none());
+
+    // audited
+    let n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM admin_audit WHERE action = 'alert_setting'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(n, 2);
+
+    // test send with mail off: logged as not sent, nothing goes out
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/admin/alerts/test",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.json()["test_sent"], false);
+    assert_eq!(r.json()["recent"][0]["kind"], "test");
+}

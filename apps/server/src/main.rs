@@ -36,6 +36,7 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!(e.message))?;
     tokio::spawn(fraglink_server::games::refresh_loop(state.clone()));
     tokio::spawn(fraglink_server::account::purge_loop(state.clone()));
+    tokio::spawn(fraglink_server::alerts::run(state.clone()));
     // WoW realm lists: on the back burner (dev.18), not fetched.
     // tokio::spawn(fraglink_server::realms::refresh_loop(state.clone()));
     let bg = state.clone();
@@ -46,7 +47,10 @@ async fn main() -> anyhow::Result<()> {
             match fraglink_server::steam::sync_due(&bg, 200).await {
                 Ok(n) if n > 0 => tracing::info!("daily Steam sync: refreshed {n} account(s)"),
                 Ok(_) => {}
-                Err(e) => tracing::warn!("daily Steam sync failed: {}", e.message),
+                Err(e) => {
+                    tracing::warn!("daily Steam sync failed: {}", e.message);
+                    fraglink_server::alerts::job_failed("Daily Steam sync", &e.message);
+                }
             }
         }
     });

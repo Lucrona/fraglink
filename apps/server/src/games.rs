@@ -325,7 +325,10 @@ pub async fn refresh_loop(st: AppState) {
                     tracing::info!("detectable list: downloaded {n} apps");
                     loaded = false;
                 }
-                Err(e) => tracing::warn!("detectable list download failed: {e:#}"),
+                Err(e) => {
+                    tracing::warn!("detectable list download failed: {e:#}");
+                    crate::alerts::job_failed("Games list download", &format!("{e:#}"));
+                }
             }
         }
         if !loaded && cache_age(&data).is_some() {
@@ -341,8 +344,14 @@ pub async fn refresh_loop(st: AppState) {
                     st.games.install(b);
                     loaded = true;
                 }
-                Ok(Err(e)) => tracing::warn!("detectable list build failed: {e:#}"),
-                Err(e) => tracing::warn!("detectable list build panicked: {e}"),
+                Ok(Err(e)) => {
+                    tracing::warn!("detectable list build failed: {e:#}");
+                    crate::alerts::job_failed("Games list build", &format!("{e:#}"));
+                }
+                Err(e) => {
+                    tracing::warn!("detectable list build panicked: {e}");
+                    crate::alerts::job_failed("Games list build", &e.to_string());
+                }
             }
         }
         tokio::time::sleep(Duration::from_secs(3600)).await;

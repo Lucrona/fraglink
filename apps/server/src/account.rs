@@ -690,6 +690,7 @@ pub async fn purge_loop(st: AppState) {
     loop {
         if let Err(e) = purge_due(&st).await {
             tracing::warn!("account purge failed: {}", e.message);
+            crate::alerts::job_failed("Account purge", &e.message);
         }
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
     }

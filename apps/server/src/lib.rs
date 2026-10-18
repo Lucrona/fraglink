@@ -8,6 +8,7 @@ pub mod account;
 pub mod achievements;
 pub mod activity;
 pub mod admin;
+pub mod alerts;
 pub mod api;
 pub mod art;
 pub mod auth;
@@ -153,6 +154,7 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             features::gate,
         ))
+        .layer(axum::middleware::from_fn(alerts::track))
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(state)
 }

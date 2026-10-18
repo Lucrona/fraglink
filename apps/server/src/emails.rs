@@ -87,6 +87,56 @@ fn layout(p: Parts) -> String {
     )
 }
 
+/// Staff alert (Admin > Site settings > Email alerts): a heading, an intro line, a list of
+/// items (plain text, escaped here) shown as a striped table, and a button into Admin.
+pub fn alert(
+    subject: &str,
+    heading: &str,
+    intro: &str,
+    lines: &[String],
+    button: (&str, &str),
+) -> Email {
+    let rows: String = lines
+        .iter()
+        .enumerate()
+        .map(|(i, l)| {
+            format!(
+                r##"<tr><td style="padding:8px 10px;font-family:{FONT};font-size:14px;line-height:20px;color:#28313d;border-top:1px solid #e1e6ec;background:{bg};">{}</td></tr>"##,
+                esc(l),
+                bg = if i % 2 == 0 { "#ffffff" } else { "#f7f9fb" }
+            )
+        })
+        .collect();
+    let table = if lines.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r##"<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e1e6ec;border-top:0;border-radius:4px;margin:0 0 6px 0;">{rows}</table>"##
+        )
+    };
+    let mut text = format!("{heading}\n\n{intro}\n\n");
+    for l in lines {
+        text.push_str(&format!("- {l}\n"));
+    }
+    text.push_str(&format!("\n{}: {}\n\nFraglink", button.0, button.1));
+    let mut paras = vec![esc(intro)];
+    if !table.is_empty() {
+        paras.push(table);
+    }
+    Email {
+        subject: subject.to_string(),
+        text,
+        html: layout(Parts {
+            preheader: intro,
+            heading,
+            paras,
+            button: Some(button),
+            after: vec![],
+            reason: "You got this because admin email alerts are on in Admin > Site settings.",
+        }),
+    }
+}
+
 pub fn confirm(name: &str, url: &str) -> Email {
     Email {
         subject: "Confirm your email for Fraglink".into(),
