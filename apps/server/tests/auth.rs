@@ -35,7 +35,7 @@ async fn signup_login_logout(pool: PgPool) {
         "POST",
         "/api/v1/auth/signup",
         None,
-        Some(json!({"email":"ANA@example.com","password":"another long pass","handle":"other"})),
+        Some(json!({"email":"ANA@example.com","password":"another long pass","handle":"other","age_ok":true})),
     )
     .await;
     assert_eq!(r.status, StatusCode::CONFLICT);
@@ -44,15 +44,15 @@ async fn signup_login_logout(pool: PgPool) {
         "POST",
         "/api/v1/auth/signup",
         None,
-        Some(json!({"email":"b@example.com","password":"another long pass","handle":"ANA_1"})),
+        Some(json!({"email":"b@example.com","password":"another long pass","handle":"ANA_1","age_ok":true})),
     )
     .await;
     assert_eq!(r.status, StatusCode::CONFLICT);
     // validation
     for body in [
-        json!({"email":"nope","password":"long enough pass","handle":"abc"}),
-        json!({"email":"c@example.com","password":"short","handle":"abc"}),
-        json!({"email":"c@example.com","password":"long enough pass","handle":"a b"}),
+        json!({"email":"nope","password":"long enough pass","handle":"abc","age_ok":true}),
+        json!({"email":"c@example.com","password":"short","handle":"abc","age_ok":true}),
+        json!({"email":"c@example.com","password":"long enough pass","handle":"a b","age_ok":true}),
     ] {
         let r = api(&app, "POST", "/api/v1/auth/signup", None, Some(body)).await;
         assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
@@ -283,7 +283,7 @@ async fn desktop_signup_login_search(pool: PgPool) {
             "POST",
             "/api/v1/device/signup",
             None,
-            Some(json!({"handle": h, "password": "a long enough pass", "device_name": "PC"})),
+            Some(json!({"handle": h, "password": "a long enough pass", "device_name": "PC", "age_ok": true})),
         )
         .await;
         assert_eq!(r.status, StatusCode::CREATED, "{}", r.text);
@@ -419,4 +419,89 @@ async fn old_sign_ins_are_purged(pool: PgPool) {
         fraglink_server::account::purge_tokens(&st).await.unwrap(),
         0
     );
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn signup_needs_the_age_tick_box(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let users = || async {
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+    // website API: missing or unticked is refused with a clear message
+    for body in [
+        json!({"email":"k@example.com","password":"long enough pass","handle":"kid"}),
+        json!({"email":"k@example.com","password":"long enough pass","handle":"kid","age_ok":false}),
+    ] {
+        let r = api(&app, "POST", "/api/v1/auth/signup", None, Some(body)).await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
+        assert_eq!(r.json()["error"], "age_required");
+        assert!(r.json()["message"]
+            .as_str()
+            .unwrap()
+            .contains("13 or older (16 or older in the EU/UK)"));
+    }
+    // desktop app: old builds don't send it at all and are told what to do
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/device/signup",
+        None,
+        Some(json!({"handle":"kid","password":"long enough pass"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert!(
+        r.json()["message"]
+            .as_str()
+            .unwrap()
+            .contains("update Fraglink"),
+        "{}",
+        r.text
+    );
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/device/signup",
+        None,
+        Some(json!({"handle":"kid","password":"long enough pass","age_ok":false})),
+    )
+    .await;
+    assert_eq!(r.json()["error"], "age_required");
+    // the server's own sign-up form (device pairing)
+    let r = form(
+        &app,
+        "/signup",
+        None,
+        Some(ORIGIN),
+        "email=k%40example.com&handle=kid&password=correct+horse+battery",
+    )
+    .await;
+    let loc = r
+        .headers
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(loc.contains("err=") && loc.contains("13+or+older"), "{loc}");
+    assert!(r.headers.get("set-cookie").is_none());
+    assert!(page(&app, "/signup", None)
+        .await
+        .text
+        .contains(r#"name="age_ok""#));
+    assert_eq!(users().await, 0);
+
+    // ticked: the time is stored and included in the export
+    let t = signup(&app, "ok@example.com", "grownup").await;
+    let at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT age_confirmed_at FROM users WHERE handle = 'grownup'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(at.is_some());
+    let ex = api(&app, "GET", "/api/v1/export", Some(&t), None).await;
+    assert!(ex.json()["age_confirmed_at"].is_string(), "{}", ex.text);
 }

@@ -105,6 +105,9 @@ pub struct SignupReq {
     pub handle: String,
     #[serde(default)]
     pub turnstile: Option<String>,
+    /// The "I'm 13 or older (16 or older in the EU/UK)" tick box.
+    #[serde(default)]
+    pub age_ok: bool,
 }
 
 #[derive(Serialize)]
@@ -126,7 +129,7 @@ async fn signup(
     .await?;
     signup_limit(&st, &headers)?;
     crate::turnstile::check(&st, &headers, r.turnstile.as_deref()).await?;
-    let user = auth::create_user(&st, &r.email, &r.password, &r.handle).await?;
+    let user = auth::create_user(&st, &r.email, &r.password, &r.handle, r.age_ok).await?;
     let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
     let token = auth::issue_token_ctx(&st, user.id, "web", None, &ctx).await?;
     crate::account::send_verification(&st, &user).await?;
@@ -194,6 +197,8 @@ struct DeviceSignupReq {
     #[serde(default)]
     email: String,
     device_name: Option<String>,
+    /// The age tick box; app builds up to 0.3.0-beta.1 don't send it.
+    age_ok: Option<bool>,
 }
 
 /// Desktop client "Create Account": makes the account and returns a device token.
@@ -209,7 +214,13 @@ async fn device_signup(
     )
     .await?;
     signup_limit(&st, &headers)?;
-    let user = auth::create_user(&st, &r.email, &r.password, &r.handle).await?;
+    let Some(age_ok) = r.age_ok else {
+        return Err(AppError::bad_request(
+            "age_required",
+            "Please confirm your age: update Fraglink, or create your account at playfraglink.com/signup.",
+        ));
+    };
+    let user = auth::create_user(&st, &r.email, &r.password, &r.handle, age_ok).await?;
     let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
     let token = auth::issue_token_ctx(
         &st,
@@ -1104,6 +1115,7 @@ pub async fn export_json(st: &AppState, user: &User) -> ApiResult<Value> {
         "schema": 1,
         "exported_at": Utc::now(),
         "user": user,
+        "age_confirmed_at": q("SELECT coalesce(to_jsonb(age_confirmed_at), 'null'::jsonb) FROM users WHERE id = $1").await?,
         "linked_accounts": q("SELECT coalesce(jsonb_agg(to_jsonb(l) - 'user_id'), '[]'::jsonb) FROM linked_accounts l WHERE user_id = $1").await?,
         "sessions": q("SELECT coalesce(jsonb_agg(to_jsonb(s) - 'user_id' ORDER BY started_at), '[]'::jsonb) FROM sessions s WHERE user_id = $1").await?,
         "steam_playtime": q("SELECT coalesce(jsonb_agg(to_jsonb(p) - 'user_id'), '[]'::jsonb) FROM steam_playtime p WHERE user_id = $1").await?,

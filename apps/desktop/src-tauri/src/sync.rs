@@ -359,14 +359,16 @@ pub fn password_sign_in(
     server_url: &str,
     login: &str,
     password: &str,
-    create: Option<&str>,
+    create: Option<(&str, bool)>,
 ) -> Result<(), String> {
     let base = fraglink_sync::normalize_server_url(server_url)
         .ok_or_else(|| "Enter a server address starting with http:// or https://".to_string())?;
     cancel_pairing(app);
     let client = Client::new(&base, None);
     let res = match create {
-        Some(email) => client.password_signup(login, password, email, &device_label()),
+        Some((email, age_ok)) => {
+            client.password_signup(login, password, email, &device_label(), age_ok)
+        }
         None => client.password_login(login, password, &device_label()),
     };
     let (token, user) = res.map_err(|e| sign_in_error(e, &base))?;

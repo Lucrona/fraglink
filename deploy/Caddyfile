@@ -112,6 +112,7 @@ playfraglink.com {
 		try_files {path} {path}.html {path}/index.html
 		header Cache-Control "no-cache"
 		header /assets/* Cache-Control "public, max-age=86400"
+		header /flags/* Cache-Control "public, max-age=604800"
 		file_server
 	}
 	handle_errors {
@@ -182,6 +183,7 @@ Disallow: /
 		try_files {path} {path}.html {path}/index.html
 		header Cache-Control "no-cache"
 		header /assets/* Cache-Control "public, max-age=86400"
+		header /flags/* Cache-Control "public, max-age=604800"
 		file_server
 	}
 	handle_errors {

@@ -660,7 +660,7 @@ async fn turnstile_required_when_configured(pool: PgPool) {
         "POST",
         "/api/v1/device/signup",
         None,
-        Some(json!({"handle": "app1", "password": PW})),
+        Some(json!({"handle": "app1", "password": PW, "age_ok": true})),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED);

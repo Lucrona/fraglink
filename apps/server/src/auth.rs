@@ -297,13 +297,28 @@ pub fn validate_signup(email: &str, password: &str, handle: &str) -> Result<(), 
     Ok(())
 }
 
+/// Shown when the sign-up age tick box wasn't ticked.
+pub const AGE_TEXT: &str = "I'm 13 or older (16 or older in the EU/UK)";
+
+pub fn age_required() -> AppError {
+    AppError::bad_request(
+        "age_required",
+        "Please tick the box to confirm you're 13 or older (16 or older in the EU/UK).",
+    )
+}
+
+/// Creates the account. `age_ok` is the sign-up tick box; without it nothing is created.
 pub async fn create_user(
     state: &AppState,
     email: &str,
     password: &str,
     handle: &str,
+    age_ok: bool,
 ) -> ApiResult<User> {
     validate_signup(email, password, handle)?;
+    if !age_ok {
+        return Err(age_required());
+    }
     // usernames freed by a staff rename stay with their old owner (old links redirect there)
     let reserved: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM handle_redirects WHERE old_handle = lower($1))",
@@ -326,7 +341,7 @@ pub async fn create_user(
         display_name: handle.trim().to_string(),
     };
     let r = sqlx::query(
-        "INSERT INTO users(id, email, handle, display_name, password_hash) VALUES($1, $2, $3, $4, $5)",
+        "INSERT INTO users(id, email, handle, display_name, password_hash, age_confirmed_at) VALUES($1, $2, $3, $4, $5, now())",
     )
     .bind(user.id)
     .bind(&user.email)

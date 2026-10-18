@@ -372,9 +372,10 @@ pages.signup = () => {
     e.preventDefault(); err.hidden = true;
     if (f.password.value !== f.password2.value) { showErr(err, new Error("The passwords don't match.")); return; }
     if (!f.terms.checked) { showErr(err, new Error("Please accept the Terms and Privacy Policy.")); return; }
+    if (!f.age_ok.checked) { showErr(err, new Error("Please tick the box to confirm you're 13 or older (16 or older in the EU/UK).")); return; }
     const b = $("button", f); b.disabled = true;
     try {
-      const r = await api("/auth/signup", { method: "POST", body: { email: f.email.value.trim(), handle: f.handle.value.trim(), password: f.password.value, turnstile: turnstileToken(f) } });
+      const r = await api("/auth/signup", { method: "POST", body: { email: f.email.value.trim(), handle: f.handle.value.trim(), password: f.password.value, age_ok: f.age_ok.checked, turnstile: turnstileToken(f) } });
       setSession(r.token, r.user);
       location.href = "/u/" + encodeURIComponent(r.user.handle) + "?welcome=1" + (r.user.email ? "&sent=1" : "");
     } catch (x) { showErr(err, x); b.disabled = false; turnstileReset(); }
@@ -446,7 +447,9 @@ function COUNTRIES() {
   return (COUNTRIES.c = out.filter(([c]) => !["AA", "QM", "QN", "QO", "QP", "QQ", "QR", "QS", "QT", "QU", "QV", "QW", "QX", "QY", "QZ", "XA", "XB", "XK", "ZZ", "EU", "EZ", "UN"].includes(c) || c === "XK").sort((x, y) => x[1].localeCompare(y[1])));
 }
 function countryName(c) { try { return new Intl.DisplayNames(["en"], { type: "region" }).of(c); } catch (e) { return c; } }
-function flag(c) { return c && /^[A-Z]{2}$/.test(c) ? `<img class="flag" src="https://flagcdn.com/20x15/${c.toLowerCase()}.png" width="20" height="15" alt="" loading="lazy">` : ""; }
+// Flags are served from our own site (flag-icons, MIT; see /flags/LICENSE.txt). Codes we have an image for:
+const FLAGS = new Set("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CP CR CU CV CW CX CY CZ DE DG DJ DK DM DO DZ EC EE EG EH ER ES ET EU FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU IC ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PC PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM UN US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW".split(" "));
+function flag(c) { return c && FLAGS.has(c) ? `<img class="flag" src="/flags/${c.toLowerCase()}.png" width="20" height="15" alt="" loading="lazy">` : ""; }
 pages.profile = async () => {
   const root = $("#profile");
   const handle = decodeURIComponent(location.pathname.replace(/^\/u\/?/, "").replace(/\/$/, ""));

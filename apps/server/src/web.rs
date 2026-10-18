@@ -402,11 +402,19 @@ fn auth_form(kind: &str, next: &str, err: Option<&str>) -> String {
     format!(
         r#"{e}<div class="card"><h1>{title}</h1><form method="post" action="{action}"><input type="hidden" name="next" value="{n}">
 <p><label>Email<br><input name="email" type="email" required autocomplete="email"></label></p>{extra}
-<p><label>Password<br><input name="password" type="password" required minlength="{min}" autocomplete="{ac}"></label></p><p><button>{title}</button></p></form><p>{alt}</p></div>"#,
+<p><label>Password<br><input name="password" type="password" required minlength="{min}" autocomplete="{ac}"></label></p>{age}<p><button>{title}</button></p></form><p>{alt}</p></div>"#,
         e = err
             .map(|e| format!(r#"<div class="card err">{}</div>"#, esc(e)))
             .unwrap_or_default(),
         n = esc(next),
+        age = if kind == "signup" {
+            format!(
+                r#"<p><label><input type="checkbox" name="age_ok" value="1" required> {}.</label> <a href="/privacy" target="_blank">Privacy Policy</a></p>"#,
+                esc(auth::AGE_TEXT)
+            )
+        } else {
+            String::new()
+        },
         min = if kind == "signup" { 10 } else { 1 },
         ac = if kind == "signup" {
             "new-password"
@@ -436,6 +444,8 @@ struct AuthFormData {
     password: String,
     handle: Option<String>,
     next: Option<String>,
+    /// Sign-up age tick box (present only when ticked).
+    age_ok: Option<String>,
 }
 
 async fn signup_post(
@@ -458,6 +468,7 @@ async fn signup_post(
             &f.email,
             &f.password,
             f.handle.as_deref().unwrap_or(""),
+            f.age_ok.is_some(),
         )
         .await?;
         auth::issue_token(&st, u.id, "web", None).await

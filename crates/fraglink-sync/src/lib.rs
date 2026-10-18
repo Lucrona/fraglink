@@ -301,18 +301,20 @@ impl Client {
         token_and_user(v)
     }
 
-    /// Create an account (email optional) and sign this PC in.
+    /// Create an account (email optional) and sign this PC in. `age_ok` is the
+    /// "I'm 13 or older (16 or older in the EU/UK)" tick box; the server refuses without it.
     pub fn password_signup(
         &self,
         handle: &str,
         password: &str,
         email: &str,
         device_name: &str,
+        age_ok: bool,
     ) -> Result<(String, RemoteUser), SyncError> {
         let v: serde_json::Value = self.call(
             "POST",
             "/api/v1/device/signup",
-            Some(serde_json::json!({ "handle": handle, "password": password, "email": email, "device_name": device_name })),
+            Some(serde_json::json!({ "handle": handle, "password": password, "email": email, "device_name": device_name, "age_ok": age_ok })),
         )?;
         token_and_user(v)
     }

@@ -175,3 +175,13 @@ the entries say what changing them would cost.
 - `/api/v1/stats` still sends `estimated_min: 0` because app builds up to 0.3.0-beta.1 read it. Drop it once those builds are retired.
 - **Retention:** accounts are purged 7 days after deletion is requested. Sign-ins (IP, browser, country) are deleted 30 days after they were revoked or expired. App devices unused for 180 days are deleted, and that app has to sign in again. Backups (nightly dumps and manual pre-deploy copies) are deleted at 14 days. All of these run automatically: the server hourly, and the backup job nightly.
 - **Country lookup** uses DB-IP "IP to Country Lite" (CC BY 4.0, attribution "IP Geolocation by DB-IP" linking to db-ip.com, shown under Settings > Security). It's an offline file refreshed monthly, so no lookup leaves the server.
+
+## D32. Own flag images; age tick box at sign-up
+
+- **Flags**: the website no longer loads flags from flagcdn.com. The flag-icons 7.6.0 SVGs (MIT) were
+  rendered once to 40x30 PNGs (shown at 20x15) in `apps/site-web/static/flags/`, two-letter codes only
+  (about 160 KB in total). No visitor request goes to a third party for a flag.
+- **Age**: every sign-up path (website API, desktop app, the server's pairing sign-up form) needs
+  "I'm 13 or older (16 or older in the EU/UK)" ticked; the server refuses otherwise (`age_required`)
+  and stores `users.age_confirmed_at`. Older accounts have NULL. App builds up to 0.3.0-beta.1 don't
+  send the field and get a message to update or sign up on the website.

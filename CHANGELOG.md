@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Removed
 - Estimated hours and the "Estimate your history" calculator. Hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter.
 
+### Added
+- Create Account asks you to confirm you're 13 or older (16 or older in the EU/UK), with a link to the Privacy Policy.
+
 ### Changed
 - The app's stats legend shows only Tracked and Imported.
 - Desktop apps that haven't been used for 180 days are signed out and need to sign in again.
@@ -16,6 +19,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Old sign-ins are deleted 30 days after they were signed out or expired. Unused app devices are deleted after 180 days.
 - Sign-in history shows an approximate country again, using an offline DB-IP database that is refreshed monthly.
 - Backups made before deploys are now deleted after 14 days, like the nightly backups.
+- Sign-up (website, app and the pairing sign-up page) needs the age tick box; the server refuses without it and stores when it was ticked. App builds up to 0.3.0-beta.1 are asked to update or sign up on the website.
+- Country flags on the website are served from playfraglink.com (flag-icons, MIT) instead of an outside image service.
 
 ## [0.3.0-beta.1] - 2026-10-12
 

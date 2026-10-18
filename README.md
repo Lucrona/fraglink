@@ -201,7 +201,7 @@ The Dark skin is a frameless, resizable window (345×555 at minimum). The side p
 
 ## License
 
-**All rights reserved; license to be decided before public release.** See [`LICENSE`](LICENSE). Bundled fonts keep their own licences (Russo One: SIL OFL 1.1; Wine Tahoma-metric fonts: LGPL 2.1+). The wordmark is Saira Expanded Bold (SIL OFL 1.1), converted to outlines.
+**All rights reserved; license to be decided before public release.** See [`LICENSE`](LICENSE). Bundled fonts keep their own licences (Russo One: SIL OFL 1.1; Wine Tahoma-metric fonts: LGPL 2.1+). The wordmark is Saira Expanded Bold (SIL OFL 1.1), converted to outlines. Website country flags come from [flag-icons](https://github.com/lipis/flag-icons) (MIT, see `apps/site-web/static/flags/LICENSE.txt`).
 
 ## Independent project
 

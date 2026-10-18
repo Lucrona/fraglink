@@ -114,7 +114,7 @@ pub async fn signup(app: &Router, email: &str, handle: &str) -> String {
         "POST",
         "/api/v1/auth/signup",
         None,
-        Some(json!({ "email": email, "password": "correct horse battery", "handle": handle })),
+        Some(json!({ "email": email, "password": "correct horse battery", "handle": handle, "age_ok": true })),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{}", r.text);

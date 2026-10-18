@@ -167,7 +167,7 @@ async fn admins_change_usernames_and_old_links_redirect(pool: PgPool) {
     assert_eq!(p.status, StatusCode::OK, "{}", p.text);
     assert_eq!(p.json()["handle"], "newname");
     // nobody can sign up with the old one
-    let s = api(&app, "POST", "/api/v1/auth/signup", None, Some(json!({ "email": "z@example.com", "password": "correct horse battery", "handle": "OldName" }))).await;
+    let s = api(&app, "POST", "/api/v1/auth/signup", None, Some(json!({ "email": "z@example.com", "password": "correct horse battery", "handle": "OldName", "age_ok": true }))).await;
     assert_eq!(s.status, StatusCode::CONFLICT);
     // logged in the audit log
     let n: i64 =

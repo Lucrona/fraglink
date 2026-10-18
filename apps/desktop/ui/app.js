@@ -374,6 +374,8 @@
         <label class="lg-lbl" for="lg-npass">Password</label><input id="lg-npass" type="password" maxlength="128" placeholder="at least 10 characters" />
         <label class="lg-lbl" for="lg-npass2">Confirm Password</label><input id="lg-npass2" type="password" maxlength="128" />
         <label class="lg-lbl" for="lg-email">Email <span class="lg-opt">(optional)</span></label><input id="lg-email" maxlength="254" autocomplete="off" />
+        <label class="lg-tick"><input type="checkbox" id="lg-age" /> I'm 13 or older (16 or older in the EU/UK)</label>
+        <a class="lg-a" data-action="privacy-policy">Privacy Policy</a>
         <div class="af-btns"><button class="hw" type="button" data-action="login-back">Cancel</button><button class="hw" type="button" data-action="signup-go">Create Account</button></div>`;
     } else {
       h += `<label class="lg-lbl" for="lg-user">Username</label>
@@ -1168,14 +1170,16 @@
       if (!/^[A-Za-z0-9_-]{3,20}$/.test(u)) { state.loginErr = 'Usernames are 3-20 characters: letters, digits, _ or -.'; render(); return; }
       if (pw.length < 10) { state.loginErr = 'Use a password of at least 10 characters.'; render(); return; }
       if (pw !== pw2) { state.loginErr = "The passwords don't match."; render(); return; }
+      if (!$('#lg-age').checked) { state.loginErr = "Please tick the box to confirm you're 13 or older (16 or older in the EU/UK)."; render(); return; }
       state.loginErr = ''; state.loginBusy = 'Creating your account…'; render();
-      try { await FLB.syncSignup(srvVal(), u, pw, em); state.loginMode = null; } catch (e) { state.loginErr = String(e && e.message || e); }
+      try { await FLB.syncSignup(srvVal(), u, pw, em, true); state.loginMode = null; } catch (e) { state.loginErr = String(e && e.message || e); }
       state.loginBusy = ''; refreshFriends();
     },
     'login-back': () => { state.loginMode = null; state.mfaTicket = null; state.loginErr = ''; render(); },
     'login-browser': () => { state.loginErr = ''; FLB.syncSignIn(srvVal()).then(refreshFriends).catch(toastErr); },
     'login-cancel': () => FLB.syncCancel().then(refreshFriends).catch(toastErr),
     'register': () => { state.tab = 'friends'; state.loginMode = 'create'; state.loginErr = ''; render(); setTimeout(() => $('#lg-nuser') && $('#lg-nuser').focus(), 0); },
+    'privacy-policy': () => { if (TAURI && FLB.openWebsite) FLB.openWebsite('privacy').catch(toastErr); else notice('Privacy Policy', 'playfraglink.com/privacy'); },
     'forgot': () => { if (TAURI && FLB.openWebsite) FLB.openWebsite('forgot').catch(toastErr); else notice('Forgot Password', LATER); },
     'invite': () => notice('Invite via Email', 'Inviting friends by email arrives with the Fraglink website. For now, send them the download link and your username.'),
     'friend-accept': a => FLB.friendRespond(a.dataset.handle, true).then(refreshFriends).catch(toastErr),

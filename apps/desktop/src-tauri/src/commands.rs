@@ -710,7 +710,7 @@ pub async fn sync_login_mfa(
     .map_err(err)?
 }
 
-/// Create Account: username, password, optional email; signs this PC in.
+/// Create Account: username, password, optional email and the age tick box; signs this PC in.
 #[tauri::command]
 pub async fn sync_signup(
     app: AppHandle,
@@ -718,10 +718,16 @@ pub async fn sync_signup(
     username: String,
     password: String,
     email: String,
+    age_ok: bool,
 ) -> CmdResult<()> {
     let h = clean_handle(&username)?;
+    if !age_ok {
+        return Err(
+            "Please tick the box to confirm you're 13 or older (16 or older in the EU/UK).".into(),
+        );
+    }
     tauri::async_runtime::spawn_blocking(move || {
-        crate::sync::password_sign_in(&app, &server, &h, &password, Some(email.trim()))
+        crate::sync::password_sign_in(&app, &server, &h, &password, Some((email.trim(), age_ok)))
     })
     .await
     .map_err(err)?
