@@ -350,7 +350,7 @@ pub fn classify_dob(birth: chrono::NaiveDate) -> ApiResult<bool> {
 }
 
 /// Creates the account. Requires a date of birth (day/month/year). Under 13 is refused
-/// with no row created. Ages 13–17 start as minors (private by default; real name, gender and location hidden); 18+ as adults.
+/// with no row created. Ages 13–17 start as minors (private by default; real name, gender, location and age hidden); 18+ as adults (age hidden).
 pub async fn create_user(
     state: &AppState,
     email: &str,
@@ -381,12 +381,15 @@ pub async fn create_user(
         handle: handle.trim().to_string(),
         display_name: handle.trim().to_string(),
     };
-    // 13–17: hide real name, gender and location by default (user can turn them on).
-    // Missing privacy keys still mean "shown" for adults and every other switch.
+    // New accounts: age hidden by default (matches Privacy Policy v9). Existing rows
+    // keep whatever is already in privacy — we never backfill.
+    // 13–17 also hide real name, gender and location (user can turn any of these on).
     let privacy = if minor {
-        serde_json::json!({"real_name": false, "gender": false, "location": false})
+        serde_json::json!({
+            "age": false, "real_name": false, "gender": false, "location": false
+        })
     } else {
-        serde_json::json!({})
+        serde_json::json!({"age": false})
     };
     let r = sqlx::query(
         "INSERT INTO users(id, email, handle, display_name, password_hash, age_confirmed_at,
