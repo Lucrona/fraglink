@@ -169,4 +169,21 @@ async fn official_icons_are_cached_and_served(pool: PgPool) {
         "/icons/games/32/steam%3A2479810.png"
     );
     assert!(v.get("not_a_game").is_none() && v.get("manual:x").is_none());
+
+    // logged out (public profiles): same answer, no session needed
+    let anon = api(
+        &app,
+        "GET",
+        "/api/v1/games/icons?ids=star_citizen,not_a_game",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(anon.status, StatusCode::OK);
+    let v = anon.json();
+    assert_eq!(
+        v["star_citizen"]["icon_path"],
+        "/icons/games/32/star_citizen.png"
+    );
+    assert!(v.get("not_a_game").is_none());
 }

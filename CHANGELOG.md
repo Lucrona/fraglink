@@ -8,7 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 - The two-step sign-in code screen tells you to email support@playfraglink.com if you've lost your authenticator and backup codes.
 
+### Changed
+- Website: the profile Miniprofile box shows the embed text and the Link, BBCode and HTML copy rows only on your own profile. Visitors see just the image, linking to the profile.
+
 ### Fixed
+- Website: game icons now show on public profiles for logged-out visitors (they showed letter tiles before).
 - Website: after choosing a new password from a reset link, the page now says your password was changed (and that other sessions were signed out) with a Sign in button, instead of an empty box. Expired, used or missing reset links, and server or connection errors, now show a clear message.
 
 ## [0.3.0-beta.2] - 2026-10-19

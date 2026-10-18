@@ -670,14 +670,16 @@ pages.profile = async () => {
   const welcome = qs("welcome") && self ? `<div class="alert ok" style="margin-bottom:12px">Welcome to Fraglink. <a href="/download">Download the app</a> and sign in with the same account to start tracking. You can pick a picture in <a href="/settings">Settings</a>.${qs("sent") ? " We sent a link to confirm your email. Can't find it? Check your junk or spam folder." : ""}</div>` : "";
   const pendingDelete = self && p.delete_after ? `<div class="alert err" style="margin-bottom:12px">This account will be deleted on ${fullDate.format(new Date(p.delete_after))}. Sign in again to keep it.</div>` : "";
 
-  // Miniprofile: the live signature image + embed codes (public profiles only)
+  // Miniprofile (public profiles only): the owner gets the embed text and copy rows; everyone
+  // else (signed out or another user) just sees the live image, linking to the profile.
   const shareUrl = siteBase() + "/u/" + encodeURIComponent(p.handle), sig = sigUrl(p.handle);
   const codes = [["Link", shareUrl], ["BBCode", `[url=${shareUrl}][img]${sig}[/img][/url]`], ["HTML", `<a href="${shareUrl}"><img src="${sig}" alt="${p.display_name || p.handle} on Fraglink" width="460" height="100"></a>`]];
-  const miniprofile = p.public_profile
-    ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere (forums, blogs, Discord). It updates live.</div>
+  const miniprofile = !p.public_profile
+    ? (self ? sec("Miniprofile", `<div class="body empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></div>`) : "")
+    : self ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere (forums, blogs, Discord). It updates live.</div>
         ${sigPreview(p.handle)}
         <div class="mpcodes">${codes.map(([l, v]) => `<div class="code"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
-    : self ? sec("Miniprofile", `<div class="body empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></div>`) : "";
+    : sec("Miniprofile", `<div class="body mp"><a href="/u/${encodeURIComponent(p.handle)}" title="${esc(p.display_name || p.handle)} on Fraglink">${sigPreview(p.handle)}</a></div>`);
 
   // Details + inset box
   const kv = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";

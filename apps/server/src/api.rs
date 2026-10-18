@@ -1440,11 +1440,21 @@ struct IconsQ {
 /// can fetch) an official icon for; other ids are left out and the app uses the
 /// exe icon on its own PC. `icon_url` stays null: apps never download icons from
 /// anyone but this server (older apps used it for a CDN link).
+/// Public: logged-out visitors see game icons on public profiles too. It only says which
+/// game ids have an icon on our own domain (no user data); anonymous callers are rate limited
+/// per IP (each call covers up to 50 ids).
 async fn game_icons(
     State(st): State<AppState>,
-    _a: AuthUser,
+    crate::auth::MaybeUser(a): crate::auth::MaybeUser,
+    headers: HeaderMap,
     Query(q): Query<IconsQ>,
 ) -> ApiResult<Json<Value>> {
+    if a.is_none() {
+        let ip = crate::client_ip(&headers);
+        if ip != "local" {
+            st.rate_limit(format!("icons:{ip}"), 120, MINUTE)?;
+        }
+    }
     let ids: Vec<String> = q
         .ids
         .split(',')
