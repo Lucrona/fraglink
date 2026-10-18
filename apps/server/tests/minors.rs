@@ -33,7 +33,7 @@ async fn signup_dob(app: &axum::Router, handle: &str, birth: &str) -> common::Re
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn under_18_accounts_are_private_and_unlisted(pool: PgPool) {
+async fn under_18_start_private_but_may_go_public(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     // DOB required
     let r = signup_dob(&app, "nogroup", "").await;
@@ -50,22 +50,50 @@ async fn under_18_accounts_are_private_and_unlisted(pool: PgPool) {
             .await
             .unwrap();
     assert!(minor && !public && set);
+    let privacy: serde_json::Value =
+        sqlx::query_scalar("SELECT privacy FROM users WHERE handle = 'teen'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(privacy["real_name"], false, "{privacy}");
+    assert_eq!(privacy["gender"], false, "{privacy}");
+    assert_eq!(privacy["location"], false, "{privacy}");
+    assert_eq!(privacy["age"], false, "{privacy}");
+    // other switches stay default-shown (missing key)
+    assert!(privacy.get("about").is_none(), "{privacy}");
     let me = api(&app, "GET", "/api/v1/me", Some(&teen), None).await;
     assert_eq!(me.json()["user"]["is_minor"], true, "{}", me.text);
+    assert_eq!(
+        me.json()["user"]["privacy"]["real_name"],
+        false,
+        "{}",
+        me.text
+    );
+    assert_eq!(me.json()["user"]["privacy"]["gender"], false, "{}", me.text);
+    assert_eq!(
+        me.json()["user"]["privacy"]["location"],
+        false,
+        "{}",
+        me.text
+    );
+    assert_eq!(me.json()["user"]["privacy"]["age"], false, "{}", me.text);
+    // adults: only age is off by default; other keys stay missing (= shown)
+    let adult_pv: serde_json::Value =
+        sqlx::query_scalar("SELECT privacy FROM users WHERE handle = 'alice'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(adult_pv["age"], false, "{adult_pv}");
+    assert!(adult_pv.get("real_name").is_none(), "{adult_pv}");
+    let me_a = api(&app, "GET", "/api/v1/me", Some(&adult), None).await;
+    assert_eq!(
+        me_a.json()["user"]["privacy"]["age"],
+        false,
+        "{}",
+        me_a.text
+    );
 
-    // can't go public while under 18
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/me/privacy",
-        Some(&teen),
-        Some(json!({"public_profile": true})),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST);
-    assert_eq!(r.json()["error"], "minor_private");
-
-    // a stranger: profile is private, not in search, not in newest members
+    // while private: strangers see a private profile; not in newest / leaderboards
     let p = api(
         &app,
         "GET",
@@ -75,15 +103,6 @@ async fn under_18_accounts_are_private_and_unlisted(pool: PgPool) {
     )
     .await;
     assert_eq!(p.json()["private"], true, "{}", p.text);
-    let s = api(
-        &app,
-        "GET",
-        "/api/v1/users/search?q=teen",
-        Some(&adult),
-        None,
-    )
-    .await;
-    assert_eq!(s.json()["users"].as_array().unwrap().len(), 0, "{}", s.text);
     let home = api(&app, "GET", "/api/v1/home", None, None).await;
     let newest: Vec<String> = home.json()["newest"]
         .as_array()
@@ -96,7 +115,6 @@ async fn under_18_accounts_are_private_and_unlisted(pool: PgPool) {
         "{newest:?}"
     );
 
-    // leaderboards and top players leave them out
     sqlx::query("INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true) ON CONFLICT DO NOTHING")
         .execute(&pool)
         .await
@@ -119,27 +137,31 @@ async fn under_18_accounts_are_private_and_unlisted(pool: PgPool) {
         .map(|r| r["handle"].as_str().unwrap().to_string())
         .collect();
     assert_eq!(ranks, ["alice"], "{}", lb.text);
-    let home = api(&app, "GET", "/api/v1/home", None, None).await;
-    assert!(!home.text.contains("\"teen\""), "{}", home.text);
 
-    // friends still find them
-    api(
-        &app,
-        "POST",
-        "/api/v1/friends/request",
-        Some(&teen),
-        Some(json!({"handle": "alice"})),
-    )
-    .await;
+    // under-18 can switch to public themselves
     let r = api(
         &app,
         "POST",
-        "/api/v1/friends/respond",
-        Some(&adult),
-        Some(json!({"handle": "teen", "accept": true})),
+        "/api/v1/me/privacy",
+        Some(&teen),
+        Some(json!({"public_profile": true})),
     )
     .await;
-    assert!(r.status.is_success(), "{}", r.text);
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["public_profile"], true, "{}", r.text);
+
+    // once public: treated like any public profile (search, newest, leaderboard)
+    let p = api(
+        &app,
+        "GET",
+        "/api/v1/users/teen/profile",
+        Some(&adult),
+        None,
+    )
+    .await;
+    // Full profile for a public account (no private:true stub); relation is "none" for a stranger.
+    assert_ne!(p.json().get("private"), Some(&json!(true)), "{}", p.text);
+    assert_eq!(p.json()["public_profile"], true, "{}", p.text);
     let s = api(
         &app,
         "GET",
@@ -149,6 +171,32 @@ async fn under_18_accounts_are_private_and_unlisted(pool: PgPool) {
     )
     .await;
     assert_eq!(s.json()["users"][0]["handle"], "teen", "{}", s.text);
+    let home = api(&app, "GET", "/api/v1/home", Some(&adult), None).await;
+    assert!(home.text.contains("\"teen\""), "{}", home.text);
+    let lb = api(&app, "GET", "/api/v1/leaderboard/wow", Some(&adult), None).await;
+    let ranks: Vec<String> = lb.json()["ranks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["handle"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        ranks.contains(&"teen".to_string()) && ranks.contains(&"alice".to_string()),
+        "{ranks:?}"
+    );
+
+    // can switch back to private any time
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&teen),
+        Some(json!({"public_profile": false})),
+    )
+    .await;
+    assert_eq!(r.json()["public_profile"], false, "{}", r.text);
+    let home = api(&app, "GET", "/api/v1/home", Some(&adult), None).await;
+    assert!(!home.text.contains("\"teen\""), "{}", home.text);
 
     // DOB locked after set (user can't change it)
     let r = api(
@@ -188,20 +236,9 @@ async fn under_18_accounts_are_private_and_unlisted(pool: PgPool) {
             .unwrap();
     assert!(!minor && !public);
 
-    // now they can go public themselves
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/me/privacy",
-        Some(&teen),
-        Some(json!({"public_profile": true})),
-    )
-    .await;
-    assert_eq!(r.json()["public_profile"], true, "{}", r.text);
-
-    // adult with no DOB yet: adding a 13–17 DOB goes private
+    // adult with no DOB yet: adding a 13–17 DOB goes private (default)
     sqlx::query(
-        "UPDATE users SET birth_date = NULL, age_confirmed_at = NULL WHERE handle = 'alice'",
+        "UPDATE users SET birth_date = NULL, age_confirmed_at = NULL, is_minor = false, public_profile = true WHERE handle = 'alice'",
     )
     .execute(&pool)
     .await
@@ -442,17 +479,17 @@ async fn private_and_minor_count_in_anonymous_aggregates(pool: PgPool) {
     assert_eq!(wow["minutes"], 180, "{wow}");
     assert_eq!(wow["players"], 3, "{wow}"); // anonymous player count includes private+minor
 
-    // named lists never name private / minor / test
+    // named lists never name private (incl. default-private minors) / test
     let blob = home.text;
     assert!(!blob.contains("\"privy\""), "private named: {blob}");
-    assert!(!blob.contains("\"teeny\""), "minor named: {blob}");
+    assert!(!blob.contains("\"teeny\""), "private minor named: {blob}");
     assert!(!blob.contains("\"testy\""), "test named: {blob}");
     assert!(
         blob.contains("\"pubby\""),
         "public should appear in newest: {blob}"
     );
 
-    // named game leaderboard: only the public adult
+    // named game leaderboard: only the public adult (private minor excluded)
     let lb = api(&app, "GET", "/api/v1/leaderboard/wow", Some(&pub_tok), None).await;
     let ranks: Vec<String> = lb.json()["ranks"]
         .as_array()

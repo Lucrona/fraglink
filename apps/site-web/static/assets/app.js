@@ -13,6 +13,33 @@ const me = () => { try { return JSON.parse(localStorage.getItem(UK)); } catch (e
 function setSession(t, u) { localStorage.setItem(TK, t); localStorage.setItem(UK, JSON.stringify(u)); }
 function clearSession() { localStorage.removeItem(TK); localStorage.removeItem(UK); }
 
+
+/** Neutral two-button confirm: Cancel and Confirm are equal weight (no primary). */
+function confirmEqual(message) {
+  return new Promise(resolve => {
+    const m = document.createElement("div");
+    m.className = "confirm-modal";
+    m.innerHTML = `<div class="confirm-box panel" role="dialog" aria-modal="true" aria-label="Confirm">
+      <p>${esc(message)}</p>
+      <div class="confirm-actions">
+        <button type="button" class="btn" data-a="cancel">Cancel</button>
+        <button type="button" class="btn" data-a="ok">Confirm</button>
+      </div>
+    </div>`;
+    const done = ok => { m.remove(); resolve(!!ok); };
+    const onKey = e => { if (e.key === "Escape") finish(false); };
+    const finish = ok => { document.removeEventListener("keydown", onKey); done(ok); };
+    m.addEventListener("click", e => {
+      const b = e.target.closest("[data-a]");
+      if (b) finish(b.dataset.a === "ok");
+      else if (e.target === m) finish(false);
+    });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(m);
+    m.querySelector('[data-a="cancel"]').focus();
+  });
+}
+
 async function api(path, opt) {
   opt = opt || {};
   const h = {}, t = token();
@@ -935,7 +962,7 @@ pages.settings = async () => {
       ${(() => {
         const dob = (u.details && u.details.birth_date) || null;
         if (dob) {
-          return row("Date of birth", `<span>${esc(dob)}</span>${u.is_minor ? ' <span class="muted">(under 18 · profile stays private)</span>' : ""}`,
+          return row("Date of birth", `<span>${esc(dob)}</span>${u.is_minor ? ' <span class="muted">(under 18 · private by default)</span>' : ""}`,
             "Your date of birth can't be changed here. Email support@playfraglink.com if it needs a correction.");
         }
         if (!sessionStorage.getItem("fl_dob_prompted")) sessionStorage.setItem("fl_dob_prompted", "1");
@@ -943,8 +970,8 @@ pages.settings = async () => {
         const months = ["January","February","March","April","May","June","July","August","September","October","November","December"].map((n,i)=>`<option value="${String(i+1).padStart(2,"0")}">${n}</option>`).join("");
         const years = Array.from({length:new Date().getFullYear()-1899},(_,i)=>new Date().getFullYear()-i).map(y=>`<option value="${y}">${y}</option>`).join("");
         return row("Date of birth", `<span class="dob"><select name="dob_day" aria-label="Day"><option value="">Day</option>${days}</select><select name="dob_month" aria-label="Month"><option value="">Month</option>${months}</select><select name="dob_year" aria-label="Year"><option value="">Year</option>${years}</select><button class="btn sm" type="button" data-save-dob>Save</button></span>`,
-          "Please add your date of birth. You must be at least 13. Under-18 accounts stay private. Once saved, only support can correct it.");
-      })()}${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""} ${u.is_minor ? "disabled" : ""}>Only my friends can see my profile</label>`, u.is_minor ? "Under-18 accounts always have a private profile." : "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page lists, and your signature image is switched off.")}
+          "Please add your date of birth. You must be at least 13. Under-18 accounts start private; you can switch to public any time. Once saved, only support can correct it.");
+      })()}${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""}>Only my friends can see my profile</label>`, u.is_minor ? "Under-18 accounts start private. You can make your profile public any time; everyone will be able to see it." : "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page lists, and your signature image is switched off.")}
       ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}${sw("name_history", "Previous nicknames (\"Previously known as\")")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
       ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location &amp; country")}${sw("gaming_style", "Gaming style")}${sw("real_name", "Real name")}${sw("gender", "Gender")}${sw("age", "Age")}`)}
       ${row("Achievements", `${sw("achievements", "Show my achievements")}`, "Needs Games &amp; hours shown.")}
@@ -1075,6 +1102,12 @@ pages.settings = async () => {
     try {
       if (f.dataset.f === "privacy") {
         const t = e.target;
+        // Unchecking "Private profile" = going public. Minors get a short, neutral confirm.
+        if (t.name === "private_profile" && !t.checked && u.is_minor) {
+          if (!await confirmEqual("Your profile will be visible to everyone. You can switch back any time.")) {
+            t.checked = true; return;
+          }
+        }
         const body = t.dataset.pv ? { privacy: { [t.dataset.pv]: t.checked } } : t.name === "private_profile" ? { public_profile: !t.checked } : { [t.name]: t.checked };
         const r = await api("/me/privacy", { method: "POST", body }); Object.assign(u, r); keep(); render(); ok($("#pane"), "Saved."); }
       else if (f.dataset.f === "notify") { u.notify_prefs = await api("/me/notifications", { method: "POST", body: { [e.target.name]: e.target.checked } }); ok(f, "Saved."); }

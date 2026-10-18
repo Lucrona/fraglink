@@ -108,12 +108,11 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         })
         .collect();
 
-    // ---- who's visible here (under-18 accounts are private anyway; NOT is_minor makes
-    // sure they never reach a public list, and friends still see them)
+    // ---- who's visible here (public profiles, plus your friends when signed in)
     let audience = if signed_in {
-        "((u.public_profile AND NOT u.is_minor) OR u.id = ANY($1))"
+        "(u.public_profile OR u.id = ANY($1))"
     } else {
-        "((u.public_profile AND NOT u.is_minor) OR (false AND u.id = ANY($1)))"
+        "(u.public_profile OR (false AND u.id = ANY($1)))"
     };
 
     // ---- now playing
@@ -160,7 +159,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     // ---- top players this week
     // Leaderboard: public profiles that show games & hours and opted into leaderboards.
     let share = format!(
-        "u.public_profile AND NOT u.is_minor AND {} AND {}",
+        "u.public_profile AND {} AND {}",
         crate::account::sql_shows("games"),
         crate::account::sql_shows("leaderboards")
     );
@@ -192,7 +191,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         .collect();
 
     // ---- newest members
-    let newest_q = "u.public_profile AND NOT u.is_minor";
+    let newest_q = "u.public_profile";
     let newest: Vec<(Uuid, String, String, DateTime<Utc>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT u.id, u.handle, u.display_name, u.created_at FROM users u WHERE {LIVE_USER} AND {newest_q}
          ORDER BY u.created_at DESC LIMIT 12"

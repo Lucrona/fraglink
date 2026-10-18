@@ -16,7 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 - Announcement banners are centred, show up within about 2 minutes of being posted, and disappear as soon as they end.
-- Under-18 accounts always have a private profile, so the private profile switch is locked on for them. When you turn 18 your profile stays private until you change it.
+- Under-18 accounts start with a private profile. You can switch to public after a short confirm (Cancel and Confirm equally weighted); you can switch back any time. When you turn 18 your profile keeps whatever setting you had.
+- New accounts hide age on the profile by default (you can turn it on). Under-18 sign-ups also hide real name, gender and location by default.
 - Your hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter. The stats legend shows only Tracked and Imported.
 - If you haven't used the app for 180 days, you'll need to sign in again.
 
@@ -26,8 +27,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Website
 - Sign-up on playfraglink.com also asks for your date of birth.
 - Friends lists on the website update live, and the Friends link shows a request badge.
-- New Privacy Policy and Terms of Use for the date-of-birth rules.
+- Privacy Policy v9 and Terms of Use v6 (19 October 2026): under-18 may go public; age hidden by default for new accounts.
 - Country flags now load from playfraglink.com.
+
+### Fixed
+- Privacy and Terms pages: markdown bullet lists render as real lists; inline code keeps surrounding spaces.
+- Month dropdown on Create Account no longer clipped ("Mont").
 
 ## [0.3.0-beta.1] - 2026-10-12
 

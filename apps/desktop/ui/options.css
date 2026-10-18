@@ -151,3 +151,10 @@ body.dark .hint-link { color: #7fa8ff; }
 body.dark .conn .soon.ok { color: #6fd27b; }
 .conn small.linked { color: inherit; font-weight: bold; }
 .web-links { flex-wrap: wrap; gap: 6px; }
+
+/* Neutral confirm: Cancel and Confirm equally weighted */
+.confirm-modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.confirm-box{width:320px;max-width:100%;background:#1a1c20;border:1px solid #000;border-radius:4px;padding:14px 16px;box-shadow:0 8px 28px #000a;color:#c9ced6}
+.confirm-box p{margin:0 0 14px;line-height:1.4;font-size:12px}
+.confirm-actions{display:flex;gap:8px;justify-content:flex-end}
+.confirm-actions button{min-width:80px}

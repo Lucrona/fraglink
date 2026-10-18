@@ -11,6 +11,32 @@
   const pending = new Map();
   let st = null, catalog = null, gsel = null, detecting = false;
   const fail = e => alert(String(e && e.message || e));
+
+  /** Neutral two-button confirm; Cancel and Confirm are equally weighted. */
+  function confirmEqual(message) {
+    return new Promise(resolve => {
+      const m = document.createElement('div');
+      m.className = 'confirm-modal';
+      m.innerHTML = `<div class="confirm-box" role="dialog" aria-modal="true" aria-label="Confirm">
+        <p>${esc(message)}</p>
+        <div class="confirm-actions">
+          <button type="button" data-a="cancel">Cancel</button>
+          <button type="button" data-a="ok">Confirm</button>
+        </div>
+      </div>`;
+      const done = ok => { m.remove(); resolve(!!ok); };
+      const onKey = e => { if (e.key === 'Escape') finish(false); };
+      const finish = ok => { document.removeEventListener('keydown', onKey); done(ok); };
+      m.addEventListener('click', e => {
+        const b = e.target.closest('[data-a]');
+        if (b) finish(b.dataset.a === 'ok');
+        else if (e.target === m) finish(false);
+      });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(m);
+      m.querySelector('[data-a="cancel"]').focus();
+    });
+  }
   const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', rsi: 'RSI Launcher', scan: 'found in your game folders', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '', detectable: '' };
   const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
@@ -179,11 +205,9 @@
     $$('[data-pv]').forEach(c => { c.checked = pv[c.dataset.pv] !== false; });
     const top = { private: a.public_profile === false, share_activity: a.share_activity !== false, show_friends: a.show_friends !== false };
     $$('[data-pv-top]').forEach(c => { c.checked = !!top[c.dataset.pvTop]; });
-    // Under-18 accounts always have a private profile (date of birth is set on the website).
-    // the save reply has no is_minor, so keep what Account info said
+    // Save reply has no is_minor — keep the flag from Account info (beta.2).
+    // Under-18 may switch to public after confirm; do not lock the checkbox.
     if ('is_minor' in a) minor = !!a.is_minor;
-    const pc = $('[data-pv-top="private"]');
-    if (pc) { pc.disabled = minor || pc.disabled; pc.title = minor ? 'Under-18 accounts always have a private profile.' : ''; }
   }
   let minor = false;
   async function renderPrivacy() {
@@ -191,15 +215,26 @@
     const signed = await signedIn();
     boxes.forEach(c => { c.disabled = !signed; });
     if (!signed) { boxes.forEach(c => { c.checked = false; }); m.textContent = 'Sign in (Account tab) to choose what others see.'; return; }
-    try { const a = await FLB.accountInfo(); paintPrivacy(a); m.textContent = a.is_minor ? 'Saved as soon as you click. Under-18 accounts always have a private profile.' : 'Saved as soon as you click.'; } catch (e) { m.textContent = String(e); }
+    try {
+      const a = await FLB.accountInfo(); paintPrivacy(a);
+      m.textContent = a.is_minor
+        ? 'Saved as soon as you click. Under-18 accounts start private; you can make your profile public any time.'
+        : 'Saved as soon as you click.';
+    } catch (e) { m.textContent = String(e); }
   }
   async function savePrivacy(c) {
     const m = $('#pv-msg'), k = c.dataset.pv, top = c.dataset.pvTop;
+    // Unchecking Private = going public. Minors get a short, neutral confirm.
+    if (top === 'private' && !c.checked && minor) {
+      if (!await confirmEqual('Your profile will be visible to everyone. You can switch back any time.')) {
+        c.checked = true; return;
+      }
+    }
     const patch = k ? { privacy: { [k]: c.checked } } : top === 'private' ? { public_profile: !c.checked } : { [top]: c.checked };
     c.disabled = true;
     try { const r = await FLB.privacy(patch); paintPrivacy(r); m.textContent = 'Saved. It shows on the website straight away.'; }
     catch (e) { c.checked = !c.checked; m.textContent = String(e); }
-    c.disabled = minor && top === 'private';
+    c.disabled = false;
   }
 
   /* ---- Connections: linked accounts, the same as Settings > Connections on the website ---- */

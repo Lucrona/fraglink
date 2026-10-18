@@ -469,7 +469,7 @@ pub async fn is_minor(st: &AppState, uid: Uuid) -> ApiResult<bool> {
 }
 
 /// When a stored DOB means they've turned 18, clear is_minor but keep the profile private.
-/// When DOB shows 13–17, ensure is_minor (and private).
+/// When DOB shows 13–17, ensure is_minor and start private (they can go public themselves).
 pub async fn refresh_minor_from_dob(st: &AppState, uid: Uuid) -> ApiResult<()> {
     let row: Option<(bool, Option<chrono::NaiveDate>)> =
         sqlx::query_as("SELECT is_minor, birth_date FROM users WHERE id = $1")
@@ -509,14 +509,7 @@ pub async fn refresh_all_minors(st: &AppState) -> ApiResult<u64> {
     Ok(ids.len() as u64)
 }
 
-pub fn minor_private() -> AppError {
-    AppError::bad_request(
-        "minor_private",
-        "Under-18 accounts always have a private profile.",
-    )
-}
-
-/// Under-18 on: private profile, off the home page, leaderboards and strangers' search.
+/// Becoming under-18: force private (default). They can switch to public themselves later.
 async fn set_minor(st: &AppState, uid: Uuid, minor: bool) -> ApiResult<()> {
     sqlx::query(
         "UPDATE users SET is_minor = $2, minor_set_at = now(),
