@@ -199,9 +199,9 @@ html.beta-host .preview-flag{display:block} /* the strip only on beta.playfragli
 
 /* site banner */
 .announce{font-size:12.5px;border-bottom:1px solid}
-.announce .wrap{display:flex;align-items:center;gap:10px;padding:6px 16px}
-.announce span{flex:1}
-.announce button{background:none;border:0;color:inherit;font-size:16px;line-height:1;cursor:pointer;opacity:.7}
+.announce .wrap{position:relative;display:flex;align-items:center;padding:6px 40px}
+.announce span{flex:1;text-align:center;min-width:0}
+.announce button{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:0;color:inherit;font-size:16px;line-height:1;cursor:pointer;opacity:.7}
 .announce button:hover{opacity:1}
 .announce.info{background:#122030;border-color:#24405e;color:#b9d2ea}
 .announce.warning{background:#2a1c0e;border-color:#5a3a17;color:#f0c58e}

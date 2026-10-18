@@ -99,6 +99,20 @@ pub async fn friend_ids(st: &AppState, me: Uuid) -> ApiResult<Vec<Uuid>> {
     .await?)
 }
 
+/// `friend_ids` for public feeds (home, Friends' Activity): test accounts (`users.is_test`)
+/// are left out unless `me` is a test account too.
+pub async fn public_friend_ids(st: &AppState, me: Uuid) -> ApiResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        "SELECT u.id FROM friendships f
+         JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END
+         WHERE (f.user_a = $1 OR f.user_b = $1) AND f.status = 'accepted'
+           AND (NOT u.is_test OR (SELECT is_test FROM users WHERE id = $1))",
+    )
+    .bind(me)
+    .fetch_all(&st.db)
+    .await?)
+}
+
 pub async fn are_friends(st: &AppState, a: Uuid, b: Uuid) -> ApiResult<bool> {
     let (x, y) = pair(a, b);
     Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM friendships WHERE user_a = $1 AND user_b = $2 AND status = 'accepted')")

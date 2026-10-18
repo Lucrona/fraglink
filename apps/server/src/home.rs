@@ -78,7 +78,7 @@ const NO_TEST_SESSIONS: &str = "s.user_id NOT IN (SELECT id FROM users WHERE is_
 pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     let signed_in = viewer.is_some();
     let friend_ids = match viewer {
-        Some(v) => friends::friend_ids(st, v).await?,
+        Some(v) => friends::public_friend_ids(st, v).await?,
         None => vec![],
     };
 

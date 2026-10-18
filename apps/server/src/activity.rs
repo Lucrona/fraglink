@@ -78,7 +78,7 @@ type SessRow = (
 /// Friends' activity: who's playing now, then one line per friend per game per day with
 /// the day's total (`tz` splits days; IANA name).
 pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<ActivityItem>> {
-    let ids = friends::friend_ids(st, me).await?;
+    let ids = friends::public_friend_ids(st, me).await?;
     if ids.is_empty() {
         return Ok(vec![]);
     }
