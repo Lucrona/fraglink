@@ -180,7 +180,8 @@
     const top = { private: a.public_profile === false, share_activity: a.share_activity !== false, show_friends: a.show_friends !== false };
     $$('[data-pv-top]').forEach(c => { c.checked = !!top[c.dataset.pvTop]; });
     // Under-18 accounts always have a private profile (date of birth is set on the website).
-    minor = !!a.is_minor;
+    // the save reply has no is_minor, so keep what Account info said
+    if ('is_minor' in a) minor = !!a.is_minor;
     const pc = $('[data-pv-top="private"]');
     if (pc) { pc.disabled = minor || pc.disabled; pc.title = minor ? 'Under-18 accounts always have a private profile.' : ''; }
   }

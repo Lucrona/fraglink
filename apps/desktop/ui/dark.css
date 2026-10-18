@@ -189,7 +189,7 @@ body.skin-dark .xf-sec.sel { background: var(--dk-blue2, #1f4f9e); }
 .lg { width: 180px; color: #fff; font-weight: bold; }
 .lg-lbl { display: block; margin: 6px 0 2px; }
 .lg select, .lg-row input, .lg-srv input { width: 100%; box-sizing: border-box; font: 11px Tahoma, Verdana, sans-serif; background: #fff; color: #000; border: 1px solid #7a8aa6; height: 19px; }
-.lg-dob select { width: 100%; min-width: 0; height: 19px; padding: 0 4px; appearance: auto; background: #fff; color: #000; border: 1px solid #7a8aa6; font: 11px Tahoma, Verdana, sans-serif; box-sizing: border-box; }
+.lg-dob select { width: 100%; min-width: 0; height: 19px; padding: 0 1px; appearance: auto; background: #fff; color: #000; border: 1px solid #7a8aa6; font: 11px Tahoma, Verdana, sans-serif; box-sizing: border-box; }
 .lg-row { display: grid; grid-template-columns: 1fr 72px; gap: 8px; } .lg-row input { background: #e8ecf2; } .lg .hw { position: static; width: auto; height: 19px; }
 .lg-a { display: block; color: #a9c6ff !important; text-decoration: underline; margin: 2px 0 2px; font-size: 11px; }
 .lg-tick { display: block; margin-top: 4px; } .lg-tick input { vertical-align: -2px; margin: 0 4px 0 0; }

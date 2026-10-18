@@ -6,7 +6,8 @@ use sqlx::PgPool;
 
 fn years_ago(y: i32, extra_days: i64) -> String {
     use chrono::Datelike;
-    let t = chrono::Utc::now().date_naive();
+    // the server judges ages on the Sydney calendar, so the test must too (UTC is still on yesterday during the Sydney morning)
+    let t = fraglink_server::auth::today_aedt();
     let d = t
         .with_year(t.year() - y)
         .unwrap_or(t - chrono::Duration::days(365 * y as i64));
