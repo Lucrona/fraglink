@@ -5,35 +5,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.2] - 2026-10-19
+
+### Major features
+- **Date of birth at sign-up**: Create Account now asks for your date of birth with Day, Month and Year dropdowns, like Discord. You need to be 13 or older to sign up. This also fixes creating new accounts from the app.
+- **Friend request badge**: the Friends tab shows how many friend requests are waiting for you.
+
 ### Added
-- Sign-up requires a date of birth (day/month/year) on the website, desktop Create Account, and pairing form. Under 13 is refused; 13–17 accounts stay private and off named public lists; turning 18 clears the under-18 flag but leaves the profile private until you change it.
-- Admin can correct a user's date of birth (Admin > Users).
+- Friend requests now reach you by email if you've turned that on and confirmed your email address. Each email has a one-click link to turn them off.
 
 ### Changed
-- Privacy Policy (v8) and Terms of Use (v5) published for the date-of-birth / under-18 rules.
-- Removed the 13+ tick box and the 18+ / 13–17 age choice at sign-up.
-
-### Added
-- Website friends lists update live over the presence WebSocket (browsers pass `?token=`), with a 20-second poll fallback while the tab is visible; the Friends nav shows a pending-request badge.
-- Desktop app: pending friend-request count badge on the Friends tab (ships in the next build; not released).
-- Friend-request emails when notification preference is on and the address is verified (at most one per requester→target, 20 a day per recipient), with a one-click turn-off link. Test accounts only email other test accounts.
-- Presence push on decline and on cancel-pending (and when blocking a pending request), so both sides update live.
+- Announcement banners are centred, show up within about 2 minutes of being posted, and disappear as soon as they end.
+- Under-18 accounts always have a private profile, so the private profile switch is locked on for them. When you turn 18 your profile stays private until you change it.
+- Your hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter. The stats legend shows only Tracked and Imported.
+- If you haven't used the app for 180 days, you'll need to sign in again.
 
 ### Removed
-- Estimated hours and the "Estimate your history" calculator. Hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter.
+- Estimated hours and the "Estimate your history" calculator.
 
-### Added
-
-### Changed
-- The app's stats legend shows only Tracked and Imported.
-- Desktop apps that haven't been used for 180 days are signed out and need to sign in again.
-
-### Server
-- Old sign-ins are deleted 30 days after they were signed out or expired. Unused app devices are deleted after 180 days.
-- Sign-in history shows an approximate country again, using an offline DB-IP database that is refreshed monthly.
-- Backups made before deploys are now deleted after 14 days, like the nightly backups.
-- Sign-up (website, app and the pairing sign-up page) needs the age tick box; the server refuses without it and stores when it was ticked. App builds up to 0.3.0-beta.1 are asked to update or sign up on the website.
-- Country flags on the website are served from playfraglink.com (flag-icons, MIT) instead of an outside image service.
+### Website
+- Sign-up on playfraglink.com also asks for your date of birth.
+- Friends lists on the website update live, and the Friends link shows a request badge.
+- New Privacy Policy and Terms of Use for the date-of-birth rules.
+- Country flags now load from playfraglink.com.
 
 ## [0.3.0-beta.1] - 2026-10-12
 
