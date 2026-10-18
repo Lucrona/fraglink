@@ -101,6 +101,12 @@ playfraglink.com {
 		header Cache-Control "no-cache"
 		file_server
 	}
+	handle /news/* {
+		root * /var/www/fraglink-beta
+		rewrite * /news.html
+		header Cache-Control "no-cache"
+		file_server
+	}
 	handle {
 		root * /var/www/fraglink-beta
 		try_files {path} {path}.html {path}/index.html
@@ -162,6 +168,12 @@ Disallow: /
 	handle /u/* {
 		root * /var/www/fraglink-beta
 		rewrite * /u.html
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle /news/* {
+		root * /var/www/fraglink-beta
+		rewrite * /news.html
 		header Cache-Control "no-cache"
 		file_server
 	}

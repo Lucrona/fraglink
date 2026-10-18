@@ -14,6 +14,7 @@ pub mod auth;
 pub mod avatars;
 pub mod config;
 pub mod connect;
+pub mod emails;
 pub mod error;
 pub mod features;
 pub mod friends;
@@ -27,6 +28,7 @@ pub mod icons;
 pub mod mailer;
 pub mod mfa;
 pub mod names;
+pub mod news;
 pub mod paging;
 pub mod presence;
 pub mod profile;
@@ -139,6 +141,7 @@ pub fn router(state: AppState) -> Router {
         .merge(web::routes())
         .merge(profile::routes())
         .merge(admin::routes())
+        .merge(news::routes())
         .merge(mfa::routes())
         .merge(account::routes())
         .merge(avatars::routes())

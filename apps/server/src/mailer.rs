@@ -20,6 +20,8 @@ pub struct Mail {
     pub to: String,
     pub subject: String,
     pub body: String,
+    /// HTML version (sent alongside the plain text), if any
+    pub html: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +73,15 @@ pub fn outbox() -> &'static Mutex<Vec<Mail>> {
 }
 
 pub fn send(st: &AppState, to: &str, subject: &str, body: &str) {
+    deliver_mail(st, to, subject, body, None);
+}
+
+/// A templated email (`crate::emails`): plain text + HTML.
+pub fn send_email(st: &AppState, to: &str, e: &crate::emails::Email) {
+    deliver_mail(st, to, &e.subject, &e.text, Some(e.html.clone()));
+}
+
+fn deliver_mail(st: &AppState, to: &str, subject: &str, body: &str, html: Option<String>) {
     if to.trim().is_empty() {
         return;
     }
@@ -78,6 +89,7 @@ pub fn send(st: &AppState, to: &str, subject: &str, body: &str) {
         to: to.to_string(),
         subject: subject.to_string(),
         body: body.to_string(),
+        html,
     };
     {
         let mut o = outbox().lock().unwrap();
@@ -116,22 +128,32 @@ async fn deliver(p: &Provider, m: &Mail) -> anyhow::Result<()> {
         .timeout(std::time::Duration::from_secs(20))
         .build()?;
     let req = match p {
-        Provider::Resend { key } => http
-            .post("https://api.resend.com/emails")
-            .bearer_auth(key)
-            .json(&serde_json::json!({
+        Provider::Resend { key } => {
+            let mut b = serde_json::json!({
                 "from": s.from, "to": [m.to], "reply_to": s.reply_to,
                 "subject": m.subject, "text": m.body,
-            })),
-        Provider::Cloudflare { token, account } => http
-            .post(format!(
+            });
+            if let Some(h) = &m.html {
+                b["html"] = h.clone().into();
+            }
+            http.post("https://api.resend.com/emails")
+                .bearer_auth(key)
+                .json(&b)
+        }
+        Provider::Cloudflare { token, account } => {
+            let mut b = serde_json::json!({
+                "from": cf_address(&s.from), "to": m.to, "reply_to": s.reply_to,
+                "subject": m.subject, "text": m.body,
+            });
+            if let Some(h) = &m.html {
+                b["html"] = h.clone().into();
+            }
+            http.post(format!(
                 "https://api.cloudflare.com/client/v4/accounts/{account}/email/sending/send"
             ))
             .bearer_auth(token)
-            .json(&serde_json::json!({
-                "from": cf_address(&s.from), "to": m.to, "reply_to": s.reply_to,
-                "subject": m.subject, "text": m.body,
-            })),
+            .json(&b)
+        }
     };
     let r = req.send().await?;
     let status = r.status();

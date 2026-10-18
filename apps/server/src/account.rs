@@ -142,13 +142,12 @@ pub async fn send_verification(st: &AppState, user: &User) -> ApiResult<()> {
     .bind(&user.email)
     .execute(&st.db)
     .await?;
-    mailer::send(
+    mailer::send_email(
         st,
         &user.email,
-        "Confirm your email for Fraglink",
-        &format!(
-            "Hi {},\n\nConfirm this email address for your Fraglink account:\n{}/verify?token={token}\n\nThe link works for 3 days. If you didn't sign up, ignore this email.\n\nFraglink",
-            user.display_name, st.cfg.site_url
+        &crate::emails::confirm(
+            &user.display_name,
+            &format!("{}/verify?token={token}", st.cfg.site_url),
         ),
     );
     Ok(())
@@ -248,13 +247,12 @@ async fn forgot(
         .bind(&u.email)
         .execute(&st.db)
         .await?;
-        mailer::send(
+        mailer::send_email(
             &st,
             &u.email,
-            "Reset your Fraglink password",
-            &format!(
-                "Hi {},\n\nReset your Fraglink password here (works for 1 hour):\n{}/reset?token={token}\n\nIf you didn't ask for this, ignore this email.\n\nFraglink",
-                u.display_name, st.cfg.site_url
+            &crate::emails::reset(
+                &u.display_name,
+                &format!("{}/reset?token={token}", st.cfg.site_url),
             ),
         );
     }

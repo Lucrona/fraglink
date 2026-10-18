@@ -26,6 +26,7 @@ const TABS = [
   ["avatars", "Reported pictures", can.avatars],
   ["server", "Server", can.server],
   ["announcements", "Announcements", can.announcements],
+  ["news", "News", can.news],
   ["settings", "Site settings", can.settings],
   ["staff", "Staff", can.staff],
 ].filter(t => t[2]);
@@ -43,7 +44,7 @@ function route() {
   const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
   const t = tab === "user" ? "users" : tab;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
-  const fn = { approvals, games, users, hours: hoursReview, avatars: avatarReports, server, announcements, settings: siteSettings, staff, user: userDetail }[tab];
+  const fn = { approvals, games, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, settings: siteSettings, staff, user: userDetail }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -408,7 +409,7 @@ async function announcements() {
     ${a ? `<p class="muted">Showing now:</p><div class="announce ${esc(a.style)}" style="border:1px solid;border-radius:3px"><div class="wrap" style="padding:6px 10px"><span>${esc(a.message)}${a.link ? ` <a href="${esc(a.link)}">More</a>` : ""}</span></div></div>
       <p class="dimt">${a.ends_at ? "Ends " + when(a.ends_at) : "No end time"}</p><button class="btn danger" id="clr">Clear announcement</button>` : `<p class="empty">No announcement is showing.</p>`}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
-    <p class="note">Where it shows: <b>(1)</b> a banner at the top of every website page, <b>(2)</b> in the desktop app as a one-time pop-up (toast) within about 15 minutes for everyone signed in (shown once per announcement; clicking it opens the link), <b>(3)</b> in the News box on the website home page. It disappears everywhere at the end time or when you clear it.</p>
+    <p class="note">Where it shows: <b>(1)</b> a banner at the top of every website page, <b>(2)</b> in the desktop app as a one-time pop-up (toast) within about 15 minutes for everyone signed in (shown once per announcement; clicking it opens the link), It disappears everywhere at the end time or when you clear it. It no longer goes into the home page News box; longer updates go in <a href="#news">News</a>.</p>
     <form class="f" id="af"><label>Message<input type="text" name="message" maxlength="300" required placeholder="Servers restart at 10 pm AEDT for an update."></label>
       <div class="row"><label>Style<select class="in" name="style"><option value="info">Info (blue)</option><option value="warning">Warning (amber)</option></select></label>
       <label>Ends (optional)<input class="in" type="datetime-local" name="ends"></label></div>
@@ -425,6 +426,63 @@ async function announcements() {
       announcements();
     } catch (x) { msg($("#anmsg"), x.message); }
   });
+}
+
+/* ---------- 6b. news ---------- */
+/* Posts for the home page News box, /news and /news/<slug>. Separate from the one-line
+   announcement banner; "Also show as banner" publishes a banner that links to the post. */
+async function news(arg) {
+  const PER = 20; let pg = 1, q = "";
+  view.innerHTML = `<div class="split"><section class="panel"><h2 id="nf-h">New post</h2><div class="body">
+    <p class="note">News posts show in the <b>News</b> box on the home page (latest 4, pinned first), on <a href="/news" target="_blank">/news</a>, and each has its own page. For a short alert on every page and in the app, use <a href="#announcements">Announcements</a>, or tick “Also show as banner” below.</p>
+    <form class="f" id="nf"><input type="hidden" name="id">
+      <label>Title<input type="text" name="title" maxlength="140" required placeholder="Fraglink 0.3.0 beta 1 is out"></label>
+      <label>Post<textarea class="in" name="body" rows="10" maxlength="20000" placeholder="Blank line = new paragraph. https:// links become clickable."></textarea></label>
+      <label>Link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+      <div class="row"><label>Date<input class="in" type="datetime-local" name="at"></label>
+        <label style="display:flex;flex-direction:row;align-items:center;gap:6px;align-self:flex-end;padding-bottom:8px"><input type="checkbox" name="pinned"> Pin to top</label>
+        <label style="display:flex;flex-direction:row;align-items:center;gap:6px;align-self:flex-end;padding-bottom:8px" id="nf-ban"><input type="checkbox" name="banner"> Also show as banner</label></div>
+      <p class="dimt">Leave the date empty to publish now. A future date keeps the post hidden until then.</p>
+      <div class="row"><button class="btn dl" id="nf-go">Publish</button><button type="button" class="btn" id="nf-cancel" hidden>Cancel edit</button></div>
+      <div class="alert" id="nfmsg" hidden></div></form></div></section>
+    <section class="panel"><h2>Posts <span class="dimt" id="n-count"></span></h2><div class="body" style="padding-bottom:4px"><input class="in" type="search" id="n-q" placeholder="Search posts" style="width:100%"></div><div id="n-list"></div></section></div>`;
+  const f = $("#nf"), local = iso => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  let items = [];
+  const reset = () => { f.reset(); f.id.value = ""; $("#nf-h").textContent = "New post"; $("#nf-go").textContent = "Publish"; $("#nf-cancel").hidden = true; $("#nf-ban").hidden = false; };
+  const fill = p => {
+    f.id.value = p.id; f.title.value = p.title; f.body.value = p.body || ""; f.link.value = p.link || ""; f.at.value = local(p.at); f.pinned.checked = p.pinned;
+    $("#nf-h").textContent = "Edit post"; $("#nf-go").textContent = "Save changes"; $("#nf-cancel").hidden = false; $("#nf-ban").hidden = true; f.title.focus(); window.scrollTo(0, 0);
+  };
+  const load = async () => {
+    const d = await api(`/admin/news?page=${pg}&per=${PER}${q ? "&q=" + encodeURIComponent(q) : ""}`);
+    items = d.items; $("#n-count").textContent = d.total ? `(${d.total.toLocaleString("en")})` : "";
+    $("#n-list").innerHTML = items.length ? `<table class="t newsadm"><tbody>${items.map(p => `<tr><td class="t"><b><a href="${esc(p.url)}" target="_blank">${esc(p.title)}</a></b><small>${day(p.at)}${p.scheduled ? ' · <span class="pill warn">scheduled</span>' : ""}${p.pinned ? ' · <span class="pin">Pinned</span>' : ""}</small></td>
+      <td class="a"><button class="btn sm" data-pin="${p.id}">${p.pinned ? "Unpin" : "Pin"}</button> <button class="btn sm" data-edit="${p.id}">Edit</button> <button class="btn sm danger" data-del="${p.id}">Delete</button></td></tr>`).join("")}</tbody></table>
+      ${d.pages > 1 ? `<div class="pager"><button class="btn sm" data-pg="${pg - 1}" ${pg > 1 ? "" : "disabled"}>‹ Prev</button><span>Page ${pg} of ${d.pages}</span><button class="btn sm" data-pg="${pg + 1}" ${pg < d.pages ? "" : "disabled"}>Next ›</button></div>` : ""}`
+      : `<p class="empty" style="padding:10px 16px">${q ? "No posts match." : "No posts yet. Write the first one on the left."}</p>`;
+  };
+  let t = null;
+  $("#n-q").addEventListener("input", e => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); pg = 1; load(); }, 250); });
+  $("#nf-cancel").addEventListener("click", reset);
+  $("#n-list").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const p = items.find(x => String(x.id) === (b.dataset.pin || b.dataset.edit || b.dataset.del));
+    if (b.dataset.pg) { pg = Number(b.dataset.pg); load(); }
+    else if (b.dataset.edit && p) fill(p);
+    else if (b.dataset.pin && p) act(b, async () => { await api(`/admin/news/${p.id}`, { method: "POST", body: { pinned: !p.pinned } }); load(); });
+    else if (b.dataset.del && p && confirm(`Delete “${p.title}”? This can't be undone (the audit log keeps a copy).`)) act(b, async () => { await api(`/admin/news/${p.id}`, { method: "DELETE" }); if (f.id.value === String(p.id)) reset(); load(); });
+  });
+  f.addEventListener("submit", async e => {
+    e.preventDefault();
+    const body = { title: f.title.value.trim(), body: f.body.value, link: f.link.value.trim(), pinned: f.pinned.checked };
+    if (f.at.value) body.published_at = new Date(f.at.value).toISOString();
+    try {
+      const r = f.id.value ? await api(`/admin/news/${f.id.value}`, { method: "POST", body }) : await api("/admin/news", { method: "POST", body });
+      if (!f.id.value && f.banner.checked && can.announcements) await api("/admin/announcements", { method: "POST", body: { message: r.post.title.slice(0, 300), style: "info", link: r.post.url } });
+      const was = f.id.value; reset(); pg = 1; await load(); msg($("#nfmsg"), was ? "Saved." : "Published.", true);
+    } catch (x) { msg($("#nfmsg"), x.message); }
+  });
+  await load();
 }
 
 /* ---------- 7. staff ---------- */

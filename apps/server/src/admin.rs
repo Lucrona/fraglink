@@ -189,7 +189,7 @@ fn forbidden() -> AppError {
 }
 
 impl Staff {
-    fn need(&self, min: Role) -> ApiResult<()> {
+    pub(crate) fn need(&self, min: Role) -> ApiResult<()> {
         if self.role >= min {
             Ok(())
         } else {
@@ -211,6 +211,7 @@ fn permissions(r: Role) -> Value {
         "games": admin,
         "server": admin,
         "announcements": admin,
+        "news": admin,
         "settings": true,
         "settings_edit": admin,
         "staff": admin,
@@ -222,7 +223,7 @@ fn permissions(r: Role) -> Value {
     })
 }
 
-async fn audit(
+pub(crate) async fn audit(
     st: &AppState,
     s: &Staff,
     action: &str,

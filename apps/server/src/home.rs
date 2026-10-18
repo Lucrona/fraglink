@@ -211,13 +211,8 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         .map(|(id, h, dn, at)| json!({ "handle": h, "display_name": dn, "joined": at, "avatar": nav.get(id) }))
         .collect();
 
-    // ---- news (staff announcements)
-    let news: Value = sqlx::query_scalar(
-        "SELECT coalesce(jsonb_agg(jsonb_build_object('id', id, 'message', message, 'link', link, 'at', created_at) ORDER BY created_at DESC), '[]'::jsonb)
-         FROM (SELECT * FROM announcements ORDER BY created_at DESC LIMIT 5) a",
-    )
-    .fetch_one(&st.db)
-    .await?;
+    // ---- news (Admin > News posts; pinned first)
+    let news = crate::news::latest(&st, 4).await?;
 
     // ---- your week
     let mut mine = Value::Null;

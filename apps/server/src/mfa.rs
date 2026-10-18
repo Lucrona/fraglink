@@ -244,13 +244,13 @@ pub async fn new_signin_notice(st: &AppState, user: &User, ctx: &ReqCtx) {
         .map(|l| format!(", {l}"))
         .unwrap_or_default();
     let what = format!("{}{place}", ctx.device());
-    mailer::send(
+    mailer::send_email(
         st,
         &user.email,
-        &format!("New sign-in from {what}"),
-        &format!(
-            "Hi {},\n\nYour Fraglink account was just signed in from {what}.\n\nIf this was you, there's nothing to do. If not, change your password and sign out other devices at {}/settings#security.\n\nFraglink",
-            user.display_name, st.cfg.site_url
+        &crate::emails::signin(
+            &user.display_name,
+            &what,
+            &format!("{}/settings#security", st.cfg.site_url),
         ),
     );
 }

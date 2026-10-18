@@ -25,7 +25,9 @@ async function api(path, opt) {
   } catch (e) { const er = new Error("Can't reach Fraglink right now. Check your connection and try again."); er.status = 0; throw er; }
   const txt = await r.text(); let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
-  if (r.status === 401 && t && !opt.keepSession) { clearSession(); }
+  // Only a dead sign-in token signs you out ("unauthorized"). Other 401s are a wrong code or
+  // password typed into a form (bad_code, bad_credentials) and must keep the session.
+  if (r.status === 401 && t && !opt.keepSession && (!data || data.error === "unauthorized")) { clearSession(); }
   if (!r.ok) {
     const er = new Error((data && data.message) || ("Something went wrong (HTTP " + r.status + ")."));
     er.status = r.status; er.code = data && data.error; throw er;
@@ -318,7 +320,7 @@ pages.home = async () => {
   const feed = h.now_playing.length ? panel("Now playing", `<div class="feed2">${h.now_playing.map(n => `<div>${avatar(n.avatar, 24)}<span><a href="/u/${encodeURIComponent(n.handle)}">${esc(n.display_name || n.handle)}</a><br>${icon(n.game_id, n.game_name)} ${esc(n.game_name)}</span>${n.since ? `<small>${since(n.since)}</small>` : ""}</div>`).join("")}</div>`) : "";
   const lb = h.top_players.length ? panel("Top players this week", `<div class="lb">${h.top_players.map((p, i) => `<div><span class="n">${i + 1}</span>${avatar(p.avatar, 24)}<span class="who"><a href="/u/${encodeURIComponent(p.handle)}">${esc(p.display_name || p.handle)}</a>${p.top_game ? `<small>${esc(p.top_game)}</small>` : ""}</span><span class="h">${hrsShort(p.minutes)} h</span></div>`).join("")}</div>`) : "";
   const mem = h.newest.length ? panel("Newest members", `<div class="mem">${h.newest.map(m => `<div><a href="/u/${encodeURIComponent(m.handle)}">${avatar(m.avatar, 40)}${esc(m.display_name || m.handle)}</a></div>`).join("")}</div>`) : "";
-  const news = h.news.length ? panel("News", `<div class="nws">${h.news.map(n => `<div><span class="ic">F</span><div><small>${fullDate.format(new Date(n.at))}</small><p style="color:var(--text)">${esc(n.message)}${n.link ? ` <a href="${esc(n.link)}"${n.link.startsWith("http") ? ' rel="noopener"' : ""}>More</a>` : ""}</p></div></div>`).join("")}</div>`) : "";
+  const news = panel("News", h.news.length ? `<div class="nws">${h.news.map(n => `<a class="nw" href="${esc(n.url)}"><span class="ic">F</span><div><small>${fullDate.format(new Date(n.at))}${n.pinned ? ' · <span class="pin">Pinned</span>' : ""}</small><b>${esc(n.title)}</b>${n.summary ? `<p>${esc(n.summary.length > 110 ? n.summary.slice(0, 108).replace(/\s+\S*$/, "") + "…" : n.summary)}</p>` : ""}</div></a>`).join("")}</div>` : `<p class="empty" style="padding:6px 0">No news yet.</p>`, ` <a class="more" href="/news">All news ›</a>`);
   let friendsBox = "", actBox = "";
   if (fl) {
     const on = fl.friends.filter(f => f.presence && f.presence.status !== "offline").sort((a, b) => rank(b.presence) - rank(a.presence));
@@ -374,7 +376,7 @@ pages.signup = () => {
     try {
       const r = await api("/auth/signup", { method: "POST", body: { email: f.email.value.trim(), handle: f.handle.value.trim(), password: f.password.value, turnstile: turnstileToken(f) } });
       setSession(r.token, r.user);
-      location.href = "/u/" + encodeURIComponent(r.user.handle) + "?welcome=1";
+      location.href = "/u/" + encodeURIComponent(r.user.handle) + "?welcome=1" + (r.user.email ? "&sent=1" : "");
     } catch (x) { showErr(err, x); b.disabled = false; turnstileReset(); }
   });
 };
@@ -386,7 +388,7 @@ pages.forgot = () => {
     e.preventDefault(); err.hidden = true; const b = $("button", f); b.disabled = true;
     try {
       const r = await api("/auth/forgot", { method: "POST", body: { email: f.email.value.trim(), turnstile: turnstileToken(f) } });
-      showOk(err, r.mail_live ? "If that email is on a Fraglink account, a reset link is on its way. It works for 1 hour." : "Thanks. Reset emails aren't being delivered yet, so please contact support (below) to get back in.");
+      showOk(err, r.mail_live ? "If that email is on a Fraglink account, a reset link is on its way. It works for 1 hour. Can't find it? Check your junk or spam folder." : "Thanks. Reset emails aren't being delivered yet, so please contact support (below) to get back in.");
     } catch (x) { showErr(err, x); turnstileReset(); }
     b.disabled = false;
   });
@@ -408,7 +410,12 @@ pages.verify = async () => {
   if (!t) { showErr(m, new Error("This page needs the link from your email.")); return; }
   try {
     const r = await api("/auth/verify", { method: "POST", body: { token: t } });
-    if (r.verified) { showOk(m, "Thanks, your email is confirmed."); const u = me(); if (u) setSession(token(), Object.assign(u, { email_verified: true })); }
+    if (r.verified) {
+      showOk(m, "Thanks, your email is confirmed.");
+      const u = me(); if (u) setSession(token(), Object.assign(u, { email_verified: true }));
+      $$(".verify-bar:not(.delete-bar)").forEach(el => el.remove());
+      sessionStorage.removeItem("fl_vb_closed");
+    }
     else showErr(m, new Error("This link was for an email address that's no longer on the account."));
   } catch (x) { showErr(m, x); }
 };
@@ -506,7 +513,7 @@ pages.profile = async () => {
       <div class="who"><h1><span class="pname"${prevs.length ? ` tabindex="0" data-tip="${esc("Previously known as: " + prevs.join(", "))}"` : ""}>${esc(p.display_name || p.handle)}</span>${p.display_name && p.display_name !== p.handle ? ` <small style="font-size:15px;color:#c8d4e0">@${esc(p.handle)}</small>` : ""}</h1>
       <div class="sub">${sub}</div>${badges}${np}<div class="acts">${actions}</div></div>${kpi}</div></section>`;
 
-  const welcome = qs("welcome") && self ? `<div class="alert ok" style="margin-bottom:12px">Welcome to Fraglink. <a href="/download">Download the app</a> and sign in with the same account to start tracking. You can pick a picture in <a href="/settings">Settings</a>.</div>` : "";
+  const welcome = qs("welcome") && self ? `<div class="alert ok" style="margin-bottom:12px">Welcome to Fraglink. <a href="/download">Download the app</a> and sign in with the same account to start tracking. You can pick a picture in <a href="/settings">Settings</a>.${qs("sent") ? " We sent a link to confirm your email. Can't find it? Check your junk or spam folder." : ""}</div>` : "";
   const pendingDelete = self && p.delete_after ? `<div class="alert err" style="margin-bottom:12px">This account will be deleted on ${fullDate.format(new Date(p.delete_after))}. Sign in again to keep it.</div>` : "";
 
   // Miniprofile: the live signature image + embed codes (public profiles only)
@@ -914,7 +921,7 @@ pages.settings = async () => {
         if (k === "about") Object.assign(body, { country: v("country"), real_name: v("real_name"), gender: v("gender"), birth_date: v("birth_date") });
         const r = await api("/me/profile", { method: "POST", body }); Object.assign(u, r); ok(f, "Saved.");
       }
-      else if (k === "email") { await api("/me/email", { method: "POST", body: { current_password: v("current_password"), new_email: v("new_email").trim() } }); await refresh(); render(); ok($("#pane"), "Email changed."); }
+      else if (k === "email") { await api("/me/email", { method: "POST", body: { current_password: v("current_password"), new_email: v("new_email").trim() } }); await refresh(); render(); ok($("#pane"), "Email changed. We sent a link to confirm the new address. Can't find it? Check your junk or spam folder."); }
       else if (k === "delete") {
         if (!confirm("Delete your Fraglink account? You'll be signed out everywhere and everything is deleted after 7 days.")) return;
         const r = await api("/me", { method: "DELETE", body: { password: v("password"), code: v("code") } }); clearSession(); location.href = "/?deleted=" + encodeURIComponent(r.delete_after || "1");
@@ -952,7 +959,7 @@ pages.settings = async () => {
       if (b.matches("[data-upload]")) $("#av-file").click();
       else if (b.matches("[data-avreset]")) { await api("/me/avatar/reset", { method: "POST" }); await refresh(); render(); ok($("#pane"), "Back to the default picture."); }
       else if (b.matches("[data-preset]")) { await api("/me/avatar/preset", { method: "POST", body: { preset: Number(b.dataset.preset) } }); await refresh(); render(); ok($("#pane"), "Picture updated."); }
-      else if (b.matches("[data-resend]")) { e.preventDefault(); if (!u.mail_live) return; await api("/me/verify/resend", { method: "POST" }); ok(pane, "Sent. Check your inbox."); }
+      else if (b.matches("[data-resend]")) { e.preventDefault(); if (!u.mail_live) return; await api("/me/verify/resend", { method: "POST" }); ok(pane, "Sent. Check your inbox. Can't find it? Check your junk or spam folder."); }
       else if (b.matches("[data-export]")) {
         const r = await fetch(API + "/export.zip", { headers: { Authorization: "Bearer " + token() } });
         if (!r.ok) { const j = await r.json().catch(() => null); throw new Error((j && j.message) || "Export failed (HTTP " + r.status + ")."); }
@@ -991,7 +998,7 @@ function verifyBar() {
   d.innerHTML = `<div class="wrap"><span>Please confirm your email address (${esc(u.email)}).${u.mail_live ? "" : " Confirmation emails are switched on soon; you can keep using Fraglink meanwhile."}</span>${u.mail_live ? `<button type="button" data-vb-send>Send the link again</button>` : ""}<button type="button" data-vb-x style="margin-left:auto">Hide</button></div>`;
   d.addEventListener("click", async e => {
     if (e.target.matches("[data-vb-x]")) { sessionStorage.setItem("fl_vb_closed", "1"); d.remove(); }
-    if (e.target.matches("[data-vb-send]")) { try { await api("/me/verify/resend", { method: "POST" }); e.target.textContent = "Sent"; } catch (x) { e.target.textContent = x.message; } }
+    if (e.target.matches("[data-vb-send]")) { try { await api("/me/verify/resend", { method: "POST" }); e.target.textContent = "Sent. Can't find it? Check junk or spam."; } catch (x) { e.target.textContent = x.message; } }
   });
   ($(".preview-flag") || $(".top")).after(d);
 }
@@ -1014,6 +1021,41 @@ async function banner() {
 }
 
 /* ---------- admin (staff only; the page itself is a 404 for everyone else) ---------- */
+/* ----- news: /news (paged list) and /news/<slug> (one post) ----- */
+/* Body text: blank line = new paragraph, single newline = line break, https:// links are clickable. */
+function newsBody(t) {
+  const link = s => s.replace(/(https:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, u => `<a href="${u}" rel="noopener">${u}</a>`);
+  return String(t || "").split(/\n{2,}/).map(p => p.trim()).filter(Boolean).map(p => `<p>${link(esc(p)).replace(/\n/g, "<br>")}</p>`).join("");
+}
+pages.news = async () => {
+  const root = $("#news"), slug = decodeURIComponent(location.pathname.replace(/^\/news\/?/, "").replace(/\/$/, ""));
+  if (slug) {
+    try {
+      const d = await api("/news/" + encodeURIComponent(slug)), p = d.post;
+      document.title = p.title + " · Fraglink";
+      if (p.slug !== slug) history.replaceState(null, "", p.url);
+      root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><article class="panel post"><div class="body">
+        <h1>${esc(p.title)}</h1><div class="sub">${fullDate.format(new Date(p.at))}${p.pinned ? ' · <span class="pin">Pinned</span>' : ""}</div>
+        <div class="txt">${newsBody(p.body) || `<p class="muted">${esc(p.summary)}</p>`}</div>
+        ${p.link ? `<p><a class="btn blue" href="${esc(p.link)}"${p.link.startsWith("http") ? ' rel="noopener"' : ""}>Read more</a></p>` : ""}</div></article>
+        <div class="post-nav">${d.newer ? `<a href="${esc(d.newer.url)}">‹ Newer: ${esc(d.newer.title)}</a>` : "<span></span>"}${d.older ? `<a href="${esc(d.older.url)}">Older: ${esc(d.older.title)} ›</a>` : ""}</div>`;
+    } catch (x) {
+      root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><div class="panel"><div class="body empty">${x.status === 404 ? "That post doesn't exist or was removed." : esc(x.message)}</div></div>`;
+    }
+    return;
+  }
+  const PER = 10;
+  const load = async pg => {
+    const d = await api(`/news?page=${pg}&per=${PER}`);
+    root.innerHTML = `<section class="head"><div><h1>News</h1><div class="sub">Updates from the Fraglink team.</div></div></section>
+      <div class="panel"><div class="body nlist">${d.items.length ? d.items.map(n => `<a class="nrow" href="${esc(n.url)}"><small>${fullDate.format(new Date(n.at))}${n.pinned ? ' · <span class="pin">Pinned</span>' : ""}</small><b>${esc(n.title)}</b>${n.summary ? `<p>${esc(n.summary)}</p>` : ""}</a>`).join("") : `<p class="empty">No news yet.</p>`}</div></div>
+      ${d.total > PER ? pagerHtml((d.page - 1) * PER, PER, d.total) : ""}`;
+    $$(".pager [data-off]", root).forEach(b => b.addEventListener("click", () => { const p = Number(b.dataset.off) / PER + 1; history.replaceState(null, "", p > 1 ? "?page=" + p : "/news"); load(p); window.scrollTo(0, 0); }));
+  };
+  try { await load(Math.max(1, parseInt(new URLSearchParams(location.search).get("page"), 10) || 1)); }
+  catch (x) { root.innerHTML = `<div class="panel"><div class="body empty">${esc(x.message)}</div></div>`; }
+};
+
 pages.admin = async () => {
   if (!token()) return;
   let who;
@@ -1054,7 +1096,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const f = pages[document.body.dataset.page];
   if (f) Promise.resolve(f()).catch(e => { console.error(e); });
   // keep the header in sync with the real account (handle/display name changes)
-  if (token() && document.body.dataset.page !== "settings") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null, avatar: m.user.avatar, email_verified: m.user.email_verified, mail_live: m.user.mail_live }); renderHeader(); verifyBar(); }).catch(() => { if (!token()) renderHeader(); });
+  if (token() && document.body.dataset.page !== "settings" && document.body.dataset.page !== "verify") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null, avatar: m.user.avatar, email_verified: m.user.email_verified, mail_live: m.user.mail_live }); renderHeader(); verifyBar(); }).catch(() => { if (!token()) renderHeader(); });
   else verifyBar();
   if (qs("deleted")) { const d = new Date(qs("deleted")); const el = document.createElement("div"); el.className = "verify-bar delete-bar"; el.innerHTML = `<div class="wrap">Your account is scheduled for deletion${isNaN(d) ? "" : " on " + fullDate.format(d)}. Sign in again before then to keep it.</div>`; ($(".preview-flag") || $(".top")).after(el); }
 });
