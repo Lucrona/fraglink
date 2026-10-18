@@ -1117,6 +1117,8 @@ pub async fn export_json(st: &AppState, user: &User) -> ApiResult<Value> {
         "birth_date": q("SELECT coalesce(to_jsonb(birth_date), 'null'::jsonb) FROM users WHERE id = $1").await?,
         "is_minor": q("SELECT to_jsonb(is_minor) FROM users WHERE id = $1").await?,
         "linked_accounts": q("SELECT coalesce(jsonb_agg(to_jsonb(l) - 'user_id'), '[]'::jsonb) FROM linked_accounts l WHERE user_id = $1").await?,
+        // Effective per-feature switches (missing key = shown), e.g. connection_names.
+        "privacy": crate::account::privacy_view(&q("SELECT coalesce(privacy, '{}'::jsonb) FROM users WHERE id = $1").await?),
         "sessions": q("SELECT coalesce(jsonb_agg(to_jsonb(s) - 'user_id' ORDER BY started_at), '[]'::jsonb) FROM sessions s WHERE user_id = $1").await?,
         "steam_playtime": q("SELECT coalesce(jsonb_agg(to_jsonb(p) - 'user_id'), '[]'::jsonb) FROM steam_playtime p WHERE user_id = $1").await?,
         "hours_entries": q("SELECT coalesce(jsonb_agg(to_jsonb(h) - 'user_id' ORDER BY captured_at), '[]'::jsonb) FROM hours_entries h WHERE user_id = $1").await?,

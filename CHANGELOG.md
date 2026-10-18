@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Added
+- New privacy switch "Show connected account names" (on by default), on the website and in the app's Options > Privacy. When it's off, visitors still see your Steam, Battle.net and Discord icons with the verified tick, but not the account names or links. Your data export now includes your privacy switches.
 - The two-step sign-in code screen tells you to email support@playfraglink.com if you've lost your authenticator and backup codes.
 
 ### Changed

@@ -1400,3 +1400,96 @@ async fn merge_game_into_another(pool: PgPool) {
         .unwrap();
     assert_eq!(a, 1);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn connection_names_switch(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let a = signup(&app, "cn1@example.com", "cnowner").await;
+    let b = signup(&app, "cn2@example.com", "cnvisit").await;
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&a),
+        Some(json!({"public_profile": true})),
+    )
+    .await;
+    sqlx::query(
+        "INSERT INTO linked_accounts (user_id, provider, provider_uid, display, verified)
+         SELECT id, 'steam', '76561190000000001', 'SteamName', true FROM users WHERE handle = 'cnowner'
+         UNION ALL SELECT id, 'discord', '1234', 'disc_name', true FROM users WHERE handle = 'cnowner'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let prof = |t: Option<String>| {
+        let app = app.clone();
+        async move {
+            api(
+                &app,
+                "GET",
+                "/api/v1/users/cnowner/profile",
+                t.as_deref(),
+                None,
+            )
+            .await
+            .json()
+        }
+    };
+    // default on (missing key): names and the Steam link are shown
+    let p = prof(None).await;
+    assert_eq!(p["linked"][0]["display"], "SteamName", "{p}");
+    assert!(p["linked"][0]["url"].is_string());
+
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&a),
+        Some(json!({"privacy": {"connection_names": false}})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["privacy"]["connection_names"], false);
+    let ex = fraglink_server::api::export_json(
+        &state(pool.clone()),
+        &sqlx::query_as(
+            "SELECT id, email, handle, display_name FROM users WHERE handle = 'cnowner'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(ex["privacy"]["connection_names"], false, "{ex}");
+    for viewer in [None, Some(b.clone())] {
+        let p = prof(viewer).await;
+        let l = p["linked"].as_array().unwrap();
+        assert_eq!(l.len(), 2, "{p}");
+        for x in l {
+            assert!(x["display"].is_null() && x.get("url").is_none(), "{p}");
+            assert_eq!(x["verified"], true);
+        }
+        assert!(
+            !p.to_string().contains("SteamName")
+                && !p.to_string().contains("disc_name")
+                && !p.to_string().contains("76561190000000001"),
+            "{p}"
+        );
+    }
+    // the owner always sees their own
+    let p = prof(Some(a.clone())).await;
+    assert_eq!(p["linked"][1]["display"], "disc_name", "{p}");
+    // private profile: strangers get no connections at all
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&a),
+        Some(json!({"public_profile": false})),
+    )
+    .await;
+    let p = prof(Some(b.clone())).await;
+    assert!(p.get("linked").is_none(), "{p}");
+}

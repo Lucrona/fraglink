@@ -940,7 +940,7 @@ pub async fn details_json(st: &AppState, uid: Uuid) -> ApiResult<Value> {
 // ------------------------------------------------------------------ per-feature privacy
 
 /// Per-feature visibility switches stored in `users.privacy` (missing key = shown).
-pub const PRIVACY_KEYS: [&str; 12] = [
+pub const PRIVACY_KEYS: [&str; 13] = [
     "now_playing",
     "games",
     "rig",
@@ -953,6 +953,9 @@ pub const PRIVACY_KEYS: [&str; 12] = [
     "gender",
     "age",
     "achievements",
+    // Names/handles of linked Steam, Battle.net and Discord accounts (the icons and the
+    // verified tick still show when this is off).
+    "connection_names",
 ];
 
 /// Whether `key` is shown (true unless explicitly switched off).

@@ -510,9 +510,15 @@ async fn profile(
     .bind(p.id)
     .fetch_all(&st.db)
     .await?;
+    // "Show connected account names" off: other viewers get the provider and the verified
+    // tick only (no name, no link that would identify the account).
+    let names = show("connection_names");
     let linked: Value = rows
         .into_iter()
         .map(|(prov, display, puid)| {
+            if !names {
+                return json!({ "provider": prov, "display": null, "verified": true });
+            }
             let raw = display.as_deref().is_none_or(|d| d == puid);
             if prov == "steam" {
                 if raw {
@@ -523,10 +529,10 @@ async fn profile(
                         );
                     }
                 }
-                json!({ "provider": prov, "display": if raw { None } else { display },
+                json!({ "provider": prov, "display": if raw { None } else { display }, "verified": true,
                         "url": format!("https://steamcommunity.com/profiles/{puid}") })
             } else {
-                json!({ "provider": prov, "display": display })
+                json!({ "provider": prov, "display": display, "verified": true })
             }
         })
         .collect();
