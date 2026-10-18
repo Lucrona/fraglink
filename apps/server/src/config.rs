@@ -39,6 +39,12 @@ pub struct Config {
     pub steam_art_cdn: String,
     /// `FRAGLINK_SITE_URL` (default `https://beta.playfraglink.com`): website links in emails.
     pub site_url: String,
+    /// `FRAGLINK_CANONICAL_URL` (default `https://playfraglink.com`): the one public address
+    /// search engines see (sitemap and canonical links), whichever host served the request.
+    pub canonical_url: String,
+    /// `FRAGLINK_SITE_DIR` (default `/var/www/fraglink-beta`): the built website, for the
+    /// profile page the server sends with per-profile robots tags.
+    pub site_dir: std::path::PathBuf,
 }
 
 impl Config {
@@ -89,6 +95,13 @@ impl Config {
                 .unwrap_or_else(|| "https://beta.playfraglink.com".into())
                 .trim_end_matches('/')
                 .to_string(),
+            canonical_url: var("FRAGLINK_CANONICAL_URL")
+                .unwrap_or_else(|| "https://playfraglink.com".into())
+                .trim_end_matches('/')
+                .to_string(),
+            site_dir: var("FRAGLINK_SITE_DIR")
+                .unwrap_or_else(|| "/var/www/fraglink-beta".into())
+                .into(),
         })
     }
 
@@ -112,6 +125,8 @@ impl Config {
             mail_enabled: false,
             steam_art_cdn: "http://127.0.0.1:9/apps".into(),
             site_url: "http://localhost:8787".into(),
+            canonical_url: "https://playfraglink.com".into(),
+            site_dir: std::env::temp_dir().join("fraglink-site-tests"),
         }
     }
 

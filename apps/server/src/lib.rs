@@ -35,6 +35,7 @@ pub mod presence;
 pub mod profile;
 pub mod realms;
 pub mod retire;
+pub mod seo;
 pub mod sig;
 pub mod steam;
 pub mod turnstile;
@@ -152,6 +153,7 @@ pub fn router(state: AppState) -> Router {
         .merge(home::routes())
         .merge(art::routes())
         .merge(connect::routes())
+        .merge(seo::routes())
         .route("/api/v1/features", axum::routing::get(features::public))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

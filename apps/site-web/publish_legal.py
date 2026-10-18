@@ -75,9 +75,15 @@ def md_to_body(md: str) -> str:
     return body
 
 
+DESC = {
+    "privacy": "How Fraglink collects, uses and protects your information, and the privacy choices you have.",
+    "terms": "The rules for using Fraglink, the gaming tracker for Windows.",
+}
+
+
 def wrap(title: str, page: str, h1: str, body: str) -> str:
     out = (
-        f"<!-- title: {title} · Fraglink | page: {page} -->\n"
+        f"<!-- title: {title} · Fraglink | page: {page} | desc: {DESC[page]} -->\n"
         '<div class="mid wrap"><section class="panel"><div class="body prose" style="padding:20px 24px">\n'
         f'<h1>{h1}</h1>\n<p class="meta">Last updated 19 October 2026</p>\n'
         f"{body}\n"

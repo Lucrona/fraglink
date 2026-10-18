@@ -36,6 +36,15 @@ playfraglink.com {
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 	}
+	# Search engines: indexable (robots.txt and sitemap.xml are below). Private and signed-in
+	# pages also say noindex in the header; profiles get theirs from the server (/u/*).
+	@private path /admin /admin/* /admin.html /api/* /settings* /friends* /login* /forgot* /reset* /verify* /pair* /auth/* /web/* /logout /updates/* /404.html
+	header @private X-Robots-Tag "noindex, nofollow"
+	# one address per page: /index.html -> /, /download.html -> /download
+	@index_html path /index.html
+	redir @index_html / 308
+	@page_html path_regexp page_html ^/([a-z0-9_-]+)\.html$
+	redir @page_html /{re.page_html.1} 308
 	# desktop auto-update files (latest.json + signed installers), put there by scripts/publish-update.sh
 	handle_path /updates/* {
 		root * /var/www/fraglink-updates
@@ -58,7 +67,9 @@ playfraglink.com {
 		rewrite * /icons/games{path}
 		reverse_proxy 127.0.0.1:8787
 	}
-	@server path /api/* /icons/* /pair /auth/* /web/* /logout
+	# the server also answers the sitemap and the profile page (/u/*: u.html from the site files
+	# with that profile's robots, canonical and preview tags; see apps/server/src/seo.rs)
+	@server path /api/* /icons/* /pair /auth/* /web/* /logout /sitemap.xml /sitemaps/* /u/*
 	handle @server {
 		reverse_proxy 127.0.0.1:8787
 	}
@@ -94,12 +105,6 @@ playfraglink.com {
 		file_server {
 			status 404
 		}
-	}
-	handle /u/* {
-		root * /var/www/fraglink-beta
-		rewrite * /u.html
-		header Cache-Control "no-cache"
-		file_server
 	}
 	handle /news/* {
 		root * /var/www/fraglink-beta
@@ -207,6 +212,8 @@ http://playfraglink.com, http://www.playfraglink.com {
 # Plain HTTP on the IP: KEEP. dev.9/dev.10 clients have http://119.42.54.86 baked in
 # (API, websocket, updates). Catches every other HTTP request too, as before.
 :80 {
+	# the bare IP is for old app builds only, never for search engines
+	header X-Robots-Tag "noindex, nofollow"
 	import fraglink
 	import updates_log updates-ip.log
 }

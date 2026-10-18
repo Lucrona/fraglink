@@ -1,0 +1,18 @@
+# playfraglink.com
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /settings
+Disallow: /friends
+Disallow: /login
+Disallow: /forgot
+Disallow: /reset
+Disallow: /verify
+Disallow: /pair
+Disallow: /auth/
+Disallow: /web/
+Disallow: /logout
+Disallow: /updates/
+
+Sitemap: https://playfraglink.com/sitemap.xml

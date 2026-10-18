@@ -157,6 +157,7 @@ fn open_in_maintenance(path: &str) -> bool {
         || path.starts_with("/api/v1/game-art/")
         || path.starts_with("/api/v1/art/")
         || path.starts_with("/icons/")
+        || path.starts_with("/u/")
 }
 
 /// Middleware: in maintenance mode, non-staff requests get 503 `maintenance`.
