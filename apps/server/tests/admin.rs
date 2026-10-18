@@ -572,7 +572,7 @@ async fn email_alert_settings(pool: PgPool) {
     assert_eq!(r.status, StatusCode::OK);
     let v = r.json();
     assert_eq!(v["recipient"], "support@playfraglink.com");
-    assert_eq!(v["alerts"].as_array().unwrap().len(), 5);
+    assert_eq!(v["alerts"].as_array().unwrap().len(), 6);
     assert!(v["alerts"]
         .as_array()
         .unwrap()

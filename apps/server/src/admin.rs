@@ -85,6 +85,10 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/admin/users/{id}/age_review/clear",
             post(age_review_clear),
         )
+        .route(
+            "/api/v1/admin/users/{id}/hours_flag/clear",
+            post(hours_flag_clear),
+        )
         .route("/api/v1/admin/users/{id}/birth_date", post(set_birth_date))
         .route("/api/v1/admin/users/{id}/handle", post(change_handle))
         .route("/api/v1/admin/users/{id}/hours", post(adjust_hours))
@@ -1120,9 +1124,10 @@ async fn users_search(
         bool,
         bool,
         Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
     )> = sqlx::query_as(
         "SELECT u.id, u.handle, u.display_name, u.email, u.created_at, u.role, u.banned_at,
-                    p.status, p.heartbeat_at, u.is_test, u.is_minor, u.age_review_at
+                    p.status, p.heartbeat_at, u.is_test, u.is_minor, u.age_review_at, u.hours_flag_at
              FROM users u LEFT JOIN presence p ON p.user_id = u.id
              WHERE u.deleted_at IS NULL
                AND ($1 = '' OR lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2
@@ -1136,10 +1141,10 @@ async fn users_search(
     .await?;
     let users: Vec<Value> = rows
         .into_iter()
-        .map(|(id, h, d, e, c, role, banned, status, hb, test, minor, review)| {
+        .map(|(id, h, d, e, c, role, banned, status, hb, test, minor, review, hflag)| {
             json!({ "id": id, "handle": h, "display_name": d, "email": e, "created_at": c,
                     "role": role, "banned": banned.is_some(), "status": status.unwrap_or_else(|| "offline".into()),
-                    "last_seen": hb, "is_test": test, "is_minor": minor, "age_review_at": review })
+                    "last_seen": hb, "is_test": test, "is_minor": minor, "age_review_at": review, "hours_flag_at": hflag })
         })
         .collect();
     Ok(Json(json!({ "users": users })))
@@ -1185,13 +1190,16 @@ async fn user_detail(
         .await?;
     let (handle, display, email, created, role, banned_at, reason, share, verified) =
         r.ok_or_else(AppError::not_found)?;
-    let (minor, minor_set_at, age_review_at, birth_date): (
+    type MinorRow = (
         bool,
         Option<DateTime<Utc>>,
         Option<DateTime<Utc>>,
         Option<chrono::NaiveDate>,
-    ) = sqlx::query_as(
-        "SELECT is_minor, minor_set_at, age_review_at, birth_date FROM users WHERE id = $1",
+        Option<DateTime<Utc>>,
+        Option<String>,
+    );
+    let (minor, minor_set_at, age_review_at, birth_date, hours_flag_at, hours_flag_reason): MinorRow = sqlx::query_as(
+        "SELECT is_minor, minor_set_at, age_review_at, birth_date, hours_flag_at, hours_flag_reason FROM users WHERE id = $1",
     )
     .bind(id)
     .fetch_one(&st.db)
@@ -1276,6 +1284,7 @@ async fn user_detail(
         "devices": devices, "games": games, "sessions": sessions,
         "is_minor": minor, "minor_set_at": minor_set_at, "age_review_at": age_review_at,
         "birth_date": birth_date,
+        "hours_flag_at": hours_flag_at, "hours_flag_reason": hours_flag_reason,
         "linked": linked.into_iter().map(|(p, d, v)| json!({"provider": p, "display": d, "verified": v})).collect::<Vec<_>>(),
     })))
 }
@@ -3127,6 +3136,38 @@ async fn mfa_reset(
     )
     .await?;
     Ok(Json(json!({ "ok": true, "was_enabled": was })))
+}
+
+/// Admin > Users: clear the "unusual hours" flag after looking at it (hours stay as they are).
+async fn hours_flag_clear(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let (handle, role, _) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    let was: Option<(DateTime<Utc>, Option<String>)> = sqlx::query_as(
+        "UPDATE users u SET hours_flag_at = NULL, hours_flag_reason = NULL FROM users old
+         WHERE u.id = $1 AND old.id = u.id AND old.hours_flag_at IS NOT NULL
+         RETURNING old.hours_flag_at, old.hours_flag_reason",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let Some((at, why)) = was else {
+        return Err(bad("not_flagged", "This account has no hours flag."));
+    };
+    audit(
+        &st,
+        &s,
+        "user.hours_flag_clear",
+        &format!("user:{handle}"),
+        json!({ "hours_flag_at": at, "hours_flag_reason": why }),
+        json!({ "hours_flag_at": null }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
 }
 
 // ------------------------------------------------------------------ game art overrides

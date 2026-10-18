@@ -10,12 +10,9 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
-use fraglink_core::outbox::UploadBatch;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
-
-pub const MAX_UPLOAD_SESSIONS: usize = 500;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -35,7 +32,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/device/approve", post(device_approve))
         .route("/api/v1/devices", get(devices))
         .route("/api/v1/devices/{id}", delete(revoke_device))
-        .route("/api/v1/sessions/upload", post(upload_sessions))
+        .route("/api/v1/sessions/upload", post(uploads_gone))
         .route("/api/v1/stats", get(stats))
         .route("/api/v1/leaderboard/{game_id}", get(leaderboard))
         .route("/api/v1/hours/estimate", post(estimates_gone))
@@ -723,36 +720,15 @@ async fn revoke_device(
 
 // ------------------------------------------------------------------ session sync
 
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct UploadResp {
-    pub accepted: Vec<String>,
-    pub rejected: Vec<Rejected>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Rejected {
-    pub id: String,
-    pub reason: String,
-}
-
-/// Session uploads from apps before 0.2.0-dev.14. Hours now come only from live
-/// presence (see `presence::set`), so uploads are acknowledged (the app clears its
-/// queue and stops retrying) and dropped: nothing a client claims is stored.
-async fn upload_sessions(
-    State(_st): State<AppState>,
-    _a: AuthUser,
-    Json(b): Json<UploadBatch>,
-) -> ApiResult<Json<UploadResp>> {
-    if b.sessions.len() > MAX_UPLOAD_SESSIONS {
-        return Err(AppError::bad_request(
-            "too_many",
-            format!("Send at most {MAX_UPLOAD_SESSIONS} sessions per request."),
-        ));
-    }
-    Ok(Json(UploadResp {
-        accepted: b.sessions.iter().map(|s| s.id.clone()).collect(),
-        rejected: vec![],
-    }))
+/// Session uploads (apps before 0.2.0-dev.14) were removed: hours only come from live
+/// presence. `POST /api/v1/sessions/upload` answers 410 Gone; nothing is stored. No
+/// 0.3.0 beta calls it.
+pub async fn uploads_gone() -> AppError {
+    AppError::new(
+        StatusCode::GONE,
+        "uploads_removed",
+        "Session uploads were removed. Update Fraglink: hours are recorded live while you play.",
+    )
 }
 
 // ------------------------------------------------------------------ stats & ranks

@@ -15,7 +15,6 @@ pub mod folderscan;
 pub mod icons;
 pub mod installs;
 pub mod libraries;
-pub mod outbox;
 pub mod overrides;
 pub mod realm;
 pub mod signatures;

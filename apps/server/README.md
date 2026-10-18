@@ -59,7 +59,7 @@ See `.env.example`. Keep real values out of git (`.env` is ignored).
 | POST | `/device/poll` `{device_code}` | none | `pending` / `approved` + device token (single use); 410 expired |
 | POST | `/device/approve` `{user_code}` | web token | |
 | GET / DELETE | `/devices`, `/devices/{id}` | token | list / revoke paired apps |
-| POST | `/sessions/upload` `{client_version,games,sessions}` | token | idempotent; `{accepted:[ids],rejected:[{id,reason}]}` |
+| POST | `/sessions/upload` | - | removed: 410 Gone (hours come from live presence) |
 | GET | `/stats` | token | per-game tracked / imported / estimated / display + tier |
 | GET | `/leaderboard/{game_id}?period=7d\|all` | token | **Tracked only** |
 | POST | `/hours/estimate` `{game_id\|game_name, eras:[{from_year,to_year,hours_per_week}], note}` | token | Estimated tier; one per game (replaces) |
@@ -96,4 +96,4 @@ cargo test -p fraglink-server
 
 Each test gets a fresh database (`#[sqlx::test]`). Steam is mocked by a local axum server, so no key is needed.
 `tests/presence.rs` opens several real WebSocket clients; `tests/tray_presence.rs` drives the tray's own `fraglink-sync` client.
-`tests/e2e.rs` runs the real desktop path: local SQLite store → outbox → `fraglink-sync` client → this server.
+`tests/e2e.rs` runs the real desktop path: pairing through the `fraglink-sync` client against this server.

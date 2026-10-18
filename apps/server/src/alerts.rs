@@ -9,6 +9,10 @@
 //!   Checked every minute, at most one email every 15 minutes.
 //! - `alert_errors`: 5 or more 5xx responses within 10 minutes, or a background job failing.
 //!   At most one email an hour.
+//! - `alert_hours`: unusual tracked hours (a single session over 16 hours, or more than 20
+//!   hours a day on 3 or more days in a row, Sydney days). Checked every 15 minutes; the
+//!   account gets a flag in Admin > Users; at most one email every 15 minutes. Nothing is
+//!   removed: idle and away time count, so this is only for a human to look at.
 //! - `alert_daily`: a summary at 9:00 AM Sydney time (new and active users, hours, pending
 //!   approvals and reports, errors).
 //!
@@ -29,11 +33,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// (key, label, help) in display order. All default to on.
-pub const ALERTS: [(&str, &str, &str); 5] = [
+pub const ALERTS: [(&str, &str, &str); 6] = [
     ("alert_approvals", "New games waiting for approval", "Unknown game IDs from the app and game suggestions. At most one email every 15 minutes, listing everything new."),
     ("alert_reports", "New player reports", "Reported profiles and pictures. At most one email every 15 minutes."),
     ("alert_age_review", "Accounts paused for an age check", "Someone entered a birthday under 13; the account is paused until you review it in Admin > Users. At most one email every 15 minutes."),
     ("alert_errors", "Server errors", "5 or more server errors (5xx) within 10 minutes, or a background job failing. At most one email an hour."),
+    ("alert_hours", "Unusual hours", "A single tracked session over 16 hours, or more than 20 hours a day on 3 or more days in a row. The account gets a flag in Admin > Users; nothing is removed. At most one email every 15 minutes."),
     ("alert_daily", "Daily summary", "Every day at 9:00 AM Sydney time: new and active users, hours played, pending approvals and reports, and errors."),
 ];
 pub const EMAIL_KEY: &str = "alert_email";
@@ -398,6 +403,88 @@ pub async fn check_age_reviews(st: &AppState) -> ApiResult<()> {
     Ok(())
 }
 
+/// Long single session (hours).
+pub const HOURS_SESSION_H: i32 = 16;
+/// Hours a day, and how many days in a row.
+pub const HOURS_DAY_H: i32 = 20;
+pub const HOURS_DAYS_RUN: i64 = 3;
+
+/// Accounts with unusual tracked hours that aren't flagged yet (or were flagged over 7 days
+/// ago): (user id, handle, reason). Test accounts and the owner's account are left out.
+pub async fn find_unusual_hours(st: &AppState) -> ApiResult<Vec<(uuid::Uuid, String, String)>> {
+    let rows: Vec<(uuid::Uuid, String, String)> = sqlx::query_as(
+        "WITH long AS (
+             SELECT s.user_id, max(s.duration_s) AS secs FROM sessions s
+             WHERE s.source = 'tracked' AND s.ended_at > now() - interval '2 days' AND s.duration_s > $1 * 3600
+             GROUP BY s.user_id),
+         daily AS (
+             SELECT s.user_id, (s.started_at AT TIME ZONE 'Australia/Sydney')::date AS d, sum(s.duration_s) AS secs
+             FROM sessions s
+             WHERE s.source = 'tracked' AND s.started_at > now() - interval '10 days'
+             GROUP BY 1, 2 HAVING sum(s.duration_s) > $2 * 3600),
+         runs AS (
+             SELECT user_id, count(*) AS n FROM (
+                 SELECT user_id, d - (row_number() OVER (PARTITION BY user_id ORDER BY d))::int AS grp FROM daily) x
+             GROUP BY user_id, grp HAVING count(*) >= $3)
+         SELECT u.id, u.handle,
+                concat_ws('; ',
+                    CASE WHEN l.secs IS NOT NULL THEN 'one session of ' || round(l.secs / 3600.0, 1) || ' hours' END,
+                    CASE WHEN r.n IS NOT NULL THEN 'over ' || $2 || ' hours a day on ' || r.n || ' days in a row' END)
+         FROM users u
+         LEFT JOIN long l ON l.user_id = u.id
+         LEFT JOIN (SELECT user_id, max(n) AS n FROM runs GROUP BY user_id) r ON r.user_id = u.id
+         WHERE (l.user_id IS NOT NULL OR r.user_id IS NOT NULL)
+           AND NOT u.is_test AND u.deleted_at IS NULL AND u.role IS DISTINCT FROM 'owner'
+           AND (u.hours_flag_at IS NULL OR u.hours_flag_at < now() - interval '7 days')
+         ORDER BY u.handle LIMIT 50",
+    )
+    .bind(HOURS_SESSION_H)
+    .bind(HOURS_DAY_H)
+    .bind(HOURS_DAYS_RUN)
+    .fetch_all(&st.db)
+    .await?;
+    Ok(rows)
+}
+
+/// Flag accounts with unusual hours (always, so Admin shows it) and email staff about new
+/// flags when the alert is on.
+pub async fn check_hours(st: &AppState) -> ApiResult<()> {
+    if !due(st, "hours_checked", QUEUE_GAP).await? {
+        return Ok(());
+    }
+    set_at(st, "hours_checked", Utc::now()).await?;
+    let rows = find_unusual_hours(st).await?;
+    if rows.is_empty() {
+        return Ok(());
+    }
+    for (id, handle, why) in &rows {
+        sqlx::query("UPDATE users SET hours_flag_at = now(), hours_flag_reason = $2 WHERE id = $1")
+            .bind(id)
+            .bind(why)
+            .execute(&st.db)
+            .await?;
+        tracing::info!("hours flag: @{handle}: {why}");
+    }
+    if !enabled(st, "alert_hours").await || !due(st, "hours_sent", QUEUE_GAP).await? {
+        return Ok(());
+    }
+    let n = rows.len() as i64;
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|(_, h, why)| format!("@{h}: {why}"))
+        .collect();
+    let e = crate::emails::alert(
+        &format!("Fraglink: unusual hours on {}", plural(n, "account", "accounts")),
+        "Unusual hours",
+        "These accounts are flagged in Admin > Users. Nothing was removed: idle and away time count as played time, so check before doing anything.",
+        &lines,
+        ("Open Admin > Users", &format!("{SITE}/admin#users")),
+    );
+    set_at(st, "hours_sent", Utc::now()).await?;
+    send(st, "hours", &e).await?;
+    Ok(())
+}
+
 async fn check_errors(st: &AppState) -> ApiResult<()> {
     // Save counters for the daily summary first (survives restarts).
     let (n5, nj) = {
@@ -569,6 +656,7 @@ pub async fn run(st: AppState) {
             ("approvals", check_approvals(&st).await),
             ("reports", check_reports(&st).await),
             ("age_review", check_age_reviews(&st).await),
+            ("hours", check_hours(&st).await),
             ("errors", check_errors(&st).await),
             ("daily", check_daily(&st).await),
         ] {

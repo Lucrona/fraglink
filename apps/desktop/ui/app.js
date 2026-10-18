@@ -506,8 +506,8 @@
     else h += `<div class="xf-row st-row fl-muted"><span class="c-name st-g"><i class="noicon"></i><span class="nm">Not in a game · watching</span></span><span class="st-live"></span></div>`;
     const change = g.last_week_seconds > 0 ? Math.round((g.week_seconds - g.last_week_seconds) / g.last_week_seconds * 100) : null;
     const chg = change === null ? '' : `<em class="${change < 0 ? 'down' : ''}" data-tip="vs all of last week">${change < 0 ? '&#9660;' : '&#9650;'}${Math.abs(change)}%</em>`;
-    h += `<div class="st-sum"><div><small>Today</small><b>${fmtHrs(g.today_seconds)} h</b></div><div><small>This week</small><b>${fmtHrs(g.week_seconds)} h</b>${chg}</div><div><small>Streak</small><b>${g.streak_days} day${g.streak_days === 1 ? '' : 's'}</b></div></div>`;
-    h += `<div class="xf-sec s-fof"><i class="tri"></i>Top Games This Week</div>`;
+    h += `<div class="st-sum"><div><small>Today (this PC)</small><b>${fmtHrs(g.today_seconds)} h</b></div><div><small>This week (this PC)</small><b>${fmtHrs(g.week_seconds)} h</b>${chg}</div><div><small>Streak</small><b>${g.streak_days} day${g.streak_days === 1 ? '' : 's'}</b></div></div>`;
+    h += `<div class="xf-sec s-fof"><i class="tri"></i>Top Games This Week (this PC)</div>`;
     const top = g.top || []; const max = Math.max(1, ...top.map(r => r.seven_day_seconds));
     if (!top.length) h += `<div class="fl-empty">No games tracked yet. Start a game, or use <a data-action="tag-game">Fraglink → This is a game…</a></div>`;
     h += top.map(r => { const id = ensureGame(r.game_id, r.name); return `<div class="xf-row st-row" data-game="${esc(id)}" data-tip="${esc(r.name)} · ${fmtDur(r.total_seconds)} tracked on this PC"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w"><i class="st-bar"><b style="width:${Math.round(r.seven_day_seconds / max * 100)}%"></b></i>${hrs(r.seven_day_seconds).toFixed(1)}</span><span class="st-t">${fmtHrs(r.total_seconds)}h${tierMark(r.tier || 'tracked')}</span></div>`; }).join('');
@@ -522,13 +522,13 @@
     const sv = LIVE.server;
     let h = `<div class="xf-sec s-now"><i class="tri"></i>My Account (all devices)</div>`;
     if (!sv) return h + `<div class="fl-empty">Server totals unavailable right now, so this shows this PC only.</div>`;
-    const local = {}; for (const r of g.top || []) local[r.game_id] = r.total_seconds / 60;
+    // The server's total plus the session running now (saved on the server when it ends).
+    const np = g.now_playing, liveMin = np ? liveSeconds() / 60 : 0;
     const rows = (sv.games || []).filter(r => r.display_min > 0).slice(0, 8);
     if (!rows.length) h += `<div class="fl-empty">Nothing on your account yet. Hours are recorded live while you play.</div>`;
     h += rows.map(r => {
       const id = ensureGame(r.game_id, r.name);
-      // Never show less than this PC already knows (the live session is only saved when it ends).
-      const mins = Math.max(r.display_min, r.display_tier === 'tracked' ? (local[r.game_id] || 0) : 0);
+      const mins = r.display_min + (np && np.game_id === r.game_id && r.display_tier === 'tracked' ? liveMin : 0);
       const tot = `${fmtHrs(mins * 60)}h${tierMark(r.display_tier === 'imported' ? 'imported' : 'tracked')}`;
       const unl = r.game_id.startsWith('exe:') && r.name === 'Unlisted game';
       const tip = unl ? 'A program you tagged as a game. Friends see "Playing a game" until it is added to Fraglink\'s game list; its hours stay with it.' : `${r.name} · tracked ${nf(r.tracked_min / 60)}h · imported ${nf(r.imported_min / 60)}h`;

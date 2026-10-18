@@ -363,6 +363,45 @@ pub async fn set(
     status: &str,
     game: Option<GameRef>,
 ) -> ApiResult<()> {
+    set_from(st, user, handle, status, Some(game)).await
+}
+
+/// Game starts allowed per user: 6 a minute and 30 an hour. Over that, the new game is
+/// ignored (the previous session still ends, so nothing is over-counted) and logged.
+const SWITCHES_PER_MIN: usize = 6;
+const SWITCHES_PER_HOUR: usize = 30;
+
+fn switch_allowed(st: &AppState, user: Uuid) -> bool {
+    let min = st.rate_limit(
+        format!("game-switch-min:{user}"),
+        SWITCHES_PER_MIN,
+        Duration::from_secs(60),
+    );
+    let hour = min.is_ok()
+        && st
+            .rate_limit(
+                format!("game-switch-hour:{user}"),
+                SWITCHES_PER_HOUR,
+                Duration::from_secs(3600),
+            )
+            .is_ok();
+    if !hour {
+        tracing::warn!("presence: {user} switched games too often; ignoring the new game");
+    }
+    hour
+}
+
+/// `game`: `Some(..)` sets the game (desktop app); `None` keeps whatever game is running
+/// (website and other sign-ins may only change the status).
+pub async fn set_from(
+    st: &AppState,
+    user: Uuid,
+    handle: &str,
+    status: &str,
+    game: Option<Option<GameRef>>,
+) -> ApiResult<()> {
+    let keep_game = game.is_none();
+    let game = game.flatten();
     let status = match status {
         "online" | "away" | "invisible" | "offline" => status,
         _ => "online",
@@ -385,18 +424,33 @@ pub async fn set(
     let before = visible_presence(st, user)
         .await?
         .unwrap_or_else(PresenceView::offline);
-    let prev: Option<(Option<String>, Option<DateTime<Utc>>, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT game_id, session_started_at, heartbeat_at FROM presence WHERE user_id = $1",
+    let prev: Option<(Option<String>, Option<DateTime<Utc>>, DateTime<Utc>, bool)> = sqlx::query_as(
+        "SELECT game_id, session_started_at, heartbeat_at, game_hidden FROM presence WHERE user_id = $1",
     )
     .bind(user)
     .fetch_optional(&st.db)
     .await?;
-    let (prev_game, prev_start, prev_hb) = match prev {
-        Some((Some(g), Some(s), hb)) => (Some(g), Some(s), hb),
-        Some((_, _, hb)) => (None, None, hb),
-        None => (None, None, now),
+    let (prev_game, prev_start, prev_hb, prev_hidden) = match prev {
+        Some((Some(g), Some(s), hb, h)) => (Some(g), Some(s), hb, h),
+        Some((_, _, hb, _)) => (None, None, hb, false),
+        None => (None, None, now, false),
     };
     let live = (now - prev_hb).num_seconds() <= IDLE_TIMEOUT_SECS as i64;
+    let game = if keep_game {
+        // status-only update: the running game (if any) carries on unchanged
+        prev_game
+            .clone()
+            .filter(|_| live && status != "offline")
+            .map(|g| (g, None, prev_hidden))
+    } else if game
+        .as_ref()
+        .is_some_and(|g| prev_game.as_deref() != Some(g.0.as_str()))
+        && !switch_allowed(st, user)
+    {
+        None
+    } else {
+        game
+    };
     let new_id = game.as_ref().map(|g| g.0.clone());
     let continuing = live && prev_game.is_some() && prev_game == new_id;
     if let (Some(pg), Some(ps), false) = (&prev_game, prev_start, continuing) {
@@ -570,7 +624,10 @@ async fn connection(st: AppState, a: AuthUser, socket: WebSocket) {
         match msg {
             Message::Text(t) => match serde_json::from_str::<ClientMsg>(&t) {
                 Ok(ClientMsg::Presence { status, game }) => {
-                    if let Err(e) = set(&st, user, &handle, &status, game).await {
+                    // Only the desktop app reports games; the website (and any other
+                    // sign-in) can change the status, and its game field is ignored.
+                    let game = (a.kind == "device").then_some(game);
+                    if let Err(e) = set_from(&st, user, &handle, &status, game).await {
                         tracing::warn!("presence set failed: {}", e.message);
                     }
                 }

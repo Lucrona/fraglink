@@ -159,19 +159,6 @@ async fn delete_account_removes_everything(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let t = signup(&app, "del@example.com", "del").await;
     let dev = pair(&app, &t).await;
-    let id = uuid();
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&dev),
-        Some(batch(
-            json!([{"id":"cs2","name":"Counter-Strike 2","steam_appid":730}]),
-            vec![session(&id, "cs2", now() - 7200, 3600)],
-        )),
-    )
-    .await;
-    assert_eq!(r.json()["accepted"].as_array().unwrap().len(), 1);
     api(
         &app,
         "POST",

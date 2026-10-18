@@ -6,12 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Added
+- Admin: "Unusual hours" alert. A single tracked session over 16 hours, or more than 20 hours a day on 3 or more days in a row, flags the account in Admin > Users (with a Clear button, logged in the audit) and emails staff (at most every 15 minutes, within the daily alert cap). Nothing is removed automatically: idle and away time count as played time. Test accounts and the owner account are left out.
 - New privacy switch "Show connected account names" (on by default), on the website and in the app's Options > Privacy. When it's off, visitors still see your Steam, Battle.net and Discord icons with the verified tick, but not the account names or links. Your data export now includes your privacy switches.
 - The two-step sign-in code screen tells you to email support@playfraglink.com if you've lost your authenticator and backup codes.
 
 ### Changed
+- Hours integrity: only the desktop app can report the game you're playing. The website's live connection (and any other sign-in) can still change your status, but a game sent from it is ignored, and it never ends a game the app is tracking. Game switches are capped at 6 a minute and 30 an hour per account (extra switches are ignored and logged).
+- App (next build): the My Account totals show the server's hours plus the session running now, instead of whichever of the server and this PC was higher. The local Today, This week and Top Games figures are labelled "this PC".
 - Website: private profiles now have friend actions. Signed in, you can send a friend request (and cancel it) or accept theirs; signed out, "Sign in to add <name>" brings you back to the profile after sign-in.
 - Website: the profile Miniprofile box shows the embed text and the Link, BBCode and HTML copy rows only on your own profile. Visitors see just the image, linking to the profile.
+
+### Removed
+- The old session upload path: `POST /api/v1/sessions/upload` now answers 410 Gone, and the app's upload queue code is gone (no 0.3.0 beta used it; the unused local columns stay so no app database migration is needed).
 
 ### Fixed
 - Website: game icons now show on public profiles for logged-out visitors (they showed letter tiles before).

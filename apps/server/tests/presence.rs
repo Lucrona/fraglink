@@ -200,7 +200,8 @@ async fn requests_accepts_and_blocks_are_pushed(pool: PgPool) {
 
     let a = signup(&app, "a@example.com", "alice").await;
     let b = signup(&app, "b@example.com", "bob").await;
-    let mut ca = Client::connect(&base, &a).await;
+    let a_dev = pair(&app, &a).await; // only the desktop app reports games
+    let mut ca = Client::connect(&base, &a_dev).await;
     let mut cb = Client::connect(&base, &b).await;
     ca.presence("online", Some(("cs2", "Counter-Strike 2")))
         .await;
@@ -306,7 +307,8 @@ async fn silent_client_times_out_to_offline(pool: PgPool) {
     // bob first: sockets have a 2 s idle limit (slow CI runners need the slack), so both speak right away
     let mut cb = Client::connect(&base, &b).await;
     cb.send(json!({ "type": "ping" })).await;
-    let mut ca = Client::connect(&base, &a).await;
+    let a_dev = pair(&app, &a).await;
+    let mut ca = Client::connect(&base, &a_dev).await;
     ca.presence("online", Some(("wow", "World of Warcraft")))
         .await;
     assert_eq!(cb.expect("presence").await["status"], "online");
@@ -343,7 +345,8 @@ async fn server_names_and_live_sessions(pool: PgPool) {
     let a = signup(&app, "a@example.com", "alice").await;
     let b = signup(&app, "b@example.com", "bob").await;
     befriend(&app, &a, &b, "bob", "alice").await;
-    let mut ca = Client::connect(&base, &a).await;
+    let a_dev = pair(&app, &a).await;
+    let mut ca = Client::connect(&base, &a_dev).await;
     let mut cb = Client::connect(&base, &b).await;
     let backdate = |mins: i64| {
         let pool = pool.clone();
@@ -524,4 +527,59 @@ async fn ws_accepts_token_query_param(pool: PgPool) {
     let mut c = Client { ws };
     let hello = c.next().await.expect("hello");
     assert_eq!(hello["type"], "hello");
+}
+
+/// Only desktop-app sign-ins report games: a website token's game is ignored (status still
+/// works), and it never ends the game the app is running.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn only_the_app_reports_games(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let served = app.clone();
+    tokio::spawn(async move { axum::serve(listener, served).await.unwrap() });
+    let a = signup(&app, "oa@example.com", "only_a").await;
+    let b = signup(&app, "ob@example.com", "only_b").await;
+    befriend(&app, &a, &b, "only_b", "only_a").await;
+    let mut cb = Client::connect(&base, &b).await;
+    let mut web = Client::connect(&base, &a).await;
+    web.presence("online", Some(("wow", "World of Warcraft")))
+        .await;
+    let m = cb.expect("presence").await;
+    assert_eq!(m["status"], "online");
+    assert!(m["game_id"].is_null(), "{m}");
+    let game: Option<String> = sqlx::query_scalar(
+        "SELECT game_id FROM presence WHERE user_id = (SELECT id FROM users WHERE handle = 'only_a')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(game.is_none());
+    // the app starts a game; a status-only change from the website keeps it running
+    let a_dev = pair(&app, &a).await;
+    let mut dev = Client::connect(&base, &a_dev).await;
+    dev.presence("online", Some(("wow", "World of Warcraft")))
+        .await;
+    assert_eq!(cb.expect("presence").await["game_id"], "wow");
+    web.presence("away", None).await;
+    let m = cb.expect("presence").await;
+    assert_eq!(
+        (m["status"].as_str(), m["game_id"].as_str()),
+        (Some("away"), Some("wow")),
+        "{m}"
+    );
+    let open: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(open, 0, "the running session wasn't cut");
+    // game switches are capped (6 starts a minute): wow + 5 more, then the next is ignored
+    for i in 0..5 {
+        let g = if i % 2 == 0 { "cs2" } else { "dota2" };
+        dev.presence("online", Some((g, ""))).await;
+        assert_eq!(cb.expect("presence").await["game_id"], g);
+    }
+    dev.presence("online", Some(("dota2", ""))).await;
+    let m = cb.expect("presence").await;
+    assert!(m["game_id"].is_null(), "{m}");
 }

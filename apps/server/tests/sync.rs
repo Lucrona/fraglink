@@ -11,67 +11,23 @@ fn games() -> Value {
     ])
 }
 
-fn ids(v: &Value, k: &str) -> Vec<String> {
-    v[k].as_array()
-        .unwrap()
-        .iter()
-        .map(|x| {
-            if x.is_string() {
-                x.as_str().unwrap().to_string()
-            } else {
-                x["id"].as_str().unwrap().to_string()
-            }
-        })
-        .collect()
-}
-
-/// Apps before dev.14 upload their offline queue. Since dev.14 hours only come from
-/// live presence: uploads are acknowledged (so old apps clear their queue and stop
-/// retrying) and nothing is stored.
+/// Session uploads were removed (hours only come from live presence): 410, nothing stored.
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn uploads_are_acknowledged_and_dropped(pool: PgPool) {
+async fn uploads_are_gone(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let web = signup(&app, "s@example.com", "syncer").await;
     let dev = pair(&app, &web).await;
-    let t = now() - 3 * 86400;
-    let (ok1, ok2) = (uuid(), uuid());
-    let b = batch(
-        games(),
-        vec![
-            session(&ok1, "cs2", t, 3600),
-            session(&ok2, "manual:my-mod", t + 7200, 1800),
-            session(&uuid(), "cs2", now() + 3600, 600),
-        ],
-    );
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&dev),
-        Some(b.clone()),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-    let v = r.json();
-    assert_eq!(ids(&v, "accepted").len(), 3);
-    assert!(ids(&v, "rejected").is_empty());
+    let b = batch(games(), vec![session(&uuid(), "cs2", now() - 86400, 3600)]);
+    for t in [Some(dev.as_str()), None] {
+        let r = api(&app, "POST", "/api/v1/sessions/upload", t, Some(b.clone())).await;
+        assert_eq!(r.status, StatusCode::GONE, "{}", r.text);
+        assert_eq!(r.json()["error"], "uploads_removed");
+    }
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
         .fetch_one(&pool)
         .await
         .unwrap();
     assert_eq!(n, 0);
-    let g: i64 = sqlx::query_scalar("SELECT count(*) FROM games WHERE id LIKE 'manual:%'")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(g, 0, "client-sent game names don't create games");
-    // no auth, no upload
-    assert_eq!(
-        api(&app, "POST", "/api/v1/sessions/upload", None, Some(b))
-            .await
-            .status,
-        StatusCode::UNAUTHORIZED
-    );
 }
 
 /// A session as the server records it from live presence.
@@ -93,24 +49,6 @@ async fn live_session(pool: &PgPool, handle: &str, game: &str, start: i64, secs:
     .execute(pool)
     .await
     .unwrap();
-}
-
-#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn too_many_sessions_in_one_batch(pool: PgPool) {
-    let app = fraglink_server::router(state(pool));
-    let t = signup(&app, "m@example.com", "many").await;
-    let sessions: Vec<Value> = (0..501)
-        .map(|i| session(&uuid(), "cs2", now() - 10_000_000 + i * 100, 10))
-        .collect();
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/sessions/upload",
-        Some(&t),
-        Some(batch(games(), sessions)),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST);
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]

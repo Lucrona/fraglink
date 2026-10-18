@@ -254,10 +254,6 @@ fn clear_local(app: &AppHandle, reason: &str) {
     set(app, keys::LAST_ERROR, reason);
     let st = app.state::<AppState>();
     *st.sync.server_stats.lock().unwrap() = None;
-    let e = st.engine.lock().unwrap();
-    if let Err(err) = e.tracker.store.reset_sync_state() {
-        log::error!("sync: reset failed: {err:#}");
-    }
 }
 
 fn device_label() -> String {

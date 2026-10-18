@@ -1,6 +1,6 @@
 //! Local SQLite store (WAL). Everything Fraglink records lives here, in the
-//! app data folder. Nothing is uploaded unless the user signs in to sync
-//! (see `outbox.rs`; the network client lives outside this crate).
+//! app data folder. Sessions are never uploaded: the server records hours from live
+//! presence while the app is signed in.
 
 use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -174,7 +174,8 @@ impl Store {
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(names.iter().any(|n| n == col))
         };
-        // v2 (0.2.0): sync outbox state per session.
+        // v2 (0.2.0): sync outbox state per session. The upload path is gone (0.3.0-beta.3);
+        // the two columns stay so existing databases need no migration, but nothing uses them.
         if !has_col("sessions", "synced_at")? {
             conn.execute_batch(
                 "ALTER TABLE sessions ADD COLUMN synced_at INTEGER;
@@ -389,7 +390,7 @@ impl Store {
     ) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute(
-            "UPDATE sessions SET ended_at = ?2, last_checkpoint_at = ?2, active_seconds = ?3, idle_trimmed_seconds = ?4, status = 'closed', synced_at = NULL, sync_error = NULL WHERE id = ?1",
+            "UPDATE sessions SET ended_at = ?2, last_checkpoint_at = ?2, active_seconds = ?3, idle_trimmed_seconds = ?4, status = 'closed' WHERE id = ?1",
             params![id, ended_at, active, trimmed],
         )?;
         Self::write_days(&tx, id, game_id, days)?;
@@ -420,7 +421,7 @@ impl Store {
 
     pub fn reopen_session(&self, id: i64) -> Result<()> {
         self.conn.execute(
-            "UPDATE sessions SET status = 'open', ended_at = NULL, synced_at = NULL WHERE id = ?1",
+            "UPDATE sessions SET status = 'open', ended_at = NULL WHERE id = ?1",
             params![id],
         )?;
         Ok(())

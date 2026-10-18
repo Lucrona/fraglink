@@ -48,8 +48,7 @@ async fn desktop_pairs_and_syncs(pool: PgPool) {
     .await
     .unwrap();
 
-    // 2) apps before dev.14 still upload their offline queue: acknowledged (so they
-    // stop retrying) but nothing is stored. Hours come only from live presence.
+    // 2) session uploads were removed (hours only come from live presence): 410
     let r = api(
         &app,
         "POST",
@@ -61,13 +60,7 @@ async fn desktop_pairs_and_syncs(pool: PgPool) {
         )),
     )
     .await;
-    assert_eq!(r.status, axum::http::StatusCode::OK, "{}", r.text);
-    assert_eq!(r.json()["accepted"].as_array().unwrap().len(), 1);
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(n, 0, "client-submitted sessions are never stored");
+    assert_eq!(r.status, axum::http::StatusCode::GONE, "{}", r.text);
     let b = base.clone();
     let tk = token.clone();
     tokio::task::spawn_blocking(move || {
