@@ -565,8 +565,23 @@
     h += `<div class="st-link"><a data-action="website">&raquo; All activity on playfraglink.com (later)</a></div></div>`;
     list.innerHTML = h;
   }
+  function pendingReqCount() {
+    const l = LIVE.friends && LIVE.friends.list;
+    return l && Array.isArray(l.incoming) ? l.incoming.length : 0;
+  }
+  function paintFriendsBadge() {
+    const n = pendingReqCount();
+    $$('.xf-tab[data-tab=friends], .dk-vtabs [data-tab=friends]').forEach(t => {
+      let b = t.querySelector('.fl-req-badge');
+      if (!n) { if (b) b.remove(); return; }
+      if (!b) { b = document.createElement('span'); b.className = 'fl-req-badge'; t.appendChild(b); }
+      b.textContent = n > 99 ? '99+' : String(n);
+      b.title = n === 1 ? '1 friend request' : n + ' friend requests';
+    });
+  }
   function render() {
     $$('.xf-tab, .xf-icontabs [data-tab], .dk-vtabs [data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
+    paintFriendsBadge();
     $('#sechead').textContent = state.tab === 'friends' && state.detectRun ? 'Detect Games' : state.tab === 'friends' && signedOut() ? 'Login' : ({ friends: 'Friends', stats: 'Stats', activity: 'Activity' })[state.tab] || '';
     $('#list').classList.toggle('nohbar', state.tab !== 'friends');
     const sl = list.scrollLeft, st = list.scrollTop;

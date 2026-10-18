@@ -448,3 +448,80 @@ async fn server_names_and_live_sessions(pool: PgPool) {
     let feed = api(&app, "GET", "/api/v1/friends/activity", Some(&b), None).await;
     assert!(!feed.text.contains("Secret"), "{}", feed.text);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn decline_and_cancel_push_friend_removed(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let served = app.clone();
+    tokio::spawn(async move { axum::serve(listener, served).await.unwrap() });
+    let a = signup(&app, "da@example.com", "decl_a").await;
+    let b = signup(&app, "db@example.com", "decl_b").await;
+    let mut wa = Client::connect(&base, &a).await;
+    let mut wb = Client::connect(&base, &b).await;
+
+    api(
+        &app,
+        "POST",
+        "/api/v1/friends/request",
+        Some(&a),
+        Some(json!({ "handle": "decl_b" })),
+    )
+    .await;
+    let m = wb.expect("friend_request").await;
+    assert_eq!(m["handle"], "decl_a");
+
+    api(
+        &app,
+        "POST",
+        "/api/v1/friends/respond",
+        Some(&b),
+        Some(json!({ "handle": "decl_a", "accept": false })),
+    )
+    .await;
+    let m = wa.expect("friend_removed").await;
+    assert_eq!(m["handle"], "decl_b");
+
+    api(
+        &app,
+        "POST",
+        "/api/v1/friends/request",
+        Some(&a),
+        Some(json!({ "handle": "decl_b" })),
+    )
+    .await;
+    let _ = wb.expect("friend_request").await;
+    api(&app, "DELETE", "/api/v1/friends/decl_b", Some(&a), None).await;
+    let m = wb.expect("friend_removed").await;
+    assert_eq!(m["handle"], "decl_a");
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn ws_accepts_token_query_param(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let served = app.clone();
+    tokio::spawn(async move { axum::serve(listener, served).await.unwrap() });
+    let t = signup(&app, "wq@example.com", "wsquery").await;
+    let enc: String = t
+        .chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+            _ => format!("%{:02X}", c as u8),
+        })
+        .collect();
+    let mut req = format!("{}/api/v1/ws?token={enc}", base.replace("http://", "ws://"))
+        .into_client_request()
+        .unwrap();
+    let _ = req.headers_mut().remove("authorization");
+    let (ws, _) = tokio_tungstenite::connect_async(req)
+        .await
+        .expect("ws connect with ?token=");
+    let mut c = Client { ws };
+    let hello = c.next().await.expect("hello");
+    assert_eq!(hello["type"], "hello");
+}

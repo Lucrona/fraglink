@@ -944,7 +944,7 @@ async fn profile_details_events_achievements_report(pool: PgPool) {
         "POST",
         "/api/v1/me/profile",
         Some(&a),
-        Some(json!({"birth_date": "2024-01-01"})),
+        Some(json!({"birth_date": "2099-01-01"})), // under-13 dates pause the account (tests/minors.rs)
     )
     .await;
     assert_eq!(bad.status, StatusCode::BAD_REQUEST);

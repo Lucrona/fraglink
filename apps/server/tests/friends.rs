@@ -231,3 +231,103 @@ async fn request_rate_limit(pool: PgPool) {
         StatusCode::TOO_MANY_REQUESTS
     );
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn friend_request_email_respects_prefs_and_caps(pool: PgPool) {
+    fn fr_mails() -> Vec<fraglink_server::mailer::Mail> {
+        fraglink_server::mailer::outbox()
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|m| m.subject.contains("wants to be friends"))
+            .cloned()
+            .collect()
+    }
+    fraglink_server::mailer::outbox().lock().unwrap().clear();
+    let app = fraglink_server::router(state(pool.clone()));
+    let a = signup(&app, "from@example.com", "fromer").await;
+    let b = signup(&app, "to@example.com", "target").await;
+    // Unverified: no friend-request mail (confirm-email may still be in the outbox).
+    req(&app, &a, "target").await;
+    assert!(
+        fr_mails().is_empty(),
+        "no friend-request mail until verified"
+    );
+    api(&app, "DELETE", "/api/v1/friends/target", Some(&a), None).await;
+    sqlx::query("UPDATE users SET email_verified = true WHERE lower(handle) = 'target'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    req(&app, &a, "target").await;
+    let mails = fr_mails();
+    assert_eq!(mails.len(), 1, "one friend-request email");
+    assert_eq!(mails[0].to, "to@example.com");
+    assert!(mails[0].subject.contains("fromer"));
+    assert!(mails[0].body.contains("/friends"));
+    let html = mails[0].html.as_deref().unwrap_or("");
+    assert!(mails[0].body.contains("notify/off") || html.contains("notify/off"));
+    // Same pair again (after decline + re-request) must not re-mail.
+    api(
+        &app,
+        "POST",
+        "/api/v1/friends/respond",
+        Some(&b),
+        Some(json!({ "handle": "fromer", "accept": false })),
+    )
+    .await;
+    fraglink_server::mailer::outbox().lock().unwrap().clear();
+    req(&app, &a, "target").await;
+    assert!(
+        fr_mails().is_empty(),
+        "at most one mail per requester→target"
+    );
+    // Preference off.
+    api(&app, "DELETE", "/api/v1/friends/target", Some(&a), None).await;
+    sqlx::query("DELETE FROM friend_request_mail_log")
+        .execute(&pool)
+        .await
+        .unwrap();
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/notifications",
+        Some(&b),
+        Some(json!({ "friend_request_email": false })),
+    )
+    .await;
+    fraglink_server::mailer::outbox().lock().unwrap().clear();
+    req(&app, &a, "target").await;
+    assert!(fr_mails().is_empty(), "pref off = no mail");
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn notify_off_link_turns_off_friend_request_email(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let _ = signup(&app, "n@example.com", "notifyme").await;
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'notifyme'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let url = fraglink_server::account::notify_off_link(&st, uid, "friend_request_email")
+        .await
+        .unwrap();
+    let token = url.split("token=").nth(1).unwrap();
+    let r = api(
+        &app,
+        "GET",
+        &format!("/api/v1/notify/off?token={token}"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert!(r.text.contains("turned off") || r.text.contains("Emails turned off"));
+    let prefs: serde_json::Value =
+        sqlx::query_scalar("SELECT notify_prefs FROM users WHERE id = $1")
+            .bind(uid)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(prefs["friend_request_email"], false);
+}

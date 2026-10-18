@@ -225,8 +225,13 @@ function renderHeader() {
     if (u) items.push(["profile", "/u/" + encodeURIComponent(u.handle), "Profile"], ["friends", "/friends", "Friends"]);
     items.push(["download", "/download", "Download"]);
     const mine = page === "profile" && u && location.pathname.toLowerCase() === "/u/" + u.handle.toLowerCase();
-    nav.innerHTML = items.map(([k, href, label]) =>
-      `<a href="${href}" class="${(k === page && (k !== "profile" || mine)) ? "on" : ""}">${label}</a>`).join("");
+    nav.innerHTML = items.map(([k, href, label]) => {
+      const on = (k === page && (k !== "profile" || mine)) ? "on" : "";
+      const badge = (k === "friends" && LIVE_FRIENDS.incoming > 0)
+        ? `<span class="nav-badge" title="${LIVE_FRIENDS.incoming} friend request${LIVE_FRIENDS.incoming === 1 ? "" : "s"}">${LIVE_FRIENDS.incoming > 99 ? "99+" : LIVE_FRIENDS.incoming}</span>`
+        : "";
+      return `<a href="${href}" class="${on}">${label}${badge}</a>`;
+    }).join("");
   }
   const right = $(".top .right");
   if (!right) return;
@@ -275,6 +280,81 @@ async function fillDownload() {
   } catch (e) {
     vers.forEach(v => { v.textContent = "The download is unavailable right now. Try again in a few minutes."; });
   }
+}
+
+
+/* ---------- live friends (WebSocket with ?token=, 20s poll fallback) ---------- */
+const LIVE_FRIENDS = { incoming: 0, friends: 0, online: 0, list: null, _ws: null, _poll: null, _onChange: [] };
+function onFriendsLive(fn) { LIVE_FRIENDS._onChange.push(fn); }
+function friendsLiveNotify() {
+  renderHeader();
+  LIVE_FRIENDS._onChange.forEach(fn => { try { fn(LIVE_FRIENDS); } catch (e) { console.error(e); } });
+}
+function applyFriendsSnapshot(fl) {
+  if (!fl) return;
+  LIVE_FRIENDS.list = fl;
+  LIVE_FRIENDS.incoming = (fl.incoming && fl.incoming.length) || fl.incoming_count || 0;
+  LIVE_FRIENDS.friends = (fl.friends && fl.friends.length) || fl.all || 0;
+  const online = fl.online != null ? fl.online
+    : (fl.friends || []).filter(f => f.presence && f.presence.status !== "offline").length;
+  LIVE_FRIENDS.online = online;
+  friendsLiveNotify();
+}
+async function refreshFriendsLive() {
+  if (!token()) return;
+  try {
+    const fl = await api("/friends");
+    applyFriendsSnapshot(fl);
+  } catch (e) { /* signed out or offline */ }
+}
+function friendsWsUrl() {
+  const t = token(); if (!t) return null;
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return proto + "//" + location.host + "/api/v1/ws?token=" + encodeURIComponent(t);
+}
+function startFriendsLive() {
+  if (!token() || LIVE_FRIENDS._ws || LIVE_FRIENDS._poll) return;
+  refreshFriendsLive();
+  const url = friendsWsUrl();
+  let usePoll = !url || typeof WebSocket === "undefined";
+  if (!usePoll) {
+    try {
+      const ws = new WebSocket(url);
+      LIVE_FRIENDS._ws = ws;
+      let ping = null;
+      ws.onopen = () => {
+        ping = setInterval(() => { try { ws.send(JSON.stringify({ type: "ping" })); } catch (e) {} }, 30000);
+      };
+      ws.onmessage = ev => {
+        let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (!m || !m.type) return;
+        if (m.type === "hello" && m.friends) applyFriendsSnapshot(m.friends);
+        else if (m.type === "friend_request" || m.type === "friend_accepted" || m.type === "friend_removed" || m.type === "presence") {
+          // Re-fetch so counts and lists stay exact (presence alone doesn't change request counts).
+          refreshFriendsLive();
+        }
+      };
+      ws.onclose = () => {
+        LIVE_FRIENDS._ws = null;
+        if (ping) clearInterval(ping);
+        // fall back to polling if the socket drops
+        if (token() && !LIVE_FRIENDS._poll) {
+          LIVE_FRIENDS._poll = setInterval(() => {
+            if (document.visibilityState === "visible") refreshFriendsLive();
+          }, 20000);
+        }
+      };
+      ws.onerror = () => { try { ws.close(); } catch (e) {} };
+    } catch (e) { usePoll = true; LIVE_FRIENDS._ws = null; }
+  }
+  if (usePoll && !LIVE_FRIENDS._poll) {
+    LIVE_FRIENDS._poll = setInterval(() => {
+      if (document.visibilityState === "visible") refreshFriendsLive();
+    }, 20000);
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && token()) refreshFriendsLive();
+  });
 }
 
 /* ---------- pages ---------- */
@@ -694,7 +774,7 @@ pages.friends = async () => {
     $("#addf").addEventListener("submit", async e => {
       e.preventDefault(); const h = e.target.handle.value.trim().replace(/^@/, ""); if (!h) return;
       try { const r = await api("/friends/request", { method: "POST", body: { handle: h } });
-        showOk(msg, r && r.status === "accepted" ? `You and ${h} are now friends.` : `Friend request sent to ${h}.`); load(); }
+        showOk(msg, r && r.status === "accepted" ? `You and ${h} are now friends.` : `Friend request sent to ${h}.`); load(); refreshFriendsLive(); }
       catch (x) { showErr(msg, x); }
     });
   }
@@ -708,9 +788,10 @@ pages.friends = async () => {
       else if (a === "remove" || a === "cancel") await api("/friends/" + encodeURIComponent(h), { method: "DELETE" });
       else if (a === "block") await api("/blocks", { method: "POST", body: { handle: h } });
       else if (a === "unblock") await api("/blocks/" + encodeURIComponent(h), { method: "DELETE" });
-      msg.hidden = true; load();
+      msg.hidden = true; load(); refreshFriendsLive();
     } catch (x) { b.disabled = false; showErr(msg, x); }
   });
+  onFriendsLive(() => { if (document.body.dataset.page === "friends") load(); });
   load();
 };
 
@@ -1104,6 +1185,28 @@ document.addEventListener("DOMContentLoaded", async () => {
   // keep the header in sync with the real account (handle/display name changes)
   if (token() && document.body.dataset.page !== "settings" && document.body.dataset.page !== "verify") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null, avatar: m.user.avatar, email_verified: m.user.email_verified, mail_live: m.user.mail_live }); renderHeader(); verifyBar(); }).catch(() => { if (!token()) renderHeader(); });
   else verifyBar();
+  if (token()) {
+    startFriendsLive();
+    onFriendsLive(() => {
+      if (document.body.dataset.page !== "home") return;
+      const kpi = document.querySelector(".kpi");
+      if (kpi) {
+        const cells = kpi.querySelectorAll("div");
+        // third kpi cell is friends online/total when signed in
+        if (cells.length >= 3 && LIVE_FRIENDS.friends != null) {
+          const b = cells[2].querySelector("b");
+          if (b) b.textContent = LIVE_FRIENDS.online + "/" + LIVE_FRIENDS.friends;
+        }
+      }
+      // refresh the Friends online panel heading count
+      $$(".panel").forEach(p => {
+        const h2 = p.querySelector("h2");
+        if (h2 && /^Friends online/.test(h2.textContent || "")) {
+          h2.childNodes[0].textContent = `Friends online (${LIVE_FRIENDS.online})`;
+        }
+      });
+    });
+  }
   if (qs("deleted")) { const d = new Date(qs("deleted")); const el = document.createElement("div"); el.className = "verify-bar delete-bar"; el.innerHTML = `<div class="wrap">Your account is scheduled for deletion${isNaN(d) ? "" : " on " + fullDate.format(d)}. Sign in again before then to keep it.</div>`; ($(".preview-flag") || $(".top")).after(el); }
 });
 })();

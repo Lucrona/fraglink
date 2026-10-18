@@ -5,8 +5,9 @@
 use crate::auth::{self, AuthUser, User};
 use crate::error::{ApiResult, AppError};
 use crate::{api, avatars, mailer, mfa, AppState};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::response::Html;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
@@ -58,6 +59,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/me/games/reset", post(reset_game))
         .route("/api/v1/me/notifications", post(save_notifications))
         .route("/api/v1/me/mfa", get(mfa_status))
+        .route("/api/v1/notify/off", get(notify_off))
 }
 
 // ------------------------------------------------------------------ /me extras
@@ -633,6 +635,78 @@ async fn reset_game(
     tx.commit().await?;
     tracing::info!(user = %a.user.id, game = %r.game_id, rows = n, "hours reset by user");
     Ok(Json(json!({ "game_id": r.game_id, "deleted_rows": n })))
+}
+
+// ------------------------------------------------------------------ notify off (email one-click)
+
+/// Build a one-click link that turns off one notification preference.
+pub async fn notify_off_link(st: &AppState, uid: Uuid, pref: &str) -> ApiResult<String> {
+    let (token, hash) = auth::new_token();
+    // Store the preference name in the email column (repurposed for notify_off).
+    sqlx::query(
+        "INSERT INTO email_tokens(token_hash, user_id, purpose, email, expires_at)
+         VALUES($1, $2, 'notify_off', $3, now() + interval '30 days')",
+    )
+    .bind(hash)
+    .bind(uid)
+    .bind(pref)
+    .execute(&st.db)
+    .await?;
+    Ok(format!(
+        "{}/api/v1/notify/off?token={token}",
+        st.cfg.site_url.trim_end_matches('/')
+    ))
+}
+
+#[derive(Deserialize)]
+struct NotifyOffQ {
+    token: String,
+}
+
+async fn notify_off(
+    State(st): State<AppState>,
+    Query(q): Query<NotifyOffQ>,
+) -> ApiResult<Html<String>> {
+    let row: Option<(Uuid, String)> = sqlx::query_as(
+        "UPDATE email_tokens SET used_at = now()
+         WHERE token_hash = $1 AND purpose = 'notify_off' AND used_at IS NULL AND expires_at > now()
+         RETURNING user_id, email",
+    )
+    .bind(auth::hash_token(q.token.trim()))
+    .fetch_optional(&st.db)
+    .await?;
+    let site = st.cfg.site_url.trim_end_matches('/');
+    let settings = format!("{site}/settings#notifications");
+    let (title, body) = match row {
+        Some((uid, _pref)) => {
+            sqlx::query("UPDATE users SET notify_prefs = notify_prefs || $2 WHERE id = $1")
+                .bind(uid)
+                .bind(json!({ "friend_request_email": false }))
+                .execute(&st.db)
+                .await?;
+            (
+                "Emails turned off".to_string(),
+                format!(
+                    "<p>Friend request emails are off for your Fraglink account.</p><p><a href=\"{settings}\">Notification settings</a></p>"
+                ),
+            )
+        }
+        None => (
+            "Link expired".to_string(),
+            format!(
+                "<p>That link has already been used or has expired.</p><p><a href=\"{settings}\">Manage notifications</a></p>"
+            ),
+        ),
+    };
+    Ok(Html(format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+<title>{title} · Fraglink</title>\
+<style>body{{font-family:system-ui,sans-serif;background:#0e141b;color:#e8eef5;margin:0;padding:40px 16px}}\
+main{{max-width:420px;margin:0 auto;background:#161d27;border:1px solid #2a3544;border-radius:8px;padding:24px}}\
+a{{color:#7eb6ff}}h1{{font-size:20px;margin:0 0 12px}}</style></head>\
+<body><main><h1>{title}</h1>{body}</main></body></html>"
+    )))
 }
 
 // ------------------------------------------------------------------ notifications

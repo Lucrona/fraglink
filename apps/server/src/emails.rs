@@ -201,6 +201,45 @@ pub fn signin(name: &str, what: &str, security_url: &str) -> Email {
     }
 }
 
+pub fn friend_request(
+    to_name: &str,
+    from_name: &str,
+    from_handle: &str,
+    friends_url: &str,
+    turn_off_url: &str,
+) -> Email {
+    let who = if from_name.is_empty() || from_name == from_handle {
+        format!("@{from_handle}")
+    } else {
+        format!("{from_name} (@{from_handle})")
+    };
+    let pre = format!("{who} sent you a friend request.");
+    let text_body = format!(
+        "Hi {to_name},\n\n{who} sent you a friend request on Fraglink.\n\nSee it here:\n{friends_url}\n\nTurn off these emails:\n{turn_off_url}\n\nFraglink"
+    );
+    Email {
+        subject: format!("{who} wants to be friends on Fraglink"),
+        text: text_body,
+        html: layout(Parts {
+            preheader: &pre,
+            heading: "New friend request",
+            paras: vec![
+                format!("Hi {},", esc(to_name)),
+                format!(
+                    r##"<b style="color:#10161f;">{}</b> wants to be friends on Fraglink."##,
+                    esc(&who)
+                ),
+            ],
+            button: Some(("See friend request", friends_url)),
+            after: vec![format!(
+                r##"Don't want these emails? <a href="{}" style="color:#5b6b7c;">Turn off friend request emails</a>."##,
+                esc(turn_off_url)
+            )],
+            reason: "You got this because friend request emails are on for your Fraglink account.",
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// `EMAIL_PREVIEW_DIR=/tmp/x cargo test -p fraglink-server --lib emails -- --ignored`
@@ -232,6 +271,16 @@ mod tests {
                     &format!("{site}/settings#security"),
                 ),
             ),
+            (
+                "friend_request",
+                super::friend_request(
+                    "Lucrona",
+                    "Riftwalker",
+                    "riftwalker",
+                    &format!("{site}/friends"),
+                    &format!("{site}/api/v1/notify/off?token=EXAMPLE"),
+                ),
+            ),
         ] {
             std::fs::write(format!("{dir}/email-{n}.html"), &e.html).unwrap();
             std::fs::write(
@@ -261,5 +310,16 @@ mod tests {
         assert!(super::reset("Lu", "https://x/reset?token=1")
             .html
             .contains("Reset password"));
+        let fr = super::friend_request(
+            "Lu",
+            "Bob <x>",
+            "bob",
+            "https://playfraglink.com/friends",
+            "https://playfraglink.com/api/v1/notify/off?token=abc",
+        );
+        assert!(fr.subject.contains("@bob"));
+        assert!(fr.html.contains("Bob &lt;x&gt;"));
+        assert!(fr.html.contains("Turn off friend request emails"));
+        assert!(fr.text.contains("https://playfraglink.com/friends"));
     }
 }

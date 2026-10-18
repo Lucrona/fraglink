@@ -32,6 +32,7 @@ h1,h2,h3{color:#eef2f6;font-weight:600}
 .nav a{display:flex;align-items:center;padding:0 14px;color:var(--silver);font-weight:600;font-size:13px;border-bottom:2px solid transparent}
 .nav a:hover{color:#fff;text-decoration:none;background:#1b2027}
 .nav a.on{color:#fff;border-bottom-color:var(--orange);background:#1a1f26}
+.nav-badge{display:inline-block;min-width:16px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--orange);color:#1b1006;font-size:11px;font-weight:700;line-height:16px;text-align:center;vertical-align:1px}
 .top .right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .search{background:#0b0d10;border:1px solid var(--line2);border-radius:3px;color:var(--text);padding:6px 9px;width:190px;font:inherit}
 .who-menu{position:relative}

@@ -107,8 +107,13 @@ pub struct AuthUser {
 }
 
 pub fn bearer_or_cookie(parts: &Parts) -> Option<(String, bool)> {
-    if let Some(v) = parts
-        .headers
+    bearer_or_cookie_headers(&parts.headers)
+}
+
+/// Same as [`bearer_or_cookie`], for handlers that already have the header map
+/// (e.g. the presence WebSocket upgrade).
+pub fn bearer_or_cookie_headers(headers: &axum::http::HeaderMap) -> Option<(String, bool)> {
+    if let Some(v) = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
     {
@@ -116,7 +121,7 @@ pub fn bearer_or_cookie(parts: &Parts) -> Option<(String, bool)> {
             return Some((t.trim().to_string(), false));
         }
     }
-    cookie_value(&parts.headers, SESSION_COOKIE).map(|t| (t, true))
+    cookie_value(headers, SESSION_COOKIE).map(|t| (t, true))
 }
 
 pub fn cookie_value(headers: &axum::http::HeaderMap, name: &str) -> Option<String> {

@@ -226,6 +226,7 @@ pub async fn request(st: &AppState, me: &Person, handle: &str) -> ApiResult<Requ
             display_name: me.display_name.clone(),
         },
     );
+    maybe_mail_request(st, me, &other).await;
     Ok(RequestOutcome::Pending)
 }
 
@@ -286,12 +287,19 @@ pub async fn respond(st: &AppState, me: &Person, handle: &str, accept_it: bool) 
     if accept_it {
         accept(st, me, &other).await
     } else {
-        // Declining deletes the request without notifying the requester.
+        // Declining deletes the request and tells the requester so their "Request sent"
+        // row disappears live (app + website sockets).
         sqlx::query("DELETE FROM friendships WHERE user_a = $1 AND user_b = $2")
             .bind(a)
             .bind(b)
             .execute(&st.db)
             .await?;
+        st.hub.send(
+            other.id,
+            ServerMsg::FriendRemoved {
+                handle: me.handle.clone(),
+            },
+        );
         Ok(())
     }
 }
@@ -307,7 +315,9 @@ pub async fn remove(st: &AppState, me: &Person, handle: &str) -> ApiResult<()> {
     .bind(b)
     .fetch_optional(&st.db)
     .await?;
-    if was.as_deref() == Some("accepted") {
+    // Always tell the other side: unfriend, and also cancel-pending (so their
+    // incoming request disappears live).
+    if was.is_some() {
         st.hub.send(
             other.id,
             ServerMsg::FriendRemoved {
@@ -347,8 +357,8 @@ pub async fn block(st: &AppState, me: &Person, handle: &str) -> ApiResult<()> {
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    // To them it looks exactly like being unfriended.
-    if was.as_deref() == Some("accepted") {
+    // To them it looks exactly like being unfriended / the request vanishing.
+    if was.is_some() {
         st.hub.send(
             other.id,
             ServerMsg::FriendRemoved {
@@ -448,4 +458,103 @@ pub async fn export(st: &AppState, me: Uuid) -> ApiResult<Value> {
         "outgoing_requests": l.outgoing,
         "blocked": l.blocked,
     }))
+}
+
+/// Cap on friend-request emails a person can receive in 24 hours.
+const FRIEND_REQUEST_MAIL_PER_DAY: i64 = 20;
+
+/// Email the recipient about a new friend request when their preference allows it.
+/// Failures are logged only; requesting never waits on mail.
+async fn maybe_mail_request(st: &AppState, from: &Person, to: &Person) {
+    if let Err(e) = try_mail_request(st, from, to).await {
+        tracing::info!(
+            from = %from.handle,
+            to = %to.handle,
+            error = %e.message,
+            "friend request email skipped"
+        );
+    }
+}
+
+async fn try_mail_request(st: &AppState, from: &Person, to: &Person) -> ApiResult<()> {
+    // Test accounts: only mail when both sides are test (so real users never get
+    // mail from hidden test accounts, and we can still exercise the path).
+    let (from_test, to_test): (bool, bool) = sqlx::query_as(
+        "SELECT (SELECT is_test FROM users WHERE id = $1),
+                (SELECT is_test FROM users WHERE id = $2)",
+    )
+    .bind(from.id)
+    .bind(to.id)
+    .fetch_one(&st.db)
+    .await?;
+    if from_test != to_test {
+        return Err(AppError::bad_request("test_skip", "test/non-test pair"));
+    }
+
+    let row: Option<(String, bool, serde_json::Value)> = sqlx::query_as(
+        "SELECT email, email_verified, notify_prefs FROM users WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(to.id)
+    .fetch_optional(&st.db)
+    .await?;
+    let Some((email, verified, prefs)) = row else {
+        return Ok(());
+    };
+    if email.trim().is_empty() || !verified {
+        return Err(AppError::bad_request("unverified", "no verified email"));
+    }
+    let want = prefs
+        .get("friend_request_email")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    if !want {
+        return Err(AppError::bad_request("pref_off", "preference off"));
+    }
+
+    // Already emailed this requester→target once.
+    let prior: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM friend_request_mail_log WHERE requester = $1 AND target = $2)",
+    )
+    .bind(from.id)
+    .bind(to.id)
+    .fetch_one(&st.db)
+    .await?;
+    if prior {
+        return Err(AppError::bad_request(
+            "already_sent",
+            "already emailed this pair",
+        ));
+    }
+
+    let today: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM friend_request_mail_log
+         WHERE target = $1 AND sent_at > now() - interval '24 hours'",
+    )
+    .bind(to.id)
+    .fetch_one(&st.db)
+    .await?;
+    if today >= FRIEND_REQUEST_MAIL_PER_DAY {
+        return Err(AppError::bad_request("daily_cap", "daily cap reached"));
+    }
+
+    let site = st.cfg.site_url.trim_end_matches('/');
+    let friends_url = format!("{site}/friends");
+    let off_url = crate::account::notify_off_link(st, to.id, "friend_request_email").await?;
+    let e = crate::emails::friend_request(
+        &to.display_name,
+        &from.display_name,
+        &from.handle,
+        &friends_url,
+        &off_url,
+    );
+    crate::mailer::send_email(st, &email, &e);
+    sqlx::query(
+        "INSERT INTO friend_request_mail_log(requester, target) VALUES($1, $2)
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(from.id)
+    .bind(to.id)
+    .execute(&st.db)
+    .await?;
+    Ok(())
 }

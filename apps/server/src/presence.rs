@@ -7,12 +7,13 @@
 //! [`IDLE_TIMEOUT_SECS`] is closed and the user goes offline, so a killed client
 //! disappears within ~2.5 min (spec §7: 60 s heartbeat, 150 s sweep).
 
-use crate::auth::AuthUser;
-use crate::error::ApiResult;
+use crate::auth::{self, AuthUser};
+use crate::error::{ApiResult, AppError};
 use crate::friends;
 use crate::AppState;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::State;
+use axum::extract::{Query, State};
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Utc};
 use futures_util::{SinkExt, StreamExt};
@@ -476,13 +477,50 @@ pub async fn reset_all(st: &AppState) -> ApiResult<()> {
     Ok(())
 }
 
-pub async fn ws_handler(State(st): State<AppState>, a: AuthUser, ws: WebSocketUpgrade) -> Response {
+#[derive(Debug, Deserialize)]
+pub struct WsAuth {
+    /// Browser WebSockets can't set Authorization headers, so the website passes
+    /// the same bearer token as `?token=`. Desktop still uses the header.
+    token: Option<String>,
+}
+
+async fn auth_for_ws(st: &AppState, headers: &HeaderMap, q: &WsAuth) -> Result<AuthUser, AppError> {
+    let from_header = auth::bearer_or_cookie_headers(headers);
+    let (token, via_cookie) = match (
+        q.token.as_deref().map(str::trim).filter(|t| !t.is_empty()),
+        from_header,
+    ) {
+        (Some(t), _) => (t.to_string(), false),
+        (None, Some(x)) => x,
+        (None, None) => return Err(AppError::unauthorized()),
+    };
+    let (user, token_id, kind) = auth::user_for_token(st, &token)
+        .await?
+        .ok_or_else(AppError::unauthorized)?;
+    Ok(AuthUser {
+        user,
+        token_id,
+        kind,
+        via_cookie,
+    })
+}
+
+pub async fn ws_handler(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<WsAuth>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let a = match auth_for_ws(&st, &headers, &q).await {
+        Ok(a) => a,
+        Err(e) => return e.into_response(),
+    };
     let Some(slot) = st.hub.try_reserve(max_sockets()) else {
         tracing::warn!(
             "presence: {} sockets live, refusing new ones (503)",
             st.hub.live_sockets()
         );
-        return crate::error::AppError::overloaded().into_response();
+        return AppError::overloaded().into_response();
     };
     ws.max_message_size(16 * 1024)
         .on_upgrade(move |socket| async move {

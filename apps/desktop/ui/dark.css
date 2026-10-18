@@ -535,3 +535,6 @@ body.skin-dark.has-news .xf-identity { top: 135px; }
 body.skin-dark.has-news .xf-status { top: 136px; }
 body.skin-dark.has-news .dk-vtabs, body.skin-dark.has-news .dk-sechead { top: 159px; }
 body.skin-dark.has-news .xf-list { top: 177px; }
+
+.dk-vtabs button { position: relative; }
+.dk-vtabs .fl-req-badge { position: absolute; top: -2px; right: -2px; min-width: 12px; height: 12px; padding: 0 3px; border-radius: 6px; background: #e07020; color: #1b1006; font-size: 9px; font-weight: 700; line-height: 12px; text-align: center; pointer-events: none; }

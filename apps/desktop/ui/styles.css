@@ -637,3 +637,6 @@ body.col-dragging, body.col-dragging * { cursor: col-resize !important; user-sel
 .nick-dlg small { display: block; margin: 6px 0 0; opacity: .75; line-height: 1.3; }
 .nick-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .nick-foot .msg.bad { color: #d9534f; }
+
+.xf-tab { position: relative; }
+.fl-req-badge { position: absolute; top: 2px; right: 2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #e07020; color: #1b1006; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center; pointer-events: none; }

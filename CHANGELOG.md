@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+- Website friends lists update live over the presence WebSocket (browsers pass `?token=`), with a 20-second poll fallback while the tab is visible; the Friends nav shows a pending-request badge.
+- Desktop app: pending friend-request count badge on the Friends tab (ships in the next build; not released).
+- Friend-request emails when notification preference is on and the address is verified (at most one per requester→target, 20 a day per recipient), with a one-click turn-off link. Test accounts only email other test accounts.
+- Presence push on decline and on cancel-pending (and when blocking a pending request), so both sides update live.
+
 ### Removed
 - Estimated hours and the "Estimate your history" calculator. Hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter.
 
