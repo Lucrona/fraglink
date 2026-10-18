@@ -145,7 +145,7 @@ the entries say what changing them would cost.
 3. **Discord login** (spec M2): not built yet. It needs a Discord application (client id/secret), which means creating an external account.
 4. **Email verification and password reset:** they need an email provider (external service), so they are not built. Accounts work without verification for now.
 5. **Grace period** for account deletion (D11) and whether excluded games should also be deleted server-side (D9).
-6. **Privacy policy:** `docs/privacy-policy.md` is a DRAFT. It needs an operator name, contact, hosting location, a minimum age and legal review before any public launch.
+6. **Privacy policy:** published 18 October 2026 at /privacy, with Terms of Use at /terms (text in `docs/privacy-policy.md` and `docs/terms.md`).
 7. **Presence scaling (D21):** fine for a single server. Pick Postgres LISTEN/NOTIFY or Redis when hosting is decided.
 
 ## D29. Dark resizable main window by default; Options in its own window

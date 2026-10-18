@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Estimated hours and the "Estimate your history" calculator. Hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter.
 
 ### Added
+- The full Privacy Policy and Terms of Use are published on the website (last updated 18 October 2026).
 - Create Account asks you to confirm you're 13 or older (16 or older in the EU/UK), with a link to the Privacy Policy.
 
 ### Changed

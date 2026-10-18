@@ -82,7 +82,7 @@ th{{color:#9fb3d6;font-weight:normal}} td.n{{text-align:right;white-space:nowrap
 .t-tracked{{color:#4ee07a}} .t-imported{{color:#5fb2ff}}
 .msg{{background:#123d2a;border-color:#2e8a5a}} .err{{background:#4a1a1a;border-color:#a33}}
 .code{{font:bold 26px monospace;letter-spacing:3px}} small.m{{color:#9fb3d6}} form.inline{{display:inline}}
-</style></head><body><header><b>FRAGLINK</b><small>local dev server · M2 preview</small></header><main>{b}</main></body></html>"#,
+</style></head><body><header><b>FRAGLINK</b></header><main>{b}</main></body></html>"#,
         t = esc(title),
         b = body
     ))
