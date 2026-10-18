@@ -63,15 +63,8 @@ async fn tiers_and_rankings(pool: PgPool) {
     live_session(&pool, "alice", "cs2", t, 7200).await;
     // bob: 1h tracked, plus a huge self-reported counter and an old (pre-removal) estimate
     live_session(&pool, "bob", "cs2", t, 3600).await;
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&b),
-        Some(json!({ "game_id": "cs2", "minutes": 600000, "source": "manual" })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let _ = &b;
+    seed_imported(&pool, "bob", "cs2", "cs2", 600000).await;
     // carol: an old estimate only
     for h in ["bob", "carol"] {
         sqlx::query("INSERT INTO hours_entries (id, user_id, game_id, tier, source, minutes) SELECT gen_random_uuid(), id, 'cs2', 'estimated', 'estimator', 1123200 FROM users WHERE handle = $1")

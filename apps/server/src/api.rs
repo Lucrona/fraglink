@@ -38,7 +38,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/stats", get(stats))
         .route("/api/v1/leaderboard/{game_id}", get(leaderboard))
         .route("/api/v1/hours/estimate", post(estimates_gone))
-        .route("/api/v1/hours/import", post(save_import))
+        .route("/api/v1/hours/import", post(imports_gone))
         .route("/api/v1/hours/{id}", delete(delete_hours))
         .route("/api/v1/steam/link", post(steam_link))
         .route("/api/v1/steam/sync", post(steam_sync))
@@ -986,6 +986,18 @@ pub async fn estimates_gone() -> AppError {
     )
 }
 
+/// `POST /api/v1/hours/import` and the old `/web/import` form: self-reported manual imports
+/// are disabled (Oct 2026). 410 Gone, nothing is read or stored; rows saved before stay.
+pub async fn imports_gone() -> AppError {
+    AppError::new(
+        StatusCode::GONE,
+        "imports_disabled",
+        "Manual hour imports are disabled.",
+    )
+}
+
+/// A game-counter import. Not routed any more (see `imports_gone`). It's kept, with its game
+/// checks and the 50,000 h cap, for a future validated WoW addon import (docs/decisions.md D6).
 #[derive(Deserialize)]
 pub struct ImportReq {
     pub game_id: Option<String>,
@@ -1001,16 +1013,6 @@ fn default_import_source() -> String {
 }
 
 /// A game's own counter typed in by the user (Imported tier, shown as "self-reported").
-async fn save_import(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    a: AuthUser,
-    Json(r): Json<ImportReq>,
-) -> ApiResult<Json<Value>> {
-    check_origin(&a, &headers, &st)?;
-    Ok(Json(import_for(&st, a.user.id, r).await?))
-}
-
 /// Most Imported hours one game can have, in minutes (50,000 h).
 pub const IMPORT_MAX_MIN: i64 = 50_000 * 60;
 

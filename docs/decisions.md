@@ -33,7 +33,8 @@ the entries say what changing them would cost.
 - Leaderboards (all time, 7 days, and the home page's Top players and Most played this week) include Imported hours (Steam, manual counters, later WoW /played), the same way a profile's total does: per game the **larger** of the app's sessions, Steam and Imported (`display_min`), never the sum. Estimated hours never count.
 - 7 days: the larger of the week's sessions and how much the Imported counter grew this week. The baseline is the last entry before the week, else the first entry in it, so a first import doesn't count, and growth is capped at the week's real time. Steam only reports a two-week figure, so it counts in all time but not in 7 days.
 - Only public profiles that show games and hours, have Leaderboards on and haven't hidden the game; never test accounts. The per-game API still needs a signed-in caller.
-- Manual imports are capped at 50,000 hours per game. Big jumps (a first import over 20,000 h, or growth faster than 20 h a day since the previous import) raise the Unusual hours admin alert. Nothing is removed automatically.
+- Self-reported manual imports are **disabled** (19 October 2026): `POST /api/v1/hours/import` and the old `/web/import` form answer 410 and store nothing. Rows saved before stay and still count. The **WoW addon will need its own validated import** (it must check where the counter came from, not trust a typed number). It can reuse `api::import_for`, which keeps the game checks and the cap below.
+- Imports are capped at 50,000 hours per game. Big jumps (a first import over 20,000 h, or growth faster than 20 h a day since the previous import) raise the Unusual hours admin alert. Nothing is removed automatically.
 - (Before: Tracked only; Imported and Estimated were ignored completely.)
 
 ## D7. One estimate per game

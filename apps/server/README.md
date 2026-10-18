@@ -62,9 +62,9 @@ See `.env.example`. Keep real values out of git (`.env` is ignored).
 | POST | `/sessions/upload` | - | removed: 410 Gone (hours come from live presence) |
 | GET | `/stats` | token | per-game tracked / imported / estimated / display + tier |
 | GET | `/leaderboard/{game_id}?period=7d\|all` | token | like profiles: all = `display_min`, 7d = sessions or Imported growth (D6) |
-| POST | `/hours/estimate` `{game_id\|game_name, eras:[{from_year,to_year,hours_per_week}], note}` | token | Estimated tier; one per game (replaces) |
-| POST | `/hours/import` `{game_id\|game_name, minutes, source: manual\|wow_manual\|xbox_recap, note}` | token | Imported tier (self-reported) |
-| DELETE | `/hours/{id}` | token | |
+| POST | `/hours/estimate` | - | removed: 410 Gone `estimates_removed` (the history estimator is gone) |
+| POST | `/hours/import` | - | disabled: 410 Gone `imports_disabled`, "Manual hour imports are disabled." Nothing is stored. Rows saved before stay, still count, and can be deleted. The old `/web/import` form answers the same. |
+| DELETE | `/hours/{id}` | token | delete one of your Imported entries |
 | POST | `/steam/link` `{profile}` · `/steam/sync` | token | |
 | GET | `/export` | token | everything about you as JSON (incl. friends) |
 | GET | `/export.zip` | token | README + JSON + CSVs (sessions, games per tier, Steam playtime); once per hour → 429 `export_cooldown` |

@@ -159,14 +159,7 @@ async fn delete_account_removes_everything(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let t = signup(&app, "del@example.com", "del").await;
     let dev = pair(&app, &t).await;
-    api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({"game_id":"cs2","minutes":300})),
-    )
-    .await;
+    seed_imported(&pool, "del", "cs2", "Counter-Strike 2", 300).await;
 
     let r = api(
         &app,
@@ -226,25 +219,12 @@ async fn delete_account_removes_everything(pool: PgPool) {
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn export_contains_own_data_only(pool: PgPool) {
-    let app = fraglink_server::router(state(pool));
+    let app = fraglink_server::router(state(pool.clone()));
     let a = signup(&app, "a@example.com", "aaa").await;
     let b = signup(&app, "b@example.com", "bbb").await;
-    api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&a),
-        Some(json!({"game_name":"World of Warcraft","minutes":6000,"source":"wow_manual"})),
-    )
-    .await;
-    api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&b),
-        Some(json!({"game_name":"Dota","minutes":60})),
-    )
-    .await;
+    let _ = &b;
+    seed_imported(&pool, "aaa", "wow", "World of Warcraft", 6000).await;
+    seed_imported(&pool, "bbb", "dota2", "Dota 2", 60).await;
     let r = api(&app, "GET", "/api/v1/export", Some(&a), None).await;
     assert_eq!(r.status, StatusCode::OK);
     let v = r.json();

@@ -169,3 +169,32 @@ pub fn batch(games: Value, sessions: Vec<Value>) -> Value {
 pub fn uuid() -> String {
     uuid::Uuid::new_v4().to_string()
 }
+
+/// Seed an Imported (game counter) entry straight in the database: manual imports over the
+/// API are disabled (410), but rows saved before stay and still count.
+pub async fn seed_imported(
+    pool: &PgPool,
+    handle: &str,
+    game_id: &str,
+    game_name: &str,
+    minutes: i32,
+) -> uuid::Uuid {
+    sqlx::query(
+        "INSERT INTO games(id, name, verified) VALUES($1, $2, true) ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(game_id)
+    .bind(game_name)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query_scalar(
+        "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes)
+         SELECT gen_random_uuid(), id, $2, 'imported', 'manual', $3 FROM users WHERE handle = $1 RETURNING id",
+    )
+    .bind(handle)
+    .bind(game_id)
+    .bind(minutes)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}

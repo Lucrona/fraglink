@@ -24,14 +24,7 @@ async fn zip_export_has_csvs_and_json(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_id": "cs2", "minutes": 6000 })),
-    )
-    .await;
+    seed_imported(&pool, "zipper", "cs2", "Counter-Strike 2", 6000).await;
     // the history estimator is gone; an old estimate row stays stored but never counts
     let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_id": "exe:quake.exe", "eras": [{ "from_year": 2000, "to_year": 2001, "hours_per_week": 5 }] }))).await;
     assert_eq!(r.status, StatusCode::GONE, "{}", r.text);

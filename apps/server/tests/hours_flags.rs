@@ -140,29 +140,28 @@ async fn unusual_hours_are_flagged_not_removed(pool: PgPool) {
 async fn big_imported_jumps_are_flagged(pool: PgPool) {
     let st = state(pool.clone());
     let app = fraglink_server::router(st.clone());
-    let jumper = signup(&app, "j@example.com", "jumper").await;
-    let big = signup(&app, "b@example.com", "bigfirst").await;
-    let steady = signup(&app, "s@example.com", "steady").await;
-    let imp = |tok: String, minutes: i64| {
-        let app = app.clone();
+    for h in ["jumper", "bigfirst", "steady"] {
+        signup(&app, &format!("{h}@example.com"), h).await;
+    }
+    // manual imports are disabled over the API; a future (validated) import writes these rows
+    let imp = |who: &'static str, minutes: i32| {
+        let pool = pool.clone();
         async move {
-            let r = api(&app, "POST", "/api/v1/hours/import", Some(&tok),
-                Some(serde_json::json!({ "game_id": "wow", "minutes": minutes, "source": "wow_manual" }))).await;
-            assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+            seed_imported(&pool, who, "wow", "World of Warcraft", minutes).await;
         }
     };
     // jumper: 1,000 h ten days ago, now 1,500 h (500 h in 10 days is more than 20 h a day)
-    imp(jumper.clone(), 60_000).await;
+    imp("jumper", 60_000).await;
     // steady: 1,000 h ten days ago, now 1,100 h (10 h a day: fine)
-    imp(steady.clone(), 60_000).await;
+    imp("steady", 60_000).await;
     sqlx::query("UPDATE hours_entries SET created_at = now() - interval '10 days'")
         .execute(&pool)
         .await
         .unwrap();
-    imp(jumper, 90_000).await;
-    imp(steady, 66_000).await;
+    imp("jumper", 90_000).await;
+    imp("steady", 66_000).await;
     // bigfirst: a first import of 30,000 h at once; 15,000 h would be fine
-    imp(big, 1_800_000).await;
+    imp("bigfirst", 1_800_000).await;
     let found = fraglink_server::alerts::find_unusual_hours(&st)
         .await
         .unwrap();

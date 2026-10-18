@@ -45,7 +45,7 @@ async fn web_login_dashboard_and_forms(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
 
-    // the old estimate form is gone (410), only game counters can be added
+    // the old estimate and manual-import forms are gone (410) and store nothing
     let r = form(
         &app,
         "/web/estimate",
@@ -55,56 +55,37 @@ async fn web_login_dashboard_and_forms(pool: PgPool) {
     )
     .await;
     assert_eq!(r.status, StatusCode::GONE);
-    // a name that isn't on the server's list is refused (nobody creates or names games)
-    let r = form(
-        &app,
-        "/web/import",
-        Some(&cookie),
-        Some(ORIGIN),
-        "game_name=%3Cscript%3Ealert(1)%3C%2Fscript%3E&hours=10&source=manual",
-    )
-    .await;
-    assert!(r.location().starts_with("/?err="), "{}", r.location());
-    let r = form(
-        &app,
-        "/web/import",
-        Some(&cookie),
-        Some(ORIGIN),
+    for body in [
         "game_name=World+of+Warcraft&hours=250.5&source=wow_manual",
-    )
-    .await;
-    assert!(r.location().starts_with("/?msg="), "{}", r.location());
-    let r = form(
-        &app,
-        "/web/import",
-        Some(&cookie),
-        Some(ORIGIN),
-        "game_name=World+of+Warcraft&hours=-3&source=manual",
-    )
-    .await;
-    assert!(r.location().starts_with("/?err="), "{}", r.location());
-    // CSRF: cookie-authenticated form from another origin
-    let r = form(
-        &app,
-        "/web/import",
-        Some(&cookie),
-        Some("https://evil.example"),
-        "game_name=X&hours=1&source=manual",
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::FORBIDDEN);
-    // and the JSON API refuses cookie auth from another origin too
+        "game_name=%3Cscript%3Ealert(1)%3C%2Fscript%3E&hours=10&source=manual",
+    ] {
+        let r = form(&app, "/web/import", Some(&cookie), Some(ORIGIN), body).await;
+        assert_eq!(r.status, StatusCode::GONE, "{}", r.text);
+        assert!(r.text.contains("Manual hour imports are disabled."));
+        assert!(!r.text.contains("script"));
+    }
     let r = send(
         &app,
         axum::http::Request::post("/api/v1/hours/import")
             .header("cookie", format!("fl_session={cookie}"))
-            .header("origin", "https://evil.example")
             .header("content-type", "application/json")
-            .body(axum::body::Body::from(r#"{"game_name":"X","minutes":60}"#))
+            .body(axum::body::Body::from(
+                r#"{"game_name":"World of Warcraft","minutes":60}"#,
+            ))
             .unwrap(),
     )
     .await;
-    assert_eq!(r.status, StatusCode::FORBIDDEN);
+    assert_eq!(r.status, StatusCode::GONE);
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM hours_entries")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0, "nothing stored");
+    // a counter saved before imports were disabled still shows and can be deleted
+    seed_imported(&pool, "webuser", "wow", "World of Warcraft", 15030).await;
+    // the account page no longer offers the form
+    let home = page(&app, "/", Some(&cookie)).await;
+    assert!(!home.text.contains("action=\"/web/import\""));
 
     let home = page(&app, "/?msg=%3Cb%3Ehi%3C%2Fb%3E", Some(&cookie)).await;
     assert_eq!(home.status, StatusCode::OK);
@@ -118,7 +99,7 @@ async fn web_login_dashboard_and_forms(pool: PgPool) {
     assert!(e.text.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
     assert!(!e.text.contains("<script>"));
     assert!(home.text.contains("&lt;b&gt;hi&lt;/b&gt;"));
-    // "World of Warcraft" matched the known game, shown as Imported, 250.5 h
+    // the old entry shows as Imported, 250.5 h
     assert!(home.text.contains("◆ 250.5h"), "{}", home.text);
     assert!(!home.text.contains("Estimate"), "{}", home.text);
     let gid: String =

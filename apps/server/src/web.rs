@@ -87,7 +87,7 @@ pub fn routes() -> Router<AppState> {
         .route("/web/steam/link", post(web_steam_link))
         .route("/web/steam/sync", post(web_steam_sync))
         .route("/web/estimate", post(api::estimates_gone))
-        .route("/web/import", post(web_import))
+        .route("/web/import", post(api::imports_gone))
         .route("/web/hours/{id}/delete", post(web_delete_hours))
         .route("/web/devices/{id}/revoke", post(web_revoke_device))
         .route("/web/friends/add", post(web_friend_add))
@@ -318,9 +318,8 @@ async fn home(
         esc(steam::PRIVATE_HELP)
     );
     // import
-    b += r#"<div class="card"><h2>Add hours from before Fraglink</h2>
-<form method="post" action="/web/import"><b>Game counter</b> (◆, e.g. /played): <input name="game_name" placeholder="Game" required> <input name="hours" type="number" step="0.1" min="0.1" placeholder="hours" style="width:6em" required>
-<select name="source"><option value="manual">typed in</option><option value="wow_manual">WoW /played</option><option value="xbox_recap">Xbox recap</option></select> <button>Save</button></form>"#;
+    // imported hours saved before manual imports were disabled: list + delete only
+    b += r#"<div class="card"><h2>Imported hours</h2><p><small class="m">Manual hour imports are disabled.</small></p>"#;
     if !entries.is_empty() {
         b += "<table style=\"margin-top:10px\">";
         for (id, name, tier, source, minutes, note) in &entries {
@@ -751,39 +750,6 @@ async fn web_steam_sync(State(st): State<AppState>, headers: HeaderMap, a: AuthU
             "Imported {} Steam games ({} hours).",
             r.games,
             hours::group(r.minutes_total / 60)
-        )),
-        Err(e) => back_err(e),
-    }
-}
-
-#[derive(Deserialize)]
-struct ImportForm {
-    game_name: String,
-    hours: f64,
-    source: String,
-}
-
-async fn web_import(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    a: AuthUser,
-    Form(f): Form<ImportForm>,
-) -> Response {
-    if let Err(e) = same_origin(&headers, &st) {
-        return e.into_response();
-    }
-    let req = api::ImportReq {
-        game_id: api::known_game_by_name(&st, &f.game_name),
-        game_name: Some(f.game_name.clone()),
-        minutes: (f.hours * 60.0).round() as i64,
-        source: f.source,
-        note: None,
-    };
-    match api::import_for(&st, a.user.id, req).await {
-        Ok(v) => back(&format!(
-            "Saved {} for {} (self-reported).",
-            hrs(v["minutes"].as_i64().unwrap_or(0)),
-            f.game_name.trim()
         )),
         Err(e) => back_err(e),
     }

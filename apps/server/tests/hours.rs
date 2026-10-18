@@ -48,163 +48,132 @@ async fn estimates_are_gone_and_old_rows_never_count(pool: PgPool) {
     let p = api(&app, "GET", "/api/v1/users/hours/profile", Some(&t), None).await;
     assert!(!p.text.contains("estimated"), "{}", p.text);
     // with real hours the row shows only those, and old builds still get estimated_min = 0
-    api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_id": "wow", "minutes": 600 })),
-    )
-    .await;
+    seed_imported(&pool, "hours", "wow", "World of Warcraft", 600).await;
     let s = api(&app, "GET", "/api/v1/stats", Some(&t), None)
         .await
         .json();
     assert_eq!(s["games"][0]["display_min"], 600, "{s}");
     assert_eq!(s["games"][0]["display_tier"], "imported");
     assert_eq!(s["games"][0]["estimated_min"], 0);
-
-    // game lookup and note checks (shared with imports)
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_name": "My Totally Made Up Game", "minutes": 60 })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
-    assert_eq!(r.json()["error"], "unknown_game", "{}", r.text);
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_name": "  ", "minutes": 60 })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST);
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_id": "no-such-game", "minutes": 60 })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST);
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_id": "wow", "note": "x".repeat(141), "minutes": 60 })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST);
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn imports_and_delete(pool: PgPool) {
+async fn manual_imports_are_disabled_and_old_rows_stay(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let t = signup(&app, "i@example.com", "importer").await;
     let other = signup(&app, "o@example.com", "other").await;
-    // known signature id works even before anyone uploaded that game
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_id": "wow", "minutes": 120000, "source": "wow_manual" })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-    let v = r.json();
-    assert_eq!(v["self_reported"], true);
-    let id = v["id"].as_str().unwrap().to_string();
-    for (minutes, source) in [
-        (0, "manual"),
-        (100, "wow_addon"),
-        (100, "estimator"),
-        (30_000_000, "manual"),
-        (3_000_001, "manual"), // over 50,000 hours for one game
+    let id = seed_imported(&pool, "importer", "wow", "World of Warcraft", 120000).await;
+    // 410 for every body, signed in or not; nothing is written or changed
+    for (tok, body) in [
+        (
+            Some(t.as_str()),
+            json!({ "game_id": "wow", "minutes": 600, "source": "wow_manual" }),
+        ),
+        (
+            Some(t.as_str()),
+            json!({ "game_name": "World of Warcraft", "minutes": 3_000_000 }),
+        ),
+        (Some(t.as_str()), json!({ "nonsense": true })),
+        (None, json!({ "game_id": "wow", "minutes": 60 })),
     ] {
-        let r = api(
-            &app,
-            "POST",
-            "/api/v1/hours/import",
-            Some(&t),
-            Some(json!({ "game_id": "wow", "minutes": minutes, "source": source })),
-        )
-        .await;
-        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{minutes} {source}");
+        let r = api(&app, "POST", "/api/v1/hours/import", tok, Some(body)).await;
+        assert_eq!(r.status, StatusCode::GONE, "{}", r.text);
+        assert_eq!(r.json()["error"], "imports_disabled");
+        assert_eq!(r.json()["message"], "Manual hour imports are disabled.");
     }
-    // exactly 50,000 hours is the most one game takes
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_id": "wow", "minutes": 3_000_000, "source": "manual" })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-    let max_id = r.json()["id"].as_str().unwrap().to_string();
-    let r = api(
-        &app,
-        "DELETE",
-        &format!("/api/v1/hours/{max_id}"),
-        Some(&t),
-        None,
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::NO_CONTENT);
-    // another user's manual game can't be targeted
-    let mine = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&t),
-        Some(json!({ "game_name": "Secret Game", "minutes": 60 })),
-    )
-    .await
-    .json();
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/import",
-        Some(&other),
-        Some(json!({ "game_id": mine["game_id"], "minutes": 60 })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    let rows: Vec<(uuid::Uuid, i32)> = sqlx::query_as("SELECT id, minutes FROM hours_entries")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![(id, 120000)],
+        "the old row is untouched, nothing new"
+    );
+    // the old row still counts, and its owner (only) can still delete it
+    let s = api(&app, "GET", "/api/v1/stats", Some(&t), None)
+        .await
+        .json();
+    assert_eq!(s["games"][0]["display_min"], 120000, "{s}");
+    let del = |tok: String| {
+        let app = app.clone();
+        async move {
+            api(
+                &app,
+                "DELETE",
+                &format!("/api/v1/hours/{id}"),
+                Some(&tok),
+                None,
+            )
+            .await
+            .status
+        }
+    };
+    assert_eq!(del(other).await, StatusCode::NOT_FOUND);
+    assert_eq!(del(t).await, StatusCode::NO_CONTENT);
+}
 
-    assert_eq!(
-        api(
-            &app,
-            "DELETE",
-            &format!("/api/v1/hours/{id}"),
-            Some(&other),
-            None
-        )
-        .await
-        .status,
-        StatusCode::NOT_FOUND
-    );
-    assert_eq!(
-        api(
-            &app,
-            "DELETE",
-            &format!("/api/v1/hours/{id}"),
-            Some(&t),
-            None
-        )
-        .await
-        .status,
-        StatusCode::NO_CONTENT
-    );
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM hours_entries WHERE game_id = 'wow'")
+/// The import checks stay for a future validated WoW addon import (not routed today).
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn import_checks_kept_for_a_future_addon_import(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    signup(&app, "i@example.com", "importer").await;
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'importer'")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(n, 0);
+    let imp = |v: serde_json::Value| {
+        let st = st.clone();
+        async move {
+            fraglink_server::api::import_for(&st, uid, serde_json::from_value(v).unwrap()).await
+        }
+    };
+    // a known signature id works even before anyone played that game
+    let v = imp(json!({ "game_id": "wow", "minutes": 120000, "source": "wow_manual" }))
+        .await
+        .unwrap();
+    assert_eq!(v["self_reported"], true);
+    // exactly 50,000 hours is the most one game takes
+    assert!(imp(json!({ "game_id": "wow", "minutes": 3_000_000 }))
+        .await
+        .is_ok());
+    for (v, code) in [
+        (json!({ "game_id": "wow", "minutes": 0 }), "invalid_minutes"),
+        (
+            json!({ "game_id": "wow", "minutes": 3_000_001 }),
+            "invalid_minutes",
+        ),
+        (
+            json!({ "game_id": "wow", "minutes": 30_000_000 }),
+            "invalid_minutes",
+        ),
+        (
+            json!({ "game_id": "wow", "minutes": 100, "source": "wow_addon" }),
+            "invalid_source",
+        ),
+        (
+            json!({ "game_id": "wow", "minutes": 100, "source": "estimator" }),
+            "invalid_source",
+        ),
+        (
+            json!({ "game_name": "My Totally Made Up Game", "minutes": 60 }),
+            "unknown_game",
+        ),
+        (
+            json!({ "game_id": "no-such-game", "minutes": 60 }),
+            "unknown_game",
+        ),
+    ] {
+        let e = imp(v.clone()).await.unwrap_err();
+        assert_eq!(e.status, StatusCode::BAD_REQUEST, "{v}");
+        assert_eq!(e.code, code, "{v}");
+    }
+    let e = imp(json!({ "game_id": "wow", "note": "x".repeat(141), "minutes": 60 }))
+        .await
+        .unwrap_err();
+    assert_eq!(e.status, StatusCode::BAD_REQUEST);
+    assert!(imp(json!({ "game_name": "  ", "minutes": 60 }))
+        .await
+        .is_err());
 }
