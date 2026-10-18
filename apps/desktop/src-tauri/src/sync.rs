@@ -349,6 +349,21 @@ pub fn announcement_toast(
     })
 }
 
+/// Where a new sign-in, sign-up or pairing goes: always https://playfraglink.com. The login
+/// screen and Options no longer have a Server field (0.3.0-beta.3), and the address the UI sends
+/// is ignored. Developers can point a build elsewhere with the `FRAGLINK_SERVER` environment
+/// variable.
+pub fn sign_in_base(_from_ui: &str) -> Result<String, String> {
+    match std::env::var("FRAGLINK_SERVER")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+    {
+        Some(dev) => fraglink_sync::normalize_server_url(&dev)
+            .ok_or_else(|| format!("FRAGLINK_SERVER isn't a valid http(s) address: {dev}")),
+        None => Ok(DEFAULT_SERVER.to_string()),
+    }
+}
+
 /// Username + password sign-in (or account creation when `create`). Blocking: call off the UI thread.
 pub fn password_sign_in(
     app: &AppHandle,
@@ -357,8 +372,7 @@ pub fn password_sign_in(
     password: &str,
     create: Option<(&str, &str)>,
 ) -> Result<(), String> {
-    let base = fraglink_sync::normalize_server_url(server_url)
-        .ok_or_else(|| "Enter a server address starting with http:// or https://".to_string())?;
+    let base = sign_in_base(server_url)?;
     cancel_pairing(app);
     let client = Client::new(&base, None);
     let res = match create {
@@ -394,8 +408,7 @@ pub fn mfa_sign_in(
     ticket: &str,
     code: &str,
 ) -> Result<(), String> {
-    let base = fraglink_sync::normalize_server_url(server_url)
-        .ok_or_else(|| "Enter a server address starting with http:// or https://".to_string())?;
+    let base = sign_in_base(server_url)?;
     let client = Client::new(&base, None);
     let (token, user) = client.mfa_login(ticket, code).map_err(|e| match e {
         SyncError::Unauthorized => {
@@ -411,8 +424,7 @@ pub fn mfa_sign_in(
 /// Start device pairing against `server_url`. Runs in the background: opens the
 /// browser on the approval page and polls until approved, expired or cancelled.
 pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
-    let base = fraglink_sync::normalize_server_url(server_url)
-        .ok_or_else(|| "Enter a server address starting with http:// or https://".to_string())?;
+    let base = sign_in_base(server_url)?;
     let st = app.state::<AppState>();
     let gen = st.sync.pairing_gen.fetch_add(1, Ordering::SeqCst) + 1;
     *st.sync.pairing_error.lock().unwrap() = None;
@@ -503,6 +515,21 @@ pub fn sign_out(app: &AppHandle) {
 #[cfg(test)]
 mod server_default_tests {
     use super::*;
+
+    #[test]
+    fn sign_in_ignores_the_ui_server_and_uses_playfraglink() {
+        if std::env::var("FRAGLINK_SERVER").is_ok() {
+            return; // a developer override is set on this machine
+        }
+        for ui in [
+            "",
+            "http://localhost:8787",
+            "http://119.42.54.86",
+            "not a url",
+        ] {
+            assert_eq!(sign_in_base(ui).unwrap(), "https://playfraglink.com");
+        }
+    }
 
     #[test]
     fn announcement_toast_shows_once_and_keeps_only_https_links() {

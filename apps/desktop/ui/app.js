@@ -349,7 +349,8 @@
   /* Signed out: the login form sits in the main window (like the classic client). Fraglink signs
      in through the browser (device pairing), so there's no password box here. */
   const signedOut = () => params.get('login') === '1' || (TAURI && !!LIVE.friends && !LIVE.friends.signed_in);
-  const srvVal = () => ($('#lg-server') && $('#lg-server').value.trim()) || (LIVE.sync && LIVE.sync.server) || '';
+  // No Server field any more: the app always signs in to https://playfraglink.com (sync::sign_in_base).
+  const srvVal = () => 'https://playfraglink.com';
   function loginHtml() {
     const sy = LIVE.sync || {}, p = sy.pairing, err = sy.pairing_error || sy.last_error;
     const used = jsonList('login_history'), last = SET().login_last || used[0] || '';
@@ -399,7 +400,6 @@
         <label class="lg-tick"><input type="checkbox" id="lg-auto" ${setOn('auto_login') ? 'checked' : ''} /> Auto-Login</label>
         <a class="lg-a lg-alt" data-action="login-browser">Sign in with your browser instead</a>`;
     }
-    if (!p) h += `<details class="lg-srv"><summary>Server</summary><input id="lg-server" maxlength="200" value="${esc(sy.server || '')}" /></details>`;
     if (state.loginBusy) h += `<div class="lg-status">${esc(state.loginBusy)}</div>`;
     if (state.loginErr) h += `<div class="bad">${esc(state.loginErr)}</div>`;
     if (err) h += `<div class="bad">${esc(err)}</div>`;

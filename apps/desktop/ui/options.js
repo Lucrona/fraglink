@@ -284,7 +284,6 @@
         <div class="btns"><button type="button" data-do="sync-cancel">Cancel</button></div>`;
     } else {
       h = `Off: nothing is tracked. Sign in to count your hours and see your friends.
-        <input id="sync-server" maxlength="200" value="${esc(s.server)}" title="Server address" />
         <div class="btns"><button type="button" data-do="sync-signin">Sign in</button></div>`;
     }
     if (err) h += `<div class="bad">${esc(err)}</div>`;
@@ -366,7 +365,7 @@
     'pw-change': changePassword,
     'em-change': changeEmail,
     'nk-change': changeNickname,
-    'sync-signin': () => FLB.syncSignIn($('#sync-server').value.trim()).then(renderSync).catch(fail),
+    'sync-signin': () => FLB.syncSignIn('https://playfraglink.com').then(renderSync).catch(fail),
     'sync-cancel': () => FLB.syncCancel().then(renderSync).catch(fail),
     'sync-now': () => FLB.syncNow().then(() => setTimeout(renderSync, 3000)).catch(fail),
     'sync-signout': () => FLB.syncSignOut().then(renderSync).catch(fail),
