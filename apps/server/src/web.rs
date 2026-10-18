@@ -132,7 +132,11 @@ header b{{font-size:18px;letter-spacing:1px;color:#fff}} header small{{color:#9f
 main{{max-width:880px;margin:18px auto;padding:0 16px}} a{{color:#04c1fa}}
 .card{{background:#12254a;border:1px solid #274b8a;border-radius:6px;padding:12px 16px;margin:0 0 14px}}
 h1{{font-size:20px}} h2{{font-size:15px;margin:0 0 8px;color:#fff}}
-input,select{{font:inherit;padding:5px 7px;border-radius:4px;border:1px solid #3a5ea0;background:#0b1830;color:#fff}}
+input,select{{font:inherit;padding:5px 7px;border-radius:4px;border:1px solid #3a5ea0;background:#0b1830;color:#fff;height:32px;box-sizing:border-box;color-scheme:dark}}
+select{{appearance:none;-webkit-appearance:none;padding-right:24px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239fb3d6' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;cursor:pointer}}
+select:focus,input:focus{{outline:none;border-color:#04c1fa;box-shadow:0 0 0 2px #04c1fa33}}
+.dob{{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.35fr);gap:8px;width:100%;margin:4px 0}}
+.dob select{{width:100%;min-width:0}}
 button{{font:inherit;padding:5px 12px;border-radius:4px;border:1px solid #04c1fa;background:#1b4a8a;color:#fff;cursor:pointer}}
 table{{width:100%;border-collapse:collapse}} td,th{{padding:4px 6px;border-bottom:1px solid #22406f;text-align:left}}
 th{{color:#9fb3d6;font-weight:normal}} td.n{{text-align:right;white-space:nowrap}}

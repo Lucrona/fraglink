@@ -161,7 +161,11 @@ async fn render_for(st: &AppState, handle: &str) -> ApiResult<Option<Vec<u8>>> {
         .bind(&hidden)
         .fetch_one(&st.db)
         .await?;
-        line2 = format!("{} this week  ·  {} total", hrs(w), hrs(total));
+        line2 = if total <= 0 && w <= 0 {
+            "Just joined  ·  playfraglink.com".into()
+        } else {
+            format!("{} this week  ·  {} total", hrs(w), hrs(total))
+        };
         if !playing && share && show_game {
             let last: Option<String> = sqlx::query_scalar(
                 "SELECT game_id FROM sessions WHERE user_id = $1 AND NOT (game_id = ANY($2)) ORDER BY ended_at DESC LIMIT 1",
@@ -482,6 +486,24 @@ mod tests {
             preset: None,
             art: None,
         });
+        let i = image::load_from_memory(&b).unwrap();
+        assert_eq!((i.width(), i.height()), (460, 100));
+    }
+
+    #[test]
+    fn renders_empty_new_account_card() {
+        let b = super::render(&super::Card {
+            name: "Newbie".into(),
+            handle: "newbie".into(),
+            line1: "Offline".into(),
+            playing: false,
+            line2: "Just joined  ·  playfraglink.com".into(),
+            color: 0,
+            avatar: None,
+            preset: None,
+            art: None,
+        });
+        assert_eq!(&b[..4], b"\x89PNG");
         let i = image::load_from_memory(&b).unwrap();
         assert_eq!((i.width(), i.height()), (460, 100));
     }

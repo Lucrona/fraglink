@@ -179,6 +179,11 @@ function cropEditor(file, onSave) {
 /* One public base for profile + signature links (server's FRAGLINK_SITE_URL). */
 const siteBase = () => ((me() && me().site_url) || location.origin).replace(/\/$/, "");
 const sigUrl = h => siteBase() + "/api/v1/sig/" + encodeURIComponent(h) + ".png";
+/** Signature <img> with a friendly placeholder if the PNG 404s (private, test, or network). */
+const sigPreview = (handle, cls = "sigimg") => {
+  const src = "/api/v1/sig/" + encodeURIComponent(handle) + ".png" + sigBust();
+  return `<span class="sigprev"><img class="${cls}" src="${src}" alt="" width="460" height="100" onerror="this.parentNode.classList.add('is-broken')"><span class="sigph">Signature preview will show here for public profiles. New accounts get a default card straight away.</span></span>`;
+};
 const sigBust = () => "?t=" + Math.floor(Date.now() / 30000);
 function avatar(a, size, extra) {
   a = a || { kind: "default", color: 0 };
@@ -624,7 +629,7 @@ pages.profile = async () => {
   const codes = [["Link", shareUrl], ["BBCode", `[url=${shareUrl}][img]${sig}[/img][/url]`], ["HTML", `<a href="${shareUrl}"><img src="${sig}" alt="${p.display_name || p.handle} on Fraglink" width="460" height="100"></a>`]];
   const miniprofile = p.public_profile
     ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere (forums, blogs, Discord). It updates live.</div>
-        <img class="sigimg" src="/api/v1/sig/${encodeURIComponent(p.handle)}.png${sigBust()}" alt="Signature for ${esc(p.handle)}" width="460" height="100">
+        ${sigPreview(p.handle)}
         <div class="mpcodes">${codes.map(([l, v]) => `<div class="code"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
     : self ? sec("Miniprofile", `<div class="body empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></div>`) : "";
 
@@ -946,7 +951,7 @@ pages.settings = async () => {
       ${row("In the app", `<span class="sub">Whether friends see the game you're in right now (and friends of friends) is set per PC in the desktop app: Options &gt; Privacy. The switches on this page show there too.</span>`)}
       ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
       ${row("Your link", `<div class="share"><input class="t" readonly value="${esc(share)}"><button class="btn sm" type="button" data-copy="${esc(share)}">Copy</button></div>`)}
-      ${!priv ? row("Signature image", `<img class="sigimg" src="/api/v1/sig/${encodeURIComponent(u.handle)}.png${sigBust()}" alt="" width="460" height="100"><div class="share" style="margin-top:6px"><input class="t" readonly value="${esc(sigUrl(u.handle))}"><button class="btn sm" type="button" data-copy="${esc(sigUrl(u.handle))}">Copy</button></div>`, "Paste the image link into forum signatures. It refreshes within about 30 seconds.") : ""}
+      ${!priv ? row("Signature image", `${sigPreview(u.handle)}<div class="share" style="margin-top:6px"><input class="t" readonly value="${esc(sigUrl(u.handle))}"><button class="btn sm" type="button" data-copy="${esc(sigUrl(u.handle))}">Copy</button></div>`, "Paste the image link into forum signatures. It refreshes within about 30 seconds. New accounts show a default card until you have hours.") : ""}
       </div></form>`;
   }
   function notificationsTab() {
