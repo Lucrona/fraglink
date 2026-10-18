@@ -366,6 +366,7 @@
         <p class="lg-dim">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
         <label class="lg-lbl" for="lg-code">Code</label>
         <div class="lg-row"><input id="lg-code" maxlength="16" autocomplete="one-time-code" /><button class="hw" type="button" data-action="mfa-go">Verify</button></div>
+        <p class="lg-dim">Lost your authenticator and backup codes? Email <a href="#" data-action="mail-support">support@playfraglink.com</a></p>
         <div class="af-btns"><button class="hw" type="button" data-action="login-back">Cancel</button></div>`;
     }
     else if (state.loginMode === 'create') {
@@ -1202,6 +1203,7 @@
       try { await FLB.syncSignup(srvVal(), u, pw, em, birth); state.loginMode = null; } catch (e) { state.loginErr = String(e && e.message || e); }
       state.loginBusy = ''; refreshFriends();
     },
+    'mail-support': () => { const u = 'mailto:support@playfraglink.com'; if (FLB.openUrl) FLB.openUrl(u).catch(() => {}); else open(u, '_blank'); },
     'login-back': () => { state.loginMode = null; state.mfaTicket = null; state.loginErr = ''; render(); },
     'login-browser': () => { state.loginErr = ''; FLB.syncSignIn(srvVal()).then(refreshFriends).catch(toastErr); },
     'login-cancel': () => FLB.syncCancel().then(refreshFriends).catch(toastErr),

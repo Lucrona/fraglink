@@ -525,10 +525,15 @@ pub async fn announcement(app: AppHandle) -> CmdResult<serde_json::Value> {
     account_call(app, |c| c.announcement()).await
 }
 
-/// Opens the announcement's link (https only; staff set it on the website).
+/// Opens the announcement's link (https only; staff set it on the website) or the support mailto.
 #[tauri::command]
 pub fn open_link(url: String) -> CmdResult<()> {
-    if !url.starts_with("https://") || url.len() > 300 || url.chars().any(|c| c.is_whitespace()) {
+    // Web links, plus the one support address (two-step sign-in help).
+    let mail = url == "mailto:support@playfraglink.com";
+    if !(mail || url.starts_with("https://"))
+        || url.len() > 300
+        || url.chars().any(|c| c.is_whitespace())
+    {
         return Err("not a web link".into());
     }
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(err)

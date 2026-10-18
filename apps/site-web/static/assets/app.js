@@ -529,12 +529,31 @@ pages.forgot = () => {
 
 pages.reset = () => {
   const f = $("#reset"), err = $("#err"), t = qs("token");
-  if (!t) { showErr(err, new Error("This page needs the link from your email.")); return; }
+  const done = $("#reset-done"), msg = $("#done-msg"), note = $("#done-note"), links = $("#done-links");
+  // The form goes away for good (success or a dead link) and the panel says what happened.
+  const finish = (ok, text, hint, html) => {
+    f.hidden = true; done.hidden = false;
+    if (ok) showOk(msg, text); else showErr(msg, new Error(text));
+    note.textContent = hint || ""; note.hidden = !hint;
+    links.innerHTML = html;
+  };
+  const deadLink = text => finish(false, text, "Reset links work once, for 1 hour. You can ask for a new one.",
+    `<a class="btn dl" href="/forgot">Get a new reset link</a><a href="/login" style="margin-left:auto">Back to sign in</a>`);
+  if (!t) { deadLink("This page needs the link from your reset email."); return; }
+  const b = $("button", f);
   f.addEventListener("submit", async e => {
     e.preventDefault(); err.hidden = true;
     if (f.password.value !== f.password2.value) return showErr(err, new Error("The passwords don't match."));
-    try { await api("/auth/reset", { method: "POST", body: { token: t, password: f.password.value } }); clearSession(); f.hidden = true; showOk(err, "Password changed. You can sign in now."); err.insertAdjacentHTML("afterend", `<p><a class="btn dl" href="/login">Sign in</a></p>`); }
-    catch (x) { showErr(err, x); }
+    b.disabled = true;
+    try {
+      await api("/auth/reset", { method: "POST", body: { token: t, password: f.password.value } });
+      clearSession(); f.reset();
+      finish(true, "Your password has been changed.", "You've been signed out everywhere else, including the app. Sign in with your new password.",
+        `<a class="btn dl" href="/login">Sign in</a>`);
+    } catch (x) {
+      if (x.code === "bad_token") deadLink("That reset link has expired or was already used.");
+      else { showErr(err, x.status >= 500 ? new Error("Something went wrong on our side and your password wasn't changed. Please try again in a minute.") : x); b.disabled = false; }
+    }
   });
 };
 
