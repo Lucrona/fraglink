@@ -11,8 +11,10 @@ Everything below is already set up; this page is for redeploys and recovery.
 | Reverse proxy | Caddy, `/etc/caddy/Caddyfile`: HTTPS on `playfraglink.com` (Let's Encrypt, automatic), `www` redirects to it, plain HTTP on the IP kept for old clients |
 | Website | `/var/www/fraglink-beta` (`apps/site-web/`), served on `https://playfraglink.com` (public, since 2026-10-18) and `https://beta.playfraglink.com` (gated); `/var/www/fraglink-site` keeps `/brand/` and the old coming-soon files |
 | Database | PostgreSQL 16, database and role `fraglink`, localhost only |
-| Backups | `/var/backups/fraglink/fraglink-YYYYMMDD-HHMMSS.dump` nightly at 03:30 (`fraglink-backup.timer`), 14 days kept |
-| Copies of the unit files, Caddyfile, backup script | `deploy/` in this repo |
+| Backups | `/var/backups/fraglink/fraglink-YYYYMMDD-HHMMSS.dump` nightly at 03:30 (`fraglink-backup.timer`). The same job deletes everything in that folder 14 days old: nightly dumps and the manual `pre-*` dumps/folders, `*.www.tgz` and `announcements-*.csv` taken before deploys |
+| Country lookup | `/var/lib/fraglink/geo/country.mmdb` (DB-IP "IP to Country Lite", CC BY 4.0), refreshed monthly on the 3rd by `fraglink-geoip.timer` (`/usr/local/sbin/fraglink-geoip`); the server reloads it without a restart |
+| Data retention jobs | in the server, hourly: accounts deleted 7 days after the request; sign-ins deleted 30 days after they were revoked or expired; app devices unused for 180 days deleted |
+| Copies of the unit files, Caddyfile, backup and country-database scripts | `deploy/` in this repo |
 
 Access: SSH key only (`~/.ssh/fraglink_binarylane`) as `fraglink` (passwordless sudo). Root and password logins are off.
 Firewall (ufw) allows 22, 80 and 443 only; fail2ban watches sshd; unattended-upgrades installs security updates.

@@ -179,24 +179,21 @@
     { id: 'lu', name: 'lumen', kind: 'off', last: '1 week ago', av: '#444', week: 0, total: 55 },
   ];
   const ME = { name: 'Lucrona', since: 'Mar 2005', game: 'hl2', started: Date.now() - (47 * 60 + 12) * 1000 };
-  // tier: tracked (Fraglink/Steam official) | imported (game's own counter, e.g. WoW /played) | estimated (history calculator)
+  // tier: tracked (Fraglink/Steam official) | imported (game's own counter, e.g. WoW /played)
   const MY_HOURS = [
     { game: 'hl2', week: 9.6, today: 1.6, total: 311.4, tier: 'tracked', src: 'Steam playtime', last: 'today' },
     { game: 'wow', week: 6.8, today: 1.1, total: 11214, tier: 'imported', src: '/played via Fraglink addon · 6 characters', last: 'today', note: 'Raided every night through TBC and Wrath' },
     { game: 'wc3', week: 3.2, today: 0, total: 544.0, tier: 'tracked', src: 'Fraglink tracked', last: 'yesterday' },
     { game: 'bf2', week: 2.7, today: 0, total: 188.9, tier: 'tracked', src: 'Fraglink tracked', last: 'Thu' },
-    { game: 'cs', week: 0.0, today: 0, total: 4400, tier: 'estimated', src: 'Estimated · 2003–2009', last: 'Sep 18' },
-    { game: 'd2', week: 0.0, today: 0, total: 1200, tier: 'estimated', src: 'Estimated · 2001–2004', last: '2004' },
     { game: 'q3', week: 0.0, today: 0, total: 260.5, tier: 'tracked', src: 'Fraglink tracked', last: 'Jul 12' },
     { game: 'rust', week: 0.0, today: 0, total: 97.2, tier: 'tracked', src: 'Steam playtime', last: 'May 2' },
   ];
-  const TIERS = { tracked: { label: 'Tracked', sym: '●' }, imported: { label: 'Imported', sym: '◆' }, estimated: { label: 'Estimated', sym: '~' } };
+  const TIERS = { tracked: { label: 'Tracked', sym: '●' }, imported: { label: 'Imported', sym: '◆' } };
   const sumBy = (arr, f) => arr.reduce((a, b) => a + f(b), 0);
-  const VERIFIED = sumBy(MY_HOURS.filter(r => r.tier !== 'estimated'), r => r.total);
-  const ESTIMATED = sumBy(MY_HOURS.filter(r => r.tier === 'estimated'), r => r.total);
+  const VERIFIED = sumBy(MY_HOURS, r => r.total);
   const nf = n => Math.round(n).toLocaleString('en-AU');
-  function tierMark(t) { const x = TIERS[t]; return `<i class="tm tm-${t}" data-tip="${x.label}">${t === 'estimated' ? '' : x.sym}</i>`; }
-  function fmtTotalShort(r) { return r.tier === 'estimated' ? `<span class="est">~${nf(r.total)}h</span>` : `${nf(r.total)}h${tierMark(r.tier)}`; }
+  function tierMark(t) { const x = TIERS[t]; return `<i class="tm tm-${t}" data-tip="${x.label}">${x.sym}</i>`; }
+  function fmtTotalShort(r) { return `${nf(r.total)}h${tierMark(r.tier)}`; }
   // friends' activity (day-grouped), newest first
   const ACTIVITY = [
     { day: 'Today', items: [
@@ -506,28 +503,26 @@
     h += `<div class="st-link"><a data-action="tag-game">&raquo; This is a game…</a> &nbsp; <a data-action="my-stats">&raquo; Full stats</a></div></div>`;
     list.innerHTML = h;
   }
-  /* Account totals from the server (all devices + Steam + imports + estimates). */
-  // Same rounding as the server: estimates over 1,000 h go to the nearest 100.
-  const roundEst = h => h > 1000 ? Math.floor((h + 50) / 100) * 100 : h;
+  /* Account totals from the server (all devices + Steam + imports). */
   function serverStatsHtml(g) {
     if (!realMode()) return '';
     const sv = LIVE.server;
     let h = `<div class="xf-sec s-now"><i class="tri"></i>My Account (all devices)</div>`;
     if (!sv) return h + `<div class="fl-empty">Server totals unavailable right now, so this shows this PC only.</div>`;
     const local = {}; for (const r of g.top || []) local[r.game_id] = r.total_seconds / 60;
-    const rows = (sv.games || []).filter(r => r.display_min > 0 || r.estimated_min > 0).slice(0, 8);
+    const rows = (sv.games || []).filter(r => r.display_min > 0).slice(0, 8);
     if (!rows.length) h += `<div class="fl-empty">Nothing on your account yet. Hours are recorded live while you play.</div>`;
     h += rows.map(r => {
-      const id = ensureGame(r.game_id, r.name), est = r.display_min <= 0;
+      const id = ensureGame(r.game_id, r.name);
       // Never show less than this PC already knows (the live session is only saved when it ends).
-      const mins = est ? r.estimated_min : Math.max(r.display_min, r.display_tier === 'tracked' ? (local[r.game_id] || 0) : 0);
-      const tot = est ? `<span class="est">~${nf(roundEst(Math.floor(mins / 60)))}h</span>` : `${fmtHrs(mins * 60)}h${tierMark(r.display_tier)}`;
+      const mins = Math.max(r.display_min, r.display_tier === 'tracked' ? (local[r.game_id] || 0) : 0);
+      const tot = `${fmtHrs(mins * 60)}h${tierMark(r.display_tier === 'imported' ? 'imported' : 'tracked')}`;
       const unl = r.game_id.startsWith('exe:') && r.name === 'Unlisted game';
-      const tip = unl ? 'A program you tagged as a game. Friends see "Playing a game" until it is added to Fraglink\'s game list; its hours stay with it.' : `${r.name} · tracked ${nf(r.tracked_min / 60)}h · imported ${nf(r.imported_min / 60)}h · estimated ~${nf(r.estimated_min / 60)}h`;
+      const tip = unl ? 'A program you tagged as a game. Friends see "Playing a game" until it is added to Fraglink\'s game list; its hours stay with it.' : `${r.name} · tracked ${nf(r.tracked_min / 60)}h · imported ${nf(r.imported_min / 60)}h`;
       return `<div class="xf-row st-row" data-game="${esc(id)}" data-tip="${esc(tip)}"><span class="c-name st-g"><i class="gi">${gameIcon(id)}</i><span class="nm">${esc(r.name.replace(/:.*/, ''))}</span></span><span class="st-w">${r.minutes_7d ? (r.minutes_7d / 60).toFixed(1) : ''}</span><span class="st-t">${tot}</span></div>`;
     }).join('');
     const o = sv.overall || {};
-    h += `<div class="st-legend">${tierMark('tracked')}Tracked ${tierMark('imported')}Imported <span class="est">~</span> Estimated · ${nf((o.verified_min || 0) / 60)} h${o.estimated_min ? ` + ${esc(o.estimated_display || '')} est.` : ''}</div>`;
+    h += `<div class="st-legend">${tierMark('tracked')}Tracked ${tierMark('imported')}Imported · ${nf((o.verified_min || 0) / 60)} h</div>`;
     return h;
   }
   const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -838,7 +833,7 @@
   function homePage() {
     const top = ['wow', 'cs', 'rust', 'hd2', 'wc3', 'bf2', 'd2', 'q3'];
     return `<div class="wp">${webHeader('Home')}<div class="wp-cols"><div class="wp-main">
-      <div class="wp-box"><h3>Your gaming stats and your friends, from anywhere</h3><div class="wp-hero"><svg viewBox="0 0 32 22"><use href="#fl-mark" fill="url(#flNavy)"/><use href="#fl-mark" fill="url(#scan)"/></svg><div><p><b>A tiny tray app logs every hour you play, on every launcher. Your profile, history, recaps and friends live here on the web.</b></p><p>Import Steam hours and estimate your history in two minutes, so your profile is never empty. Export everything, any time.</p><button class="wp-btn" data-action="download">Download Fraglink 1.62</button> <button class="wp-btn alt" data-action="estimate">Estimate your history</button></div></div></div>
+      <div class="wp-box"><h3>Your gaming stats and your friends, from anywhere</h3><div class="wp-hero"><svg viewBox="0 0 32 22"><use href="#fl-mark" fill="url(#flNavy)"/><use href="#fl-mark" fill="url(#scan)"/></svg><div><p><b>A tiny tray app logs every hour you play, on every launcher. Your profile, history, recaps and friends live here on the web.</b></p><p>Import your Steam hours so your profile is never empty. Export everything, any time.</p><button class="wp-btn" data-action="download">Download Fraglink 1.62</button></div></div></div>
       <div class="wp-box"><h3>Top Games This Week</h3><table class="wp-t"><tr><th>#</th><th>Game</th><th>Hours Played</th><th>Gamers</th></tr>${top.map((g, i) => `<tr><td>${i + 1}</td><td><span class="gi">${gameIcon(g)}</span> <a>${esc(GAMES[g].name)}</a></td><td>${(98000 - i * 9133).toLocaleString()}</td><td>${(41000 - i * 3890).toLocaleString()}</td></tr>`).join('')}</table></div>
       </div><div class="wp-side"><div class="wp-box"><h3>Friends Playing Now</h3>${FRIENDS.filter(f => f.kind === 'playing').map(f => `<div class="wp-fr"><span class="gi">${gameIcon(f.game)}</span><a>${esc(f.name)}</a><br><small>${esc(GAMES[f.game].name)}</small></div>`).join('')}</div>
       <div class="wp-box"><h3>Fraglink Stats</h3><p>Registered users: <b>9,812</b><br>Hours tracked this week: <b>120,497</b></p></div></div></div>${webFoot()}</div>`;
@@ -858,7 +853,7 @@
   function signatureSVG(theme) {
     const gold = theme === 'gold';
     const A = gold ? '#ffc233' : '#3fd0ff', B1 = gold ? '#3a2606' : '#0d2a52', B2 = gold ? '#120c04' : '#050b16', L = gold ? '#7a5210' : '#1d4f8a';
-    const wk = [...MY_HOURS].sort((a, b) => b.week - a.week)[0], at = [...MY_HOURS].filter(r => r.tier !== 'estimated').sort((a, b) => b.total - a.total)[0];
+    const wk = [...MY_HOURS].sort((a, b) => b.week - a.week)[0], at = [...MY_HOURS].sort((a, b) => b.total - a.total)[0];
     return `<svg class="sig" viewBox="0 0 440 110" width="440" height="110" font-family="Verdana, 'DejaVu Sans', sans-serif">
       <defs><linearGradient id="sg-${theme}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${B1}"/><stop offset="1" stop-color="${B2}"/></linearGradient>
       <pattern id="sgp-${theme}" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="rgba(255,255,255,.035)"/></pattern></defs>
@@ -871,7 +866,7 @@
       <text x="262" y="44" font-size="8" fill="#8ea3c8" letter-spacing=".6">ALL TIME</text>
       <text x="262" y="57" font-size="10.5" fill="#fff" font-weight="bold">${esc(GAMES[at.game].name)}</text><text x="262" y="70" font-size="10" fill="${A}">${nf(at.total)} hrs <tspan fill="#7fb2ff">◆ imported</tspan></text>
       <line x1="86" y1="80" x2="430" y2="80" stroke="${L}"/>
-      <text x="86" y="95" font-size="9" fill="#c9d4e3">${nf(VERIFIED)} hrs verified · ~${nf(ESTIMATED)} est. · Now playing <tspan fill="#fff" font-weight="bold">${esc(GAMES[ME.game].name.replace(/:.*/, ''))}</tspan></text>
+      <text x="86" y="95" font-size="9" fill="#c9d4e3">${nf(VERIFIED)} hrs verified · Now playing <tspan fill="#fff" font-weight="bold">${esc(GAMES[ME.game].name.replace(/:.*/, ''))}</tspan></text>
       <g transform="translate(398 8) scale(1)"><svg width="32" height="22" viewBox="0 0 32 22"><use href="#fl-mark" fill="${A}"/></svg></g></svg>`;
   }
   const ACH = [
@@ -884,7 +879,7 @@
   ];
   function histRow(r, max) {
     const t = TIERS[r.tier];
-    const total = r.tier === 'estimated' ? `<span class="est" data-tip="Estimated with the history calculator; excluded from ranks and achievements">~${nf(r.total)} hrs</span>` : `${r.total >= 1000 ? nf(r.total) : r.total.toFixed(1)} hrs`;
+    const total = `${r.total >= 1000 ? nf(r.total) : r.total.toFixed(1)} hrs`;
     return `<tr><td><span class="gi">${gameIcon(r.game)}</span> <a>${esc(GAMES[r.game].name)}</a>${r.note ? `<div class="pf-note">“${esc(r.note)}”</div>` : ''}</td><td>${r.week.toFixed(1)} hrs</td><td class="bar"><i style="width:${max ? (r.week / max * 100) : 0}%"></i></td><td>${total}</td><td><span class="tb tb-${r.tier}" data-tip="${esc(r.src)}">${t.sym} ${t.label}</span></td></tr>`;
   }
   function profilePage(theme) {
@@ -894,7 +889,7 @@
     return `<div class="wp prof-${theme}">${webHeader('My Profile')}
       <div class="pf-head"><div class="pf-av">L</div><div class="pf-id"><h2>Lucrona</h2><div class="pf-st"><span class="gi">${gameIcon(ME.game)}</span> Currently playing <b>${esc(GAMES[ME.game].name)}</b></div>
       <div class="pf-links"><a>Add as Friend</a> | <a>Message on Discord</a> | <a>Compare hours</a> | <a data-profile-theme>Theme: ${theme === 'gold' ? 'Gold 567' : 'Cyan Grid'}</a> | <a>Edit layout (drag · hide · reorder)</a></div></div>
-      <div class="pf-rank"><b>${nf(VERIFIED)}</b><small>hours verified</small><span class="pf-est">~${nf(ESTIMATED)} estimated</span></div></div>
+      <div class="pf-rank"><b>${nf(VERIFIED)}</b><small>hours verified</small></div></div>
       <div class="wp-cols"><div class="wp-side pf-left">
         <div class="wp-box" data-sec="details"><h3>Details</h3><table class="pf-kv">
           <tr><td>Username</td><td>lucrona</td></tr><tr><td>Location</td><td>Sydney, AU</td></tr><tr><td>Member Since</td><td>Mar 2025</td></tr><tr><td>Gaming Style</td><td>Weekend Raider</td></tr><tr><td>Last Seen</td><td style="color:var(--pf-accent)">Online now</td></tr></table>
@@ -909,12 +904,11 @@
       </div><div class="wp-main">
         <div class="wp-box" data-sec="miniprofile"><h3>Miniprofile <small class="h3n">signature image for forums, READMEs &amp; Twitch panels</small></h3><div class="pf-sig">${signatureSVG(theme)}
           <div class="pf-embed"><label>Image URL<input readonly value="https://playfraglink.com/sig/lucrona.png"></label><label>BBCode<input readonly value="[url=https://playfraglink.com/u/lucrona][img]https://playfraglink.com/sig/lucrona.png[/img][/url]"></label><span>Also: Markdown · HTML · 320×100 Twitch panel · 350×20 userbar</span></div></div></div>
-        <div class="wp-box" data-sec="achievements"><h3>Achievements <small class="h3n">24 of 35 tiers · play-time only · estimated hours never count</small></h3><div class="pf-ach">${ACH.map(a => `<div class="ach ach-${a.c}" data-tip="${esc(a.k)} · ${a.tier}"><i><b>${esc(a.g)}</b></i><div><b>${esc(a.k)}</b><span class="t">${a.tier}</span><small>${esc(a.prog)}</small></div></div>`).join('')}</div></div>
+        <div class="wp-box" data-sec="achievements"><h3>Achievements <small class="h3n">24 of 35 tiers · play-time only</small></h3><div class="pf-ach">${ACH.map(a => `<div class="ach ach-${a.c}" data-tip="${esc(a.k)} · ${a.tier}"><i><b>${esc(a.g)}</b></i><div><b>${esc(a.k)}</b><span class="t">${a.tier}</span><small>${esc(a.prog)}</small></div></div>`).join('')}</div></div>
         <div class="wp-box" data-sec="history"><h3>Gaming History</h3><table class="wp-t pf-hist"><tr><th>Game</th><th>Past 7 Days</th><th></th><th>Total</th><th>Source</th></tr>
           ${MY_HOURS.map(r => histRow(r, max)).join('')}
-          <tr class="tot"><td>Overall Hours</td><td>${tw.toFixed(1)} hrs</td><td></td><td>${nf(VERIFIED)} hrs</td><td>verified</td></tr>
-          <tr class="tot est-tot"><td colspan="3"></td><td><span class="est">~${nf(ESTIMATED)} hrs</span></td><td>estimated</td></tr></table>
-          <div class="pf-legend"><span class="tb tb-tracked">● Tracked</span> logged by Fraglink or Steam's official playtime · <span class="tb tb-imported">◆ Imported</span> the game's own counter (WoW /played via addon) · <span class="tb tb-estimated">~ Estimated</span> history calculator, excluded from ranks · <a data-action="estimate">Estimate your history…</a> · <a>Show entire gaming history</a></div></div>
+          <tr class="tot"><td>Overall Hours</td><td>${tw.toFixed(1)} hrs</td><td></td><td>${nf(VERIFIED)} hrs</td><td>verified</td></tr></table>
+          <div class="pf-legend"><span class="tb tb-tracked">● Tracked</span> logged by Fraglink or Steam's official playtime · <span class="tb tb-imported">◆ Imported</span> the game's own counter (WoW /played via addon) · <a>Show entire gaming history</a></div></div>
         <div class="wp-box" data-sec="wow"><h3>World of Warcraft Characters <small class="h3n">◆ /played: 11,214 h across 6 characters</small></h3><div class="pf-wow">
           <div class="wow-main">${portrait()}<div class="wow-id"><div class="wow-name">Fragnar <span class="ver big">✓ Verified via Battle.net</span></div>
             <div class="wow-line">Level 80 Night Elf <b class="cls">Hunter</b> · Beast Mastery</div><div class="wow-guild">&lt;Southern Cross Vanguard&gt; · Frostmourne (US · Oceanic)</div>
@@ -924,25 +918,7 @@
             <li>${portrait('#6a5a2a', '#1a1408', true)}<div><b>Fraglet</b> · Lvl 60 Human Warrior · Classic Era · Arugal</div><span class="ver">✓ Verified</span></li>
             <li>${portrait('#3a3f5a', '#0c0f1c', true)}<div><b>Oldfrag</b> · Lvl 42 Dwarf Priest · Turtle WoW (private server)</div><span class="unver">Unverified · manual</span></li></ul></div></div>
         <div class="wp-box" data-sec="activity"><h3>Recent Activity</h3><ul class="pf-act"><li>Played <b>Half-Life 2: Deathmatch</b> for 2.1 hours · today</li><li>Imported <b>/played</b> for 6 WoW characters · Tue</li><li>Unlocked <b>No Days Off · Gold</b> · Mon</li><li>Weekly recap: <b>22.3 h</b>, top game HL2:DM · <a>view recap</a> · Mon</li><li>Added <a>Riftwalker</a> as a friend · Sep 20</li></ul></div>
-      </div></div>${webFoot()}${params.get('modal') === 'estimate' || state.estOpen ? estimatorModal() : ''}</div>`;
-  }
-  /* ---------------- "Estimate your history" calculator ---------------- */
-  const EST = { game: 'cs', eras: [{ from: 2003, to: 2006, hpw: 18 }, { from: 2007, to: 2009, hpw: 4 }], note: 'LAN every weekend at the uni club' };
-  const RELEASE = { cs: 2000, wow: 2004, d2: 2000, wc3: 2002, q3: 1999, ut: 2004, bfv: 2004 };
-  const eraHours = e => Math.max(0, (e.to - e.from + 1)) * 52 * Math.min(80, Math.max(0, e.hpw));
-  function estimatorModal() {
-    const tot = sumBy(EST.eras, eraHours);
-    const opts = ['cs', 'wow', 'd2', 'wc3', 'q3', 'ut', 'bfv'].map(g => `<option value="${g}" ${g === EST.game ? 'selected' : ''}>${esc(GAMES[g].name)}</option>`).join('');
-    return `<div class="est-ovl" id="est"><div class="est-box"><h3>Estimate your history <button data-est="close" data-tip="Close">×</button></h3><div class="est-body">
-      <p class="est-intro">Played before Fraglink? Tell us roughly how much. Estimates show on your profile as <span class="est">~hours</span> with an <span class="tb tb-estimated">~ Estimated</span> badge and never count toward ranks, leaderboards or achievements.</p>
-      <label class="est-game">Game <span class="gi">${gameIcon(EST.game)}</span><select data-est="game">${opts}</select></label>
-      <table class="est-t"><tr><th>From</th><th>To</th><th>Hours / week</th><th>Weeks</th><th>Estimate</th><th></th></tr>
-        ${EST.eras.map((e, i) => `<tr><td><input type="number" min="1990" max="2026" value="${e.from}" data-era="${i}" data-f="from"></td><td><input type="number" min="1990" max="2026" value="${e.to}" data-era="${i}" data-f="to"></td><td><input type="number" min="0" max="80" value="${e.hpw}" data-era="${i}" data-f="hpw"></td><td>${(e.to - e.from + 1) * 52}</td><td class="n">${nf(eraHours(e))} h</td><td>${EST.eras.length > 1 ? `<a data-est="del" data-i="${i}">remove</a>` : ''}</td></tr>`).join('')}
-      </table><a class="est-add" data-est="add">+ Add another era</a>
-      <label class="est-note">Story note (optional, 140 chars)<input maxlength="140" value="${esc(EST.note)}" data-est="note"></label>
-      <div class="est-res"><div><small>Shown on your profile as</small><b>~${nf(Math.round(tot / 100) * 100)} h</b><span class="tb tb-estimated">~ Estimated</span></div>
-        <div class="est-chk">${EST.eras.every(e => e.from >= RELEASE[EST.game]) ? `<div>✓ Starts after release (${RELEASE[EST.game]})</div>` : `<div class="bad">✗ Starts before release (${RELEASE[EST.game]})</div>`}${EST.eras.every(e => e.hpw <= 80) ? '<div>✓ Under 80 h/week per era</div>' : '<div class="bad">✗ Capped at 80 h/week</div>'}<div>Deleted characters or lost accounts? Estimate those years here: their time can't be recovered from the game.</div></div></div>
-      </div><div class="est-foot"><button class="wp-btn" data-est="save">Save to profile</button><button class="wp-btn alt" data-est="close">Cancel</button></div></div></div>`;
+      </div></div>${webFoot()}</div>`;
   }
   function website(page) {
     const w = $('#web'); w.hidden = false;
@@ -950,25 +926,12 @@
     state.webPage = page;
     $('#web-url').textContent = page === 'profile' ? 'https://playfraglink.com/u/lucrona' : 'https://playfraglink.com/';
     const pg = $('#web-page'), st = pg.scrollTop;
-    pg.innerHTML = page === 'profile' ? profilePage(prof) : homePage() + (state.estOpen ? estimatorModal() : '');
+    pg.innerHTML = page === 'profile' ? profilePage(prof) : homePage();
     pg.scrollTop = st;
   }
-  function openEstimator() { state.estOpen = true; website(state.webPage || 'profile'); }
   $('#web-page').addEventListener('click', e => {
-    const a = e.target.closest('[data-web]'); if (a) { state.estOpen = false; website(a.dataset.web); return; }
+    const a = e.target.closest('[data-web]'); if (a) { website(a.dataset.web); return; }
     if (e.target.closest('[data-profile-theme]')) { params.set('prof', params.get('prof') === 'gold' ? 'cyan' : 'gold'); website('profile'); return; }
-    const x = e.target.closest('[data-est]'); if (!x) return;
-    const k = x.dataset.est;
-    if (k === 'close') { state.estOpen = false; params.delete('modal'); website(state.webPage); }
-    else if (k === 'add') { const l = EST.eras[EST.eras.length - 1]; EST.eras.push({ from: Math.min(2026, l.to + 1), to: Math.min(2026, l.to + 2), hpw: 5 }); website(state.webPage); }
-    else if (k === 'del') { EST.eras.splice(+x.dataset.i, 1); website(state.webPage); }
-    else if (k === 'save') { state.estOpen = false; params.delete('modal'); website(state.webPage); alert('Saved (mock): shown on your profile as an Estimated total.'); }
-  });
-  $('#web-page').addEventListener('change', e => {
-    const t = e.target;
-    if (t.dataset.era != null) { EST.eras[+t.dataset.era][t.dataset.f] = +t.value || 0; website(state.webPage); }
-    else if (t.dataset.est === 'game') { EST.game = t.value; website(state.webPage); }
-    else if (t.dataset.est === 'note') { EST.note = t.value; }
   });
 
   /* ---------------- dialogs / misc ---------------- */
@@ -1222,7 +1185,7 @@
     'friend-mute': a => FLB.friendMute(a.dataset.handle, a.dataset.mute === '1').then(refreshFriends).catch(toastErr),
     'my-profile': () => notice('My Profile', LATER),
     'friend-profile': a => { const h = a && a.dataset && a.dataset.handle || a && a.dataset && a.dataset.key; if (TAURI && FLB.openWebsite && h) FLB.openWebsite('u/' + h).catch(toastErr); else notice('Profile', LATER); },
-    'my-stats': () => notice('Full stats', LATER), 'website': () => notice('playfraglink.com', LATER), 'estimate': () => notice('Estimate my history', LATER),
+    'my-stats': () => notice('Full stats', LATER), 'website': () => notice('playfraglink.com', LATER),
     'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${devVer(st.version)}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {}
       notice('About Fraglink', `<div class="about-box"><img class="about-lock" src="brand/v28-lockup.svg" alt="Fraglink" draggable="false"><b class="about-ver">Fraglink ${esc(v)}</b><div class="about-slogan">PLAY. CONNECT. TRACK.</div>
         <p>Track your game hours and see what friends are playing.</p><p class="about-c">\u00a9 2026 Lucrona. All rights reserved.</p>

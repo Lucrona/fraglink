@@ -35,12 +35,16 @@ sudo install -m 755 /tmp/fraglink-server /opt/fraglink/fraglink-server.new
 sudo cp -f /opt/fraglink/fraglink-server /opt/fraglink/fraglink-server.prev 2>/dev/null || true
 sudo mv /opt/fraglink/fraglink-server.new /opt/fraglink/fraglink-server
 if [[ "$CONFIGS" == "--configs" ]]; then
-  sudo install -m 644 /tmp/fraglink-server.service /tmp/fraglink-backup.service /tmp/fraglink-backup.timer /etc/systemd/system/
+  sudo install -m 644 /tmp/fraglink-server.service /tmp/fraglink-backup.service /tmp/fraglink-backup.timer \
+    /tmp/fraglink-geoip.service /tmp/fraglink-geoip.timer /etc/systemd/system/
   sudo install -m 755 /tmp/fraglink-backup.sh /usr/local/sbin/fraglink-backup
+  sudo install -m 755 /tmp/fraglink-geoip.sh /usr/local/sbin/fraglink-geoip
   sudo install -m 644 /tmp/Caddyfile /etc/caddy/Caddyfile
   sudo systemctl daemon-reload && sudo systemctl reload caddy
+  sudo systemctl enable --now fraglink-geoip.timer
+  [ -f /var/lib/fraglink/geo/country.mmdb ] || sudo /usr/local/sbin/fraglink-geoip || true
 fi
-rm -f /tmp/fraglink-server /tmp/fraglink-server.service /tmp/fraglink-backup.* /tmp/Caddyfile
+rm -f /tmp/fraglink-server /tmp/fraglink-server.service /tmp/fraglink-backup.* /tmp/fraglink-geoip.* /tmp/Caddyfile
 sudo systemctl restart fraglink-server   # migrations run on start
 for i in $(seq 1 20); do curl -fs -m2 http://127.0.0.1:8787/api/v1/health && echo && exit 0; sleep 1; done
 echo "health check failed; rolling back"; sudo journalctl -u fraglink-server -n 20 --no-pager

@@ -537,7 +537,7 @@ async fn my_games(
     let named = crate::names::public_names(&st, &ids).await?;
     let games: Vec<Value> = rows
         .into_iter()
-        .filter(|g| g.display_min > 0 || g.minutes_7d > 0 || g.estimated_min > 0)
+        .filter(|g| g.display_min > 0 || g.minutes_7d > 0)
         .map(|g| {
             json!({
                 "game_id": g.game_id, "name": named.get(&g.game_id).cloned().unwrap_or(g.name),
@@ -606,7 +606,7 @@ struct ResetReq {
     password: String,
 }
 
-/// Delete every hour recorded for one game (sessions, imports, estimates, Steam playtime).
+/// Delete every hour recorded for one game (sessions, imported counters, Steam playtime).
 async fn reset_game(
     State(st): State<AppState>,
     headers: HeaderMap,
@@ -686,11 +686,41 @@ pub async fn purge_due(st: &AppState) -> ApiResult<u64> {
     Ok(ids.len() as u64)
 }
 
+/// Sign-in records (IP, browser, country) that stopped working are kept this long after
+/// they were revoked or expired, then deleted. Privacy Policy: "30 days".
+pub const TOKEN_KEEP_DAYS: i32 = 30;
+/// App devices nobody used for this long are deleted (that app has to sign in again).
+pub const DEVICE_IDLE_DAYS: i32 = 180;
+
+/// Delete old sign-ins: any token revoked or expired more than [`TOKEN_KEEP_DAYS`] ago,
+/// and app device tokens unused for [`DEVICE_IDLE_DAYS`]. Returns how many.
+pub async fn purge_tokens(st: &AppState) -> ApiResult<u64> {
+    let n = sqlx::query(
+        "DELETE FROM auth_tokens
+         WHERE revoked_at < now() - make_interval(days => $1)
+            OR expires_at < now() - make_interval(days => $1)
+            OR (kind = 'device' AND last_used_at < now() - make_interval(days => $2))",
+    )
+    .bind(TOKEN_KEEP_DAYS)
+    .bind(DEVICE_IDLE_DAYS)
+    .execute(&st.db)
+    .await?
+    .rows_affected();
+    if n > 0 {
+        tracing::info!(tokens = n, "old sign-ins purged");
+    }
+    Ok(n)
+}
+
 pub async fn purge_loop(st: AppState) {
     loop {
         if let Err(e) = purge_due(&st).await {
             tracing::warn!("account purge failed: {}", e.message);
             crate::alerts::job_failed("Account purge", &e.message);
+        }
+        if let Err(e) = purge_tokens(&st).await {
+            tracing::warn!("sign-in purge failed: {}", e.message);
+            crate::alerts::job_failed("Sign-in purge", &e.message);
         }
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
     }

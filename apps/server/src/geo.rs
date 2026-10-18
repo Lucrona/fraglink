@@ -72,13 +72,34 @@ pub fn describe_ua(ua: &str) -> String {
     format!("{os} · {br}")
 }
 
-fn reader(st: &AppState) -> Option<&'static maxminddb::Reader<Vec<u8>>> {
-    static R: std::sync::OnceLock<Option<maxminddb::Reader<Vec<u8>>>> = std::sync::OnceLock::new();
-    R.get_or_init(|| {
-        let p = st.cfg.data_dir.join("geo").join("country.mmdb");
-        maxminddb::Reader::open_readfile(&p).ok()
-    })
-    .as_ref()
+type GeoDb = std::sync::Arc<maxminddb::Reader<Vec<u8>>>;
+
+/// The country database, reloaded when the file changes (the monthly refresh replaces
+/// it in place), so no restart is needed. None when the file is missing.
+fn reader(st: &AppState) -> Option<GeoDb> {
+    use std::sync::Mutex;
+    use std::time::SystemTime;
+    static R: Mutex<Option<(std::path::PathBuf, SystemTime, GeoDb)>> = Mutex::new(None);
+    let p = st.cfg.data_dir.join("geo").join("country.mmdb");
+    let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok()?;
+    let mut cur = R.lock().unwrap();
+    if let Some((path, t, r)) = cur.as_ref() {
+        if *path == p && *t == mtime {
+            return Some(r.clone());
+        }
+    }
+    match maxminddb::Reader::open_readfile(&p) {
+        Ok(r) => {
+            let r = std::sync::Arc::new(r);
+            *cur = Some((p, mtime, r.clone()));
+            Some(r)
+        }
+        // a half-written file: keep using the previous copy
+        Err(e) => {
+            tracing::warn!("country database not loaded: {e}");
+            cur.as_ref().map(|(_, _, r)| r.clone())
+        }
+    }
 }
 
 pub fn country(st: &AppState, ip: &str) -> Option<String> {

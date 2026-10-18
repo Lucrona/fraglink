@@ -32,7 +32,13 @@ async fn zip_export_has_csvs_and_json(pool: PgPool) {
         Some(json!({ "game_id": "cs2", "minutes": 6000 })),
     )
     .await;
-    api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_id": "exe:quake.exe", "eras": [{ "from_year": 2000, "to_year": 2001, "hours_per_week": 5 }] }))).await;
+    // the history estimator is gone; an old estimate row stays stored but never counts
+    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_id": "exe:quake.exe", "eras": [{ "from_year": 2000, "to_year": 2001, "hours_per_week": 5 }] }))).await;
+    assert_eq!(r.status, StatusCode::GONE, "{}", r.text);
+    sqlx::query("INSERT INTO hours_entries (id, user_id, game_id, tier, source, minutes) SELECT gen_random_uuid(), id, 'exe:quake.exe', 'estimated', 'estimator', 6240 FROM users WHERE handle = 'zipper'")
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let r = api(&app, "GET", "/api/v1/export.zip", Some(&t), None).await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
@@ -78,10 +84,16 @@ async fn zip_export_has_csvs_and_json(pool: PgPool) {
     let games = read(&mut z, "games.csv");
     let cs2 = games.lines().find(|l| l.starts_with("cs2,")).unwrap();
     assert!(
-        cs2.starts_with("cs2,Counter-Strike 2,60,6000,0,6000,imported,60,"),
+        cs2.starts_with("cs2,Counter-Strike 2,60,6000,6000,imported,60,"),
         "{cs2}"
     );
-    assert!(games.contains("\"Quake, \"\"Arena\"\"\""), "{games}");
+    assert!(
+        games.starts_with("game_id,game_name,tracked_minutes,imported_minutes,display_minutes,")
+    );
+    assert!(
+        !games.contains("Quake"),
+        "estimate-only games are left out: {games}"
+    );
     let hours: Value = serde_json::from_str(&read(&mut z, "hours_entries.json")).unwrap();
     assert_eq!(hours.as_array().unwrap().len(), 2);
     let profile: Value = serde_json::from_str(&read(&mut z, "profile.json")).unwrap();

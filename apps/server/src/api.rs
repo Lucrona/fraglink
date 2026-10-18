@@ -3,7 +3,6 @@
 use crate::auth::{self, AuthUser, User};
 use crate::error::{ApiResult, AppError};
 use crate::friends;
-use crate::hours::{self, Era};
 use crate::steam::{self, ProfileRef};
 use crate::AppState;
 use axum::extract::{Path, Query, State};
@@ -39,7 +38,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/sessions/upload", post(upload_sessions))
         .route("/api/v1/stats", get(stats))
         .route("/api/v1/leaderboard/{game_id}", get(leaderboard))
-        .route("/api/v1/hours/estimate", post(save_estimate))
+        .route("/api/v1/hours/estimate", post(estimates_gone))
         .route("/api/v1/hours/import", post(save_import))
         .route("/api/v1/hours/{id}", delete(delete_hours))
         .route("/api/v1/steam/link", post(steam_link))
@@ -757,7 +756,6 @@ pub struct GameStat {
     pub name: String,
     pub tracked_min: i64,
     pub imported_min: i64,
-    pub estimated_min: i64,
     pub display_min: i64,
     pub display_tier: String,
     pub minutes_7d: i64,
@@ -767,8 +765,8 @@ pub struct GameStat {
 /// Per-game totals with the server's names (unknown games: "Unlisted game").
 pub async fn game_stats(st: &AppState, user_id: Uuid) -> ApiResult<Vec<GameStat>> {
     let mut rows: Vec<GameStat> = sqlx::query_as(
-        "SELECT game_id, name, tracked_min, imported_min, estimated_min, display_min, display_tier, minutes_7d, last_played_at
-         FROM user_game_stats WHERE user_id = $1 ORDER BY display_min DESC, estimated_min DESC, name",
+        "SELECT game_id, name, tracked_min, imported_min, display_min, display_tier, minutes_7d, last_played_at
+         FROM user_game_stats WHERE user_id = $1 ORDER BY display_min DESC, name",
     )
     .bind(user_id)
     .fetch_all(&st.db)
@@ -787,11 +785,20 @@ pub async fn game_stats(st: &AppState, user_id: Uuid) -> ApiResult<Vec<GameStat>
 async fn stats(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
     let games = game_stats(&st, a.user.id).await?;
     let verified: i64 = games.iter().map(|g| g.display_min).sum();
-    let estimated: i64 = games.iter().map(|g| g.estimated_min).sum();
+    // App builds up to 0.3.0-beta.1 still read `estimated_min` (their tooltip would show
+    // "NaN" without it). The Estimated tier is gone, so it is always 0. Drop this once
+    // those builds are retired.
+    let games: Vec<Value> = games
+        .into_iter()
+        .map(|g| {
+            let mut v = json!(g);
+            v["estimated_min"] = json!(0);
+            v
+        })
+        .collect();
     Ok(Json(json!({
         "games": games,
-        "overall": { "verified_min": verified, "estimated_min": estimated,
-                     "estimated_display": format!("~{}h", hours::group(hours::round_estimate_hours(estimated / 60))) }
+        "overall": { "verified_min": verified, "estimated_min": 0 }
     })))
 }
 
@@ -801,8 +808,7 @@ struct LbQuery {
     period: Option<String>,
 }
 
-/// Ranks use **Tracked only** (sessions + Steam playtime). Imported and Estimated
-/// hours never count (spec §5, §9). Profiles aren't public before M4, so this needs
+/// Ranks use **Tracked only** (sessions + Steam playtime). Imported hours never count (spec §5, §9). Profiles aren't public before M4, so this needs
 /// a signed-in caller.
 async fn leaderboard(
     State(st): State<AppState>,
@@ -843,7 +849,7 @@ async fn leaderboard(
     ))
 }
 
-// ------------------------------------------------------------------ imported / estimated
+// ------------------------------------------------------------------ imported hours
 
 /// Resolve the game for hours entries: an id on our lists (or an existing row), or a
 /// free-text name that exactly matches a listed game. Users can't create or name games.
@@ -944,53 +950,13 @@ fn clean_note(n: Option<String>) -> ApiResult<Option<String>> {
     Ok(n)
 }
 
-#[derive(Deserialize)]
-pub struct EstimateReq {
-    pub game_id: Option<String>,
-    pub game_name: Option<String>,
-    pub eras: Vec<Era>,
-    pub note: Option<String>,
-}
-
-/// History calculator (Estimated tier). One estimate per game; saving again replaces it.
-async fn save_estimate(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    a: AuthUser,
-    Json(r): Json<EstimateReq>,
-) -> ApiResult<Json<Value>> {
-    check_origin(&a, &headers, &st)?;
-    Ok(Json(estimate_for(&st, a.user.id, r).await?))
-}
-
-pub async fn estimate_for(st: &AppState, user_id: Uuid, r: EstimateReq) -> ApiResult<Value> {
-    let est = hours::estimate(&r.eras, hours::current_year())?;
-    let note = clean_note(r.note)?;
-    let gid = ensure_game(st, user_id, r.game_id.as_deref(), r.game_name.as_deref()).await?;
-    let id = Uuid::new_v4();
-    let mut tx = st.db.begin().await?;
-    sqlx::query(
-        "DELETE FROM hours_entries WHERE user_id = $1 AND game_id = $2 AND tier = 'estimated'",
-    )
-    .bind(user_id)
-    .bind(&gid)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, inputs, note)
-         VALUES($1, $2, $3, 'estimated', 'estimator', $4, $5, $6)",
-    )
-    .bind(id)
-    .bind(user_id)
-    .bind(&gid)
-    .bind(est.minutes as i32)
-    .bind(json!({ "eras": r.eras }))
-    .bind(note)
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(
-        json!({ "id": id, "game_id": gid, "tier": "estimated", "minutes": est.minutes, "display": est.display, "warnings": est.warnings }),
+/// The history calculator (Estimated tier) was removed: `POST /api/v1/hours/estimate`
+/// and the old `/web/estimate` form answer 410 Gone. Nothing is stored.
+pub async fn estimates_gone() -> AppError {
+    AppError::new(
+        StatusCode::GONE,
+        "estimates_removed",
+        "Estimated hours were removed from Fraglink. Hours come from the app, Steam or imported game counters.",
     )
 }
 
@@ -1158,13 +1124,14 @@ pub const EXPORT_ZIP_INTERVAL_SECS: u64 = 3600;
 const ZIP_README: &str = "Fraglink account export\n\n\
 profile.json         your account, linked accounts and paired devices\n\
 sessions.csv         every session uploaded by the Fraglink app (tier: tracked)\n\
-games.csv            per-game minutes by tier: tracked, imported (self-reported), estimated, and what is displayed\n\
-hours_entries.json   imported counters and history estimates, with the estimator inputs\n\
+games.csv            per-game minutes by tier: tracked, imported (self-reported), and what is displayed\n\
+hours_entries.json   game counters you added yourself (imported). Entries from the old history\n\
+                     estimator, if you ever saved one, are included as stored but never counted.\n\
 steam_playtime.csv   Steam's own playtime counters (tracked tier)\n\
 friends.json         friends, pending requests and blocks\n\
 fraglink-account.json  everything above in one JSON document\n\n\
 Times are UTC (RFC 3339). Minutes are whole minutes; seconds where the column says _s.\n\
-Estimated hours are never added to totals or rankings.\n";
+Imported hours never count toward rankings.\n";
 
 fn csv_line(fields: &[String]) -> String {
     let mut l = fields
@@ -1220,14 +1187,13 @@ async fn export_zip(
             up.to_rfc3339(),
         ]);
     }
-    let mut games = String::from("game_id,game_name,tracked_minutes,imported_minutes,estimated_minutes,display_minutes,display_tier,minutes_last_7_days,last_played_utc\n");
+    let mut games = String::from("game_id,game_name,tracked_minutes,imported_minutes,display_minutes,display_tier,minutes_last_7_days,last_played_utc\n");
     for g in game_stats(&st, uid).await? {
         games += &csv_line(&[
             g.game_id,
             g.name,
             g.tracked_min.to_string(),
             g.imported_min.to_string(),
-            g.estimated_min.to_string(),
             g.display_min.to_string(),
             g.display_tier,
             g.minutes_7d.to_string(),

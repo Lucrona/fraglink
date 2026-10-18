@@ -123,7 +123,7 @@ async fn tiers_and_rankings(pool: PgPool) {
     let _ = (&a, &c);
     // alice: 2h tracked CS2
     live_session(&pool, "alice", "cs2", t, 7200).await;
-    // bob: 1h tracked, plus a huge self-reported counter and a huge estimate
+    // bob: 1h tracked, plus a huge self-reported counter and an old (pre-removal) estimate
     live_session(&pool, "bob", "cs2", t, 3600).await;
     let r = api(
         &app,
@@ -134,10 +134,14 @@ async fn tiers_and_rankings(pool: PgPool) {
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&b), Some(json!({ "game_id": "cs2", "eras": [{ "from_year": 2012, "to_year": 2020, "hours_per_week": 40 }] }))).await;
-    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-    // carol: estimate only
-    api(&app, "POST", "/api/v1/hours/estimate", Some(&c), Some(json!({ "game_id": "cs2", "eras": [{ "from_year": 2012, "to_year": 2020, "hours_per_week": 40 }] }))).await;
+    // carol: an old estimate only
+    for h in ["bob", "carol"] {
+        sqlx::query("INSERT INTO hours_entries (id, user_id, game_id, tier, source, minutes) SELECT gen_random_uuid(), id, 'cs2', 'estimated', 'estimator', 1123200 FROM users WHERE handle = $1")
+            .bind(h)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
     // Steam counter for alice larger than her sessions: tracked = max(sessions, steam)
     let alice: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'alice'")
         .fetch_one(&pool)
@@ -164,7 +168,7 @@ async fn tiers_and_rankings(pool: PgPool) {
         assert_eq!(
             handles,
             vec!["alice", "bob"],
-            "{period}: Imported/Estimated never rank; carol has no Tracked time"
+            "{period}: Imported/old estimates never rank; carol has no Tracked time"
         );
         if period == "all" {
             assert_eq!(ranks[0]["tracked_min"], 300);
@@ -192,7 +196,7 @@ async fn tiers_and_rankings(pool: PgPool) {
         StatusCode::BAD_REQUEST
     );
 
-    // bob's own stats show all three tiers separately
+    // bob's own stats show both tiers separately; the old estimate is left out
     let s = api(&app, "GET", "/api/v1/stats", Some(&b), None)
         .await
         .json();
@@ -202,12 +206,15 @@ async fn tiers_and_rankings(pool: PgPool) {
     assert_eq!(g["imported_min"], 600000);
     assert_eq!(g["display_min"], 600000);
     assert_eq!(g["display_tier"], "imported");
-    assert_eq!(g["estimated_min"], 9 * 52 * 40 * 60);
-    assert_eq!(
-        s["overall"]["verified_min"], 600000,
-        "estimated never adds to the verified total"
-    );
-    assert_eq!(s["overall"]["estimated_display"], "~18,700h");
+    assert_eq!(g["estimated_min"], 0);
+    assert_eq!(s["overall"]["verified_min"], 600000);
+    assert_eq!(s["overall"]["estimated_min"], 0);
+    assert!(s["overall"].get("estimated_display").is_none());
+    // carol (estimate only) has nothing to show
+    let s = api(&app, "GET", "/api/v1/stats", Some(&c), None)
+        .await
+        .json();
+    assert_eq!(s["games"].as_array().unwrap().len(), 0, "{s}");
     let s = api(&app, "GET", "/api/v1/stats", Some(&a), None)
         .await
         .json();

@@ -5,59 +5,101 @@ use serde_json::json;
 use sqlx::PgPool;
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn estimates_replace_and_validate(pool: PgPool) {
+async fn estimates_are_gone_and_old_rows_never_count(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let t = signup(&app, "h@example.com", "hours").await;
-    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({
-        "game_name": "World of Warcraft", "note": "vanilla + TBC",
-        "eras": [{ "from_year": 2005, "to_year": 2007, "hours_per_week": 30 }, { "from_year": 2007, "to_year": 2008, "hours_per_week": 50 }]
-    }))).await;
-    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-    let v = r.json();
-    assert_eq!(v["tier"], "estimated");
-    assert_eq!(v["minutes"], (3 * 52 * 30 + 2 * 52 * 50) * 60);
-    assert!(
-        !v["warnings"].as_array().unwrap().is_empty(),
-        "overlapping 2007 and >40 h/week multi-year should warn"
-    );
-    // a typed name picks the game from the server's list; nobody creates or names games
-    let gid = v["game_id"].as_str().unwrap().to_string();
-    assert_eq!(gid, "wow");
-    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_name": "My Totally Made Up Game", "eras": [{ "from_year": 2010, "to_year": 2010, "hours_per_week": 1 }] }))).await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
-    assert_eq!(r.json()["error"], "unknown_game", "{}", r.text);
-
-    // saving again replaces (one estimate per game)
-    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_id": gid, "eras": [{ "from_year": 2010, "to_year": 2010, "hours_per_week": 10 }] }))).await;
-    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    // the history calculator was removed: 410, nothing stored
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/estimate",
+        Some(&t),
+        Some(json!({
+            "game_name": "World of Warcraft",
+            "eras": [{ "from_year": 2005, "to_year": 2007, "hours_per_week": 30 }]
+        })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::GONE, "{}", r.text);
+    assert_eq!(r.json()["error"], "estimates_removed");
+    // an estimate saved before the removal stays in the table but is left out everywhere
+    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true) ON CONFLICT DO NOTHING")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO hours_entries (id, user_id, game_id, tier, source, minutes) SELECT gen_random_uuid(), id, 'wow', 'estimated', 'estimator', 9000 FROM users WHERE handle = 'hours'")
+        .execute(&pool)
+        .await
+        .unwrap();
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM hours_entries WHERE tier = 'estimated'")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(n, 1);
+    assert_eq!(n, 1, "old rows are kept");
+    let s = api(&app, "GET", "/api/v1/stats", Some(&t), None)
+        .await
+        .json();
+    assert_eq!(s["games"].as_array().unwrap().len(), 0, "{s}");
+    assert_eq!(s["overall"]["verified_min"], 0);
+    assert_eq!(
+        s["overall"]["estimated_min"], 0,
+        "kept at 0 for old app builds"
+    );
+    let p = api(&app, "GET", "/api/v1/users/hours/profile", Some(&t), None).await;
+    assert!(!p.text.contains("estimated"), "{}", p.text);
+    // with real hours the row shows only those, and old builds still get estimated_min = 0
+    api(
+        &app,
+        "POST",
+        "/api/v1/hours/import",
+        Some(&t),
+        Some(json!({ "game_id": "wow", "minutes": 600 })),
+    )
+    .await;
+    let s = api(&app, "GET", "/api/v1/stats", Some(&t), None)
+        .await
+        .json();
+    assert_eq!(s["games"][0]["display_min"], 600, "{s}");
+    assert_eq!(s["games"][0]["display_tier"], "imported");
+    assert_eq!(s["games"][0]["estimated_min"], 0);
 
-    for eras in [
-        json!([]),
-        json!([{ "from_year": 2010, "to_year": 2009, "hours_per_week": 10 }]),
-        json!([{ "from_year": 2010, "to_year": 2011, "hours_per_week": 81 }]),
-        json!([{ "from_year": 1960, "to_year": 1961, "hours_per_week": 1 }]),
-        json!([{ "from_year": 2010, "to_year": 2099, "hours_per_week": 1 }]),
-    ] {
-        let r = api(
-            &app,
-            "POST",
-            "/api/v1/hours/estimate",
-            Some(&t),
-            Some(json!({ "game_name": "X", "eras": eras })),
-        )
-        .await;
-        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{eras}: {}", r.text);
-    }
-    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_name": "  ", "eras": [{ "from_year": 2010, "to_year": 2010, "hours_per_week": 1 }] }))).await;
+    // game lookup and note checks (shared with imports)
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/import",
+        Some(&t),
+        Some(json!({ "game_name": "My Totally Made Up Game", "minutes": 60 })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
+    assert_eq!(r.json()["error"], "unknown_game", "{}", r.text);
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/import",
+        Some(&t),
+        Some(json!({ "game_name": "  ", "minutes": 60 })),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
-    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_id": "no-such-game", "eras": [{ "from_year": 2010, "to_year": 2010, "hours_per_week": 1 }] }))).await;
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/import",
+        Some(&t),
+        Some(json!({ "game_id": "no-such-game", "minutes": 60 })),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
-    let r = api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({ "game_name": "X", "note": "x".repeat(141), "eras": [{ "from_year": 2010, "to_year": 2010, "hours_per_week": 1 }] }))).await;
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/import",
+        Some(&t),
+        Some(json!({ "game_id": "wow", "note": "x".repeat(141), "minutes": 60 })),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
 }
 

@@ -157,7 +157,7 @@ async function listGames(q) {
   if (!d.games.length) { box.innerHTML = `<div class="body empty">${q ? `No games match “${esc(q)}”.` : "No games."}</div>`; return; }
   const th = (k, l, c) => `<th class="${c || ""} srt${GS.sort === k ? " on" : ""}" data-sort="${k}" title="Sort by ${l.toLowerCase()}">${l}${GS.sort === k ? (k === "name" ? " ▴" : " ▾") : ""}</th>`;
   const from = GS.offset + 1, to = GS.offset + d.games.length;
-  box.innerHTML = `<div class="note">${q ? "Matches" : GS.show ? "Edited, retired or with a status" : "Every game with hours"} · players and hours count all tiers (tracked, imported, estimated; best figure per player) and include test accounts (the public site leaves those out).</div>
+  box.innerHTML = `<div class="note">${q ? "Matches" : GS.show ? "Edited, retired or with a status" : "Every game with hours"} · players and hours count both tiers (tracked and imported; best figure per player) and include test accounts (the public site leaves those out).</div>
     <table><thead><tr><th></th>${th("name", "Name")}<th>Id</th><th>Source</th>${th("players", "Players", "num")}${th("hours", "Hours", "num")}${th("recent", "Last played", "num")}</tr></thead><tbody>
     ${d.games.map(g => {
       const o = g.override || {};
@@ -165,7 +165,7 @@ async function listGames(q) {
         (o.has_icon ? `<span class="pill">icon</span>` : "") + ((o.extra_exes || []).length ? `<span class="pill">+${o.extra_exes.length} exe</span>` : "") +
         (g.retired ? `<span class="pill bad">${g.retired.partial ? "exe retired" : "retired"}</span>` : "") +
         (g.status && g.status.lifecycle !== "live" ? `<span class="pill ${g.status.lifecycle === "ended" ? "bad" : "warn"}">${esc(LIFE[g.status.lifecycle] || g.status.lifecycle)}</span>` : "");
-      const bd = [["tracked", g.tracked_min], ["imported", g.imported_min], ["estimated", g.estimated_min]].filter(x => x[1] > 0).map(([k, m]) => `${k} ${hrs(m)}`).join(" · ");
+      const bd = [["tracked", g.tracked_min], ["imported", g.imported_min]].filter(x => x[1] > 0).map(([k, m]) => `${k} ${hrs(m)}`).join(" · ");
       return `<tr class="click" data-id="${esc(g.id)}"><td class="ic"><img src="${esc(g.icon)}" width="20" height="20" alt="" onerror="this.style.visibility='hidden'"></td>
         <td>${esc(g.public_name || g.name)}${flags}</td><td class="mono dimt">${esc(g.id)}</td><td class="muted">${esc(g.source)}</td>
         <td class="num">${g.players}</td><td class="num" title="${esc(bd || "no hours")}">${hrs(g.total_min)}${bd ? `<div class="dimt" style="font-size:10.5px;white-space:nowrap">${esc(bd)}</div>` : ""}</td><td class="num dimt">${g.last_played_at ? day(g.last_played_at) : "-"}</td></tr>`;
@@ -206,7 +206,7 @@ async function editGame(id) {
   const o = g.override || {};
   const bust = "?t=" + Date.now();
   box.innerHTML = `<h2>Edit game</h2><div class="body"><form class="f" id="gf">
-    <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">From: ${esc(g.source)} · ${g.players} players · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)} · estimated ${hrs(g.estimated_min)})</div></div>
+    <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">From: ${esc(g.source)} · ${g.players} players · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})</div></div>
     <label>Display name override<input type="text" name="name" maxlength="80" value="${esc(o.name || "")}" placeholder="${esc(g.name)}"><small>Leave empty to use the list name.</small></label>
     <label class="check"><input type="checkbox" name="hidden" ${o.hidden ? "checked" : ""}> Hide from public (shown as "Playing a game")</label>
     <label>Extra exe names (one per line)<textarea class="in" name="exes" placeholder="GameClient-Win64.exe">${esc((o.extra_exes || []).join("\n"))}</textarea><small>Apps detect these as this game (picked up within a day or on restart).</small></label>
@@ -331,7 +331,7 @@ async function userDetail(id) {
       await act(b, async () => { await api(`/admin/users/${id}/hours`, { method: "POST", body: { game_id: g, action: "cap", hours: Number(v) } }); userDetail(id); });
     } else if (b.matches("[data-remove]")) {
       const g = tr.dataset.game;
-      if (!confirm("Remove ALL hours for this game from " + u.handle + "? (tracked, imported, estimated and Steam)")) return;
+      if (!confirm("Remove ALL hours for this game from " + u.handle + "? (tracked, imported and Steam)")) return;
       await act(b, async () => { await api(`/admin/users/${id}/hours`, { method: "POST", body: { game_id: g, action: "remove" } }); userDetail(id); });
     } else if (b.matches("[data-delsess]")) {
       if (!confirm("Delete this session?")) return;
@@ -565,11 +565,11 @@ function wireMerge(id) {
     const d = await api("/admin/games?q=" + encodeURIComponent(v)).catch(() => ({ games: [] }));
     $("#mrg-games").innerHTML = d.games.filter(x => x.id !== id).map(x => `<option value="${esc(x.id)}">${esc(x.public_name || x.name)}</option>`).join("");
   }, 250); });
-  const row = (label, t) => `<tr><td>${esc(label)}</td><td class="num">${t.players}</td><td class="num">${t.sessions}</td><td class="num">${hrs(t.tracked_min)}</td><td class="num">${hrs(t.imported_min)}</td><td class="num">${hrs(t.estimated_min)}</td><td class="num">${t.hidden_by}</td></tr>`;
+  const row = (label, t) => `<tr><td>${esc(label)}</td><td class="num">${t.players}</td><td class="num">${t.sessions}</td><td class="num">${hrs(t.tracked_min)}</td><td class="num">${hrs(t.imported_min)}</td><td class="num">${t.hidden_by}</td></tr>`;
   $("#mrgp").addEventListener("click", e => act(e.target, async () => {
     const into = q.value.trim(); if (!into) throw new Error("Pick the game to merge into.");
     const p = await api(gid + "/merge?into=" + encodeURIComponent(into));
-    out.innerHTML = `<table class="mrgt"><thead><tr><th></th><th class="num">Players</th><th class="num">Sessions</th><th class="num">Tracked</th><th class="num">Imported</th><th class="num">Estimated</th><th class="num">Hidden by</th></tr></thead><tbody>
+    out.innerHTML = `<table class="mrgt"><thead><tr><th></th><th class="num">Players</th><th class="num">Sessions</th><th class="num">Tracked</th><th class="num">Imported</th><th class="num">Hidden by</th></tr></thead><tbody>
       ${row("Moves from " + (p.from.name || id), p.from.totals)}${row("Into " + (p.into.name || into) + " (now)", p.into.totals)}</tbody></table>
       <div class="dimt">Everything above moves to <b>${esc(p.into.name || into)}</b> <span class="mono">${esc(into)}</span>. This entry is retired, and apps that still report <span class="mono">${esc(id)}</span> count for the target from now on. Logged in the audit log.</div>
       <div class="row"><button class="btn danger" type="button" id="mrgdo">Merge…</button></div>`;

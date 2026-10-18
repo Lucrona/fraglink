@@ -1124,7 +1124,16 @@ async fn admin_game_totals_count_all_tiers(pool: PgPool) {
     assert_eq!(g["games"][0]["id"], "rivals");
     assert_eq!(g["games"][0]["players"], 1);
     assert_eq!(g["games"][0]["total_min"], 46800);
-    assert_eq!(g["games"][1]["estimated_min"], 60, "{g}");
+    // an old estimate (tier removed) counts for nothing: tiny has no hours
+    assert!(
+        g["games"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|x| x["id"] != "tiny"),
+        "{g}"
+    );
+    assert!(g["games"][0].get("estimated_min").is_none(), "{g}");
     let s = api(&app, "GET", "/api/v1/admin/games?q=tiny", Some(&t), None)
         .await
         .json();
@@ -1135,7 +1144,8 @@ async fn admin_game_totals_count_all_tiers(pool: PgPool) {
         .find(|g| g["id"] == "tiny")
         .cloned()
         .unwrap();
-    assert_eq!(tiny["total_min"], 60);
+    assert_eq!(tiny["total_min"], 0);
+    assert_eq!(tiny["players"], 0);
     let d = api(&app, "GET", "/api/v1/admin/games/rivals", Some(&t), None)
         .await
         .json();

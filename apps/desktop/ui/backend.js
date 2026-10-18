@@ -158,11 +158,10 @@
     friendBlock: (h, b) => { if (b) { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.blocked.push(h); } else mockFriends.blocked = mockFriends.blocked.filter(x => x !== h); return ok(); },
     friendMute: (h, m) => { const i = muted.indexOf(h.toLowerCase()); if (m && i < 0) muted.push(h.toLowerCase()); if (!m && i >= 0) muted.splice(i, 1); return ok(); },
     serverStats: () => ok(sync.signed_in ? { fetched_at: now(), games: [
-      { game_id: 'wc3', name: 'Warcraft III', tracked_min: 0, imported_min: 544 * 60, estimated_min: 0, display_min: 544 * 60, display_tier: 'imported' },
-      { game_id: 'wow', name: 'World of Warcraft', tracked_min: 312 * 60, imported_min: 0, estimated_min: 0, display_min: 312 * 60, display_tier: 'tracked' },
-      { game_id: 'steam:730', name: 'Counter-Strike 2', tracked_min: 118 * 60, imported_min: 0, estimated_min: 0, display_min: 118 * 60, display_tier: 'tracked' },
-      { game_id: 'manual:ut99', name: 'Unreal Tournament', tracked_min: 0, imported_min: 0, estimated_min: 1500 * 60, display_min: 0, display_tier: 'estimated' },
-    ], overall: { verified_min: 974 * 60, estimated_min: 1500 * 60, estimated_display: '~1,500h' } } : null),
+      { game_id: 'wc3', name: 'Warcraft III', tracked_min: 0, imported_min: 544 * 60, display_min: 544 * 60, display_tier: 'imported' },
+      { game_id: 'wow', name: 'World of Warcraft', tracked_min: 312 * 60, imported_min: 0, display_min: 312 * 60, display_tier: 'tracked' },
+      { game_id: 'steam:730', name: 'Counter-Strike 2', tracked_min: 118 * 60, imported_min: 0, display_min: 118 * 60, display_tier: 'tracked' },
+    ], overall: { verified_min: 974 * 60 } } : null),
     // preview: stand-in icons drawn on a canvas (no real game art is bundled)
     // preview: uploaded pictures stand in as little gradient portraits
     avatarImages: (urls) => ok(Object.fromEntries(urls.map(u => { const k = /dizz/.test(u) ? ['#d98b3a', '#5a2a12'] : ['#6aa7e8', '#1d2f6b']; return [u, 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${k[0]}"/><stop offset="1" stop-color="${k[1]}"/></linearGradient></defs><rect width="64" height="64" fill="url(#g)"/><circle cx="32" cy="25" r="12" fill="#f1d9c0"/><path d="M10 64c2-15 12-22 22-22s20 7 22 22z" fill="#2b2f3a"/></svg>`)]; }))),

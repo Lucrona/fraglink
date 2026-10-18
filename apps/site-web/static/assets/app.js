@@ -550,7 +550,7 @@ pages.profile = async () => {
       <tbody data-gbody>${p.games.map(row).join("")}</tbody>
       <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
       ${many ? `<div data-gpager>${pagerHtml(0, GPAGE, p.games_total)}</div>` : ""}
-      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters. Estimates are never added to totals.</div>`);
+      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters.</div>`);
     gamesRow = row;
   }
 
@@ -893,7 +893,8 @@ pages.settings = async () => {
     const box = $("[data-sess]", el);
     let s; try { s = await api("/me/sessions"); } catch (e) { bad(box, e); return; }
     box.innerHTML = `${msg}${s.sessions.map(x => `<div class="sess" data-id="${esc(x.id)}"><div class="d"><b>${esc(x.device)}</b>${x.current ? `<span class="cur">This browser</span>` : ""}<small>${x.kind === "device" ? "Desktop app" : "Website"} · ${x.location ? esc(x.location) + " · " : ""}${x.ip ? esc(x.ip) + " · " : ""}signed in ${fullDate.format(new Date(x.created_at))} · last active ${since(x.last_used_at)} ago</small></div>${x.current ? "" : `<button class="btn sm" type="button" data-revoke>Sign out</button>`}</div>`).join("")}
-      <div style="padding:10px 14px"><button class="btn red" type="button" data-revoke-all>Log out of all other devices</button></div>`;
+      <div style="padding:10px 14px"><button class="btn red" type="button" data-revoke-all>Log out of all other devices</button></div>
+      <div class="note" style="padding:0 14px 10px">Countries are approximate, worked out on our own server. <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Signed-out sign-ins are removed after 30 days, and desktop apps unused for 180 days are signed out.</div>`;
   }
 
   function render() {

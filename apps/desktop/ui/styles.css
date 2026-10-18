@@ -503,8 +503,7 @@ body.compare .xf-app { left: 0 !important; top: 0 !important; }
    v0.2 — Stats + Activity tabs (tray), trust-tier markers
    ===================================================================== */
 .tm { font-style: normal; font-size: 8px; margin-left: 1px; vertical-align: 1px; }
-.tm-tracked { color: #3ddc5a; } .tm-imported { color: #6fb0ff; } .tm-estimated { display: none; }
-.est { color: #b9c3d6; text-decoration: underline dotted rgba(255,255,255,.45); text-underline-offset: 2px; }
+.tm-tracked { color: #3ddc5a; } .tm-imported { color: #6fb0ff; }
 /* Stats tab: fits the 217px viewport (no horizontal scroll) */
 .st, .av { width: 100%; }
 .st-g .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -529,7 +528,6 @@ body.compare .xf-app { left: 0 !important; top: 0 !important; }
 .st-sum em { font-style: normal; font-size: 7px; color: #3ddc5a; margin-left: 1px; }
 .st-legend { margin: 3px 4px 0; font-size: 9px; font-weight: normal; color: #8ea3c8; white-space: nowrap; }
 .st-legend .tm { margin: 0 2px 0 4px; font-size: 8px; } .st-legend .tm:first-child { margin-left: 0; }
-.st-legend .est { margin: 0 2px 0 4px; text-decoration: none; color: #b9c3d6; font-weight: bold; }
 .st-link { position: sticky; bottom: 0; z-index: 2; margin: 3px 0 0; padding: 1px 4px 2px; background: linear-gradient(rgba(0,0,0,.85), #000 40%); border-top: 1px solid #1f3a6e; }
 
 .st-link a { color: var(--cyan); cursor: pointer; text-decoration: underline; text-underline-offset: 1px; }
@@ -557,16 +555,13 @@ body.compare .xf-app { left: 0 !important; top: 0 !important; }
 
 /* =====================================================================
    v0.2 — website profile: trust badges, linked accounts, signature,
-   achievements, WoW characters, data export, estimator modal
+   achievements, WoW characters, data export
    ===================================================================== */
 .h3n { float: right; font-weight: normal; text-transform: none; letter-spacing: 0; color: rgba(255,255,255,.65); font-size: 10px; }
-.pf-rank .pf-est { display: block; font-size: 10px; color: #8ea3c8; margin-top: 1px; }
 .tb { display: inline-block; padding: 0 4px; border-radius: 2px; font-size: 9px; font-weight: bold; line-height: 13px; white-space: nowrap; }
 .tb-tracked { background: rgba(61,220,90,.14); color: #6ff08a; border: 1px solid rgba(61,220,90,.5); }
 .tb-imported { background: rgba(111,176,255,.14); color: #9cc8ff; border: 1px solid rgba(111,176,255,.5); }
-.tb-estimated { background: transparent; color: #b9c3d6; border: 1px dashed rgba(185,195,214,.6); }
 .pf-hist td:nth-child(5) { width: 1%; }
-.pf-hist tr.est-tot td { border-top: 0; font-weight: normal; color: #b9c3d6 !important; }
 .pf-note { font-size: 10px; font-style: italic; color: #8ea3c8; margin: 1px 0 0 20px; white-space: normal; }
 .pf-legend { font-size: 10px; color: #8ea3c8; border-top: 1px solid var(--pf-line); line-height: 1.7; }
 .pf-sub { font-weight: bold; color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; border-top: 1px solid var(--pf-line); padding: 5px 8px 0 !important; }
@@ -614,30 +609,6 @@ body.compare .xf-app { left: 0 !important; top: 0 !important; }
 .wow-alts .pt { width: 22px; height: 22px; border: 1px solid var(--pf-line); display: block; flex: none; }
 .wow-alts li div { flex: 1; } .wow-alts li b { color: #fff; }
 .wp-btn.alt { background: linear-gradient(#5a5f6a, #2a2e36); }
-/* estimator modal */
-.web-page { position: relative; }
-.est-ovl { position: fixed; left: 0; right: 0; top: 50px; bottom: 0; background: rgba(2,6,14,.72); display: flex; align-items: flex-start; justify-content: center; padding-top: 40px; z-index: 50; }
-.est-box { width: 560px; background: #0f1f36; border: 1px solid #3a6aa8; box-shadow: 0 8px 30px rgba(0,0,0,.7); font: 11px/1.4 var(--vfont); color: #c9d4e3; }
-.wp.prof-gold .est-box { background: #1f170c; border-color: #7a5210; color: #e6d9c0; }
-.est-box h3 { margin: 0; padding: 4px 8px; font: bold 12px var(--vfont); color: #fff; background: linear-gradient(var(--pf-head1, #1d4f8a), var(--pf-head2, #0d2a52)); text-transform: uppercase; letter-spacing: .3px; display: flex; }
-.est-box h3 button { margin-left: auto; width: 18px; height: 16px; border: 1px solid #000; background: linear-gradient(#e27a5a, #c0401e); color: #fff; font-weight: bold; cursor: pointer; line-height: 12px; padding: 0; }
-.est-body { padding: 8px 10px; }
-.est-intro { margin: 0 0 8px; color: #8ea3c8; }
-.est-game { display: flex; align-items: center; gap: 6px; font-weight: bold; color: #fff; margin-bottom: 6px; }
-.est-game select, .est-t input, .est-note input { font: 11px var(--vfont); border: 1px solid #000; background: #050b16; color: #fff; height: 19px; }
-.est-game select { min-width: 220px; }
-.est-t { width: 100%; border-collapse: collapse; }
-.est-t th { text-align: left; font-size: 10px; color: #8ea3c8; padding: 2px 4px; border-bottom: 1px solid var(--pf-line, #1e3a60); }
-.est-t td { padding: 3px 4px; border-bottom: 1px solid rgba(255,255,255,.05); }
-.est-t input { width: 64px; padding: 0 3px; } .est-t td.n { color: #fff; font-weight: bold; }
-.est-add { display: inline-block; margin: 5px 0 8px; }
-.est-note { display: flex; flex-direction: column; gap: 2px; color: #8ea3c8; font-size: 10px; } .est-note input { width: 100%; padding: 0 4px; }
-.est-res { display: flex; gap: 12px; margin-top: 10px; padding: 8px; background: rgba(0,0,0,.3); border: 1px solid var(--pf-line, #1e3a60); }
-.est-res > div:first-child { flex: none; text-align: center; }
-.est-res small { display: block; color: #8ea3c8; font-size: 10px; }
-.est-res b { display: block; font: bold 28px var(--vfont); color: #b9c3d6; text-decoration: underline dotted rgba(255,255,255,.4); text-underline-offset: 4px; margin: 2px 0 4px; }
-.est-chk { font-size: 10px; color: #8ea3c8; line-height: 1.6; } .est-chk div:nth-child(-n+2) { color: #6ff08a; } .est-chk div.bad { color: #ff8a6a; }
-.est-foot { display: flex; gap: 6px; justify-content: flex-end; padding: 0 10px 10px; }
 /* signature-only render mode (for exporting the PNG) */
 body.sig-only { background: #000; } body.sig-only #desktop, body.sig-only #taskbar { display: none; }
 .sig-host { position: absolute; left: 0; top: 0; } .sig-host .sig { display: block; }

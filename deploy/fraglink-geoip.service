@@ -1,0 +1,8 @@
+[Unit]
+Description=Fraglink monthly IP-to-country database refresh (DB-IP Lite)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fraglink-geoip

@@ -362,7 +362,7 @@ async fn profile(
             total_min += g.display_min;
             min_7d += g.minutes_7d;
             let listed = named.contains_key(&g.game_id);
-            if g.display_min == 0 && g.minutes_7d == 0 && g.estimated_min == 0 {
+            if g.display_min == 0 && g.minutes_7d == 0 {
                 continue;
             }
             games.push(json!({
@@ -371,7 +371,6 @@ async fn profile(
                 "listed": listed,
                 "minutes_7d": g.minutes_7d,
                 "total_min": g.display_min,
-                "estimated_min": g.estimated_min,
                 "tier": g.display_tier,
                 "last_played_at": g.last_played_at,
                 "steam_appid": if listed { apps.get(&g.game_id).copied() } else { None },

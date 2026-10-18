@@ -166,3 +166,12 @@ the entries say what changing them would cost.
 - **Scope:** chat, voice, video, broadcasting, file transfer, screenshots, chat rooms, the in-game overlay and the server browser are left out. Settings for features that don't exist yet (sounds, nickname, language, some privacy switches, custom status and groups) are saved so the dialog is complete, and are listed in the changelog as inert.
 - **Launching** only uses data Fraglink found itself or the user typed into Options (Steam/Epic launcher URLs, a known .exe); the UI passes a game id, never a command line.
 
+
+## D31. No Estimated tier; data retention numbers
+
+**Date:** 2026-10-18
+
+- **Estimated hours are gone.** The history calculator and the Estimated tier (D5–D7) are removed from the app, website, admin, export and API. `POST /api/v1/hours/estimate` and `/web/estimate` answer 410 Gone. Old `hours_entries` rows with tier `estimated` stay in the table untouched, but `user_game_stats` (migration 0025) no longer reads them, so they count for nothing and show nowhere. They still appear in the user's own `hours_entries.json` export, because it is data we hold. Hours are Tracked or Imported, and a game shows the larger of the two.
+- `/api/v1/stats` still sends `estimated_min: 0` because app builds up to 0.3.0-beta.1 read it. Drop it once those builds are retired.
+- **Retention:** accounts are purged 7 days after deletion is requested. Sign-ins (IP, browser, country) are deleted 30 days after they were revoked or expired. App devices unused for 180 days are deleted, and that app has to sign in again. Backups (nightly dumps and manual pre-deploy copies) are deleted at 14 days. All of these run automatically: the server hourly, and the backup job nightly.
+- **Country lookup** uses DB-IP "IP to Country Lite" (CC BY 4.0, attribution "IP Geolocation by DB-IP" linking to db-ip.com, shown under Settings > Security). It's an offline file refreshed monthly, so no lookup leaves the server.

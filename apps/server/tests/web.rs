@@ -45,10 +45,7 @@ async fn web_login_dashboard_and_forms(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
 
-    // estimate + import via forms; names are HTML-escaped on the dashboard
-    // a name that isn't on the server's list is refused (nobody creates or names games)
-    let r = form(&app, "/web/estimate", Some(&cookie), Some(ORIGIN), "game_name=%3Cscript%3Ealert(1)%3C%2Fscript%3E&from_year=2005&to_year=2006&hours_per_week=10").await;
-    assert!(r.location().starts_with("/?err="), "{}", r.location());
+    // the old estimate form is gone (410), only game counters can be added
     let r = form(
         &app,
         "/web/estimate",
@@ -57,7 +54,17 @@ async fn web_login_dashboard_and_forms(pool: PgPool) {
         "game_name=Counter-Strike+2&from_year=2005&to_year=2006&hours_per_week=10",
     )
     .await;
-    assert!(r.location().starts_with("/?msg="), "{}", r.location());
+    assert_eq!(r.status, StatusCode::GONE);
+    // a name that isn't on the server's list is refused (nobody creates or names games)
+    let r = form(
+        &app,
+        "/web/import",
+        Some(&cookie),
+        Some(ORIGIN),
+        "game_name=%3Cscript%3Ealert(1)%3C%2Fscript%3E&hours=10&source=manual",
+    )
+    .await;
+    assert!(r.location().starts_with("/?err="), "{}", r.location());
     let r = form(
         &app,
         "/web/import",
@@ -113,7 +120,7 @@ async fn web_login_dashboard_and_forms(pool: PgPool) {
     assert!(home.text.contains("&lt;b&gt;hi&lt;/b&gt;"));
     // "World of Warcraft" matched the known game, shown as Imported, 250.5 h
     assert!(home.text.contains("◆ 250.5h"), "{}", home.text);
-    assert!(home.text.contains("~ Estimated"));
+    assert!(!home.text.contains("Estimate"), "{}", home.text);
     let gid: String =
         sqlx::query_scalar("SELECT game_id FROM hours_entries WHERE tier = 'imported'")
             .fetch_one(&pool)

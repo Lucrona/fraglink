@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Removed
+- Estimated hours and the "Estimate your history" calculator. Hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter.
+
+### Changed
+- The app's stats legend shows only Tracked and Imported.
+- Desktop apps that haven't been used for 180 days are signed out and need to sign in again.
+
+### Server
+- Old sign-ins are deleted 30 days after they were signed out or expired. Unused app devices are deleted after 180 days.
+- Sign-in history shows an approximate country again, using an offline DB-IP database that is refreshed monthly.
+- Backups made before deploys are now deleted after 14 days, like the nightly backups.
+
 ## [0.3.0-beta.1] - 2026-10-12
 
 The first Fraglink beta. From now on releases are numbered 0.3.0-beta.1, 0.3.0-beta.2, and so on.

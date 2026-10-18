@@ -1,5 +1,5 @@
 //! Minimal server-rendered pages (no JavaScript): sign up / sign in, approve a
-//! desktop pairing code, link + sync Steam, add Imported/Estimated hours, manage
+//! desktop pairing code, link + sync Steam, add Imported hours, manage
 //! devices, export. The real website (Astro, M4) replaces these.
 
 #![allow(clippy::type_complexity)]
@@ -7,7 +7,7 @@
 use crate::api::{self, same_origin, GameStat};
 use crate::auth::{self, AuthUser, MaybeUser, SESSION_COOKIE};
 use crate::error::AppError;
-use crate::hours::{self, Era};
+use crate::hours;
 use crate::{steam, AppState};
 use axum::extract::{Form, Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
@@ -29,7 +29,7 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/steam/callback", get(steam_callback))
         .route("/web/steam/link", post(web_steam_link))
         .route("/web/steam/sync", post(web_steam_sync))
-        .route("/web/estimate", post(web_estimate))
+        .route("/web/estimate", post(api::estimates_gone))
         .route("/web/import", post(web_import))
         .route("/web/hours/{id}/delete", post(web_delete_hours))
         .route("/web/devices/{id}/revoke", post(web_revoke_device))
@@ -79,7 +79,7 @@ input,select{{font:inherit;padding:5px 7px;border-radius:4px;border:1px solid #3
 button{{font:inherit;padding:5px 12px;border-radius:4px;border:1px solid #04c1fa;background:#1b4a8a;color:#fff;cursor:pointer}}
 table{{width:100%;border-collapse:collapse}} td,th{{padding:4px 6px;border-bottom:1px solid #22406f;text-align:left}}
 th{{color:#9fb3d6;font-weight:normal}} td.n{{text-align:right;white-space:nowrap}}
-.t-tracked{{color:#4ee07a}} .t-imported{{color:#5fb2ff}} .t-estimated{{color:#c9b36a;text-decoration:underline dotted}}
+.t-tracked{{color:#4ee07a}} .t-imported{{color:#5fb2ff}}
 .msg{{background:#123d2a;border-color:#2e8a5a}} .err{{background:#4a1a1a;border-color:#a33}}
 .code{{font:bold 26px monospace;letter-spacing:3px}} small.m{{color:#9fb3d6}} form.inline{{display:inline}}
 </style></head><body><header><b>FRAGLINK</b><small>local dev server · M2 preview</small></header><main>{b}</main></body></html>"#,
@@ -120,7 +120,6 @@ fn back_err(e: AppError) -> Response {
 fn tier_mark(tier: &str) -> &'static str {
     match tier {
         "imported" => "◆",
-        "estimated" => "~",
         _ => "●",
     }
 }
@@ -171,7 +170,7 @@ async fn home(
     .await?;
     let mut entries: Vec<(Uuid, String, String, String, i32, Option<String>)> = sqlx::query_as(
         "SELECT h.id, h.game_id, h.tier, h.source, h.minutes, h.note FROM hours_entries h
-         WHERE h.user_id = $1 ORDER BY h.created_at DESC",
+         WHERE h.user_id = $1 AND h.tier = 'imported' ORDER BY h.created_at DESC",
     )
     .bind(uid)
     .fetch_all(&st.db)
@@ -200,10 +199,9 @@ async fn home(
     );
     // stats
     let verified: i64 = games.iter().map(|g| g.display_min).sum();
-    let estimated: i64 = games.iter().map(|g| g.estimated_min).sum();
-    b += r#"<div class="card"><h2>Your hours</h2><table><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total</th><th class="n">Estimated</th></tr>"#;
+    b += r#"<div class="card"><h2>Your hours</h2><table><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total</th></tr>"#;
     if games.is_empty() {
-        b += r#"<tr><td colspan="4"><small class="m">Nothing yet. Pair the tray app, sync Steam or add hours below.</small></td></tr>"#;
+        b += r#"<tr><td colspan="3"><small class="m">Nothing yet. Pair the tray app, sync Steam or add hours below.</small></td></tr>"#;
     }
     for g in &games {
         let GameStat {
@@ -211,7 +209,6 @@ async fn home(
             display_min,
             display_tier,
             minutes_7d,
-            estimated_min,
             ..
         } = g;
         let total = if *display_min > 0 {
@@ -223,26 +220,16 @@ async fn home(
         } else {
             "–".into()
         };
-        let est = if *estimated_min > 0 {
-            format!(
-                r#"<span class="t-estimated">~{}h</span>"#,
-                hours::group(hours::round_estimate_hours(estimated_min / 60))
-            )
-        } else {
-            String::new()
-        };
         b += &format!(
-            r#"<tr><td>{}</td><td class="n">{}</td><td class="n">{}</td><td class="n">{}</td></tr>"#,
+            r#"<tr><td>{}</td><td class="n">{}</td><td class="n">{}</td></tr>"#,
             esc(name),
             hrs(*minutes_7d),
-            total,
-            est
+            total
         );
     }
     b += &format!(
-        r#"</table><p><b>{}</b> verified · <span class="t-estimated">~{}h</span> estimated<br><small class="m"><span class="t-tracked">● Tracked</span> = Fraglink sessions or Steam's own playtime · <span class="t-imported">◆ Imported</span> = a game's own counter you entered (self-reported) · <span class="t-estimated">~ Estimated</span> = your history estimate, never used for ranks.</small></p></div>"#,
-        hrs(verified),
-        hours::group(hours::round_estimate_hours(estimated / 60))
+        r#"</table><p><b>{}</b> verified<br><small class="m"><span class="t-tracked">● Tracked</span> = Fraglink sessions or Steam's own playtime · <span class="t-imported">◆ Imported</span> = a game's own counter you entered (self-reported), never used for ranks.</small></p></div>"#,
+        hrs(verified)
     );
     // steam
     b += r#"<div class="card"><h2>Steam</h2>"#;
@@ -269,12 +256,9 @@ async fn home(
         r#"<p><small class="m">{}</small></p></div>"#,
         esc(steam::PRIVATE_HELP)
     );
-    // estimate + import
+    // import
     b += r#"<div class="card"><h2>Add hours from before Fraglink</h2>
-<form method="post" action="/web/estimate"><b>Estimate</b> (~): <input name="game_name" placeholder="Game, e.g. World of Warcraft" required>
-from <input name="from_year" type="number" min="1970" max="2100" value="2005" style="width:5em"> to <input name="to_year" type="number" min="1970" max="2100" value="2008" style="width:5em">
-at <input name="hours_per_week" type="number" step="0.5" min="0.5" max="80" value="10" style="width:4em"> h/week <button>Save estimate</button></form>
-<form method="post" action="/web/import" style="margin-top:8px"><b>Game counter</b> (◆, e.g. /played): <input name="game_name" placeholder="Game" required> <input name="hours" type="number" step="0.1" min="0.1" placeholder="hours" style="width:6em" required>
+<form method="post" action="/web/import"><b>Game counter</b> (◆, e.g. /played): <input name="game_name" placeholder="Game" required> <input name="hours" type="number" step="0.1" min="0.1" placeholder="hours" style="width:6em" required>
 <select name="source"><option value="manual">typed in</option><option value="wow_manual">WoW /played</option><option value="xbox_recap">Xbox recap</option></select> <button>Save</button></form>"#;
     if !entries.is_empty() {
         b += "<table style=\"margin-top:10px\">";
@@ -691,55 +675,6 @@ async fn web_steam_sync(State(st): State<AppState>, headers: HeaderMap, a: AuthU
             r.games,
             hours::group(r.minutes_total / 60)
         )),
-        Err(e) => back_err(e),
-    }
-}
-
-#[derive(Deserialize)]
-struct EstimateForm {
-    game_name: String,
-    from_year: i32,
-    to_year: i32,
-    hours_per_week: f64,
-}
-
-async fn web_estimate(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    a: AuthUser,
-    Form(f): Form<EstimateForm>,
-) -> Response {
-    if let Err(e) = same_origin(&headers, &st) {
-        return e.into_response();
-    }
-    let req = api::EstimateReq {
-        game_id: api::known_game_by_name(&st, &f.game_name),
-        game_name: Some(f.game_name.clone()),
-        eras: vec![Era {
-            from_year: f.from_year,
-            to_year: f.to_year,
-            hours_per_week: f.hours_per_week,
-        }],
-        note: None,
-    };
-    match api::estimate_for(&st, a.user.id, req).await {
-        Ok(v) => {
-            let mut m = format!(
-                "Saved estimate: {} for {}.",
-                v["display"].as_str().unwrap_or(""),
-                f.game_name.trim()
-            );
-            if let Some(w) = v["warnings"].as_array().filter(|w| !w.is_empty()) {
-                m += &format!(
-                    " Note: {}",
-                    w.iter()
-                        .filter_map(|x| x.as_str())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                );
-            }
-            back(&m)
-        }
         Err(e) => back_err(e),
     }
 }

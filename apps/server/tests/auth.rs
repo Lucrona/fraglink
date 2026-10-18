@@ -172,7 +172,14 @@ async fn delete_account_removes_everything(pool: PgPool) {
     )
     .await;
     assert_eq!(r.json()["accepted"].as_array().unwrap().len(), 1);
-    api(&app, "POST", "/api/v1/hours/estimate", Some(&t), Some(json!({"game_name":"Old Game","eras":[{"from_year":2005,"to_year":2006,"hours_per_week":5}]}))).await;
+    api(
+        &app,
+        "POST",
+        "/api/v1/hours/import",
+        Some(&t),
+        Some(json!({"game_id":"cs2","minutes":300})),
+    )
+    .await;
 
     let r = api(
         &app,
@@ -313,4 +320,103 @@ async fn desktop_signup_login_search(pool: PgPool) {
     let users = body["users"].as_array().unwrap();
     assert_eq!(users.len(), 1, "{}", r.text);
     assert_eq!(users[0]["handle"], "zed_two");
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn old_sign_ins_are_purged(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let web = signup(&app, "purge@example.com", "purger").await;
+    // eight tokens: web and device, in every state that matters
+    for _ in 0..3 {
+        pair(&app, &web).await;
+    }
+    for _ in 0..4 {
+        let r = api(
+            &app,
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            Some(json!({"email":"purge@example.com","password":"correct horse battery"})),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    }
+    let ids: Vec<(uuid::Uuid, String)> =
+        sqlx::query_as("SELECT id, kind FROM auth_tokens ORDER BY kind, created_at")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let dev: Vec<uuid::Uuid> = ids
+        .iter()
+        .filter(|x| x.1 == "device")
+        .map(|x| x.0)
+        .collect();
+    let webs: Vec<uuid::Uuid> = ids.iter().filter(|x| x.1 == "web").map(|x| x.0).collect();
+    assert_eq!((dev.len(), webs.len()), (3, 5));
+    let set = |sql: &'static str, id: uuid::Uuid| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(sql).bind(id).execute(&pool).await.unwrap();
+        }
+    };
+    // purged: web revoked 31 days ago, web expired 31 days ago, device revoked 31 days
+    // ago, device unused for 181 days
+    set(
+        "UPDATE auth_tokens SET revoked_at = now() - interval '31 days' WHERE id = $1",
+        webs[1],
+    )
+    .await;
+    set(
+        "UPDATE auth_tokens SET expires_at = now() - interval '31 days' WHERE id = $1",
+        webs[2],
+    )
+    .await;
+    set(
+        "UPDATE auth_tokens SET revoked_at = now() - interval '31 days' WHERE id = $1",
+        dev[0],
+    )
+    .await;
+    set(
+        "UPDATE auth_tokens SET last_used_at = now() - interval '181 days' WHERE id = $1",
+        dev[1],
+    )
+    .await;
+    // kept: web revoked 29 days ago, web unused for a year but not expired, device used
+    // 179 days ago (and the signup token itself)
+    set(
+        "UPDATE auth_tokens SET revoked_at = now() - interval '29 days' WHERE id = $1",
+        webs[3],
+    )
+    .await;
+    set(
+        "UPDATE auth_tokens SET last_used_at = now() - interval '365 days' WHERE id = $1",
+        webs[4],
+    )
+    .await;
+    set(
+        "UPDATE auth_tokens SET last_used_at = now() - interval '179 days' WHERE id = $1",
+        dev[2],
+    )
+    .await;
+    let st = fraglink_server::AppState::new(
+        pool.clone(),
+        fraglink_server::Config::for_tests("postgres://unused"),
+    );
+    assert_eq!(
+        fraglink_server::account::purge_tokens(&st).await.unwrap(),
+        4
+    );
+    let left: Vec<uuid::Uuid> = sqlx::query_scalar("SELECT id FROM auth_tokens")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    let mut want = vec![webs[0], webs[3], webs[4], dev[2]];
+    let mut got = left.clone();
+    want.sort();
+    got.sort();
+    assert_eq!(got, want);
+    assert_eq!(
+        fraglink_server::account::purge_tokens(&st).await.unwrap(),
+        0
+    );
 }

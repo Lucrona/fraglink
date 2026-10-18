@@ -444,27 +444,26 @@ struct SearchQ {
     offset: Option<i64>,
 }
 
-/// Per-game totals over every trust tier. Per player we count their best known figure
-/// (max of tracked/imported, or the estimate when that's all there is) so tiers never
-/// double count; the breakdown sums each tier on its own.
+/// Per-game totals over both trust tiers. Per player we count their best known figure
+/// (max of tracked/imported) so tiers never double count; the breakdown sums each tier
+/// on its own.
 const GAME_TOTALS: &str = "SELECT game_id,
-        count(*) FILTER (WHERE display_min > 0 OR estimated_min > 0 OR minutes_7d > 0) AS players,
-        sum(GREATEST(display_min, estimated_min))::bigint AS total_min,
+        count(*) FILTER (WHERE display_min > 0 OR minutes_7d > 0) AS players,
+        sum(display_min)::bigint AS total_min,
         sum(tracked_min)::bigint AS tracked_min, sum(imported_min)::bigint AS imported_min,
-        sum(estimated_min)::bigint AS estimated_min, max(last_played_at) AS last_played_at
+        max(last_played_at) AS last_played_at
     FROM user_game_stats";
 
-type Totals = (String, i64, i64, i64, i64, i64, Option<DateTime<Utc>>);
+type Totals = (String, i64, i64, i64, i64, Option<DateTime<Utc>>);
 
 fn put_totals(v: &mut Value, t: Option<&Totals>) {
-    let z = (String::new(), 0, 0, 0, 0, 0, None);
+    let z = (String::new(), 0, 0, 0, 0, None);
     let t = t.unwrap_or(&z);
     v["players"] = json!(t.1);
     v["total_min"] = json!(t.2);
     v["tracked_min"] = json!(t.3);
     v["imported_min"] = json!(t.4);
-    v["estimated_min"] = json!(t.5);
-    v["last_played_at"] = json!(t.6);
+    v["last_played_at"] = json!(t.5);
 }
 
 const ADMIN_PAGE: i64 = 50;
@@ -556,7 +555,7 @@ async fn games_search(
         // every game with any hours, aggregated and paged in the database
         let rows: Vec<Totals> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "WITH t AS ({GAME_TOTALS} GROUP BY game_id)
-             SELECT t.game_id, t.players, t.total_min, t.tracked_min, t.imported_min, t.estimated_min, t.last_played_at
+             SELECT t.game_id, t.players, t.total_min, t.tracked_min, t.imported_min, t.last_played_at
              FROM t LEFT JOIN games gm ON gm.id = t.game_id
              WHERE t.game_id NOT LIKE 'manual:%' AND (t.players > 0 OR t.total_min > 0)
              ORDER BY {sort} LIMIT $1 OFFSET $2"
@@ -567,7 +566,7 @@ async fn games_search(
         .await?;
         let total: i64 = sqlx::query_scalar(
             "SELECT count(DISTINCT game_id) FROM user_game_stats WHERE game_id NOT LIKE 'manual:%'
-               AND (display_min > 0 OR estimated_min > 0 OR minutes_7d > 0)",
+               AND (display_min > 0 OR minutes_7d > 0)",
         )
         .fetch_one(&st.db)
         .await?;
@@ -621,7 +620,7 @@ async fn games_search(
             "WITH t AS ({GAME_TOTALS} WHERE game_id = ANY($1) GROUP BY game_id),
                   ids AS (SELECT unnest($1::text[]) AS game_id)
              SELECT ids.game_id, coalesce(t.players, 0), coalesce(t.total_min, 0)::bigint, coalesce(t.tracked_min, 0)::bigint,
-                    coalesce(t.imported_min, 0)::bigint, coalesce(t.estimated_min, 0)::bigint, t.last_played_at
+                    coalesce(t.imported_min, 0)::bigint, t.last_played_at
              FROM ids LEFT JOIN t ON t.game_id = ids.game_id LEFT JOIN games gm ON gm.id = ids.game_id
              ORDER BY {sort} LIMIT $2 OFFSET $3"
         ).replace("t.game_id)", "ids.game_id)")))
@@ -1478,8 +1477,8 @@ struct HoursReq {
 }
 
 async fn tiers(st: &AppState, user: Uuid, game: &str) -> ApiResult<Value> {
-    let r: Option<(i64, i64, i64, i64)> = sqlx::query_as(
-        "SELECT tracked_min, imported_min, estimated_min, display_min FROM user_game_stats
+    let r: Option<(i64, i64, i64)> = sqlx::query_as(
+        "SELECT tracked_min, imported_min, display_min FROM user_game_stats
          WHERE user_id = $1 AND game_id = $2",
     )
     .bind(user)
@@ -1494,7 +1493,7 @@ async fn tiers(st: &AppState, user: Uuid, game: &str) -> ApiResult<Value> {
     .fetch_one(&st.db)
     .await?;
     Ok(match r {
-        Some((t, i, e, d)) => json!({ "tracked_min": t, "imported_min": i, "estimated_min": e,
+        Some((t, i, d)) => json!({ "tracked_min": t, "imported_min": i,
                                       "display_min": d, "sessions": sess.0, "session_min": sess.1 / 60 }),
         None => json!({ "display_min": 0, "sessions": 0, "session_min": 0 }),
     })

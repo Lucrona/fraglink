@@ -139,8 +139,8 @@ signed in. There are no analytics, advertising or third-party cookies, and no tr
   once per hour. The tray exports its local data as a zip too.
 - **Delete:** deleting your account on the website (password plus a confirmation box) immediately removes your account, sessions,
   hours, Steam link, tokens, friendships, requests, blocks and presence from the database.
-  Backups: **TBD** (how long database backups are kept once hosting exists).
-- **Correct:** you can delete individual imported or estimated entries and exclude games in the
+  Backups are kept for 14 days.
+- **Correct:** you can delete individual imported entries and exclude games in the
   tray. Changing your display name isn't built yet (**TBD**).
 - **Stop syncing:** sign out in the tray. Nothing is tracked while signed out. Sessions already
   recorded stay until you delete them or your account.
