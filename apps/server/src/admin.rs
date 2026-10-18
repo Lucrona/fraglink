@@ -81,6 +81,11 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/v1/admin/users/{id}/ban", post(ban))
         .route("/api/v1/admin/users/{id}/unban", post(unban))
+        .route(
+            "/api/v1/admin/users/{id}/age_review/clear",
+            post(age_review_clear),
+        )
+        .route("/api/v1/admin/users/{id}/birth_date", post(set_birth_date))
         .route("/api/v1/admin/users/{id}/handle", post(change_handle))
         .route("/api/v1/admin/users/{id}/hours", post(adjust_hours))
         .route(
@@ -1113,14 +1118,16 @@ async fn users_search(
         Option<String>,
         Option<DateTime<Utc>>,
         bool,
+        bool,
+        Option<DateTime<Utc>>,
     )> = sqlx::query_as(
         "SELECT u.id, u.handle, u.display_name, u.email, u.created_at, u.role, u.banned_at,
-                    p.status, p.heartbeat_at, u.is_test
+                    p.status, p.heartbeat_at, u.is_test, u.is_minor, u.age_review_at
              FROM users u LEFT JOIN presence p ON p.user_id = u.id
              WHERE u.deleted_at IS NULL
                AND ($1 = '' OR lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2
                     OR (u.email <> '' AND lower(u.email) LIKE $2))
-             ORDER BY (lower(u.handle) = $1) DESC, u.created_at DESC
+             ORDER BY (lower(u.handle) = $1) DESC, (u.age_review_at IS NOT NULL) DESC, u.created_at DESC
              LIMIT 50",
     )
     .bind(&q)
@@ -1129,10 +1136,10 @@ async fn users_search(
     .await?;
     let users: Vec<Value> = rows
         .into_iter()
-        .map(|(id, h, d, e, c, role, banned, status, hb, test)| {
+        .map(|(id, h, d, e, c, role, banned, status, hb, test, minor, review)| {
             json!({ "id": id, "handle": h, "display_name": d, "email": e, "created_at": c,
                     "role": role, "banned": banned.is_some(), "status": status.unwrap_or_else(|| "offline".into()),
-                    "last_seen": hb, "is_test": test })
+                    "last_seen": hb, "is_test": test, "is_minor": minor, "age_review_at": review })
         })
         .collect();
     Ok(Json(json!({ "users": users })))
@@ -1178,6 +1185,17 @@ async fn user_detail(
         .await?;
     let (handle, display, email, created, role, banned_at, reason, share, verified) =
         r.ok_or_else(AppError::not_found)?;
+    let (minor, minor_set_at, age_review_at, birth_date): (
+        bool,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+        Option<chrono::NaiveDate>,
+    ) = sqlx::query_as(
+        "SELECT is_minor, minor_set_at, age_review_at, birth_date FROM users WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&st.db)
+    .await?;
     let presence: Option<(String, Option<String>, Option<String>, Option<String>, DateTime<Utc>, bool)> = sqlx::query_as(
         "SELECT status, game_id, game_name, game_detail, heartbeat_at, game_hidden FROM presence WHERE user_id = $1",
     )
@@ -1256,6 +1274,8 @@ async fn user_detail(
         "created_at": created, "role": role, "banned_at": banned_at, "ban_reason": reason,
         "share_activity": share, "friend_count": friends, "presence": presence,
         "devices": devices, "games": games, "sessions": sessions,
+        "is_minor": minor, "minor_set_at": minor_set_at, "age_review_at": age_review_at,
+        "birth_date": birth_date,
         "linked": linked.into_iter().map(|(p, d, v)| json!({"provider": p, "display": d, "verified": v})).collect::<Vec<_>>(),
     })))
 }
@@ -1465,6 +1485,98 @@ async fn unban(
     )
     .await?;
     Ok(Json(json!({ "ok": true })))
+}
+
+/// Admin > Users: an account paused because a birthday under 13 was entered. After looking
+/// into it, staff either clear the pause (the person can sign in again; the birthday was
+/// never stored) or ban/delete the account with the usual tools.
+async fn age_review_clear(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let (handle, role, _) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    let at: Option<DateTime<Utc>> = sqlx::query_scalar(
+        "UPDATE users u SET age_review_at = NULL FROM users old
+         WHERE u.id = $1 AND old.id = u.id AND old.age_review_at IS NOT NULL RETURNING old.age_review_at",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let Some(at) = at else {
+        return Err(bad(
+            "not_paused",
+            "This account isn't paused for an age check.",
+        ));
+    };
+    audit(
+        &st,
+        &s,
+        "user.age_review_clear",
+        &format!("user:{handle}"),
+        json!({ "age_review_at": at }),
+        json!({ "age_review_at": null }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct BirthDateReq {
+    /// YYYY-MM-DD. Admin-only correction; under-13 is refused (not stored).
+    birth_date: String,
+}
+
+async fn set_birth_date(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+    Json(r): Json<BirthDateReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let (handle, role, _) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    let birth = auth::parse_birth_date(Some(&r.birth_date))?;
+    let minor = auth::classify_dob(birth)?;
+    let old: Option<chrono::NaiveDate> =
+        sqlx::query_scalar("SELECT birth_date FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_one(&st.db)
+            .await?;
+    let was_minor: bool = sqlx::query_scalar("SELECT is_minor FROM users WHERE id = $1")
+        .bind(id)
+        .fetch_one(&st.db)
+        .await?;
+    sqlx::query(
+        "UPDATE users SET birth_date = $2, age_confirmed_at = coalesce(age_confirmed_at, now()),
+               is_minor = $3,
+               minor_set_at = CASE
+                 WHEN $3 AND NOT $4 THEN now()
+                 WHEN NOT $3 AND $4 THEN now()
+                 ELSE minor_set_at END,
+               public_profile = CASE WHEN $3 THEN false ELSE public_profile END
+         WHERE id = $1",
+    )
+    .bind(id)
+    .bind(birth)
+    .bind(minor)
+    .bind(was_minor)
+    .execute(&st.db)
+    .await?;
+    audit(
+        &st,
+        &s,
+        "user.birth_date",
+        &format!("user:{handle}"),
+        json!({ "birth_date": old, "is_minor": null }),
+        json!({ "birth_date": birth, "is_minor": minor }),
+    )
+    .await?;
+    Ok(Json(
+        json!({ "ok": true, "birth_date": birth, "is_minor": minor }),
+    ))
 }
 
 #[derive(Deserialize)]

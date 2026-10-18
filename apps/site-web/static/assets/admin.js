@@ -271,9 +271,9 @@ async function users(q) {
 }
 async function listUsers(q) {
   const d = await api("/admin/users?q=" + encodeURIComponent(q));
-  $("#ulist").innerHTML = d.users.length ? `<div class="note">${q ? "Matches" : "Newest accounts"}</div><table><thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Joined</th><th>Status</th></tr></thead><tbody>
-    ${d.users.map(u => `<tr class="click" data-id="${esc(u.id)}"><td><a href="#user/${esc(u.id)}">${esc(u.handle)}</a>${rolePill(u.role)}${u.is_test ? `<span class="pill" title="Test account: hidden from everyone else">test</span>` : ""}${u.banned ? `<span class="pill bad">banned</span>` : ""}</td>
-      <td>${esc(u.display_name)}</td><td class="muted">${esc(u.email || "-")}</td><td>${day(u.created_at)}</td>
+  $("#ulist").innerHTML = d.users.length ? `<div class="note">${q ? "Matches" : "Newest accounts"}</div><table><thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Age</th><th>Joined</th><th>Status</th></tr></thead><tbody>
+    ${d.users.map(u => `<tr class="click" data-id="${esc(u.id)}"><td><a href="#user/${esc(u.id)}">${esc(u.handle)}</a>${rolePill(u.role)}${u.is_test ? `<span class="pill" title="Test account: hidden from everyone else">test</span>` : ""}${u.banned ? `<span class="pill bad">banned</span>` : ""}${u.age_review_at ? `<span class="pill bad" title="Entered a birthday under 13. Can't sign in until reviewed.">age check</span>` : ""}</td>
+      <td>${esc(u.display_name)}</td><td class="muted">${esc(u.email || "-")}</td><td>${u.is_minor ? `<span class="pill" title="Under 18: private profile, kept off public lists">13–17</span>` : `<span class="dimt">18+</span>`}</td><td>${day(u.created_at)}</td>
       <td><span class="status"><i class="dot ${esc(u.status === "invisible" ? "offline" : u.status)}"></i>${esc(u.status)}</span>${u.last_seen ? ` <span class="dimt">${when(u.last_seen)}</span>` : ""}</td></tr>`).join("")}</tbody></table>`
     : `<div class="body empty">No accounts match.</div>`;
   $("#ulist").onclick = e => { const tr = e.target.closest("tr[data-id]"); if (tr && !e.target.closest("a")) location.hash = "user/" + tr.dataset.id; };
@@ -285,12 +285,14 @@ async function userDetail(id) {
   const pres = p.status && p.status !== "offline" ? `${esc(p.status)}${p.game_id ? " · playing " + esc(p.game_name || p.game_id) + (p.game_hidden ? " (hidden from friends)" : "") : ""}${p.game_detail ? " · " + esc(p.game_detail) : ""}` : "offline";
   view.innerHTML = `<p><a href="#users">← Users</a></p>
   <div class="split"><div class="col">
-    <section class="panel"><h2>${esc(u.handle)} ${rolePill(u.role)}${u.banned_at ? `<span class="pill bad">banned</span>` : ""}<span class="more"><a href="/u/${encodeURIComponent(u.handle)}">Public profile</a></span></h2><div class="body">
+    <section class="panel"><h2>${esc(u.handle)} ${rolePill(u.role)}${u.banned_at ? `<span class="pill bad">banned</span>` : ""}${u.age_review_at ? `<span class="pill bad">age check</span>` : ""}${u.is_minor ? `<span class="pill">13–17</span>` : ""}<span class="more"><a href="/u/${encodeURIComponent(u.handle)}">Public profile</a></span></h2><div class="body">
       <dl class="kv"><dt>Display name</dt><dd>${esc(u.display_name)}</dd><dt>Email</dt><dd>${esc(u.email || "-")}${u.email ? (u.email_verified ? " (verified)" : " (not verified)") : ""}</dd>
       <dt>Member since</dt><dd>${day(u.created_at)}</dd><dt>Status</dt><dd>${pres}${p.connected ? ` <span class="pill ok">connected</span>` : ""}</dd>
       <dt>Friends</dt><dd>${u.friend_count}</dd><dt>Shares activity</dt><dd>${u.share_activity ? "Yes" : "No"}</dd>
       ${u.linked.length ? `<dt>Linked</dt><dd>${u.linked.map(l => esc(l.provider) + " " + esc(l.display)).join(", ")}</dd>` : ""}
       ${u.banned_at ? `<dt>Banned</dt><dd>${when(u.banned_at)}${u.ban_reason ? " · " + esc(u.ban_reason) : ""}</dd>` : ""}
+      <dt>Date of birth</dt><dd>${u.birth_date ? esc(u.birth_date) : "<span class=\"dimt\">(not set)</span>"}${u.is_minor ? " · 13–17 (private profile, kept off public lists)" : " · 18 or older"}${u.minor_set_at ? ` · since ${day(u.minor_set_at)}` : ""}</dd>
+      ${u.age_review_at ? `<dt>Age check</dt><dd>Paused ${when(u.age_review_at)}: entered a birthday under 13 (not saved). Can't sign in until cleared.</dd>` : ""}
       <dt>User id</dt><dd class="mono dimt">${esc(u.id)}</dd></dl></div></section>
     <section class="panel"><h2>Games</h2>${u.games.length ? `<table><thead><tr><th></th><th>Game</th><th class="num">Past 7 days</th><th class="num">Total</th><th class="num"></th></tr></thead><tbody>
       ${u.games.map(g => `<tr data-game="${esc(g.game_id)}"><td class="ic">${icon(g.game_id, g.name)}</td><td>${esc(g.name)}${g.name === "Unlisted game" && g.stored_name ? ` <span class="dimt">(${esc(g.stored_name)})</span>` : ""}<div class="mono dimt">${esc(g.game_id)}</div></td>
@@ -300,8 +302,10 @@ async function userDetail(id) {
       ${u.sessions.map(s => `<tr data-sid="${esc(s.id)}"><td>${esc(s.name)}</td><td>${when(s.started_at)}</td><td class="num">${hrs(s.duration_s / 60)}${s.duration_s > 18 * 3600 ? `<span class="pill bad">long</span>` : ""}</td><td class="muted">${esc(s.source)}</td><td class="num"><button class="btn sm danger" data-delsess>Delete</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No sessions.</div>`}</section>
   </div><div class="col">
     <section class="panel"><h2>Actions</h2><div class="body f">
+      ${u.age_review_at ? `<div class="row"><button class="btn" id="ageclear">Clear age check</button></div><small>Lets them sign in again. If they really are under 13, ban or delete the account instead. Nothing is deleted automatically.</small><hr style="border:0;border-top:1px solid var(--line);margin:6px 0">` : ""}
       ${u.banned_at ? `<button class="btn" id="unban">Unban</button>` : `<label>Ban reason (optional, kept in the audit log)<input type="text" id="reason" maxlength="200"></label><div class="row"><button class="btn danger" id="ban">Ban account</button></div><small>Banned accounts are signed out everywhere, can't sign in, and their profile is hidden.</small>`}
       ${can.reset_password ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="resetpw">Reset password</button></div><small>Makes a temporary password (shown once) and signs the account out everywhere. Send it to the user yourself; email isn't set up yet.</small><div id="pwout"></div>` : ""}
+      ${can.reset_password ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><label>Date of birth (YYYY-MM-DD)<input type="date" id="newdob" min="1900-01-01" max="2099-12-31" value="${esc(u.birth_date || "")}"></label><div class="row"><button class="btn" id="chdob">Save date of birth</button></div><small>Only staff can change this. Under 13 is refused and not stored. 13–17 forces a private profile; turning 18 clears the under-18 flag but leaves the profile private.</small>` : ""}
       ${can.change_handle ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><label>Username<input type="text" id="newhandle" maxlength="20" value="${esc(u.handle)}"></label><div class="row"><button class="btn" id="chhandle">Change username</button></div><small>Users can't change their username themselves. The old one keeps redirecting to them and can't be taken by anyone else. Logged in the audit log.</small>` : ""}
       <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="rmav">Remove picture</button>${can.mfa_reset ? ` <button class="btn" id="mfareset">Reset two-step sign-in</button>` : ""}</div><small>Removing a picture resets it to the default and blocks that exact image. Resetting two-step sign-in lets them sign in with just their password (check it's really them first).</small>
       <div class="alert" id="amsg" hidden></div></div></section>
@@ -311,7 +315,16 @@ async function userDetail(id) {
   const ban = $("#ban"), unban = $("#unban"), reset = $("#resetpw");
   const chh = $("#chhandle");
   if (chh) chh.addEventListener("click", () => { const nh = $("#newhandle").value.trim(); if (nh && nh !== u.handle && confirm(`Change username ${u.handle} → ${nh}? Their profile address changes; the old one redirects.`)) act(chh, async () => { await api(`/admin/users/${id}/handle`, { method: "POST", body: { handle: nh } }); userDetail(id); }); });
+  const chdob = $("#chdob");
+  if (chdob) chdob.addEventListener("click", () => {
+    const d = ($("#newdob").value || "").trim();
+    if (!d) { msg(amsg, "Enter a date of birth."); return; }
+    if (!confirm(`Set date of birth for ${u.handle} to ${d}?`)) return;
+    act(chdob, async () => { await api(`/admin/users/${id}/birth_date`, { method: "POST", body: { birth_date: d } }); userDetail(id); }).catch(x => msg(amsg, x.message));
+  });
   if (ban) ban.addEventListener("click", () => { if (confirm("Ban " + u.handle + "?")) act(ban, async () => { await api(`/admin/users/${id}/ban`, { method: "POST", body: { reason: $("#reason").value } }); userDetail(id); }).catch(x => msg(amsg, x.message)); });
+  const agec = $("#ageclear");
+  if (agec) agec.addEventListener("click", () => { if (confirm("Clear the age check for " + u.handle + "? They'll be able to sign in again.")) act(agec, async () => { await api(`/admin/users/${id}/age_review/clear`, { method: "POST" }); userDetail(id); }).catch(x => msg(amsg, x.message)); });
   if (unban) unban.addEventListener("click", () => act(unban, async () => { await api(`/admin/users/${id}/unban`, { method: "POST" }); userDetail(id); }));
   const rmav = $("#rmav"), mfar = $("#mfareset");
   if (rmav) rmav.addEventListener("click", () => { if (confirm("Remove " + u.handle + "'s picture and block it?")) act(rmav, async () => { await api(`/admin/users/${id}/avatar/remove`, { method: "POST" }); msg(amsg, "Picture removed.", true); }); });

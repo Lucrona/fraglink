@@ -144,7 +144,7 @@ pub async fn user_for_token(
          FROM auth_tokens t JOIN users u ON u.id = t.user_id
          WHERE t.token_hash = $1 AND t.revoked_at IS NULL
            AND (t.expires_at IS NULL OR t.expires_at > now()) AND u.deleted_at IS NULL
-           AND u.banned_at IS NULL",
+           AND u.banned_at IS NULL AND u.age_review_at IS NULL",
     )
     .bind(hash_token(token))
     .fetch_optional(&state.db)
@@ -302,28 +302,64 @@ pub fn validate_signup(email: &str, password: &str, handle: &str) -> Result<(), 
     Ok(())
 }
 
-/// Shown when the sign-up age tick box wasn't ticked.
-pub const AGE_TEXT: &str = "I'm 13 or older (16 or older in the EU/UK)";
+/// Neutral message when someone under 13 tries to sign up (no account is created).
+pub const TOO_YOUNG_TEXT: &str =
+    "Sorry, you aren't eligible to create a Fraglink account right now.";
 
-pub fn age_required() -> AppError {
-    AppError::bad_request(
-        "age_required",
-        "Please tick the box to confirm you're 13 or older (16 or older in the EU/UK).",
-    )
+pub fn too_young() -> AppError {
+    AppError::bad_request("too_young", TOO_YOUNG_TEXT)
 }
 
-/// Creates the account. `age_ok` is the sign-up tick box; without it nothing is created.
+/// Shown when an account is paused for an age check (neutral on purpose).
+pub const PAUSED_TEXT: &str = "Your account is paused while our team takes a quick look. If you have questions, email support@playfraglink.com.";
+
+pub fn account_paused() -> AppError {
+    AppError::new(StatusCode::FORBIDDEN, "account_paused", PAUSED_TEXT)
+}
+
+/// Today's date in Australia/Sydney (Fraglink's home zone), for age checks.
+pub fn today_aedt() -> chrono::NaiveDate {
+    use chrono::TimeZone;
+    chrono_tz::Australia::Sydney
+        .from_utc_datetime(&chrono::Utc::now().naive_utc())
+        .date_naive()
+}
+
+/// Parse a required YYYY-MM-DD date of birth from sign-up.
+pub fn parse_birth_date(raw: Option<&str>) -> ApiResult<chrono::NaiveDate> {
+    let s = raw
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| AppError::bad_request("dob_required", "Please enter your date of birth."))?;
+    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        .map_err(|_| AppError::bad_request("invalid_birth_date", "Please check the date."))
+}
+
+/// Classify a date of birth: Err(too_young) if under 13, else Ok(is_minor).
+pub fn classify_dob(birth: chrono::NaiveDate) -> ApiResult<bool> {
+    let Some(age) = crate::account::age_on(birth, today_aedt()).filter(|a| *a <= 120) else {
+        return Err(AppError::bad_request(
+            "invalid_birth_date",
+            "Please check the date.",
+        ));
+    };
+    if age < 13 {
+        return Err(too_young());
+    }
+    Ok(age < 18)
+}
+
+/// Creates the account. Requires a date of birth (day/month/year). Under 13 is refused
+/// with no row created. Ages 13–17 start as minors (always private); 18+ as adults.
 pub async fn create_user(
     state: &AppState,
     email: &str,
     password: &str,
     handle: &str,
-    age_ok: bool,
+    birth_date: chrono::NaiveDate,
 ) -> ApiResult<User> {
     validate_signup(email, password, handle)?;
-    if !age_ok {
-        return Err(age_required());
-    }
+    let minor = classify_dob(birth_date)?;
     // usernames freed by a staff rename stay with their old owner (old links redirect there)
     let reserved: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM handle_redirects WHERE old_handle = lower($1))",
@@ -346,13 +382,17 @@ pub async fn create_user(
         display_name: handle.trim().to_string(),
     };
     let r = sqlx::query(
-        "INSERT INTO users(id, email, handle, display_name, password_hash, age_confirmed_at) VALUES($1, $2, $3, $4, $5, now())",
+        "INSERT INTO users(id, email, handle, display_name, password_hash, age_confirmed_at,
+                           birth_date, is_minor, minor_set_at, public_profile)
+         VALUES($1, $2, $3, $4, $5, now(), $6, $7, CASE WHEN $7 THEN now() END, NOT $7)",
     )
     .bind(user.id)
     .bind(&user.email)
     .bind(&user.handle)
     .bind(&user.display_name)
     .bind(hash)
+    .bind(birth_date)
+    .bind(minor)
     .execute(&state.db)
     .await;
     match r {
@@ -393,8 +433,8 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
             "Too many failed sign-ins. Try again in 15 minutes.",
         ));
     }
-    let row: Option<(Uuid, String, String, String, String, bool)> = sqlx::query_as(
-        "SELECT id, email, handle, display_name, password_hash, banned_at IS NOT NULL FROM users
+    let row: Option<(Uuid, String, String, String, String, bool, bool)> = sqlx::query_as(
+        "SELECT id, email, handle, display_name, password_hash, banned_at IS NOT NULL, age_review_at IS NOT NULL FROM users
          WHERE ((lower(email) = $1 AND email <> '') OR lower(handle) = $1) AND deleted_at IS NULL
          ORDER BY (lower(handle) = $1) DESC LIMIT 1",
     )
@@ -402,8 +442,8 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
     .fetch_optional(&state.db)
     .await?;
     let pw = password.to_string();
-    let (user, hash, banned) = match row {
-        Some((id, email, handle, display_name, hash, banned)) => (
+    let (user, hash, banned, paused) = match row {
+        Some((id, email, handle, display_name, hash, banned, paused)) => (
             Some(User {
                 id,
                 email,
@@ -412,8 +452,9 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
             }),
             hash,
             banned,
+            paused,
         ),
-        None => (None, dummy_hash().to_string(), false),
+        None => (None, dummy_hash().to_string(), false, false),
     };
     // Argon2 is CPU-heavy: keep it off the async workers.
     let ok = tokio::task::spawn_blocking(move || verify_password(&pw, &hash))
@@ -425,6 +466,7 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
             "account_banned",
             "This account has been suspended.",
         )),
+        (Some(_), true) if paused => Err(account_paused()),
         (Some(u), true) => Ok(u),
         _ => {
             record_failure(state, &key);

@@ -446,21 +446,41 @@ pages.login = () => {
 
 pages.signup = () => {
   if (token() && me()) { location.replace("/"); return; }
+  const blockUntil = Number(localStorage.getItem("fl_dob_block_until") || 0);
+  if (blockUntil > Date.now()) {
+    const f = $("#signup"), err = $("#err");
+    if (f) f.hidden = true;
+    showErr(err, new Error("Sorry, you aren't eligible to create a Fraglink account right now."));
+    return;
+  }
   loadTurnstile();
   const f = $("#signup"), err = $("#err");
+  const ysel = f.dob_year, dsel = f.dob_day;
+  const yNow = new Date().getFullYear();
+  for (let y = yNow; y >= 1900; y--) ysel.insertAdjacentHTML("beforeend", `<option value="${y}">${y}</option>`);
+  for (let d = 1; d <= 31; d++) dsel.insertAdjacentHTML("beforeend", `<option value="${String(d).padStart(2, "0")}">${d}</option>`);
   f.addEventListener("submit", async e => {
     e.preventDefault(); err.hidden = true;
     if (f.password.value !== f.password2.value) { showErr(err, new Error("The passwords don't match.")); return; }
-    if (!f.terms.checked) { showErr(err, new Error("Please accept the Terms and Privacy Policy.")); return; }
-    if (!f.age_ok.checked) { showErr(err, new Error("Please tick the box to confirm you're 13 or older (16 or older in the EU/UK).")); return; }
+    if (!f.dob_year.value || !f.dob_month.value || !f.dob_day.value) {
+      showErr(err, new Error("Please enter your date of birth.")); return;
+    }
+    const birth_date = `${f.dob_year.value}-${f.dob_month.value}-${f.dob_day.value}`;
     const b = $("button", f); b.disabled = true;
     try {
-      const r = await api("/auth/signup", { method: "POST", body: { email: f.email.value.trim(), handle: f.handle.value.trim(), password: f.password.value, age_ok: f.age_ok.checked, turnstile: turnstileToken(f) } });
+      const r = await api("/auth/signup", { method: "POST", body: { email: f.email.value.trim(), handle: f.handle.value.trim(), password: f.password.value, birth_date, turnstile: turnstileToken(f) } });
       setSession(r.token, r.user);
       location.href = "/u/" + encodeURIComponent(r.user.handle) + "?welcome=1" + (r.user.email ? "&sent=1" : "");
-    } catch (x) { showErr(err, x); b.disabled = false; turnstileReset(); }
+    } catch (x) {
+      if (x.code === "too_young") {
+        localStorage.setItem("fl_dob_block_until", String(Date.now() + 24 * 3600 * 1000));
+        f.hidden = true;
+      }
+      showErr(err, x); b.disabled = false; turnstileReset();
+    }
   });
 };
+
 
 pages.forgot = () => {
   loadTurnstile();
@@ -832,7 +852,6 @@ pages.settings = async () => {
       ${row("Country", `<select class="t" name="country"><option value="">(not shown)</option>${COUNTRIES().map(([c, n]) => `<option value="${c}" ${(u.details || {}).country === c ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>`, "Shows a small flag next to your location.")}
       ${row("Real name", `<input class="t" name="real_name" maxlength="40" value="${esc((u.details || {}).real_name || "")}">`, "Optional.")}
       ${row("Gender", `<input class="t" name="gender" maxlength="20" value="${esc((u.details || {}).gender || "")}">`, "Optional, as you'd like it shown.")}
-      ${row("Birthday", `<input class="t" type="date" name="birth_date" value="${esc((u.details || {}).birth_date || "")}">`, "Optional. Only your age is shown, never the date. Hide it in Privacy.")}
       ${row("Gaming style", `<select class="t" name="gaming_style"><option value="">(none)</option>${STYLES.map(s => `<option ${u.gaming_style === s ? "selected" : ""}>${s}</option>`).join("")}</select>`)}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
     <h3>Change email</h3><form data-f="email">${msg}<div class="frm">
@@ -908,7 +927,19 @@ pages.settings = async () => {
     const priv = !u.public_profile;
     const sw = (k, label) => `<label style="display:block;margin:3px 0"><input type="checkbox" data-pv="${k}" ${pv[k] !== false ? "checked" : ""}>${label}</label>`;
     return `<h3>Privacy</h3><form data-f="privacy">${msg}<div class="frm">
-      ${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""}>Only my friends can see my profile</label>`, "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page lists, and your signature image is switched off.")}
+      ${(() => {
+        const dob = (u.details && u.details.birth_date) || null;
+        if (dob) {
+          return row("Date of birth", `<span>${esc(dob)}</span>${u.is_minor ? ' <span class="muted">(under 18 · profile stays private)</span>' : ""}`,
+            "Your date of birth can't be changed here. Email support@playfraglink.com if it needs a correction.");
+        }
+        if (!sessionStorage.getItem("fl_dob_prompted")) sessionStorage.setItem("fl_dob_prompted", "1");
+        const days = Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,"0")}">${i+1}</option>`).join("");
+        const months = ["January","February","March","April","May","June","July","August","September","October","November","December"].map((n,i)=>`<option value="${String(i+1).padStart(2,"0")}">${n}</option>`).join("");
+        const years = Array.from({length:new Date().getFullYear()-1899},(_,i)=>new Date().getFullYear()-i).map(y=>`<option value="${y}">${y}</option>`).join("");
+        return row("Date of birth", `<span class="dob"><select name="dob_day" aria-label="Day"><option value="">Day</option>${days}</select><select name="dob_month" aria-label="Month"><option value="">Month</option>${months}</select><select name="dob_year" aria-label="Year"><option value="">Year</option>${years}</select><button class="btn sm" type="button" data-save-dob>Save</button></span>`,
+          "Please add your date of birth. You must be at least 13. Under-18 accounts stay private. Once saved, only support can correct it.");
+      })()}${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""} ${u.is_minor ? "disabled" : ""}>Only my friends can see my profile</label>`, u.is_minor ? "Under-18 accounts always have a private profile." : "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page lists, and your signature image is switched off.")}
       ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}${sw("name_history", "Previous nicknames (\"Previously known as\")")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
       ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location &amp; country")}${sw("gaming_style", "Gaming style")}${sw("real_name", "Real name")}${sw("gender", "Gender")}${sw("age", "Age")}`)}
       ${row("Achievements", `${sw("achievements", "Show my achievements")}`, "Needs Games &amp; hours shown.")}
@@ -1003,7 +1034,9 @@ pages.settings = async () => {
       else if (k === "about" || k === "rig") {
         const rig = Object.assign({}, u.rig || {}); if (k === "rig") RIG_FIELDS.forEach(([n]) => { rig[n] = v(n); });
         const body = { about: k === "about" ? v("about") : u.about, location: k === "about" ? v("location") : u.location, gaming_style: (k === "about" ? v("gaming_style") : u.gaming_style) || null, rig };
-        if (k === "about") Object.assign(body, { country: v("country"), real_name: v("real_name"), gender: v("gender"), birth_date: v("birth_date") });
+        if (k === "about") {
+          Object.assign(body, { country: v("country"), real_name: v("real_name"), gender: v("gender") });
+        }
         const r = await api("/me/profile", { method: "POST", body }); Object.assign(u, r); ok(f, "Saved.");
       }
       else if (k === "email") { await api("/me/email", { method: "POST", body: { current_password: v("current_password"), new_email: v("new_email").trim() } }); await refresh(); render(); ok($("#pane"), "Email changed. We sent a link to confirm the new address. Can't find it? Check your junk or spam folder."); }
@@ -1015,7 +1048,10 @@ pages.settings = async () => {
         if (v("new_password") !== v("new_password2")) throw new Error("The new passwords don't match.");
         const r = await api("/me/password", { method: "POST", body: { current_password: v("current_password"), new_password: v("new_password") } }); f.reset(); ok(f, `Password changed. ${plural(r.signed_out_other_sessions || 0, "other session")} signed out.`);
       }
-    } catch (x) { bad(f, x); }
+    } catch (x) {
+      if (x.code === "account_paused") { clearSession(); alert(x.message); location.href = "/"; return; }
+      bad(f, x);
+    }
   });
   root.addEventListener("change", async e => {
     const f = e.target.closest("form[data-f]");
@@ -1033,7 +1069,8 @@ pages.settings = async () => {
     if (!f) return;
     try {
       if (f.dataset.f === "privacy") {
-        const t = e.target, body = t.dataset.pv ? { privacy: { [t.dataset.pv]: t.checked } } : t.name === "private_profile" ? { public_profile: !t.checked } : { [t.name]: t.checked };
+        const t = e.target;
+        const body = t.dataset.pv ? { privacy: { [t.dataset.pv]: t.checked } } : t.name === "private_profile" ? { public_profile: !t.checked } : { [t.name]: t.checked };
         const r = await api("/me/privacy", { method: "POST", body }); Object.assign(u, r); keep(); render(); ok($("#pane"), "Saved."); }
       else if (f.dataset.f === "notify") { u.notify_prefs = await api("/me/notifications", { method: "POST", body: { [e.target.name]: e.target.checked } }); ok(f, "Saved."); }
     } catch (x) { e.target.checked = !e.target.checked; bad(f, x); }
@@ -1045,7 +1082,16 @@ pages.settings = async () => {
       else if (b.matches("[data-avreset]")) { await api("/me/avatar/reset", { method: "POST" }); await refresh(); render(); ok($("#pane"), "Back to the default picture."); }
       else if (b.matches("[data-preset]")) { await api("/me/avatar/preset", { method: "POST", body: { preset: Number(b.dataset.preset) } }); await refresh(); render(); ok($("#pane"), "Picture updated."); }
       else if (b.matches("[data-resend]")) { e.preventDefault(); if (!u.mail_live) return; await api("/me/verify/resend", { method: "POST" }); ok(pane, "Sent. Check your inbox. Can't find it? Check your junk or spam folder."); }
-      else if (b.matches("[data-export]")) {
+      else if (b.matches("[data-save-dob]")) {
+        const day = $('[name=dob_day]', pane), month = $('[name=dob_month]', pane), year = $('[name=dob_year]', pane);
+        if (!day.value || !month.value || !year.value) { alert("Please enter your date of birth."); return; }
+        const birth_date = `${year.value}-${month.value}-${day.value}`;
+        try {
+          const r = await api("/me/profile", { method: "POST", body: { birth_date } });
+          Object.assign(u, r); if (r.details) u.details = r.details; keep(); render();
+          ok($("#pane"), "Date of birth saved.");
+        } catch (x) { alert(x.message); if (x.code === "account_paused") location.href = "/login"; }
+      } else if (b.matches("[data-export]")) {
         const r = await fetch(API + "/export.zip", { headers: { Authorization: "Bearer " + token() } });
         if (!r.ok) { const j = await r.json().catch(() => null); throw new Error((j && j.message) || "Export failed (HTTP " + r.status + ")."); }
         const a = document.createElement("a"); a.href = URL.createObjectURL(await r.blob()); a.download = "fraglink-export.zip"; a.click();

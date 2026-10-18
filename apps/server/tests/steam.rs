@@ -267,7 +267,7 @@ async fn sign_in_through_steam_verifies_link(pool: PgPool) {
         "/signup",
         None,
         Some(ORIGIN),
-        "email=o%40example.com&handle=openid&password=correct+horse+battery&age_ok=1",
+        "email=o%40example.com&handle=openid&password=correct+horse+battery&dob_year=1990&dob_month=01&dob_day=15",
     )
     .await;
     let cookie = r.cookie().unwrap();
@@ -330,7 +330,7 @@ async fn sign_in_through_steam_verifies_link(pool: PgPool) {
         "/signup",
         None,
         Some(ORIGIN),
-        "email=o2%40example.com&handle=openid2&password=correct+horse+battery&age_ok=1",
+        "email=o2%40example.com&handle=openid2&password=correct+horse+battery&dob_year=1990&dob_month=01&dob_day=15",
     )
     .await;
     let cookie2 = r.cookie().unwrap();

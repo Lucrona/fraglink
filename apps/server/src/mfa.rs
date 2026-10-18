@@ -311,7 +311,7 @@ async fn second_step(
         .await?;
     let user: User = sqlx::query_as(
         "SELECT id, email, handle, display_name FROM users
-         WHERE id = $1 AND deleted_at IS NULL AND banned_at IS NULL",
+         WHERE id = $1 AND deleted_at IS NULL AND banned_at IS NULL AND age_review_at IS NULL",
     )
     .bind(uid)
     .fetch_optional(&st.db)

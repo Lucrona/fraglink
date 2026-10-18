@@ -186,7 +186,7 @@ async fn browser_pairing_pages(pool: PgPool) {
     assert_eq!(r.status, StatusCode::SEE_OTHER);
     assert_eq!(r.location(), format!("/login?next=%2Fpair%3Fcode%3D{code}"));
 
-    let r = form(&app, "/signup", None, Some(ORIGIN), &format!("email=w%40example.com&handle=webby&password=correct+horse+battery&age_ok=1&next=%2Fpair%3Fcode%3D{code}")).await;
+    let r = form(&app, "/signup", None, Some(ORIGIN), &format!("email=w%40example.com&handle=webby&password=correct+horse+battery&dob_year=1990&dob_month=01&dob_day=15&next=%2Fpair%3Fcode%3D{code}")).await;
     assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.text);
     assert_eq!(r.location(), format!("/pair?code={code}"));
     let set = r

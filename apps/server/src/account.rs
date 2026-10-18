@@ -105,6 +105,7 @@ pub async fn me_extra(st: &AppState, uid: Uuid) -> ApiResult<Value> {
         "avatar": avatars::avatar_json(uid, kind.as_deref(), hash.as_deref(), preset),
         "about": about, "location": location, "gaming_style": style, "rig": rig,
         "public_profile": public, "show_friends": show_friends,
+        "is_minor": is_minor(st, uid).await?,
         "privacy": privacy_view(&privacy),
         "site_url": st.cfg.site_url.trim_end_matches('/'),
         "notify_prefs": notify_defaults(&prefs),
@@ -406,29 +407,154 @@ async fn save_profile(
             .await?;
     }
     if let Some(v) = &r.birth_date {
-        let d = match clean(txt(v), 10) {
-            None => None,
-            Some(s) => {
-                let d = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").map_err(|_| {
-                    AppError::bad_request("invalid_birth_date", "Birthday must be a date.")
-                })?;
-                let age = (Utc::now().date_naive() - d).num_days() / 365;
-                if !(13..=120).contains(&age) {
-                    return Err(AppError::bad_request(
-                        "invalid_birth_date",
-                        "You must be at least 13 to give a birthday.",
-                    ));
-                }
-                Some(d)
-            }
+        let existing: Option<chrono::NaiveDate> =
+            sqlx::query_scalar("SELECT birth_date FROM users WHERE id = $1")
+                .bind(a.user.id)
+                .fetch_one(&st.db)
+                .await?;
+        if existing.is_some() {
+            return Err(AppError::bad_request(
+                "dob_locked",
+                "Your date of birth can't be changed here. Email support@playfraglink.com if it needs a correction.",
+            ));
+        }
+        let check_date = || AppError::bad_request("invalid_birth_date", "Please check the date.");
+        let s = clean(txt(v), 10).ok_or_else(check_date)?;
+        let d = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").map_err(|_| check_date())?;
+        let Some(age) = age_on(d, auth::today_aedt()).filter(|a| *a <= 120) else {
+            return Err(check_date());
         };
-        sqlx::query("UPDATE users SET birth_date = $2 WHERE id = $1")
-            .bind(a.user.id)
-            .bind(d)
-            .execute(&st.db)
-            .await?;
+        if age < 13 {
+            // Never stored. Pause the account for staff to look at (Admin > Users).
+            pause_for_age_review(&st, a.user.id).await?;
+            return Err(auth::account_paused());
+        }
+        sqlx::query(
+            "UPDATE users SET birth_date = $2, age_confirmed_at = coalesce(age_confirmed_at, now()) WHERE id = $1",
+        )
+        .bind(a.user.id)
+        .bind(d)
+        .execute(&st.db)
+        .await?;
+        if age < 18 {
+            set_minor(&st, a.user.id, true).await?;
+        }
     }
     me_extra(&st, a.user.id).await.map(Json)
+}
+
+// ------------------------------------------------------------------ age
+
+/// Whole years from `birth` to `today`; None for a date in the future.
+pub fn age_on(birth: chrono::NaiveDate, today: chrono::NaiveDate) -> Option<i32> {
+    use chrono::Datelike;
+    if birth > today {
+        return None;
+    }
+    Some(
+        today.year()
+            - birth.year()
+            - i32::from((today.month(), today.day()) < (birth.month(), birth.day())),
+    )
+}
+
+pub async fn is_minor(st: &AppState, uid: Uuid) -> ApiResult<bool> {
+    refresh_minor_from_dob(st, uid).await?;
+    Ok(
+        sqlx::query_scalar("SELECT is_minor FROM users WHERE id = $1")
+            .bind(uid)
+            .fetch_one(&st.db)
+            .await?,
+    )
+}
+
+/// When a stored DOB means they've turned 18, clear is_minor but keep the profile private.
+/// When DOB shows 13–17, ensure is_minor (and private).
+pub async fn refresh_minor_from_dob(st: &AppState, uid: Uuid) -> ApiResult<()> {
+    let row: Option<(bool, Option<chrono::NaiveDate>)> =
+        sqlx::query_as("SELECT is_minor, birth_date FROM users WHERE id = $1")
+            .bind(uid)
+            .fetch_optional(&st.db)
+            .await?;
+    let Some((was_minor, Some(birth))) = row else {
+        return Ok(());
+    };
+    let Some(age) = age_on(birth, auth::today_aedt()) else {
+        return Ok(());
+    };
+    if age >= 18 && was_minor {
+        // Clear minor flag only; never flip the profile to public.
+        sqlx::query(
+            "UPDATE users SET is_minor = false, minor_set_at = now() WHERE id = $1 AND is_minor",
+        )
+        .bind(uid)
+        .execute(&st.db)
+        .await?;
+    } else if (13..18).contains(&age) && !was_minor {
+        set_minor(st, uid, true).await?;
+    }
+    Ok(())
+}
+
+/// Daily job: refresh is_minor for everyone with a DOB (turning 18 keeps profile private).
+pub async fn refresh_all_minors(st: &AppState) -> ApiResult<u64> {
+    let ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE birth_date IS NOT NULL AND deleted_at IS NULL",
+    )
+    .fetch_all(&st.db)
+    .await?;
+    for id in &ids {
+        refresh_minor_from_dob(st, *id).await?;
+    }
+    Ok(ids.len() as u64)
+}
+
+pub fn minor_private() -> AppError {
+    AppError::bad_request(
+        "minor_private",
+        "Under-18 accounts always have a private profile.",
+    )
+}
+
+/// Under-18 on: private profile, off the home page, leaderboards and strangers' search.
+async fn set_minor(st: &AppState, uid: Uuid, minor: bool) -> ApiResult<()> {
+    sqlx::query(
+        "UPDATE users SET is_minor = $2, minor_set_at = now(),
+                public_profile = CASE WHEN $2 THEN false ELSE public_profile END
+         WHERE id = $1 AND is_minor <> $2",
+    )
+    .bind(uid)
+    .bind(minor)
+    .execute(&st.db)
+    .await?;
+    if minor {
+        if let Some(h) = sqlx::query_scalar::<_, String>("SELECT handle FROM users WHERE id = $1")
+            .bind(uid)
+            .fetch_optional(&st.db)
+            .await?
+        {
+            crate::sig::forget(&h);
+        }
+    }
+    Ok(())
+}
+
+/// A birthday under 13 was entered: sign the account out everywhere and block sign-in until
+/// staff clear it. Nothing is deleted automatically.
+pub async fn pause_for_age_review(st: &AppState, uid: Uuid) -> ApiResult<()> {
+    sqlx::query("UPDATE users SET age_review_at = now() WHERE id = $1 AND age_review_at IS NULL")
+        .bind(uid)
+        .execute(&st.db)
+        .await?;
+    sqlx::query(
+        "UPDATE auth_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(uid)
+    .execute(&st.db)
+    .await?;
+    st.hub.kick(uid);
+    tracing::warn!(user = %uid, "account paused for an age review");
+    Ok(())
 }
 
 // ------------------------------------------------------------------ sessions
@@ -795,6 +921,10 @@ pub async fn purge_loop(st: AppState) {
         if let Err(e) = purge_tokens(&st).await {
             tracing::warn!("sign-in purge failed: {}", e.message);
             crate::alerts::job_failed("Sign-in purge", &e.message);
+        }
+        if let Err(e) = refresh_all_minors(&st).await {
+            tracing::warn!("minor refresh failed: {}", e.message);
+            crate::alerts::job_failed("Minor age refresh", &e.message);
         }
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
     }

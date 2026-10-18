@@ -5,6 +5,8 @@
 //!   "track this as a game?" suggestions). At most one email every 15 minutes, listing
 //!   everything new since the last one.
 //! - `alert_reports`: new player reports (reported profiles and pictures). Same 15 minutes.
+//! - `alert_age_review`: an account was paused because a birthday under 13 was entered.
+//!   Checked every minute, at most one email every 15 minutes.
 //! - `alert_errors`: 5 or more 5xx responses within 10 minutes, or a background job failing.
 //!   At most one email an hour.
 //! - `alert_daily`: a summary at 9:00 AM Sydney time (new and active users, hours, pending
@@ -27,9 +29,10 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// (key, label, help) in display order. All default to on.
-pub const ALERTS: [(&str, &str, &str); 4] = [
+pub const ALERTS: [(&str, &str, &str); 5] = [
     ("alert_approvals", "New games waiting for approval", "Unknown game IDs from the app and game suggestions. At most one email every 15 minutes, listing everything new."),
     ("alert_reports", "New player reports", "Reported profiles and pictures. At most one email every 15 minutes."),
+    ("alert_age_review", "Accounts paused for an age check", "Someone entered a birthday under 13; the account is paused until you review it in Admin > Users. At most one email every 15 minutes."),
     ("alert_errors", "Server errors", "5 or more server errors (5xx) within 10 minutes, or a background job failing. At most one email an hour."),
     ("alert_daily", "Daily summary", "Every day at 9:00 AM Sydney time: new and active users, hours played, pending approvals and reports, and errors."),
 ];
@@ -346,6 +349,55 @@ async fn check_reports(st: &AppState) -> ApiResult<()> {
     Ok(())
 }
 
+pub async fn check_age_reviews(st: &AppState) -> ApiResult<()> {
+    if !enabled(st, "alert_age_review").await {
+        return Ok(());
+    }
+    let Some(mark) = watermark(st, "age_review_mark").await? else {
+        return Ok(());
+    };
+    let rows: Vec<(String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT handle, age_review_at FROM users WHERE age_review_at > $1 AND deleted_at IS NULL
+         ORDER BY age_review_at LIMIT 50",
+    )
+    .bind(mark)
+    .fetch_all(&st.db)
+    .await?;
+    if rows.is_empty() || !due(st, "age_review_sent", QUEUE_GAP).await? {
+        return Ok(());
+    }
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM users WHERE age_review_at IS NOT NULL AND deleted_at IS NULL",
+    )
+    .fetch_one(&st.db)
+    .await?;
+    let newest = rows.iter().map(|r| r.1).max().unwrap_or(mark);
+    let n = rows.len() as i64;
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|(h, _)| format!("@{h}: entered a birthday under 13, can't sign in until reviewed"))
+        .collect();
+    let e = crate::emails::alert(
+        &format!(
+            "Fraglink: {} paused for an age check",
+            plural(n, "account", "accounts")
+        ),
+        "Accounts paused for an age check",
+        &format!(
+            "{} since the last alert. {} waiting for review in total. The birthday wasn't saved and nothing was deleted.",
+            plural(n, "new account", "new accounts"),
+            pending
+        ),
+        &lines,
+        ("Review in Admin > Users", &format!("{SITE}/admin#users")),
+    );
+    set_at(st, "age_review_sent", Utc::now()).await?;
+    if send(st, "age_review", &e).await? {
+        set_at(st, "age_review_mark", newest).await?;
+    }
+    Ok(())
+}
+
 async fn check_errors(st: &AppState) -> ApiResult<()> {
     // Save counters for the daily summary first (survives restarts).
     let (n5, nj) = {
@@ -516,6 +568,7 @@ pub async fn run(st: AppState) {
         for (name, r) in [
             ("approvals", check_approvals(&st).await),
             ("reports", check_reports(&st).await),
+            ("age_review", check_age_reviews(&st).await),
             ("errors", check_errors(&st).await),
             ("daily", check_daily(&st).await),
         ] {

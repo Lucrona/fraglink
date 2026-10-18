@@ -660,7 +660,7 @@ async fn turnstile_required_when_configured(pool: PgPool) {
         "POST",
         "/api/v1/device/signup",
         None,
-        Some(json!({"handle": "app1", "password": PW, "age_ok": true})),
+        Some(json!({"handle": "app1", "password": PW, "birth_date": "1990-01-15"})),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED);
@@ -926,6 +926,11 @@ async fn profile_details_events_achievements_report(pool: PgPool) {
          SELECT gen_random_uuid(), id, 'wow', now() - interval '13 hours', now() - interval '1 hour', 43200 FROM users WHERE handle = 'pda'",
     )
     .execute(&pool).await.unwrap();
+    // clear signup DOB so the first profile save can set it (afterwards it's locked)
+    sqlx::query("UPDATE users SET birth_date = NULL, age_confirmed_at = NULL WHERE handle = 'pda'")
+        .execute(&pool)
+        .await
+        .unwrap();
     let r = api(
         &app,
         "POST",
@@ -944,10 +949,11 @@ async fn profile_details_events_achievements_report(pool: PgPool) {
         "POST",
         "/api/v1/me/profile",
         Some(&a),
-        Some(json!({"birth_date": "2099-01-01"})), // under-13 dates pause the account (tests/minors.rs)
+        Some(json!({"birth_date": "2099-01-01"})), // locked once set; under-13 pause is in tests/minors.rs
     )
     .await;
     assert_eq!(bad.status, StatusCode::BAD_REQUEST);
+    assert_eq!(bad.json()["error"], "dob_locked");
     let p = api(&app, "GET", "/api/v1/users/pda/profile", Some(&b), None)
         .await
         .json();

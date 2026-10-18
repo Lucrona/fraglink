@@ -6,8 +6,20 @@
     <label>Email <span class="hint">(optional, for account recovery and sign-in alerts)</span><input type="email" name="email" autocomplete="email"></label>
     <label>Password<input type="password" name="password" required minlength="10" maxlength="128" autocomplete="new-password"><small>At least 10 characters.</small></label>
     <label>Password again<input type="password" name="password2" required minlength="10" maxlength="128" autocomplete="new-password"></label>
-    <label class="check"><input type="checkbox" name="terms"> <span>I accept the <a href="/terms" target="_blank">Terms</a> and the <a href="/privacy" target="_blank">Privacy Policy</a>.</span></label>
-    <label class="check"><input type="checkbox" name="age_ok"> <span>I'm 13 or older (16 or older in the EU/UK). <a href="/privacy" target="_blank">Privacy Policy</a></span></label>
+    <label>Date of birth
+      <span class="dob">
+        <select name="dob_day" required aria-label="Day"><option value="">Day</option></select>
+        <select name="dob_month" required aria-label="Month"><option value="">Month</option>
+          <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+          <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+          <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+          <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+        </select>
+        <select name="dob_year" required aria-label="Year"><option value="">Year</option></select>
+      </span>
+      <small>You must be at least 13. We use this to keep under-18 accounts private.</small>
+    </label>
+    <p class="hint" style="margin:8px 0 0">By creating an account you agree to the <a href="/terms" target="_blank">Terms of Use</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
     <div class="cf-turnstile" data-sitekey="__SITEKEY__" data-theme="dark"></div>
     <div class="row"><button class="btn dl">Create account</button></div>
   </form>

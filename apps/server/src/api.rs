@@ -105,9 +105,9 @@ pub struct SignupReq {
     pub handle: String,
     #[serde(default)]
     pub turnstile: Option<String>,
-    /// The "I'm 13 or older (16 or older in the EU/UK)" tick box.
+    /// Required YYYY-MM-DD date of birth.
     #[serde(default)]
-    pub age_ok: bool,
+    pub birth_date: String,
 }
 
 #[derive(Serialize)]
@@ -129,7 +129,8 @@ async fn signup(
     .await?;
     signup_limit(&st, &headers)?;
     crate::turnstile::check(&st, &headers, r.turnstile.as_deref()).await?;
-    let user = auth::create_user(&st, &r.email, &r.password, &r.handle, r.age_ok).await?;
+    let birth = auth::parse_birth_date(Some(&r.birth_date))?;
+    let user = auth::create_user(&st, &r.email, &r.password, &r.handle, birth).await?;
     let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
     let token = auth::issue_token_ctx(&st, user.id, "web", None, &ctx).await?;
     crate::account::send_verification(&st, &user).await?;
@@ -197,8 +198,8 @@ struct DeviceSignupReq {
     #[serde(default)]
     email: String,
     device_name: Option<String>,
-    /// The age tick box; app builds up to 0.3.0-beta.1 don't send it.
-    age_ok: Option<bool>,
+    /// Date of birth YYYY-MM-DD (required from 0.3.0-beta.2+).
+    birth_date: Option<String>,
 }
 
 /// Desktop client "Create Account": makes the account and returns a device token.
@@ -214,13 +215,8 @@ async fn device_signup(
     )
     .await?;
     signup_limit(&st, &headers)?;
-    let Some(age_ok) = r.age_ok else {
-        return Err(AppError::bad_request(
-            "age_required",
-            "Please confirm your age: update Fraglink, or create your account at playfraglink.com/signup.",
-        ));
-    };
-    let user = auth::create_user(&st, &r.email, &r.password, &r.handle, age_ok).await?;
+    let birth = auth::parse_birth_date(r.birth_date.as_deref())?;
+    let user = auth::create_user(&st, &r.email, &r.password, &r.handle, birth).await?;
     let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
     let token = auth::issue_token_ctx(
         &st,
@@ -290,6 +286,8 @@ async fn user_search(
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT u.handle, u.display_name FROM users u
          WHERE u.deleted_at IS NULL AND u.banned_at IS NULL AND u.id <> $1 AND NOT u.is_test
+           AND (NOT u.is_minor OR EXISTS (SELECT 1 FROM friendships f WHERE f.status = 'accepted'
+                AND ((f.user_a = $1 AND f.user_b = u.id) OR (f.user_b = $1 AND f.user_a = u.id))))
            AND (lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2 OR (u.email <> '' AND lower(u.email) = $3))
            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker = u.id AND b.blocked = $1) OR (b.blocker = $1 AND b.blocked = u.id))
          ORDER BY (lower(u.handle) = $3 OR lower(u.display_name) = $3) DESC,
@@ -831,7 +829,7 @@ async fn leaderboard(
         "7d" => {
             sqlx::query_as(
                 "SELECT u.handle, (sum(s.duration_s) / 60)::bigint AS m FROM sessions s JOIN users u ON u.id = s.user_id
-                 WHERE s.game_id = $1 AND s.started_at >= now() - interval '7 days' AND u.deleted_at IS NULL AND NOT u.is_test
+                 WHERE s.game_id = $1 AND s.started_at >= now() - interval '7 days' AND u.deleted_at IS NULL AND NOT u.is_test AND NOT u.is_minor
                  GROUP BY u.handle HAVING sum(s.duration_s) >= 60 ORDER BY m DESC, u.handle LIMIT 50",
             )
             .bind(&game_id)
@@ -841,7 +839,7 @@ async fn leaderboard(
         "all" => {
             sqlx::query_as(
                 "SELECT u.handle, g.tracked_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
-                 WHERE g.game_id = $1 AND g.tracked_min > 0 AND u.deleted_at IS NULL AND NOT u.is_test
+                 WHERE g.game_id = $1 AND g.tracked_min > 0 AND u.deleted_at IS NULL AND NOT u.is_test AND NOT u.is_minor
                  ORDER BY g.tracked_min DESC, u.handle LIMIT 50",
             )
             .bind(&game_id)
@@ -1116,6 +1114,8 @@ pub async fn export_json(st: &AppState, user: &User) -> ApiResult<Value> {
         "exported_at": Utc::now(),
         "user": user,
         "age_confirmed_at": q("SELECT coalesce(to_jsonb(age_confirmed_at), 'null'::jsonb) FROM users WHERE id = $1").await?,
+        "birth_date": q("SELECT coalesce(to_jsonb(birth_date), 'null'::jsonb) FROM users WHERE id = $1").await?,
+        "is_minor": q("SELECT to_jsonb(is_minor) FROM users WHERE id = $1").await?,
         "linked_accounts": q("SELECT coalesce(jsonb_agg(to_jsonb(l) - 'user_id'), '[]'::jsonb) FROM linked_accounts l WHERE user_id = $1").await?,
         "sessions": q("SELECT coalesce(jsonb_agg(to_jsonb(s) - 'user_id' ORDER BY started_at), '[]'::jsonb) FROM sessions s WHERE user_id = $1").await?,
         "steam_playtime": q("SELECT coalesce(jsonb_agg(to_jsonb(p) - 'user_id'), '[]'::jsonb) FROM steam_playtime p WHERE user_id = $1").await?,
@@ -1364,6 +1364,9 @@ async fn set_privacy(
 ) -> ApiResult<Json<Value>> {
     check_origin(&a, &headers, &st)?;
     st.rate_limit(format!("privacy:{}", a.user.id), 60, 15 * MINUTE)?;
+    if r.public_profile == Some(true) && crate::account::is_minor(&st, a.user.id).await? {
+        return Err(crate::account::minor_private());
+    }
     let mut patch = serde_json::Map::new();
     for (k, v) in r.privacy.unwrap_or_default() {
         if !crate::account::PRIVACY_KEYS.contains(&k.as_str()) || !v.is_boolean() {

@@ -212,7 +212,7 @@ async fn secure_cookie_on_https(pool: PgPool) {
         "/signup",
         None,
         Some("https://fraglink.example"),
-        "email=s%40example.com&handle=secure&password=correct+horse+battery&age_ok=1",
+        "email=s%40example.com&handle=secure&password=correct+horse+battery&dob_year=1990&dob_month=01&dob_day=15",
     )
     .await;
     let c = r.headers.get("set-cookie").unwrap().to_str().unwrap();

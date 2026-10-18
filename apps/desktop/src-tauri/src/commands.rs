@@ -710,7 +710,7 @@ pub async fn sync_login_mfa(
     .map_err(err)?
 }
 
-/// Create Account: username, password, optional email and the age tick box; signs this PC in.
+/// Create Account: username, password, optional email and date of birth; signs this PC in.
 #[tauri::command]
 pub async fn sync_signup(
     app: AppHandle,
@@ -718,16 +718,21 @@ pub async fn sync_signup(
     username: String,
     password: String,
     email: String,
-    age_ok: bool,
+    birth_date: String,
 ) -> CmdResult<()> {
     let h = clean_handle(&username)?;
-    if !age_ok {
-        return Err(
-            "Please tick the box to confirm you're 13 or older (16 or older in the EU/UK).".into(),
-        );
+    let birth = birth_date.trim().to_string();
+    if birth.is_empty() {
+        return Err("Please enter your date of birth.".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        crate::sync::password_sign_in(&app, &server, &h, &password, Some((email.trim(), age_ok)))
+        crate::sync::password_sign_in(
+            &app,
+            &server,
+            &h,
+            &password,
+            Some((email.trim(), birth.as_str())),
+        )
     })
     .await
     .map_err(err)?
@@ -837,6 +842,7 @@ pub async fn account_info(app: AppHandle) -> CmdResult<serde_json::Value> {
             "email": u["email"], "email_verified": u["email_verified"],
             "share_activity": u["share_activity"], "avatar": u["avatar"],
             "public_profile": u["public_profile"], "show_friends": u["show_friends"],
+            "is_minor": u["is_minor"],
             "privacy": u["privacy"], "notify_prefs": u["notify_prefs"],
             "mfa": u["mfa"],
         }))

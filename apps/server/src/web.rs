@@ -18,6 +18,63 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+fn dob_ymd(
+    y: Option<&str>,
+    m: Option<&str>,
+    d: Option<&str>,
+) -> Result<String, crate::error::AppError> {
+    let (y, m, d) = match (
+        y.map(str::trim).filter(|s| !s.is_empty()),
+        m.map(str::trim).filter(|s| !s.is_empty()),
+        d.map(str::trim).filter(|s| !s.is_empty()),
+    ) {
+        (Some(y), Some(m), Some(d)) => (y, m, d),
+        _ => {
+            return Err(crate::error::AppError::bad_request(
+                "dob_required",
+                "Please enter your date of birth.",
+            ))
+        }
+    };
+    Ok(format!("{y}-{m:0>2}-{d:0>2}"))
+}
+
+fn dob_fields_html() -> String {
+    use chrono::Datelike;
+    let years = (1900..=auth::today_aedt().year())
+        .rev()
+        .map(|y| format!(r#"<option value="{y}">{y}</option>"#))
+        .collect::<String>();
+    let months = [
+        (1, "January"),
+        (2, "February"),
+        (3, "March"),
+        (4, "April"),
+        (5, "May"),
+        (6, "June"),
+        (7, "July"),
+        (8, "August"),
+        (9, "September"),
+        (10, "October"),
+        (11, "November"),
+        (12, "December"),
+    ]
+    .into_iter()
+    .map(|(n, name)| format!(r#"<option value="{n:02}">{name}</option>"#))
+    .collect::<String>();
+    let days = (1..=31)
+        .map(|d| format!(r#"<option value="{d:02}">{d}</option>"#))
+        .collect::<String>();
+    format!(
+        r#"<p><label>Date of birth</label><span class="dob">
+<select name="dob_day" required aria-label="Day"><option value="">Day</option>{days}</select>
+<select name="dob_month" required aria-label="Month"><option value="">Month</option>{months}</select>
+<select name="dob_year" required aria-label="Year"><option value="">Year</option>{years}</select>
+</span><small>You must be at least 13. We use this to keep under-18 accounts private.</small></p>
+<p class="hint">By creating an account you agree to the <a href="/terms" target="_blank">Terms of Use</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</p>"#
+    )
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(home))
@@ -408,10 +465,7 @@ fn auth_form(kind: &str, next: &str, err: Option<&str>) -> String {
             .unwrap_or_default(),
         n = esc(next),
         age = if kind == "signup" {
-            format!(
-                r#"<p><label><input type="checkbox" name="age_ok" value="1" required> {}.</label> <a href="/privacy" target="_blank">Privacy Policy</a></p>"#,
-                esc(auth::AGE_TEXT)
-            )
+            dob_fields_html()
         } else {
             String::new()
         },
@@ -444,8 +498,11 @@ struct AuthFormData {
     password: String,
     handle: Option<String>,
     next: Option<String>,
-    /// Sign-up age tick box (present only when ticked).
-    age_ok: Option<String>,
+    /// Sign-up date of birth (day / month / year).
+    dob_day: Option<String>,
+    dob_month: Option<String>,
+    #[serde(default)]
+    dob_year: Option<String>,
 }
 
 async fn signup_post(
@@ -463,12 +520,17 @@ async fn signup_post(
     }
     let res = async {
         crate::api::signup_limit(&st, &headers)?;
+        let birth = auth::parse_birth_date(Some(&dob_ymd(
+            f.dob_year.as_deref(),
+            f.dob_month.as_deref(),
+            f.dob_day.as_deref(),
+        )?))?;
         let u = auth::create_user(
             &st,
             &f.email,
             &f.password,
             f.handle.as_deref().unwrap_or(""),
-            f.age_ok.is_some(),
+            birth,
         )
         .await?;
         auth::issue_token(&st, u.id, "web", None).await
