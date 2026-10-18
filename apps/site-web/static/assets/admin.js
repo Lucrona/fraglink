@@ -134,7 +134,7 @@ function badge(tab, n) { const s = $(`.tabs a[data-tab=${tab}] .n`); if (s) { s.
 async function games(q) {
   q = q || "";
   view.innerHTML = `<div class="split"><section class="panel"><h2>Games</h2>
-    <form class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off">
+    <form method="post" action="/api/v1/form-fallback" class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off">
       <select class="in" id="gshow" aria-label="Show"><option value="">All games with hours</option><option value="edited">Edited / retired / status set</option></select></form>
     <div id="glist"><div class="body empty">Loading…</div></div></section>
     <section class="panel" id="gedit"><h2>Edit game</h2><div class="body empty">Pick a game on the left.</div></section></div>`;
@@ -180,7 +180,7 @@ async function listGames(q) {
 const LIFE = { live: "Live", beta: "Beta", test: "Test", early_access: "Early Access", ended: "Ended" };
 function statusHtml(g) {
   const s = g.status || { lifecycle: "live" };
-  return `<form class="f" id="gst"><label>Status</label>
+  return `<form method="post" action="/api/v1/form-fallback" class="f" id="gst"><label>Status</label>
     <div class="row"><select class="in" name="lifecycle">${Object.entries(LIFE).map(([k, v]) => `<option value="${k}"${s.lifecycle === k ? " selected" : ""}>${v}</option>`).join("")}</select>
       <label style="margin:0">Expected end / launch <input type="date" name="date" value="${esc(s.date || "")}"></label></div>
     <label>Note<input type="text" name="note" maxlength="500" value="${esc(s.note || "")}" placeholder="e.g. beta ends when the full game launches"></label>
@@ -205,7 +205,7 @@ async function editGame(id) {
   const g = await api("/admin/games/" + encodeURIComponent(id));
   const o = g.override || {};
   const bust = "?t=" + Date.now();
-  box.innerHTML = `<h2>Edit game</h2><div class="body"><form class="f" id="gf">
+  box.innerHTML = `<h2>Edit game</h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="gf">
     <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">From: ${esc(g.source)} · ${g.players} players · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})</div></div>
     <label>Display name override<input type="text" name="name" maxlength="80" value="${esc(o.name || "")}" placeholder="${esc(g.name)}"><small>Leave empty to use the list name.</small></label>
     <label class="check"><input type="checkbox" name="hidden" ${o.hidden ? "checked" : ""}> Hide from public (shown as "Playing a game")</label>
@@ -263,7 +263,7 @@ async function editGame(id) {
 async function users(q) {
   q = q || "";
   view.innerHTML = `<section class="panel"><h2>Users</h2>
-    <form class="tools" id="us"><input class="in grow" name="q" value="${esc(q)}" placeholder="Username, display name or email" autocomplete="off"></form>
+    <form method="post" action="/api/v1/form-fallback" class="tools" id="us"><input class="in grow" name="q" value="${esc(q)}" placeholder="Username, display name or email" autocomplete="off"></form>
     <div id="ulist"></div></section>`;
   $("#us").addEventListener("submit", e => { e.preventDefault(); const v = e.target.q.value.trim(); history.replaceState(null, "", "#users/" + encodeURIComponent(v)); listUsers(v); });
   liveSearch($("#us"));
@@ -407,7 +407,7 @@ async function siteSettings() {
     <td class="dimt" style="white-space:nowrap">${s.updated_at ? `${when(s.updated_at)}${s.updated_by ? " by " + esc(s.updated_by) : ""}` : "default"}</td></tr>`;
   const alerts = al ? `<section class="panel"><h2>Email alerts</h2><div class="body">
     <p class="note">Staff alerts by email, using the site's sending address. To keep within Cloudflare's 200 emails a day, alerts are batched (see each one) and capped at ${al.cap} a day. Sent in the last 24 hours: <b>${al.sent_24h}</b> of ${al.cap}.${al.mail_live ? "" : ` <span class="pill bad">Email sending is off on the server</span>`}</p>
-    <form class="f" id="al-to" style="max-width:560px"><label>Send alerts to<div class="row"><input class="in" type="email" name="to" value="${esc(al.recipient)}" required maxlength="200" style="flex:1"><button class="btn">Save</button></div></label>
+    <form method="post" action="/api/v1/form-fallback" class="f" id="al-to" style="max-width:560px"><label>Send alerts to<div class="row"><input class="in" type="email" name="to" value="${esc(al.recipient)}" required maxlength="200" style="flex:1"><button class="btn">Save</button></div></label>
       <div class="dimt">Default: ${esc(al.default_recipient)}</div><div class="alert" id="al-msg" hidden></div></form>
     <table class="settings"><tbody>${al.alerts.map(a => row(a, "alert")).join("")}</tbody></table>
     <div class="row" style="margin-top:12px"><button class="btn" id="al-test">Send a test alert</button><span class="dimt">Sends today's summary marked [Test] to the address above. Counts toward the daily cap.</span></div>
@@ -453,7 +453,7 @@ async function announcements() {
       <p class="dimt">${a.ends_at ? "Ends " + when(a.ends_at) : "No end time"}</p><button class="btn danger" id="clr">Clear announcement</button>` : `<p class="empty">No announcement is showing.</p>`}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     <p class="note">Where it shows: <b>(1)</b> a banner at the top of every website page, <b>(2)</b> in the desktop app as a banner under the header within about 2 minutes for everyone signed in (2 minutes from the next app build; the current build checks about every 15 minutes; clicking it opens the link). It disappears everywhere at the end time or when you clear it. It no longer goes into the home page News box; longer updates go in <a href="#news">News</a>.</p>
-    <form class="f" id="af"><label>Message<input type="text" name="message" maxlength="300" required placeholder="Servers restart at 10 pm AEDT for an update."></label>
+    <form method="post" action="/api/v1/form-fallback" class="f" id="af"><label>Message<input type="text" name="message" maxlength="300" required placeholder="Servers restart at 10 pm AEDT for an update."></label>
       <div class="row"><label>Style<select class="in" name="style"><option value="info">Info (blue)</option><option value="warning">Warning (amber)</option></select></label>
       <label>Ends (optional)<input class="in" type="datetime-local" name="ends"></label></div>
       <label>Link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
@@ -478,7 +478,7 @@ async function news(arg) {
   const PER = 20; let pg = 1, q = "";
   view.innerHTML = `<div class="split"><section class="panel"><h2 id="nf-h">New post</h2><div class="body">
     <p class="note">News posts show in the <b>News</b> box on the home page (latest 4, pinned first), on <a href="/news" target="_blank">/news</a>, and each has its own page. For a short alert on every page and in the app, use <a href="#announcements">Announcements</a>, or tick “Also show as banner” below.</p>
-    <form class="f" id="nf"><input type="hidden" name="id">
+    <form method="post" action="/api/v1/form-fallback" class="f" id="nf"><input type="hidden" name="id">
       <label>Title<input type="text" name="title" maxlength="140" required placeholder="Fraglink 0.3.0 beta 1 is out"></label>
       <label>Post<textarea class="in" name="body" rows="10" maxlength="20000" placeholder="Blank line = new paragraph. https:// links become clickable."></textarea></label>
       <label>Link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
@@ -541,10 +541,10 @@ async function staff() {
       return `<tr data-h="${esc(s.handle)}"><td><a href="#user/${esc(s.id)}">${esc(s.handle)}</a></td><td>${rolePill(s.role)}</td><td>${day(s.member_since)}</td>
         <td class="num"><div class="acts">${canEdit ? `${owner ? `<select class="in" data-role>${["admin", "moderator"].map(r => `<option ${r === s.role ? "selected" : ""}>${r}</option>`).join("")}</select>` : ""}<button class="btn sm danger" data-rm>Remove</button>` : `<span class="dimt">${s.role === "owner" ? "owner" : ""}</span>`}</div></td></tr>`;
     }).join("")}</tbody></table>
-    <form class="tools" id="sf"><input class="in grow" name="handle" placeholder="Username" required><select class="in" name="role">${roleOpts.map(r => `<option>${r}</option>`).join("")}</select><button class="btn">Add to staff</button></form>
+    <form method="post" action="/api/v1/form-fallback" class="tools" id="sf"><input class="in grow" name="handle" placeholder="Username" required><select class="in" name="role">${roleOpts.map(r => `<option>${r}</option>`).join("")}</select><button class="btn">Add to staff</button></form>
     <div class="note">Owner: everything, and the only one who adds or removes admins. Admin: everything except managing admins. Moderator: game approvals, user ban/unban and hours review.</div>
     <div class="alert" id="smsg" hidden style="margin:0 12px 12px"></div></section>
-    ${owner ? `<section class="panel"><h2>Transfer ownership</h2><div class="body"><form class="f" id="tf"><label>New owner's username<input type="text" name="handle" required></label>
+    ${owner ? `<section class="panel"><h2>Transfer ownership</h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="tf"><label>New owner's username<input type="text" name="handle" required></label>
       <label>Type your own username to confirm<input type="text" name="confirm" required></label><div class="row"><button class="btn danger">Transfer</button><span class="dimt">You become an admin.</span></div><div class="alert" id="tmsg" hidden></div></form></div></section>` : ""}
     </div>
     <section class="panel"><h2>Audit log</h2>${log.entries.length ? log.entries.map(x => `<div class="fr"><div class="who"><div class="nm"><span><b>${esc(x.actor)}</b> ${esc(x.action)} <span class="muted">${esc(x.target || "")}</span></span><small>${when(x.at)}</small></div>

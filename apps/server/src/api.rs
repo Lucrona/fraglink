@@ -7,6 +7,7 @@ use crate::steam::{self, ProfileRef};
 use crate::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
@@ -17,6 +18,7 @@ use uuid::Uuid;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/health", get(health))
+        .route("/api/v1/form-fallback", post(form_fallback))
         .route("/api/v1/auth/signup", post(signup))
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/logout", post(logout))
@@ -719,6 +721,38 @@ async fn revoke_device(
 }
 
 // ------------------------------------------------------------------ session sync
+
+/// Website forms post here only if they're submitted before the page script is ready
+/// (the script normally sends them as JSON). The body is never read, so nothing typed is
+/// stored, logged or echoed: the browser is sent back to the page it came from (same
+/// origin only) to try again.
+pub async fn form_fallback(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    let origin = st.cfg.public_origin();
+    let back = headers
+        .get(axum::http::header::REFERER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|r| r.strip_prefix(origin.as_str()))
+        .filter(|p| {
+            p.starts_with('/') && !p.starts_with("//") && !p.contains('\\') && p.len() <= 2000
+        })
+        .unwrap_or("/")
+        .to_string();
+    (
+        StatusCode::SEE_OTHER,
+        [
+            (axum::http::header::LOCATION, back),
+            (axum::http::header::CACHE_CONTROL, "no-store".to_string()),
+            (
+                axum::http::header::REFERRER_POLICY,
+                "no-referrer".to_string(),
+            ),
+        ],
+    )
+        .into_response()
+}
 
 /// Session uploads (apps before 0.2.0-dev.14) were removed: hours only come from live
 /// presence. `POST /api/v1/sessions/upload` answers 410 Gone; nothing is stored. No

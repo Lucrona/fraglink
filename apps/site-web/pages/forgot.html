@@ -1,10 +1,10 @@
 <!-- title: Forgot password · Fraglink | page: forgot -->
 <div class="narrow wrap"><section class="panel"><h2>Forgot your password?</h2><div class="body">
-  <form class="f" id="forgot">
+  <form class="f" id="forgot" method="post" action="/api/v1/form-fallback">
     <div id="err" class="alert" hidden></div>
     <label>Email on your account<input type="email" name="email" required autocomplete="email"></label>
     <div class="cf-turnstile" data-sitekey="__SITEKEY__" data-theme="dark"></div>
-    <div class="row"><button class="btn dl">Send reset link</button><a href="/login" style="margin-left:auto">Back to sign in</a></div>
+    <div class="row"><button class="btn dl" disabled data-wait>Send reset link</button><a href="/login" style="margin-left:auto">Back to sign in</a></div>
   </form>
   <p class="hint" style="margin:14px 0 0" id="mail-note">The email can take a minute. Can't find it? Check your junk or spam folder. Still locked out? Email <a href="mailto:support@playfraglink.com">support@playfraglink.com</a> from the address on your account, or ask on <a href="https://discord.gg/QbaYRtvADj" rel="noopener">Discord</a>.</p>
 </div></section></div>

@@ -3,6 +3,9 @@
 (function () {
 "use strict";
 const API = "/api/v1", TK = "fl_token", UK = "fl_user";
+/* Every form posts here if it's ever submitted before its script is ready: never a GET (which
+   would put passwords or tokens in the URL and server logs). The server ignores the body. */
+const FA = 'method="post" action="/api/v1/form-fallback"';
 const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } })();
 const DISCORD = "https://discord.gg/QbaYRtvADj";
 const $ = (s, r) => (r || document).querySelector(s);
@@ -847,7 +850,7 @@ pages.friends = async () => {
         <div data-fpager>${fl.total > FP ? pagerHtml(fs.offset, FP, fl.total, fs.q) : ""}</div></section>
       ${fl.outgoing.length ? `<section class="panel"><h2>Sent requests (${fl.outgoing_count})</h2><div>${reqOut}</div></section>` : ""}
     </div><aside class="col">
-      <section class="panel"><h2>Add a friend</h2><div class="body"><form class="f" id="addf"><label>Username<input type="text" name="handle" maxlength="20" required placeholder="their Fraglink username" autocomplete="off"></label><div class="row"><button class="btn">Send request</button></div></form></div></section>
+      <section class="panel"><h2>Add a friend</h2><div class="body"><form ${FA} class="f" id="addf"><label>Username<input type="text" name="handle" maxlength="20" required placeholder="their Fraglink username" autocomplete="off"></label><div class="row"><button class="btn">Send request</button></div></form></div></section>
       <section class="panel"><h2>Friends' activity</h2><div>${feed || `<div class="body empty">Nothing in the last 7 days.</div>`}</div></section>
       ${fl.blocked.length ? `<section class="panel"><h2>Blocked</h2><div>${fl.blocked.map(h => `<div class="fr" data-h="${esc(h)}"><div class="who">${esc(h)}</div><div class="acts"><button class="btn sm" data-act="unblock">Unblock</button></div></div>`).join("")}</div></section>` : ""}
     </aside></div>`;
@@ -910,12 +913,12 @@ pages.settings = async () => {
         canUp ? "PNG, JPEG, WebP or GIF (first frame), up to 2 MB. Cropped to a square. Keep it friendly: pictures can be reported and removed. 5 changes a day." : esc(u.avatar_upload_block || "Uploads aren't available right now."))}
       ${row("Or pick a preset", `<div class="presets">${PRESET_GLYPHS.map((g, i) => `<button type="button" data-preset="${i}" class="${u.avatar.kind === "preset" && u.avatar.preset === i ? "on" : ""}" title="Preset ${i + 1}">${avatar({ kind: "preset", preset: i }, 48)}</button>`).join("")}</div>`, "Your default colour comes from your account.")}
     </div>
-    <h3>Account</h3><form data-f="name">${msg}<div class="frm">
+    <h3>Account</h3><form ${FA} data-f="name">${msg}<div class="frm">
       ${row("Username", `<b>${esc(u.handle)}</b> <small style="color:#8a96a3">playfraglink.com/u/${esc(u.handle)}</small>`, "Your sign-in name and profile address. It's permanent; ask staff if it really needs changing.")}
       ${row("Nickname", `<input class="t" name="display_name" maxlength="32" value="${esc(u.display_name || "")}">`, "The name everyone sees, in the app and on the site. Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave empty to use your username.")}
       ${row("Email", `${esc(u.email || "")} ${verified}`)}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
-    <h3>About you</h3><form data-f="about">${msg}<div class="frm">
+    <h3>About you</h3><form ${FA} data-f="about">${msg}<div class="frm">
       ${row("About me", `<textarea class="t" name="about" maxlength="300">${esc(u.about || "")}</textarea>`, "Up to 300 characters.")}
       ${row("Location", `<input class="t" name="location" maxlength="40" value="${esc(u.location || "")}" placeholder="e.g. Sydney, Australia">`, "Optional. Shown on your profile as typed.")}
       ${row("Country", `<select class="t" name="country"><option value="">(not shown)</option>${COUNTRIES().map(([c, n]) => `<option value="${c}" ${(u.details || {}).country === c ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>`, "Shows a small flag next to your location.")}
@@ -923,21 +926,21 @@ pages.settings = async () => {
       ${row("Gender", `<input class="t" name="gender" maxlength="20" value="${esc((u.details || {}).gender || "")}">`, "Optional, as you'd like it shown.")}
       ${row("Gaming style", `<select class="t" name="gaming_style"><option value="">(none)</option>${STYLES.map(s => `<option ${u.gaming_style === s ? "selected" : ""}>${s}</option>`).join("")}</select>`)}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
-    <h3>Change email</h3><form data-f="email">${msg}<div class="frm">
+    <h3>Change email</h3><form ${FA} data-f="email">${msg}<div class="frm">
       ${row("New email", `<input class="t" type="email" name="new_email" required autocomplete="email">`)}
       ${row("Current password", `<input class="t" type="password" name="current_password" required autocomplete="current-password">`)}
       ${row("", `<button class="btn">Change email</button>`)}</div></form>
     <h3>Your data</h3>${msg}<div class="frm">
       ${row("Download my data", `<button class="btn" type="button" data-export>Download (zip)</button>`, "Everything we store about you: account, sessions, hours, friends, as JSON and CSV. Once an hour.")}
       ${row("Delete my account", `<button class="btn red" type="button" data-delete>Delete account…</button>`, "Signs you out everywhere now and deletes everything after 7 days. Signing in again during those 7 days cancels it.")}
-    </div><form data-f="delete" hidden>${msg}<div class="frm"><div class="danger" style="grid-column:1/-1">Your profile disappears now and your account and all data are deleted for good after 7 days.</div>
+    </div><form ${FA} data-f="delete" hidden>${msg}<div class="frm"><div class="danger" style="grid-column:1/-1">Your profile disappears now and your account and all data are deleted for good after 7 days.</div>
       ${row("Password", `<input class="t" type="password" name="password" required autocomplete="current-password">`)}
       ${u.mfa && u.mfa.enabled ? row("Two-step code", `<input class="t" name="code" required autocomplete="one-time-code">`) : ""}
       ${row("", `<button class="btn red">Delete my account</button>`)}</div></form>`;
   }
   function rigTab() {
     const r = u.rig || {};
-    return `<h3>Gaming rig</h3><form data-f="rig">${msg}<div class="frm">${RIG_FIELDS.map(([k, l, ph]) => row(l, `<input class="t" name="${k}" maxlength="60" value="${esc(r[k] || "")}" placeholder="${esc(ph)}">`)).join("")}
+    return `<h3>Gaming rig</h3><form ${FA} data-f="rig">${msg}<div class="frm">${RIG_FIELDS.map(([k, l, ph]) => row(l, `<input class="t" name="${k}" maxlength="60" value="${esc(r[k] || "")}" placeholder="${esc(ph)}">`)).join("")}
       ${row("", `<button class="btn dl">Save rig</button>`, "Shown on your profile. Leave everything empty to hide the box.")}</div></form>`;
   }
   async function gamesTab(el) {
@@ -995,7 +998,7 @@ pages.settings = async () => {
     const pv = u.privacy || {};
     const priv = !u.public_profile;
     const sw = (k, label) => `<label style="display:block;margin:3px 0"><input type="checkbox" data-pv="${k}" ${pv[k] !== false ? "checked" : ""}>${label}</label>`;
-    return `<h3>Privacy</h3><form data-f="privacy">${msg}<div class="frm">
+    return `<h3>Privacy</h3><form ${FA} data-f="privacy">${msg}<div class="frm">
       ${(() => {
         const dob = (u.details && u.details.birth_date) || null;
         if (dob) {
@@ -1022,7 +1025,7 @@ pages.settings = async () => {
   function notificationsTab() {
     const n = u.notify_prefs || {};
     const cb = (k, t) => `<label style="display:block;margin:2px 0"><input type="checkbox" name="${k}" ${n[k] ? "checked" : ""}>${t}</label>`;
-    return `<h3>Notifications</h3><form data-f="notify">${msg}<div class="frm">
+    return `<h3>Notifications</h3><form ${FA} data-f="notify">${msg}<div class="frm">
       ${row("Email", cb("signin_email", "New sign-in to my account") + cb("friend_request_email", "Someone sends me a friend request") + cb("news_email", "Fraglink news (a few times a year)"), u.mail_live ? "" : "Email delivery isn't switched on yet. Your choices are saved for when it is.")}
       ${row("Desktop app", cb("friend_request_client", "Friend requests") + cb("friend_online_client", "A friend comes online or starts a game"), "The same switches as Options > General in the desktop app; a change here shows there next time you open Options.")}
       </div></form>`;
@@ -1060,7 +1063,7 @@ pages.settings = async () => {
   }
   async function securityTab(el) {
     const mf = u.mfa || {};
-    el.innerHTML = `<h3>Password</h3><form data-f="pw">${msg}<div class="frm">
+    el.innerHTML = `<h3>Password</h3><form ${FA} data-f="pw">${msg}<div class="frm">
       ${row("Current password", `<input class="t" type="password" name="current_password" required autocomplete="current-password">`)}
       ${row("New password", `<input class="t" type="password" name="new_password" required minlength="10" maxlength="128" autocomplete="new-password">`)}
       ${row("New password again", `<input class="t" type="password" name="new_password2" required minlength="10" maxlength="128" autocomplete="new-password">`)}
@@ -1303,7 +1306,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const y = $("#year"); if (y) y.textContent = new Date().getFullYear();
   banner();
   const f = pages[document.body.dataset.page];
-  if (f) Promise.resolve(f()).catch(e => { console.error(e); });
+  // Submit buttons in the page HTML start disabled (data-wait) until the page's handlers exist.
+  const ready = () => $$("button[data-wait]").forEach(b => { b.disabled = false; b.removeAttribute("data-wait"); });
+  if (f) Promise.resolve(f()).catch(e => { console.error(e); }).finally(ready); else ready();
   // keep the header in sync with the real account (handle/display name changes)
   if (token() && document.body.dataset.page !== "settings" && document.body.dataset.page !== "verify") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null, avatar: m.user.avatar, email_verified: m.user.email_verified, mail_live: m.user.mail_live }); renderHeader(); verifyBar(); }).catch(() => { if (!token()) renderHeader(); });
   else verifyBar();

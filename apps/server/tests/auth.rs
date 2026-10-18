@@ -490,3 +490,38 @@ async fn signup_needs_date_of_birth(pool: PgPool) {
     assert_eq!(ex.json()["birth_date"], "1990-01-15", "{}", ex.text);
     assert_eq!(ex.json()["is_minor"], false);
 }
+
+/// A website form submitted before its script was ready posts here: the body is never read
+/// or echoed, and the browser goes back to the same-origin page it came from.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn form_fallback_never_echoes(pool: PgPool) {
+    use axum::body::Body;
+    use axum::http::{header, Request};
+    let app = fraglink_server::router(state(pool));
+    let post = |referer: Option<&'static str>| {
+        let mut b = Request::builder()
+            .method("POST")
+            .uri("/api/v1/form-fallback")
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+        if let Some(r) = referer {
+            b = b.header(header::REFERER, r);
+        }
+        b.body(Body::from("login=ana&password=hunter2-secret-pw"))
+            .unwrap()
+    };
+    for (referer, want) in [
+        (
+            Some("http://localhost:8787/reset?token=abc"),
+            "/reset?token=abc",
+        ),
+        (Some("http://localhost:8787/login"), "/login"),
+        (Some("https://evil.example/login"), "/"),
+        (Some("http://localhost:8787//evil.example"), "/"),
+        (None, "/"),
+    ] {
+        let r = send(&app, post(referer)).await;
+        assert_eq!(r.status, StatusCode::SEE_OTHER, "{referer:?}");
+        assert_eq!(r.headers[header::LOCATION.as_str()], want, "{referer:?}");
+        assert!(!r.text.contains("hunter2"));
+    }
+}

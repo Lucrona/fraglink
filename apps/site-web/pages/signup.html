@@ -1,6 +1,6 @@
 <!-- title: Create an account · Fraglink | page: signup -->
 <div class="narrow wrap"><section class="panel"><h2>Create an account</h2><div class="body">
-  <form class="f" id="signup" autocomplete="on">
+  <form class="f" id="signup" method="post" action="/api/v1/form-fallback" autocomplete="on">
     <div id="err" class="alert err" hidden></div>
     <label>Username<input type="text" name="handle" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_\-]{3,20}" autocomplete="username" autofocus><small>3-20 letters, digits, _ or -. Friends add you by this name.</small></label>
     <label>Email <span class="hint">(optional, for account recovery and sign-in alerts)</span><input type="email" name="email" autocomplete="email"></label>
@@ -21,7 +21,7 @@
     </label>
     <p class="hint" style="margin:8px 0 0">By creating an account you agree to the <a href="/terms" target="_blank">Terms of Use</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
     <div class="cf-turnstile" data-sitekey="__SITEKEY__" data-theme="dark"></div>
-    <div class="row"><button class="btn dl">Create account</button></div>
+    <div class="row"><button class="btn dl" disabled data-wait>Create account</button></div>
   </form>
   <p class="hint" style="margin:14px 0 0">Already have an account? <a href="/login">Sign in</a>.</p>
 </div></section></div>

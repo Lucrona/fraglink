@@ -151,6 +151,7 @@ fn open_in_maintenance(path: &str) -> bool {
             | "/api/v1/announcement"
             | "/api/v1/auth/login"
             | "/api/v1/auth/mfa"
+            | "/api/v1/form-fallback"
     ) || path.starts_with("/api/v1/admin/")
         || path.starts_with("/api/v1/games/")
         || path.starts_with("/api/v1/game-art/")
