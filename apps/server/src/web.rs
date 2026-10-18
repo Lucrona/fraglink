@@ -459,6 +459,10 @@ async fn signup_post(
     headers: HeaderMap,
     Form(f): Form<AuthFormData>,
 ) -> Response {
+    if let Err(e) = crate::features::require(&st, "signups", "Sign-ups are closed right now.").await
+    {
+        return e.into_response();
+    }
     let next = safe_next(f.next.as_deref());
     if let Err(e) = same_origin(&headers, &st) {
         return e.into_response();
@@ -596,6 +600,15 @@ async fn steam_start(State(st): State<AppState>, MaybeUser(u): MaybeUser) -> Res
     if u.is_none() {
         return Redirect::to("/login?next=%2Fauth%2Fsteam%2Fstart").into_response();
     }
+    if let Err(e) = crate::features::require(
+        &st,
+        "connect_steam",
+        "Steam linking is turned off right now.",
+    )
+    .await
+    {
+        return e.into_response();
+    }
     Redirect::to(&st.steam.openid_redirect(&st.cfg.public_url)).into_response()
 }
 
@@ -627,6 +640,15 @@ async fn web_steam_link(
     a: AuthUser,
     Form(f): Form<LinkForm>,
 ) -> Response {
+    if let Err(e) = crate::features::require(
+        &st,
+        "connect_steam",
+        "Steam linking is turned off right now.",
+    )
+    .await
+    {
+        return e.into_response();
+    }
     if let Err(e) = same_origin(&headers, &st) {
         return e.into_response();
     }
@@ -651,6 +673,15 @@ async fn web_steam_link(
 }
 
 async fn web_steam_sync(State(st): State<AppState>, headers: HeaderMap, a: AuthUser) -> Response {
+    if let Err(e) = crate::features::require(
+        &st,
+        "connect_steam",
+        "Steam linking is turned off right now.",
+    )
+    .await
+    {
+        return e.into_response();
+    }
     if let Err(e) = same_origin(&headers, &st) {
         return e.into_response();
     }

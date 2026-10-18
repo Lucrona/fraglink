@@ -145,6 +145,12 @@ pub async fn test_handles(st: &AppState) -> ApiResult<Vec<String>> {
 }
 
 pub async fn request(st: &AppState, me: &Person, handle: &str) -> ApiResult<RequestOutcome> {
+    crate::features::require(
+        st,
+        "friend_requests",
+        "Friend requests are turned off right now.",
+    )
+    .await?;
     let other = find_visible(st, Some(me.id), handle).await?;
     if other.id == me.id {
         return Err(AppError::bad_request(

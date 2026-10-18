@@ -125,3 +125,18 @@ sudo systemctl start fraglink-server
 Take a backup by hand: `sudo systemctl start fraglink-backup`. Backups only live on the VPS, so copy
 one off now and then (`scp fraglink@119.42.54.86:/var/backups/fraglink/…`; the directory is root-only, so copy it
 to `/tmp` with sudo first) or turn on BinaryLane backups.
+
+## Email (account emails)
+
+The server sends: email confirmation (sign-up / email change), password reset, new sign-in alert.
+`/etc/fraglink/server.env`: `FRAGLINK_MAIL=on` plus one provider:
+- Resend: `RESEND_API_KEY` (domain `playfraglink.com` verified in Resend; DNS records on Cloudflare).
+- Cloudflare Email Service (Workers Paid): `FRAGLINK_MAIL_PROVIDER=cloudflare`, `CLOUDFLARE_EMAIL_TOKEN` (Email Sending: Edit), `CLOUDFLARE_ACCOUNT_ID`.
+Optional `FRAGLINK_MAIL_FROM` (default `Fraglink <no-reply@playfraglink.com>`), `FRAGLINK_MAIL_REPLY_TO` (default `support@playfraglink.com`).
+Without a key, mail is only logged and email-gated rules stay off. Incoming mail: Cloudflare Email Routing forwards hello@, support@ and a catch-all.
+
+## Site settings and test accounts
+
+- Admin > Site settings (`site_settings`, `src/features.rs`): sign-ups, announcement banner, Steam/Battle.net/Discord connect,
+  friend requests, public profiles + search, maintenance mode. Public read-only `GET /api/v1/features`; enforced server-side.
+- Test accounts: `UPDATE users SET is_test = true WHERE handle = '...'` hides an account from everyone but itself and its friends.

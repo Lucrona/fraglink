@@ -119,6 +119,12 @@ async fn signup(
     headers: HeaderMap,
     Json(r): Json<SignupReq>,
 ) -> ApiResult<(StatusCode, Json<TokenResp>)> {
+    crate::features::require(
+        &st,
+        "signups",
+        "Sign-ups are closed right now. Try again later.",
+    )
+    .await?;
     signup_limit(&st, &headers)?;
     crate::turnstile::check(&st, &headers, r.turnstile.as_deref()).await?;
     let user = auth::create_user(&st, &r.email, &r.password, &r.handle).await?;
@@ -197,6 +203,12 @@ async fn device_signup(
     headers: HeaderMap,
     Json(r): Json<DeviceSignupReq>,
 ) -> ApiResult<(StatusCode, Json<TokenResp>)> {
+    crate::features::require(
+        &st,
+        "signups",
+        "Sign-ups are closed right now. Try again later.",
+    )
+    .await?;
     signup_limit(&st, &headers)?;
     let user = auth::create_user(&st, &r.email, &r.password, &r.handle).await?;
     let ctx = crate::geo::ReqCtx::from_headers(&st, &headers);
@@ -248,6 +260,12 @@ async fn user_search(
     Query(q): Query<SearchQ>,
 ) -> ApiResult<Json<Value>> {
     st.rate_limit(format!("search:{}", a.user.id), 60, MINUTE)?;
+    crate::features::require(
+        &st,
+        "public_profiles",
+        "Player search is turned off right now.",
+    )
+    .await?;
     let q = q.q.trim().to_lowercase();
     if q.is_empty() || q.len() > 64 {
         return Ok(Json(json!({ "users": [] })));
@@ -1070,6 +1088,12 @@ async fn steam_link(
     Json(r): Json<SteamLinkReq>,
 ) -> ApiResult<Json<Value>> {
     check_origin(&a, &headers, &st)?;
+    crate::features::require(
+        &st,
+        "connect_steam",
+        "Steam linking is turned off right now.",
+    )
+    .await?;
     let id = match steam::parse_profile(&r.profile) {
         Some(ProfileRef::Id(id)) => id,
         Some(ProfileRef::Vanity(v)) => st.steam.resolve_vanity(&v).await?,
@@ -1092,6 +1116,12 @@ async fn steam_sync(
     a: AuthUser,
 ) -> ApiResult<Json<steam::ImportResult>> {
     check_origin(&a, &headers, &st)?;
+    crate::features::require(
+        &st,
+        "connect_steam",
+        "Steam linking is turned off right now.",
+    )
+    .await?;
     Ok(Json(steam::import(&st, a.user.id).await?))
 }
 

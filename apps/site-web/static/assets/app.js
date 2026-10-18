@@ -845,7 +845,7 @@ pages.settings = async () => {
       const v = c[p] || {}, l = v.linked;
       const right = l
         ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
-        : v.available ? `<button class="btn sm blue" type="button" data-link="${p}">${p === "steam" ? "Sign in through Steam" : "Link " + NAMES[p]}</button>` : `<span class="btn sm" aria-disabled="true">Coming soon</span>`;
+        : v.off ? `<span class="btn sm" aria-disabled="true">Turned off for now</span>` : v.available ? `<button class="btn sm blue" type="button" data-link="${p}">${p === "steam" ? "Sign in through Steam" : "Link " + NAMES[p]}</button>` : `<span class="btn sm" aria-disabled="true">Coming soon</span>`;
       const who = l ? `${p === "steam" ? `<a href="https://steamcommunity.com/profiles/${esc(l.uid)}" rel="noopener">${esc(l.display || l.uid)}</a>` : `<b>${esc(l.display || l.uid)}</b>`} ${l.verified ? `<span class="vbadge">✓ Verified</span>` : `<span class="sub">(not verified)</span>`}${l.last_sync_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(l.last_sync_at))}${l.sync_status && l.sync_status !== "ok" ? " · " + esc(l.sync_status) : ""}</div>` : ""}`
         : `<span class="sub">${blurb}</span>`;
       return `<div class="conn"><span class="cl">${logo}</span><div style="flex:1"><b style="display:block">${NAMES[p]}</b>${who}</div><div>${right}</div></div>`;
@@ -1026,9 +1026,29 @@ pages.admin = async () => {
   document.head.appendChild(s);
 };
 
+/* ---------- feature switches (Admin > Site settings; the server enforces them too) ---------- */
+const FEATURES = { signups: true, announcement: true, connect_steam: true, connect_bnet: true, connect_discord: true, friend_requests: true, public_profiles: true, maintenance: false };
+const featuresReady = fetch(API + "/features", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => { if (d && d.features) Object.assign(FEATURES, d.features); }).catch(() => {});
+function applyFeatures() {
+  document.body.classList.toggle("ff-no-friendreq", !FEATURES.friend_requests);
+  document.body.classList.toggle("ff-no-search", !FEATURES.public_profiles);
+  const page = document.body.dataset.page, staff = !!(me() && me().staff_role);
+  if (FEATURES.maintenance && !staff && page !== "login" && page !== "admin") {
+    $("main").innerHTML = `<div class="maint panel"><div class="body"><h1>Down for maintenance</h1><p>Fraglink is getting some work done. We'll be back soon.</p><p class="muted">News and updates: <a href="https://discord.gg/QbaYRtvADj" rel="noopener">our Discord</a>.</p></div></div>`;
+    return false;
+  }
+  if (!FEATURES.signups && page === "signup") {
+    const f = $("#signup"); if (f) f.outerHTML = `<p>Sign-ups are closed right now. Please check back soon.</p><p><a href="/login">Already have an account? Sign in</a></p>`;
+    return false;
+  }
+  return true;
+}
+
 /* ---------- boot ---------- */
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await featuresReady;
   renderHeader();
+  if (!applyFeatures()) return;
   const y = $("#year"); if (y) y.textContent = new Date().getFullYear();
   banner();
   const f = pages[document.body.dataset.page];

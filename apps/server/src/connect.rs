@@ -82,10 +82,12 @@ async fn status(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value
     .await?;
     let mut out = serde_json::Map::new();
     for p in PROVIDERS {
+        // a switched-off service (Admin > Site settings) can't be linked; unlinking still works
+        let off = !crate::features::on(&st, &format!("connect_{p}")).await;
         out.insert(
             p.into(),
-            json!({ "available": available(p), "linked": linked.get(p),
-                    "import": p == "steam" && st.steam.configured() }),
+            json!({ "available": available(p) && !off, "off": off, "linked": linked.get(p),
+                    "import": p == "steam" && st.steam.configured() && !off }),
         );
     }
     Ok(Json(Value::Object(out)))
@@ -100,6 +102,13 @@ async fn start(
     api::check_origin(&a, &headers, &st)?;
     if !PROVIDERS.contains(&provider.as_str()) {
         return Err(AppError::not_found());
+    }
+    if !crate::features::on(&st, &format!("connect_{provider}")).await {
+        return Err(AppError::new(
+            StatusCode::FORBIDDEN,
+            "feature_off",
+            "Linking this service is turned off right now.",
+        ));
     }
     if !available(&provider) {
         return Err(AppError::new(

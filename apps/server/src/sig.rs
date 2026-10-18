@@ -43,6 +43,9 @@ pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Resp
     let Some(handle) = file.strip_suffix(".png").map(|h| h.to_lowercase()) else {
         return StatusCode::NOT_FOUND.into_response();
     };
+    if !crate::features::on(&st, "public_profiles").await {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     if let Some((t, b)) = cache().lock().unwrap().get(&handle) {
         if t.elapsed() < Duration::from_secs(CACHE_SECS) {
             return png(b.clone());

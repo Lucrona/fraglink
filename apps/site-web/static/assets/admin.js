@@ -26,6 +26,7 @@ const TABS = [
   ["avatars", "Reported pictures", can.avatars],
   ["server", "Server", can.server],
   ["announcements", "Announcements", can.announcements],
+  ["settings", "Site settings", can.settings],
   ["staff", "Staff", can.staff],
 ].filter(t => t[2]);
 
@@ -42,7 +43,7 @@ function route() {
   const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
   const t = tab === "user" ? "users" : tab;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
-  const fn = { approvals, games, users, hours: hoursReview, avatars: avatarReports, server, announcements, staff, user: userDetail }[tab];
+  const fn = { approvals, games, users, hours: hoursReview, avatars: avatarReports, server, announcements, settings: siteSettings, staff, user: userDetail }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -377,6 +378,26 @@ async function server() {
   };
   await draw();
   timer = setInterval(() => { if (document.visibilityState === "visible") draw().catch(() => {}); }, 15000);
+}
+
+/* ---------- site settings (feature switches) ---------- */
+async function siteSettings() {
+  const d = await api("/admin/settings");
+  const edit = !!can.settings_edit;
+  const row = s => `<tr><td style="width:56px"><label class="switch"><input type="checkbox" data-key="${esc(s.key)}" ${s.enabled ? "checked" : ""} ${edit ? "" : "disabled"}><i></i></label></td>
+    <td><b>${esc(s.label)}</b>${s.key === "maintenance" && s.enabled ? ` <span class="pill bad">ON</span>` : ""}${s.enabled !== s.default ? ` <span class="pill">changed</span>` : ""}<div class="dimt">${esc(s.help)}</div></td>
+    <td class="dimt" style="white-space:nowrap">${s.updated_at ? `${when(s.updated_at)}${s.updated_by ? " by " + esc(s.updated_by) : ""}` : "default"}</td></tr>`;
+  view.innerHTML = `<section class="panel"><h2>Site settings</h2><div class="body">
+    <p class="note">Switches apply to the website and the desktop app within about 30 seconds, and the server enforces them (hiding a button is not the only effect). Every change is written to the audit log.${edit ? "" : " Only admins can change them."}</p>
+    <table class="settings"><tbody>${d.settings.map(row).join("")}</tbody></table></div></section>`;
+  view.onchange = async e => {
+    const c = e.target.closest("input[data-key]"); if (!c) return;
+    const on = c.checked, key = c.dataset.key;
+    if (key === "maintenance" && on && !confirm("Turn on maintenance mode? Everyone except staff will see a maintenance page and the app will stop syncing.")) { c.checked = false; return; }
+    c.disabled = true;
+    try { await api("/admin/settings", { method: "POST", body: { key, enabled: on } }); siteSettings(); }
+    catch (x) { c.checked = !on; c.disabled = false; alert(x.message); }
+  };
 }
 
 /* ---------- 6. announcements ---------- */

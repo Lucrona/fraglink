@@ -28,6 +28,10 @@ use uuid::Uuid;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/announcement", get(announcement_public))
+        .route(
+            "/api/v1/admin/settings",
+            get(settings_get).post(settings_set),
+        )
         .route("/api/v1/admin/me", get(me))
         .route("/api/v1/admin/suggestions", get(suggestions))
         .route("/api/v1/admin/suggestions/approve", post(approve))
@@ -207,6 +211,8 @@ fn permissions(r: Role) -> Value {
         "games": admin,
         "server": admin,
         "announcements": admin,
+        "settings": true,
+        "settings_edit": admin,
         "staff": admin,
         "manage_admins": r == Role::Owner,
         "audit": admin,
@@ -1943,7 +1949,12 @@ pub async fn active_announcement(st: &AppState) -> ApiResult<Option<Value>> {
 
 /// `GET /api/v1/announcement`: the banner to show (or null). Public, cached 60 s.
 async fn announcement_public(State(st): State<AppState>) -> ApiResult<impl IntoResponse> {
-    let a = active_announcement(&st).await?;
+    // Admin > Site settings > Announcement banner off: nothing to show (site + app)
+    let a = if crate::features::on(&st, "announcement").await {
+        active_announcement(&st).await?
+    } else {
+        None
+    };
     Ok((
         [(header::CACHE_CONTROL, "public, max-age=60")],
         Json(json!({ "announcement": a })),
@@ -3105,4 +3116,42 @@ async fn game_art_clear(
     Ok(Json(
         json!({ "ok": true, "source": crate::art::source_of(&st, &id).await }),
     ))
+}
+
+// ---------------------------------------------------------------------------
+// Site settings (feature switches, see `features`)
+
+/// `GET /api/v1/admin/settings`: every switch (any staff role can look).
+async fn settings_get(State(st): State<AppState>, _s: Staff) -> ApiResult<Json<Value>> {
+    Ok(Json(crate::features::admin_list(&st).await?))
+}
+
+#[derive(serde::Deserialize)]
+struct SettingReq {
+    key: String,
+    enabled: bool,
+}
+
+/// `POST /api/v1/admin/settings` `{key, enabled}`: admins and the owner only; audited.
+async fn settings_set(
+    State(st): State<AppState>,
+    s: Staff,
+    Json(r): Json<SettingReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    if !crate::features::is_key(&r.key) {
+        return Err(AppError::bad_request("unknown_setting", "No such setting."));
+    }
+    let before = crate::features::on(&st, &r.key).await;
+    crate::features::set(&st, &r.key, r.enabled, s.user.id).await?;
+    audit(
+        &st,
+        &s,
+        "site_setting",
+        &r.key,
+        json!({ "enabled": before }),
+        json!({ "enabled": r.enabled }),
+    )
+    .await?;
+    Ok(Json(crate::features::admin_list(&st).await?))
 }

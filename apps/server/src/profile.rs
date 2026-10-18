@@ -216,6 +216,20 @@ async fn profile(
     };
     let p = friends::find_visible(&st, viewer, &handle).await?;
     let is_self = viewer == Some(p.id);
+    // Admin > Site settings > Public profiles off: only yourself and friends
+    if !is_self && !crate::features::on(&st, "public_profiles").await {
+        let friend = match viewer {
+            Some(v) => friends::are_friends(&st, v, p.id).await?,
+            None => false,
+        };
+        if !friend {
+            return Err(AppError::new(
+                StatusCode::FORBIDDEN,
+                "feature_off",
+                "Profiles are only visible to friends right now.",
+            ));
+        }
+    }
     // test accounts never show in friend counts, grids or events on profiles
     let test_handles = friends::test_handles(&st).await?;
     if let (Some(me), false) = (viewer, is_self) {

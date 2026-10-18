@@ -15,6 +15,7 @@ pub mod avatars;
 pub mod config;
 pub mod connect;
 pub mod error;
+pub mod features;
 pub mod friends;
 pub mod game_overrides;
 pub mod game_status;
@@ -144,6 +145,11 @@ pub fn router(state: AppState) -> Router {
         .merge(home::routes())
         .merge(art::routes())
         .merge(connect::routes())
+        .route("/api/v1/features", axum::routing::get(features::public))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            features::gate,
+        ))
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(state)
 }
