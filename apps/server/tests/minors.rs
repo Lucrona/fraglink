@@ -199,10 +199,12 @@ async fn under_18_accounts_are_private_and_unlisted(pool: PgPool) {
     assert_eq!(r.json()["public_profile"], true, "{}", r.text);
 
     // adult with no DOB yet: adding a 13–17 DOB goes private
-    sqlx::query("UPDATE users SET birth_date = NULL, age_confirmed_at = NULL WHERE handle = 'alice'")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE users SET birth_date = NULL, age_confirmed_at = NULL WHERE handle = 'alice'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let r = api(
         &app,
         "POST",
@@ -244,10 +246,12 @@ async fn under_13_signup_refused_and_existing_pauses(pool: PgPool) {
 
     let t = signup(&app, "k@example.com", "kiddo").await;
     // existing accounts without a DOB (pre-DOB migration)
-    sqlx::query("UPDATE users SET birth_date = NULL, age_confirmed_at = NULL WHERE handle = 'kiddo'")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE users SET birth_date = NULL, age_confirmed_at = NULL WHERE handle = 'kiddo'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     fraglink_server::alerts::check_age_reviews(&st)
         .await
         .unwrap(); // sets the watermark
