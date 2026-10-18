@@ -404,7 +404,7 @@ async fn report(
         20,
         std::time::Duration::from_secs(3600),
     )?;
-    let p = friends::find_by_handle(&st, &handle).await?;
+    let p = friends::find_visible(&st, Some(a.user.id), &handle).await?;
     let hash: Option<String> = sqlx::query_scalar(
         "SELECT avatar_hash FROM users WHERE id = $1 AND avatar_kind = 'upload'",
     )

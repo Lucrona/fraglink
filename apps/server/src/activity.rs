@@ -158,7 +158,7 @@ fn week_start(now: DateTime<Utc>) -> DateTime<Utc> {
 }
 
 pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendSummary> {
-    let p = friends::find_by_handle(st, handle).await?;
+    let p = friends::find_visible(st, Some(me), handle).await?;
     if p.id != me && !friends::are_friends(st, me, p.id).await? {
         return Err(AppError::new(
             StatusCode::NOT_FOUND,

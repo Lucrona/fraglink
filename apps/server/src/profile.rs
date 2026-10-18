@@ -214,8 +214,10 @@ async fn profile(
             "No Fraglink user with that name.",
         )
     };
-    let p = friends::find_by_handle(&st, &handle).await?;
+    let p = friends::find_visible(&st, viewer, &handle).await?;
     let is_self = viewer == Some(p.id);
+    // test accounts never show in friend counts, grids or events on profiles
+    let test_handles = friends::test_handles(&st).await?;
     if let (Some(me), false) = (viewer, is_self) {
         let blocked: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM blocks WHERE (blocker = $1 AND blocked = $2) OR (blocker = $2 AND blocked = $1))",
@@ -254,7 +256,18 @@ async fn profile(
     if delete_after.is_some() && !is_self {
         return Err(not_found());
     }
-    let friend_count = friends::friend_ids(&st, p.id).await?.len();
+    let friend_count = if test_handles.is_empty() {
+        friends::friend_ids(&st, p.id).await?.len()
+    } else {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM friendships f
+             JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END
+             WHERE (f.user_a = $1 OR f.user_b = $1) AND f.status = 'accepted' AND NOT u.is_test",
+        )
+        .bind(p.id)
+        .fetch_one(&st.db)
+        .await? as usize
+    };
     let relation = match viewer {
         None => "public",
         Some(_) if is_self => "self",
@@ -391,6 +404,7 @@ async fn profile(
              JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END
              WHERE (f.user_a = $1 OR f.user_b = $1) AND f.status = 'accepted'
                AND f.accepted_at > now() - interval '3 days' AND u.delete_after IS NULL AND u.banned_at IS NULL
+               AND NOT u.is_test
              ORDER BY f.accepted_at DESC LIMIT 10",
         )
         .bind(p.id)
@@ -443,7 +457,8 @@ async fn profile(
     // Friends grid: the user's own, friends' and public profiles (unless switched off).
     let mut friend_grid = Value::Null;
     if is_self || show_friends {
-        let fl = friends::list(&st, p.id).await?;
+        let mut fl = friends::list(&st, p.id).await?;
+        fl.friends.retain(|f| !test_handles.contains(&f.handle));
         // Friends who hide their game (or are private to this viewer) show no game here.
         let fids: Vec<String> = fl.friends.iter().map(|f| f.handle.clone()).collect();
         let quiet: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
@@ -587,7 +602,7 @@ async fn report_profile(
         10,
         std::time::Duration::from_secs(3600),
     )?;
-    let p = friends::find_by_handle(&st, &handle).await?;
+    let p = friends::find_visible(&st, Some(a.user.id), &handle).await?;
     if p.id == a.user.id {
         return Err(AppError::bad_request(
             "own_profile",

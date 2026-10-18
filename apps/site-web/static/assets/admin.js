@@ -155,7 +155,7 @@ async function listGames(q) {
   if (!d.games.length) { box.innerHTML = `<div class="body empty">${q ? `No games match “${esc(q)}”.` : "No games."}</div>`; return; }
   const th = (k, l, c) => `<th class="${c || ""} srt${GS.sort === k ? " on" : ""}" data-sort="${k}" title="Sort by ${l.toLowerCase()}">${l}${GS.sort === k ? (k === "name" ? " ▴" : " ▾") : ""}</th>`;
   const from = GS.offset + 1, to = GS.offset + d.games.length;
-  box.innerHTML = `<div class="note">${q ? "Matches" : GS.show ? "Edited, retired or with a status" : "Every game with hours"} · players and hours count all tiers (tracked, imported, estimated; best figure per player).</div>
+  box.innerHTML = `<div class="note">${q ? "Matches" : GS.show ? "Edited, retired or with a status" : "Every game with hours"} · players and hours count all tiers (tracked, imported, estimated; best figure per player) and include test accounts (the public site leaves those out).</div>
     <table><thead><tr><th></th>${th("name", "Name")}<th>Id</th><th>Source</th>${th("players", "Players", "num")}${th("hours", "Hours", "num")}${th("recent", "Last played", "num")}</tr></thead><tbody>
     ${d.games.map(g => {
       const o = g.override || {};
@@ -270,7 +270,7 @@ async function users(q) {
 async function listUsers(q) {
   const d = await api("/admin/users?q=" + encodeURIComponent(q));
   $("#ulist").innerHTML = d.users.length ? `<div class="note">${q ? "Matches" : "Newest accounts"}</div><table><thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Joined</th><th>Status</th></tr></thead><tbody>
-    ${d.users.map(u => `<tr class="click" data-id="${esc(u.id)}"><td><a href="#user/${esc(u.id)}">${esc(u.handle)}</a>${rolePill(u.role)}${u.banned ? `<span class="pill bad">banned</span>` : ""}</td>
+    ${d.users.map(u => `<tr class="click" data-id="${esc(u.id)}"><td><a href="#user/${esc(u.id)}">${esc(u.handle)}</a>${rolePill(u.role)}${u.is_test ? `<span class="pill" title="Test account: hidden from everyone else">test</span>` : ""}${u.banned ? `<span class="pill bad">banned</span>` : ""}</td>
       <td>${esc(u.display_name)}</td><td class="muted">${esc(u.email || "-")}</td><td>${day(u.created_at)}</td>
       <td><span class="status"><i class="dot ${esc(u.status === "invisible" ? "offline" : u.status)}"></i>${esc(u.status)}</span>${u.last_seen ? ` <span class="dimt">${when(u.last_seen)}</span>` : ""}</td></tr>`).join("")}</tbody></table>`
     : `<div class="body empty">No accounts match.</div>`;

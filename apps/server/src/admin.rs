@@ -1104,9 +1104,10 @@ async fn users_search(
         Option<DateTime<Utc>>,
         Option<String>,
         Option<DateTime<Utc>>,
+        bool,
     )> = sqlx::query_as(
         "SELECT u.id, u.handle, u.display_name, u.email, u.created_at, u.role, u.banned_at,
-                    p.status, p.heartbeat_at
+                    p.status, p.heartbeat_at, u.is_test
              FROM users u LEFT JOIN presence p ON p.user_id = u.id
              WHERE u.deleted_at IS NULL
                AND ($1 = '' OR lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2
@@ -1120,10 +1121,10 @@ async fn users_search(
     .await?;
     let users: Vec<Value> = rows
         .into_iter()
-        .map(|(id, h, d, e, c, role, banned, status, hb)| {
+        .map(|(id, h, d, e, c, role, banned, status, hb, test)| {
             json!({ "id": id, "handle": h, "display_name": d, "email": e, "created_at": c,
                     "role": role, "banned": banned.is_some(), "status": status.unwrap_or_else(|| "offline".into()),
-                    "last_seen": hb })
+                    "last_seen": hb, "is_test": test })
         })
         .collect();
     Ok(Json(json!({ "users": users })))

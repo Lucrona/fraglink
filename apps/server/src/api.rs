@@ -261,7 +261,7 @@ async fn user_search(
     );
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT u.handle, u.display_name FROM users u
-         WHERE u.deleted_at IS NULL AND u.banned_at IS NULL AND u.id <> $1
+         WHERE u.deleted_at IS NULL AND u.banned_at IS NULL AND u.id <> $1 AND NOT u.is_test
            AND (lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2 OR (u.email <> '' AND lower(u.email) = $3))
            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker = u.id AND b.blocked = $1) OR (b.blocker = $1 AND b.blocked = u.id))
          ORDER BY (lower(u.handle) = $3 OR lower(u.display_name) = $3) DESC,
@@ -796,7 +796,7 @@ async fn leaderboard(
         "7d" => {
             sqlx::query_as(
                 "SELECT u.handle, (sum(s.duration_s) / 60)::bigint AS m FROM sessions s JOIN users u ON u.id = s.user_id
-                 WHERE s.game_id = $1 AND s.started_at >= now() - interval '7 days' AND u.deleted_at IS NULL
+                 WHERE s.game_id = $1 AND s.started_at >= now() - interval '7 days' AND u.deleted_at IS NULL AND NOT u.is_test
                  GROUP BY u.handle HAVING sum(s.duration_s) >= 60 ORDER BY m DESC, u.handle LIMIT 50",
             )
             .bind(&game_id)
@@ -806,7 +806,7 @@ async fn leaderboard(
         "all" => {
             sqlx::query_as(
                 "SELECT u.handle, g.tracked_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
-                 WHERE g.game_id = $1 AND g.tracked_min > 0 AND u.deleted_at IS NULL
+                 WHERE g.game_id = $1 AND g.tracked_min > 0 AND u.deleted_at IS NULL AND NOT u.is_test
                  ORDER BY g.tracked_min DESC, u.handle LIMIT 50",
             )
             .bind(&game_id)

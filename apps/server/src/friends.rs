@@ -116,8 +116,36 @@ pub enum RequestOutcome {
     Accepted,
 }
 
+/// `find_by_handle` as seen by `viewer`: a test account (`users.is_test`) only exists for
+/// itself and the people it is already friends with; everyone else gets "not found".
+pub async fn find_visible(st: &AppState, viewer: Option<Uuid>, handle: &str) -> ApiResult<Person> {
+    let p = find_by_handle(st, handle).await?;
+    let is_test: bool = sqlx::query_scalar("SELECT is_test FROM users WHERE id = $1")
+        .bind(p.id)
+        .fetch_one(&st.db)
+        .await?;
+    if !is_test {
+        return Ok(p);
+    }
+    match viewer {
+        Some(v) if v == p.id || are_friends(st, v, p.id).await? => Ok(p),
+        _ => Err(AppError::new(
+            StatusCode::NOT_FOUND,
+            "user_not_found",
+            "No Fraglink user with that name.",
+        )),
+    }
+}
+
+/// Handles of test accounts, to keep them out of lists other people see.
+pub async fn test_handles(st: &AppState) -> ApiResult<Vec<String>> {
+    Ok(sqlx::query_scalar("SELECT handle FROM users WHERE is_test")
+        .fetch_all(&st.db)
+        .await?)
+}
+
 pub async fn request(st: &AppState, me: &Person, handle: &str) -> ApiResult<RequestOutcome> {
-    let other = find_by_handle(st, handle).await?;
+    let other = find_visible(st, Some(me.id), handle).await?;
     if other.id == me.id {
         return Err(AppError::bad_request(
             "self_request",
@@ -218,7 +246,7 @@ async fn accept(st: &AppState, me: &Person, other: &Person) -> ApiResult<()> {
 
 /// Accept or decline a request the other user sent me.
 pub async fn respond(st: &AppState, me: &Person, handle: &str, accept_it: bool) -> ApiResult<()> {
-    let other = find_by_handle(st, handle).await?;
+    let other = find_visible(st, Some(me.id), handle).await?;
     let (a, b) = pair(me.id, other.id);
     let pending: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM friendships WHERE user_a = $1 AND user_b = $2 AND status = 'pending' AND requested_by = $3)",
@@ -250,7 +278,7 @@ pub async fn respond(st: &AppState, me: &Person, handle: &str, accept_it: bool) 
 
 /// Unfriend, cancel my request, or decline theirs.
 pub async fn remove(st: &AppState, me: &Person, handle: &str) -> ApiResult<()> {
-    let other = find_by_handle(st, handle).await?;
+    let other = find_visible(st, Some(me.id), handle).await?;
     let (a, b) = pair(me.id, other.id);
     let was: Option<String> = sqlx::query_scalar(
         "DELETE FROM friendships WHERE user_a = $1 AND user_b = $2 RETURNING status",
@@ -277,7 +305,7 @@ pub async fn remove(st: &AppState, me: &Person, handle: &str) -> ApiResult<()> {
 }
 
 pub async fn block(st: &AppState, me: &Person, handle: &str) -> ApiResult<()> {
-    let other = find_by_handle(st, handle).await?;
+    let other = find_visible(st, Some(me.id), handle).await?;
     if other.id == me.id {
         return Err(AppError::bad_request(
             "self_block",
@@ -318,7 +346,7 @@ pub async fn block(st: &AppState, me: &Person, handle: &str) -> ApiResult<()> {
 }
 
 pub async fn unblock(st: &AppState, me: &Person, handle: &str) -> ApiResult<()> {
-    let other = find_by_handle(st, handle).await?;
+    let other = find_visible(st, Some(me.id), handle).await?;
     sqlx::query("DELETE FROM blocks WHERE blocker = $1 AND blocked = $2")
         .bind(me.id)
         .bind(other.id)

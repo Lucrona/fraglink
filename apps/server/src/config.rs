@@ -33,7 +33,7 @@ pub struct Config {
     pub turnstile_secret: Option<String>,
     /// `TURNSTILE_VERIFY_URL` (default Cloudflare's siteverify).
     pub turnstile_verify_url: String,
-    /// `FRAGLINK_MAIL=on` sends email; anything else only logs it (no provider yet).
+    /// `FRAGLINK_MAIL=on` sends email (with a provider key, see `mailer`); anything else only logs it.
     pub mail_enabled: bool,
     /// `FRAGLINK_STEAM_ART_CDN`: base for Steam store header art (`<base>/<appid>/header.jpg`).
     pub steam_art_cdn: String,

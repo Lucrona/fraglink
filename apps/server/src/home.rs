@@ -70,7 +70,10 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
     Ok(Json(v))
 }
 
-const LIVE_USER: &str = "u.deleted_at IS NULL AND u.banned_at IS NULL AND u.delete_after IS NULL";
+const LIVE_USER: &str =
+    "u.deleted_at IS NULL AND u.banned_at IS NULL AND u.delete_after IS NULL AND NOT u.is_test";
+/// Sessions of test accounts never count in public totals.
+const NO_TEST_SESSIONS: &str = "s.user_id NOT IN (SELECT id FROM users WHERE is_test)";
 
 pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     let signed_in = viewer.is_some();
@@ -84,18 +87,18 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         "SELECT (SELECT count(*) FROM users u WHERE {LIVE_USER}),
                 (SELECT count(*) FROM presence p JOIN users u ON u.id = p.user_id WHERE {LIVE_USER} AND p.status IN ('online','away')),
                 (SELECT count(*) FROM presence p JOIN users u ON u.id = p.user_id WHERE {LIVE_USER} AND p.status IN ('online','away') AND p.game_id IS NOT NULL),
-                (SELECT coalesce(sum(duration_s), 0)::bigint FROM sessions WHERE started_at >= now() - interval '7 days')"
+                (SELECT coalesce(sum(s.duration_s), 0)::bigint FROM sessions s WHERE s.started_at >= now() - interval '7 days' AND {NO_TEST_SESSIONS})"
     )))
     .fetch_one(&st.db)
     .await?;
 
     // ---- most played this week (aggregate; unlisted/hidden games never shown)
-    let rows: Vec<(String, i64, i64)> = sqlx::query_as(
+    let rows: Vec<(String, i64, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT s.game_id, (sum(s.duration_s) / 60)::bigint, count(DISTINCT s.user_id)
-         FROM sessions s WHERE s.started_at >= now() - interval '7 days'
+         FROM sessions s WHERE s.started_at >= now() - interval '7 days' AND {NO_TEST_SESSIONS}
            AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
-         GROUP BY s.game_id HAVING sum(s.duration_s) >= 60 ORDER BY 2 DESC LIMIT 40",
-    )
+         GROUP BY s.game_id HAVING sum(s.duration_s) >= 60 ORDER BY 2 DESC LIMIT 40"
+    )))
     .fetch_all(&st.db)
     .await?;
     let ids: Vec<String> = rows.iter().map(|r| r.0.clone()).collect();
