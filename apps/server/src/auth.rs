@@ -350,7 +350,7 @@ pub fn classify_dob(birth: chrono::NaiveDate) -> ApiResult<bool> {
 }
 
 /// Creates the account. Requires a date of birth (day/month/year). Under 13 is refused
-/// with no row created. Ages 13–17 start as minors (always private); 18+ as adults.
+/// with no row created. Ages 13–17 start as minors (private by default); 18+ as adults.
 pub async fn create_user(
     state: &AppState,
     email: &str,

@@ -273,7 +273,7 @@ async function listUsers(q) {
   const d = await api("/admin/users?q=" + encodeURIComponent(q));
   $("#ulist").innerHTML = d.users.length ? `<div class="note">${q ? "Matches" : "Newest accounts"}</div><table><thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Age</th><th>Joined</th><th>Status</th></tr></thead><tbody>
     ${d.users.map(u => `<tr class="click" data-id="${esc(u.id)}"><td><a href="#user/${esc(u.id)}">${esc(u.handle)}</a>${rolePill(u.role)}${u.is_test ? `<span class="pill" title="Test account: hidden from everyone else">test</span>` : ""}${u.banned ? `<span class="pill bad">banned</span>` : ""}${u.age_review_at ? `<span class="pill bad" title="Entered a birthday under 13. Can't sign in until reviewed.">age check</span>` : ""}</td>
-      <td>${esc(u.display_name)}</td><td class="muted">${esc(u.email || "-")}</td><td>${u.is_minor ? `<span class="pill" title="Under 18: private profile, kept off public lists">13–17</span>` : `<span class="dimt">18+</span>`}</td><td>${day(u.created_at)}</td>
+      <td>${esc(u.display_name)}</td><td class="muted">${esc(u.email || "-")}</td><td>${u.is_minor ? `<span class="pill" title="Under 18: private by default; can go public">13–17</span>` : `<span class="dimt">18+</span>`}</td><td>${day(u.created_at)}</td>
       <td><span class="status"><i class="dot ${esc(u.status === "invisible" ? "offline" : u.status)}"></i>${esc(u.status)}</span>${u.last_seen ? ` <span class="dimt">${when(u.last_seen)}</span>` : ""}</td></tr>`).join("")}</tbody></table>`
     : `<div class="body empty">No accounts match.</div>`;
   $("#ulist").onclick = e => { const tr = e.target.closest("tr[data-id]"); if (tr && !e.target.closest("a")) location.hash = "user/" + tr.dataset.id; };
@@ -291,7 +291,7 @@ async function userDetail(id) {
       <dt>Friends</dt><dd>${u.friend_count}</dd><dt>Shares activity</dt><dd>${u.share_activity ? "Yes" : "No"}</dd>
       ${u.linked.length ? `<dt>Linked</dt><dd>${u.linked.map(l => esc(l.provider) + " " + esc(l.display)).join(", ")}</dd>` : ""}
       ${u.banned_at ? `<dt>Banned</dt><dd>${when(u.banned_at)}${u.ban_reason ? " · " + esc(u.ban_reason) : ""}</dd>` : ""}
-      <dt>Date of birth</dt><dd>${u.birth_date ? esc(u.birth_date) : "<span class=\"dimt\">(not set)</span>"}${u.is_minor ? " · 13–17 (private profile, kept off public lists)" : " · 18 or older"}${u.minor_set_at ? ` · since ${day(u.minor_set_at)}` : ""}</dd>
+      <dt>Date of birth</dt><dd>${u.birth_date ? esc(u.birth_date) : "<span class=\"dimt\">(not set)</span>"}${u.is_minor ? " · 13–17 (private by default; can go public)" : " · 18 or older"}${u.minor_set_at ? ` · since ${day(u.minor_set_at)}` : ""}</dd>
       ${u.age_review_at ? `<dt>Age check</dt><dd>Paused ${when(u.age_review_at)}: entered a birthday under 13 (not saved). Can't sign in until cleared.</dd>` : ""}
       <dt>User id</dt><dd class="mono dimt">${esc(u.id)}</dd></dl></div></section>
     <section class="panel"><h2>Games</h2>${u.games.length ? `<table><thead><tr><th></th><th>Game</th><th class="num">Past 7 days</th><th class="num">Total</th><th class="num"></th></tr></thead><tbody>

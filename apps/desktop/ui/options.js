@@ -179,10 +179,7 @@
     $$('[data-pv]').forEach(c => { c.checked = pv[c.dataset.pv] !== false; });
     const top = { private: a.public_profile === false, share_activity: a.share_activity !== false, show_friends: a.show_friends !== false };
     $$('[data-pv-top]').forEach(c => { c.checked = !!top[c.dataset.pvTop]; });
-    // Under-18 accounts always have a private profile (date of birth is set on the website).
     minor = !!a.is_minor;
-    const pc = $('[data-pv-top="private"]');
-    if (pc) { pc.disabled = minor || pc.disabled; pc.title = minor ? 'Under-18 accounts always have a private profile.' : ''; }
   }
   let minor = false;
   async function renderPrivacy() {
@@ -190,15 +187,26 @@
     const signed = await signedIn();
     boxes.forEach(c => { c.disabled = !signed; });
     if (!signed) { boxes.forEach(c => { c.checked = false; }); m.textContent = 'Sign in (Account tab) to choose what others see.'; return; }
-    try { const a = await FLB.accountInfo(); paintPrivacy(a); m.textContent = a.is_minor ? 'Saved as soon as you click. Under-18 accounts always have a private profile.' : 'Saved as soon as you click.'; } catch (e) { m.textContent = String(e); }
+    try {
+      const a = await FLB.accountInfo(); paintPrivacy(a);
+      m.textContent = a.is_minor
+        ? 'Saved as soon as you click. Under-18 accounts start private; you can make your profile public any time.'
+        : 'Saved as soon as you click.';
+    } catch (e) { m.textContent = String(e); }
   }
   async function savePrivacy(c) {
     const m = $('#pv-msg'), k = c.dataset.pv, top = c.dataset.pvTop;
+    // Unchecking Private = going public. Minors get a short confirm.
+    if (top === 'private' && !c.checked && minor) {
+      if (!confirm('Your profile will be visible to everyone. You can switch back any time.')) {
+        c.checked = true; return;
+      }
+    }
     const patch = k ? { privacy: { [k]: c.checked } } : top === 'private' ? { public_profile: !c.checked } : { [top]: c.checked };
     c.disabled = true;
     try { const r = await FLB.privacy(patch); paintPrivacy(r); m.textContent = 'Saved. It shows on the website straight away.'; }
     catch (e) { c.checked = !c.checked; m.textContent = String(e); }
-    c.disabled = minor && top === 'private';
+    c.disabled = false;
   }
 
   /* ---- Connections: linked accounts, the same as Settings > Connections on the website ---- */
