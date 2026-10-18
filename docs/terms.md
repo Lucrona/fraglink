@@ -1,6 +1,6 @@
 # Terms of Use
 
-Last updated: 18 October 2026
+Last updated 19 October 2026
 
 Welcome to Fraglink. These terms are the deal between you and us when you use the Fraglink app, the website at playfraglink.com, or a Fraglink account. We've kept them short and plain. By creating an account you agree to the Terms and Privacy Policy. If you use the app without an account, these terms still apply. Our [Privacy Policy](/privacy) explains what we collect and why.
 
@@ -12,7 +12,7 @@ Fraglink is operated by Lucrona, an individual based in Melbourne, Australia. Wh
 
 - You need to be at least **13**, wherever you live (including the EU and UK). When you sign up, you give your date of birth. We don't check ID, so please give your real one.
 - If you're under 13, sign-up is refused and no account is created.
-- If you're 13–17, your account is marked as a minor account. Your profile is always private and can't be made public. It stays off the home-page lists, leaderboards and top-player lists, and only your friends can find you in search. When you turn 18, it automatically becomes a normal account, but your profile stays private until you choose to make it public.
+- If you're 13–17, your account is marked as a minor account and your profile **starts private**. You can make it public yourself in your privacy settings, after a short confirmation. Once it's public, it works like any other public profile: it can appear in lists on the home page, on leaderboards and in search. You can switch back to private at any time. When you turn 18, your account automatically becomes a normal account and keeps whatever setting you had, so a private profile stays private until you choose to make it public.
 - You can't change your date of birth yourself after sign-up. If it's wrong, email support@playfraglink.com and we'll fix it.
 - Accounts made before we asked for a date of birth are asked to add one. If it shows the person is under 13, the account is locked and an admin reviews and closes it. If we learn in any other way that someone is under 13, we lock the account straight away, and an admin closes it after a review. Parents can email us to have their child's account closed.
 - One account per person. Keep your password and two-step codes to yourself. You're responsible for what happens on your account, so tell us straight away if you think someone else got in.

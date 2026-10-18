@@ -52,8 +52,34 @@ async fn under_18_start_private_but_may_go_public(pool: PgPool) {
             .await
             .unwrap();
     assert!(minor && !public && set);
+    let privacy: serde_json::Value =
+        sqlx::query_scalar("SELECT privacy FROM users WHERE handle = 'teen'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(privacy["real_name"], false, "{privacy}");
+    assert_eq!(privacy["gender"], false, "{privacy}");
+    assert_eq!(privacy["location"], false, "{privacy}");
+    // other switches stay default-shown (missing key)
+    assert!(
+        privacy.get("about").is_none() && privacy.get("age").is_none(),
+        "{privacy}"
+    );
     let me = api(&app, "GET", "/api/v1/me", Some(&teen), None).await;
     assert_eq!(me.json()["user"]["is_minor"], true, "{}", me.text);
+    assert_eq!(me.json()["user"]["privacy"]["real_name"], false, "{}", me.text);
+    assert_eq!(me.json()["user"]["privacy"]["gender"], false, "{}", me.text);
+    assert_eq!(me.json()["user"]["privacy"]["location"], false, "{}", me.text);
+    // adult keeps default-shown for those fields
+    let adult_pv: serde_json::Value =
+        sqlx::query_scalar("SELECT privacy FROM users WHERE handle = 'alice'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        adult_pv.as_object().map(|o| o.is_empty()).unwrap_or(false),
+        "{adult_pv}"
+    );
 
     // while private: strangers see a private profile; not in newest / leaderboards
     let p = api(

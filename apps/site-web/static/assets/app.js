@@ -13,6 +13,33 @@ const me = () => { try { return JSON.parse(localStorage.getItem(UK)); } catch (e
 function setSession(t, u) { localStorage.setItem(TK, t); localStorage.setItem(UK, JSON.stringify(u)); }
 function clearSession() { localStorage.removeItem(TK); localStorage.removeItem(UK); }
 
+
+/** Neutral two-button confirm: Cancel and Confirm are equal weight (no primary). */
+function confirmEqual(message) {
+  return new Promise(resolve => {
+    const m = document.createElement("div");
+    m.className = "confirm-modal";
+    m.innerHTML = `<div class="confirm-box panel" role="dialog" aria-modal="true" aria-label="Confirm">
+      <p>${esc(message)}</p>
+      <div class="confirm-actions">
+        <button type="button" class="btn" data-a="cancel">Cancel</button>
+        <button type="button" class="btn" data-a="ok">Confirm</button>
+      </div>
+    </div>`;
+    const done = ok => { m.remove(); resolve(!!ok); };
+    const onKey = e => { if (e.key === "Escape") finish(false); };
+    const finish = ok => { document.removeEventListener("keydown", onKey); done(ok); };
+    m.addEventListener("click", e => {
+      const b = e.target.closest("[data-a]");
+      if (b) finish(b.dataset.a === "ok");
+      else if (e.target === m) finish(false);
+    });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(m);
+    m.querySelector('[data-a="cancel"]').focus();
+  });
+}
+
 async function api(path, opt) {
   opt = opt || {};
   const h = {}, t = token();
@@ -1075,9 +1102,9 @@ pages.settings = async () => {
     try {
       if (f.dataset.f === "privacy") {
         const t = e.target;
-        // Unchecking "Private profile" = going public. Minors get a short confirm.
+        // Unchecking "Private profile" = going public. Minors get a short, neutral confirm.
         if (t.name === "private_profile" && !t.checked && u.is_minor) {
-          if (!confirm("Your profile will be visible to everyone. You can switch back any time.")) {
+          if (!await confirmEqual("Your profile will be visible to everyone. You can switch back any time.")) {
             t.checked = true; return;
           }
         }

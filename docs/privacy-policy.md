@@ -1,13 +1,13 @@
 # Privacy Policy
 
-Last updated: 18 October 2026
+Last updated 19 October 2026
 
 Fraglink is a small, independent project that helps you track your game hours and see what your friends are playing. This page explains, in plain words, what we collect, why, who can see it and what you can do about it.
 
 **The short version**
 - The app only checks which programs are running and compares them with Fraglink's own games list. It never looks inside your games, your files or your screen.
 - Hours are only counted while you're signed in and connected to Fraglink. Nothing is tracked or saved up for later while you're offline.
-- Profiles are public by default (always private if you're under 18), and you choose exactly what's shown. You can also make your whole profile private.
+- Profiles are public by default (private to start with if you're under 18), and you choose exactly what's shown. You can also make your whole profile private.
 - No ads, no selling your data, no analytics or tracking scripts.
 - You can download a copy of your data and delete your account at any time.
 
@@ -68,10 +68,10 @@ When you create an account we store:
 
 - **Friends** see your status, the game you're playing, and (unless you turn it off) your recent games and hours this week. **Invisible** shows you as offline, with no game, to everyone.
 - **Your profile** at playfraglink.com is **public by default**. Anyone, including people who aren't signed in, can see what your privacy switches allow. Public profiles can also appear in lists on the home page and on leaderboards, and you can share a signature image or a small profile card.
-- **Privacy switches.** You choose what your profile shows: what you're playing now, your games and hours, recent activity, friends, achievements, leaderboards, your gaming rig, previous nicknames, and each personal detail, including whether to show your age or birthday (both hidden by default). The same switches are in the app (Options > Privacy) and on the website, and changing one changes the other.
-- **If you're 13–17,** your profile is always private and can't be made public. It stays off the home-page lists, leaderboards and top-player lists, and only your friends can find you in search.
+- **Privacy switches.** You choose what your profile shows: what you're playing now, your games and hours, recent activity, friends, achievements, leaderboards, your gaming rig, previous nicknames, and each personal detail, including whether to show your age (hidden by default). The same switches are in the app (Options > Privacy) and on the website, and changing one changes the other.
+- **If you're 13–17,** your profile starts private. You can make it public yourself after a short confirmation, and then it works like any other public profile.
 - **Private profile.** Turn this on and only your friends can see your profile. You're taken off the home-page lists, and your signature image and profile card are switched off.
-- **Finding you.** Any signed-in player can find you in player search by username or nickname, or by typing your exact email address. **That includes private profiles** (except under-18s, who only their friends can find). Search shows only your username and nickname, and your email is never shown to anyone. Players you've blocked (or who blocked you) can't find you.
+- **Finding you.** Any signed-in player can find you in player search by username or nickname, or by typing your exact email address. **That includes private profiles.** Search shows only your username and nickname, and your email is never shown to anyone. Players you've blocked (or who blocked you) can't find you.
 - **Blocking** is silent. A blocked player can't send you requests or see your status.
 - **Reports.** Players can report a profile or a profile picture. Reports, including the reported username and the reason, go to our team by email for review.
 - Sometimes we may limit profiles to friends only for everyone, for example while dealing with abuse.
@@ -145,7 +145,7 @@ For almost everything, including teen accounts, our legal basis is providing the
 - **To provide Fraglink (contract):** your account, tracking your hours, friends, your profile, linked accounts and account emails.
 - **To meet our age rules and protect young players (legal obligation and legitimate interests):** your date of birth, and the extra protections on minor accounts.
 - **To keep Fraglink safe and working (legitimate interests):** sign-in records, bot checks, logs, backups, rate limits, and handling reports and bans.
-- **Because you chose to (consent):** optional profile details (like real name or gender), showing your age or birthday on your profile, your profile picture and linking other accounts. You can remove them or unlink at any time, and that doesn't affect anything we did before.
+- **Because you chose to (consent):** optional profile details (like real name or gender), showing your age on your profile, your profile picture and linking other accounts. You can remove them or unlink at any time, and that doesn't affect anything we did before.
 
 **Your rights**
 - **Access:** ask what we hold about you.
@@ -173,7 +173,7 @@ You need to be at least **13** to use Fraglink, wherever you live, including the
 
 We don't knowingly collect information from children under 13. If the date of birth you enter at sign-up shows you're under 13, sign-up is refused and no account is created. Your browser then remembers this for 24 hours so the form can't simply be tried again straight away.
 
-If you're 13–17, your account is marked as a minor account. Your profile is always private and can't be made public. It stays off the home-page lists, leaderboards and top-player lists, and only your friends can find you in search. When you turn 18, it automatically becomes a normal account, but your profile stays private until you choose to make it public.
+If you're 13–17, your account is marked as a minor account and your profile **starts private**. You can make it public yourself in your privacy settings, after a short confirmation. Once it's public, it works like any other public profile: it can appear in lists on the home page, on leaderboards and in search. You can switch back to private at any time. When you turn 18, your account automatically becomes a normal account and keeps whatever setting you had, so a private profile stays private until you choose to make it public.
 
 You can't change your date of birth yourself after sign-up. If it's wrong, email support@playfraglink.com and we'll fix it.
 

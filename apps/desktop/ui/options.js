@@ -11,6 +11,32 @@
   const pending = new Map();
   let st = null, catalog = null, gsel = null, detecting = false;
   const fail = e => alert(String(e && e.message || e));
+
+  /** Neutral two-button confirm; Cancel and Confirm are equally weighted. */
+  function confirmEqual(message) {
+    return new Promise(resolve => {
+      const m = document.createElement('div');
+      m.className = 'confirm-modal';
+      m.innerHTML = `<div class="confirm-box" role="dialog" aria-modal="true" aria-label="Confirm">
+        <p>${esc(message)}</p>
+        <div class="confirm-actions">
+          <button type="button" data-a="cancel">Cancel</button>
+          <button type="button" data-a="ok">Confirm</button>
+        </div>
+      </div>`;
+      const done = ok => { m.remove(); resolve(!!ok); };
+      const onKey = e => { if (e.key === 'Escape') finish(false); };
+      const finish = ok => { document.removeEventListener('keydown', onKey); done(ok); };
+      m.addEventListener('click', e => {
+        const b = e.target.closest('[data-a]');
+        if (b) finish(b.dataset.a === 'ok');
+        else if (e.target === m) finish(false);
+      });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(m);
+      m.querySelector('[data-a="cancel"]').focus();
+    });
+  }
   const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', rsi: 'RSI Launcher', scan: 'found in your game folders', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '', detectable: '' };
   const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
@@ -196,9 +222,9 @@
   }
   async function savePrivacy(c) {
     const m = $('#pv-msg'), k = c.dataset.pv, top = c.dataset.pvTop;
-    // Unchecking Private = going public. Minors get a short confirm.
+    // Unchecking Private = going public. Minors get a short, neutral confirm.
     if (top === 'private' && !c.checked && minor) {
-      if (!confirm('Your profile will be visible to everyone. You can switch back any time.')) {
+      if (!await confirmEqual('Your profile will be visible to everyone. You can switch back any time.')) {
         c.checked = true; return;
       }
     }

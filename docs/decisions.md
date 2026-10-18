@@ -145,7 +145,7 @@ the entries say what changing them would cost.
 3. **Discord login** (spec M2): not built yet. It needs a Discord application (client id/secret), which means creating an external account.
 4. **Email verification and password reset:** they need an email provider (external service), so they are not built. Accounts work without verification for now.
 5. **Grace period** for account deletion (D11) and whether excluded games should also be deleted server-side (D9).
-6. **Privacy policy / Terms:** Published 18 October 2026 (privacy v8, terms v5) with required date of birth at sign-up, 13+ everywhere, and always-private under-18 accounts. Sources: `docs/privacy-policy.md`, `docs/terms.md`.
+6. **Privacy policy / Terms:** Live still 18 October 2026 (privacy v8, terms v5). Branch `minors-public` holds Content v9/v6 (19 October 2026): under-18 starts private and may go public after confirm; regenerates via `apps/site-web/publish_legal.py`. **Hold merge/deploy:** v9 says age is hidden by default, but `shows()` still defaults missing keys (including `age`) to shown — fix or reword before go-live. Sources: `docs/privacy-policy.md`, `docs/terms.md`.
 7. **Presence scaling (D21):** fine for a single server. Pick Postgres LISTEN/NOTIFY or Redis when hosting is decided.
 
 ## D29. Dark resizable main window by default; Options in its own window
