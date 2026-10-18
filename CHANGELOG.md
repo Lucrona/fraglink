@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Added
+- Sign-up requires a date of birth (day/month/year) on the website, desktop Create Account, and pairing form. Under 13 is refused; 13–17 accounts stay private and off named public lists; turning 18 clears the under-18 flag but leaves the profile private until you change it.
+- Admin can correct a user's date of birth (Admin > Users).
+
+### Changed
+- Privacy Policy (v8) and Terms of Use (v5) published for the date-of-birth / under-18 rules.
+- Removed the 13+ tick box and the 18+ / 13–17 age choice at sign-up.
+
+### Added
 - Website friends lists update live over the presence WebSocket (browsers pass `?token=`), with a 20-second poll fallback while the tab is visible; the Friends nav shows a pending-request badge.
 - Desktop app: pending friend-request count badge on the Friends tab (ships in the next build; not released).
 - Friend-request emails when notification preference is on and the address is verified (at most one per requester→target, 20 a day per recipient), with a one-click turn-off link. Test accounts only email other test accounts.
@@ -15,7 +23,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Estimated hours and the "Estimate your history" calculator. Hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter.
 
 ### Added
-- Create Account asks you to confirm you're 13 or older (16 or older in the EU/UK), with a link to the Privacy Policy.
 
 ### Changed
 - The app's stats legend shows only Tracked and Imported.
