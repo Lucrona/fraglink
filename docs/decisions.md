@@ -29,9 +29,12 @@ the entries say what changing them would cost.
 - `display = max(tracked, latest Imported counter)`. The tier marker shows which one won.
 - Estimated is always shown separately (`~`) and **never** added to any total.
 
-## D6. Rankings use Tracked only
-- Leaderboards (7 days: Fraglink sessions; all time: tracked as in D5) ignore Imported and Estimated hours completely.
-- Until M4 adds privacy settings, the leaderboard API needs a signed-in caller and shows handles only.
+## D6. Rankings count like profiles (changed 19 October 2026)
+- Leaderboards (all time, 7 days, and the home page's Top players and Most played this week) include Imported hours (Steam, manual counters, later WoW /played), the same way a profile's total does: per game the **larger** of the app's sessions, Steam and Imported (`display_min`), never the sum. Estimated hours never count.
+- 7 days: the larger of the week's sessions and how much the Imported counter grew this week. The baseline is the last entry before the week, else the first entry in it, so a first import doesn't count, and growth is capped at the week's real time. Steam only reports a two-week figure, so it counts in all time but not in 7 days.
+- Only public profiles that show games and hours, have Leaderboards on and haven't hidden the game; never test accounts. The per-game API still needs a signed-in caller.
+- Manual imports are capped at 50,000 hours per game. Big jumps (a first import over 20,000 h, or growth faster than 20 h a day since the previous import) raise the Unusual hours admin alert. Nothing is removed automatically.
+- (Before: Tracked only; Imported and Estimated were ignored completely.)
 
 ## D7. One estimate per game
 - Saving the history estimator again for the same game **replaces** the old estimate instead of stacking another.

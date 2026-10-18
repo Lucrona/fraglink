@@ -721,11 +721,10 @@ pages.profile = async () => {
       <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const many = (p.games_total || p.games.length) > GPAGE;
     games = sec("Games", `
-      <table class="gt" style="width:100%;border-collapse:collapse"><thead><tr>${[["name", "Game", ""], ["week", "Past 7 days", "n"], ["total", "Total", "n"], ["recent", "Last played", "n hide-sm"]].map(([k, l, c]) => many ? `<th class="${c} srt${k === "total" ? " on" : ""}" data-gs="${k}" tabindex="0" role="button">${l}<i>${k === "total" ? " ▾" : ""}</i></th>` : `<th class="${c}">${l}</th>`).join("")}</tr></thead>
+      <table class="gt" style="width:100%;border-collapse:collapse"><thead><tr>${[["name", "Game", ""], ["week", "Past 7 days", "n"], ["total", "Total", "n"], ["recent", "Last played", "n hide-sm"]].map(([k, l, c]) => `<th class="${c} srt${k === "total" ? " on" : ""}" data-gs="${k}" tabindex="0" role="button" aria-sort="${k === "total" ? "descending" : "none"}" title="Sort by ${l.toLowerCase()}">${l}<i>${k === "total" ? " ▾" : ""}</i></th>`).join("")}</tr></thead>
       <tbody data-gbody>${p.games.map(row).join("")}</tbody>
       <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
-      ${many ? `<div data-gpager>${pagerHtml(0, GPAGE, p.games_total)}</div>` : ""}
-      <div class="note">Hours counted by the Fraglink app while you play, plus imported game counters.</div>`);
+      <div data-gpager>${many ? pagerHtml(0, GPAGE, p.games_total) : ""}</div>`);
     gamesRow = row;
   }
 
@@ -788,21 +787,30 @@ pages.profile = async () => {
   if (acc) acc.addEventListener("click", async () => { acc.disabled = true; try { await api("/friends/respond", { method: "POST", body: { handle: p.handle, accept: true } }); location.reload(); } catch (e) { acc.disabled = false; alert(e.message); } });
   const gbody = $("[data-gbody]", root), gpg = $("[data-gpager]", root);
   if (gbody && gpg) {
-    const st = { offset: 0, sort: "total" };
+    // Sorted and paged on the server. Clicking the active column flips its direction; another
+    // column starts in its natural one (Game A→Z, the numbers biggest first, Last played newest).
+    const st = { offset: 0, sort: "total", dir: "desc" };
     const load = async keepPos => {
-      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: st.sort });
+      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: st.sort, dir: st.dir });
       gbody.style.opacity = .5;
       try {
         const r = await api("/users/" + encodeURIComponent(p.handle) + "/profile?" + qs, { keepSession: true });
         await loadIcons(r.games.map(g => g.game_id));
         gbody.innerHTML = r.games.map(gamesRow).join("");
-        gpg.innerHTML = pagerHtml(st.offset, GPAGE, r.total);
+        gpg.innerHTML = r.total > GPAGE ? pagerHtml(st.offset, GPAGE, r.total) : "";
         if (keepPos) { const t = gbody.closest("section"); if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: "start" }); }
       } catch (x) { gpg.textContent = x.message; }
       gbody.style.opacity = 1;
     };
     gpg.addEventListener("click", e => { const b = e.target.closest("[data-off]"); if (!b) return; e.preventDefault(); st.offset = +b.dataset.off; load(true); });
-    const sortBy = th => { st.sort = th.dataset.gs; st.offset = 0; $$("th.srt", root).forEach(x => { x.classList.toggle("on", x === th); x.querySelector("i").textContent = x === th ? (st.sort === "name" ? " ▴" : " ▾") : ""; }); load(); };
+    const sortBy = th => {
+      const k = th.dataset.gs;
+      if (k === st.sort) st.dir = st.dir === "asc" ? "desc" : "asc";
+      else { st.sort = k; st.dir = k === "name" ? "asc" : "desc"; }
+      st.offset = 0;
+      $$("th.srt", root).forEach(x => { const on = x === th; x.classList.toggle("on", on); x.querySelector("i").textContent = on ? (st.dir === "asc" ? " ▴" : " ▾") : ""; x.setAttribute("aria-sort", on ? (st.dir === "asc" ? "ascending" : "descending") : "none"); });
+      load();
+    };
     $$("th.srt", root).forEach(th => { th.addEventListener("click", () => sortBy(th)); th.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sortBy(th); } }); });
   }
   if (rep) rep.addEventListener("click", async e => {

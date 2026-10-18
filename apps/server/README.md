@@ -61,7 +61,7 @@ See `.env.example`. Keep real values out of git (`.env` is ignored).
 | GET / DELETE | `/devices`, `/devices/{id}` | token | list / revoke paired apps |
 | POST | `/sessions/upload` | - | removed: 410 Gone (hours come from live presence) |
 | GET | `/stats` | token | per-game tracked / imported / estimated / display + tier |
-| GET | `/leaderboard/{game_id}?period=7d\|all` | token | **Tracked only** |
+| GET | `/leaderboard/{game_id}?period=7d\|all` | token | like profiles: all = `display_min`, 7d = sessions or Imported growth (D6) |
 | POST | `/hours/estimate` `{game_id\|game_name, eras:[{from_year,to_year,hours_per_week}], note}` | token | Estimated tier; one per game (replaces) |
 | POST | `/hours/import` `{game_id\|game_name, minutes, source: manual\|wow_manual\|xbox_recap, note}` | token | Imported tier (self-reported) |
 | DELETE | `/hours/{id}` | token | |

@@ -825,46 +825,53 @@ struct LbQuery {
     period: Option<String>,
 }
 
-/// Ranks use **Tracked only** (sessions + Steam playtime). Imported hours never count (spec §5, §9). Profiles aren't public before M4, so this needs
-/// a signed-in caller.
+/// Per-game ranks, counted like profiles: all time is the game's total (`display_min`: the
+/// larger of the app's sessions, Steam playtime and Imported hours), 7 days is
+/// `hours::WEEK_CTE`. Only public profiles that show games and hours, have Leaderboards on and
+/// haven't hidden the game; never test accounts. Needs a signed-in caller.
 async fn leaderboard(
     State(st): State<AppState>,
     _a: AuthUser,
     Path(game_id): Path<String>,
     Query(q): Query<LbQuery>,
 ) -> ApiResult<Json<Value>> {
-    let rows: Vec<(String, i64)> = match q.period.as_deref().unwrap_or("7d") {
-        "7d" => {
-            sqlx::query_as(
-                "SELECT u.handle, (sum(s.duration_s) / 60)::bigint AS m FROM sessions s JOIN users u ON u.id = s.user_id
-                 WHERE s.game_id = $1 AND s.started_at >= now() - interval '7 days'
-                   AND u.deleted_at IS NULL AND NOT u.is_test AND u.public_profile
-                 GROUP BY u.handle HAVING sum(s.duration_s) >= 60 ORDER BY m DESC, u.handle LIMIT 50",
-            )
-            .bind(&game_id)
-            .fetch_all(&st.db)
-            .await?
+    let who = format!(
+        "u.deleted_at IS NULL AND u.banned_at IS NULL AND u.delete_after IS NULL AND NOT u.is_test
+         AND u.public_profile AND {} AND {}
+         AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = u.id AND h.game_id = $1)",
+        crate::account::sql_shows("games"),
+        crate::account::sql_shows("leaderboards")
+    );
+    let sql = match q.period.as_deref().unwrap_or("7d") {
+        "7d" => format!(
+            "WITH {wk} SELECT u.handle, w.m FROM wk w JOIN users u ON u.id = w.user_id
+             WHERE w.game_id = $1 AND {who} ORDER BY w.m DESC, u.handle LIMIT 50",
+            wk = crate::hours::WEEK_CTE
+        ),
+        "all" => format!(
+            "SELECT u.handle, g.display_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
+             WHERE g.game_id = $1 AND g.display_min > 0 AND {who}
+             ORDER BY g.display_min DESC, u.handle LIMIT 50"
+        ),
+        _ => {
+            return Err(AppError::bad_request(
+                "invalid_period",
+                "period is 7d or all",
+            ))
         }
-        "all" => {
-            sqlx::query_as(
-                "SELECT u.handle, g.tracked_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
-                 WHERE g.game_id = $1 AND g.tracked_min > 0
-                   AND u.deleted_at IS NULL AND NOT u.is_test AND u.public_profile
-                 ORDER BY g.tracked_min DESC, u.handle LIMIT 50",
-            )
-            .bind(&game_id)
-            .fetch_all(&st.db)
-            .await?
-        }
-        _ => return Err(AppError::bad_request("invalid_period", "period is 7d or all")),
     };
+    let rows: Vec<(String, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+        .bind(&game_id)
+        .fetch_all(&st.db)
+        .await?;
     let ranks: Vec<Value> = rows
         .iter()
         .enumerate()
-        .map(|(i, (h, m))| json!({ "rank": i + 1, "handle": h, "tracked_min": m }))
+        // `tracked_min` is the old name of `minutes`, kept for older clients
+        .map(|(i, (h, m))| json!({ "rank": i + 1, "handle": h, "minutes": m, "tracked_min": m }))
         .collect();
     Ok(Json(
-        json!({ "game_id": game_id, "tier": "tracked", "ranks": ranks }),
+        json!({ "game_id": game_id, "tier": "display", "ranks": ranks }),
     ))
 }
 
@@ -1004,6 +1011,9 @@ async fn save_import(
     Ok(Json(import_for(&st, a.user.id, r).await?))
 }
 
+/// Most Imported hours one game can have, in minutes (50,000 h).
+pub const IMPORT_MAX_MIN: i64 = 50_000 * 60;
+
 pub async fn import_for(st: &AppState, user_id: Uuid, r: ImportReq) -> ApiResult<Value> {
     if !["manual", "wow_manual", "xbox_recap"].contains(&r.source.as_str()) {
         return Err(AppError::bad_request(
@@ -1011,11 +1021,12 @@ pub async fn import_for(st: &AppState, user_id: Uuid, r: ImportReq) -> ApiResult
             "source is manual, wow_manual or xbox_recap",
         ));
     }
-    // 40 years of 24/7 play is the outer bound of plausible.
-    if !(1..=40 * 365 * 24 * 60).contains(&r.minutes) {
+    // One game's counter: at most 50,000 hours (over 5.7 years non-stop). Big jumps under that
+    // are left in but flag the account for staff (alerts::find_unusual_hours).
+    if !(1..=IMPORT_MAX_MIN).contains(&r.minutes) {
         return Err(AppError::bad_request(
             "invalid_minutes",
-            "That number of minutes isn't plausible.",
+            "That's more hours than anyone could have played (the limit is 50,000 hours per game).",
         ));
     }
     let note = clean_note(r.note)?;
@@ -1155,7 +1166,7 @@ steam_playtime.csv   Steam's own playtime counters (tracked tier)\n\
 friends.json         friends, pending requests and blocks\n\
 fraglink-account.json  everything above in one JSON document\n\n\
 Times are UTC (RFC 3339). Minutes are whole minutes; seconds where the column says _s.\n\
-Imported hours never count toward rankings.\n";
+Leaderboards count a game like your profile does: the largest of Fraglink sessions, Steam and imported hours.\n";
 
 fn csv_line(fields: &[String]) -> String {
     let mut l = fields

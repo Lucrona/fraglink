@@ -393,7 +393,7 @@ async fn profile(
     let games_page = {
         let mut g = games.clone();
         if pq.sort.is_some() {
-            crate::paging::sort_games(&mut g, pq.sort.as_deref());
+            crate::paging::sort_games(&mut g, pq.sort.as_deref(), pq.dir.as_deref());
         }
         let default = if games_only { 50 } else { 8 };
         crate::paging::page(g, &pq.term(), &["name"], pq.offset(), pq.limit(default))

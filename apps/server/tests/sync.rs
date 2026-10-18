@@ -88,33 +88,59 @@ async fn tiers_and_rankings(pool: PgPool) {
     sqlx::query("INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at) VALUES($1, 730, 'cs2', 300, 0, now())")
         .bind(alice).execute(&pool).await.unwrap();
 
-    for period in ["7d", "all"] {
-        let r = api(
-            &app,
-            "GET",
-            &format!("/api/v1/leaderboard/cs2?period={period}"),
-            Some(&c),
-            None,
-        )
-        .await;
-        assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-        let ranks = r.json()["ranks"].as_array().unwrap().clone();
-        let handles: Vec<&str> = ranks
-            .iter()
-            .map(|r| r["handle"].as_str().unwrap())
-            .collect();
-        assert_eq!(
-            handles,
-            vec!["alice", "bob"],
-            "{period}: Imported/old estimates never rank; carol has no Tracked time"
-        );
-        if period == "all" {
-            assert_eq!(ranks[0]["tracked_min"], 300);
-            assert_eq!(ranks[1]["tracked_min"], 60);
-        } else {
-            assert_eq!(ranks[0]["tracked_min"], 120);
+    // Leaderboards count like profiles (Oct 2026): all time is display_min (largest of sessions,
+    // Steam and Imported); 7 days counts Imported only by how much the counter grew this week.
+    let ranks = |period: &'static str| {
+        let app = app.clone();
+        let c = c.clone();
+        async move {
+            let r = api(
+                &app,
+                "GET",
+                &format!("/api/v1/leaderboard/cs2?period={period}"),
+                Some(&c),
+                None,
+            )
+            .await;
+            assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+            r.json()["ranks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| {
+                    (
+                        r["handle"].as_str().unwrap().to_string(),
+                        r["minutes"].as_i64().unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>()
         }
-    }
+    };
+    let all = ranks("all").await;
+    assert_eq!(
+        all,
+        vec![("bob".to_string(), 600000), ("alice".to_string(), 300)],
+        "old estimates never rank"
+    );
+    // a first import isn't this week's play: 7 days is still the app's sessions
+    let week = ranks("7d").await;
+    assert_eq!(
+        week,
+        vec![("alice".to_string(), 120), ("bob".to_string(), 60)]
+    );
+    // bob's counter was 599,700 three days ago: it grew 300 minutes this week, which beats his
+    // 60 minutes of sessions (the larger one counts, not both)
+    sqlx::query("INSERT INTO hours_entries (id, user_id, game_id, tier, source, minutes, created_at, captured_at) SELECT gen_random_uuid(), id, 'cs2', 'imported', 'manual', 599700, now() - interval '3 days', now() - interval '3 days' FROM users WHERE handle = 'bob'")
+        .execute(&pool).await.unwrap();
+    let week = ranks("7d").await;
+    assert_eq!(
+        week,
+        vec![("bob".to_string(), 300), ("alice".to_string(), 120)]
+    );
+    // turning Leaderboards off takes you off the board
+    sqlx::query("UPDATE users SET privacy = privacy || '{\"leaderboards\": false}'::jsonb WHERE handle = 'bob'")
+        .execute(&pool).await.unwrap();
+    assert_eq!(ranks("all").await, vec![("alice".to_string(), 300)]);
     assert_eq!(
         api(&app, "GET", "/api/v1/leaderboard/cs2", None, None)
             .await

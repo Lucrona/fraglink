@@ -473,8 +473,10 @@
   function renderFriends() {
     if (state.detectRun) { list.innerHTML = `<div class="lg"><div class="lg-h">Detecting installed games…</div><p>Looking for games from Steam, Battle.net, Epic, GOG, EA app, Ubisoft Connect and Xbox…</p><div class="det-track"><div class="det-bar" id="fd-bar" style="width:${state.detectPct}%"></div></div><button class="dk-btn" data-action="detect-skip">Skip</button></div>`; return; }
     const s = state.sort;
+    // the arrow sits on the active column and points the way it's sorted (click again to flip)
+    const arrow = k => s.key === k ? ` sort${s.dir < 0 ? ' desc' : ''}` : '';
     const cw = colWidths(), cs = cw ? ` cw" style="--cw-name:${cw.name}px;--cw-status:${cw.status}px` : '';
-    let h = `<div class="xf-grid${cs}"><div class="xf-head"><span class="c-name sort ${s.key === 'name' && s.dir < 0 ? 'desc' : ''}" data-sort="name">Name<i class="col-grip" data-col="name" data-tip="Drag to resize, double-click to reset"></i></span><span class="c-status" data-sort="status">Status<i class="col-grip" data-col="status" data-tip="Drag to resize, double-click to reset"></i></span><span class="c-info">Game Info</span></div>`;
+    let h = `<div class="xf-grid${cs}"><div class="xf-head"><span class="c-name${arrow('name')}" data-sort="name">Name<i class="col-grip" data-col="name" data-tip="Drag to resize, double-click to reset"></i></span><span class="c-status${arrow('status')}" data-sort="status">Status<i class="col-grip" data-col="status" data-tip="Drag to resize, double-click to reset"></i></span><span class="c-info">Game Info</span></div>`;
     if (realMode()) {
       const F = realFriends(), fs = LIVE.friends;
       let note = '';

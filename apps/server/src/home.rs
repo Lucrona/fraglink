@@ -87,11 +87,14 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     .await?;
 
     // ---- most played this week (aggregate; unlisted/hidden games never shown)
+    // (app sessions or Imported counter growth, whichever is larger per player: hours::WEEK_CTE)
     let rows: Vec<(String, i64, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT s.game_id, (sum(s.duration_s) / 60)::bigint, count(DISTINCT s.user_id)
-         FROM sessions s WHERE s.started_at >= now() - interval '7 days' AND {NO_TEST_SESSIONS}
+        "WITH {wk}
+         SELECT s.game_id, sum(s.m)::bigint, count(DISTINCT s.user_id)
+         FROM wk s WHERE {NO_TEST_SESSIONS}
            AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
-         GROUP BY s.game_id HAVING sum(s.duration_s) >= 60 ORDER BY 2 DESC LIMIT 40"
+         GROUP BY s.game_id HAVING sum(s.m) >= 1 ORDER BY 2 DESC LIMIT 40",
+        wk = crate::hours::WEEK_CTE
     )))
     .fetch_all(&st.db)
     .await?;
@@ -164,17 +167,16 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         crate::account::sql_shows("leaderboards")
     );
     let tops: Vec<(Uuid, String, String, i64, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "WITH w AS (
-            SELECT s.user_id, s.game_id, sum(s.duration_s) AS secs FROM sessions s
-            WHERE s.started_at >= now() - interval '7 days'
-              AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
-            GROUP BY s.user_id, s.game_id)
-         SELECT u.id, u.handle, u.display_name, (sum(w.secs) / 60)::bigint AS m,
-                (array_agg(w.game_id ORDER BY w.secs DESC))[1]
+        "WITH {wk}, w AS (
+            SELECT s.user_id, s.game_id, s.m FROM wk s
+            WHERE NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id))
+         SELECT u.id, u.handle, u.display_name, sum(w.m)::bigint AS m,
+                (array_agg(w.game_id ORDER BY w.m DESC))[1]
          FROM w JOIN users u ON u.id = w.user_id
          WHERE {LIVE_USER} AND {share}
-         GROUP BY u.id, u.handle, u.display_name HAVING sum(w.secs) >= 600
-         ORDER BY m DESC, u.handle LIMIT 8"
+         GROUP BY u.id, u.handle, u.display_name HAVING sum(w.m) >= 10
+         ORDER BY m DESC, u.handle LIMIT 8",
+        wk = crate::hours::WEEK_CTE
     )))
     .fetch_all(&st.db)
     .await?;

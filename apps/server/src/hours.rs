@@ -13,6 +13,29 @@ pub enum Tier {
 }
 
 /// 12345 -> "12,345"
+/// Leaderboard week: a CTE `wk(user_id, game_id, m)` with each user's minutes per game over the
+/// last 7 days. Like a profile's total, it takes the larger of the app's sessions and the game's
+/// own counter (Imported: manual hours, WoW /played), never the sum, so the same play isn't counted
+/// twice. Imported counts only what the counter grew by within the 7 days. Its baseline is the
+/// newest entry from before the 7 days, else the first entry inside them, so a first import never
+/// counts as this week's play. The growth is capped at the 7 days' real time. Steam only reports a
+/// two-week figure, so Steam counts in all-time totals (display_min) but not here.
+pub const WEEK_CTE: &str = "wk AS NOT MATERIALIZED (
+    SELECT user_id, game_id, max(m)::bigint AS m FROM (
+        SELECT s.user_id, s.game_id, sum(s.duration_s) / 60 AS m FROM sessions s
+         WHERE s.started_at >= now() - interval '7 days' GROUP BY 1, 2
+        UNION ALL
+        SELECT e.user_id, e.game_id,
+               LEAST(GREATEST((array_agg(e.minutes ORDER BY e.created_at DESC, e.id DESC))[1]
+                   - coalesce((SELECT b.minutes FROM hours_entries b
+                                WHERE b.user_id = e.user_id AND b.game_id = e.game_id AND b.tier = 'imported'
+                                  AND b.created_at < now() - interval '7 days'
+                                ORDER BY b.created_at DESC, b.id DESC LIMIT 1),
+                              (array_agg(e.minutes ORDER BY e.created_at, e.id))[1]), 0), 7 * 24 * 60)
+          FROM hours_entries e WHERE e.tier = 'imported' AND e.created_at >= now() - interval '7 days'
+         GROUP BY 1, 2
+    ) x GROUP BY 1, 2 HAVING max(m) > 0)";
+
 pub fn group(n: i64) -> String {
     let s = n.abs().to_string();
     let mut out = String::new();

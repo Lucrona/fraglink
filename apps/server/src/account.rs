@@ -681,7 +681,7 @@ async fn my_games(
             _ => true,
         })
         .collect();
-    crate::paging::sort_games(&mut games, pq.sort.as_deref());
+    crate::paging::sort_games(&mut games, pq.sort.as_deref(), pq.dir.as_deref());
     let (games, total) =
         crate::paging::page(games, &pq.term(), &["name"], pq.offset(), pq.limit(50));
     Ok(Json(

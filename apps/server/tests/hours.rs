@@ -126,6 +126,7 @@ async fn imports_and_delete(pool: PgPool) {
         (100, "wow_addon"),
         (100, "estimator"),
         (30_000_000, "manual"),
+        (3_000_001, "manual"), // over 50,000 hours for one game
     ] {
         let r = api(
             &app,
@@ -137,6 +138,26 @@ async fn imports_and_delete(pool: PgPool) {
         .await;
         assert_eq!(r.status, StatusCode::BAD_REQUEST, "{minutes} {source}");
     }
+    // exactly 50,000 hours is the most one game takes
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/import",
+        Some(&t),
+        Some(json!({ "game_id": "wow", "minutes": 3_000_000, "source": "manual" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let max_id = r.json()["id"].as_str().unwrap().to_string();
+    let r = api(
+        &app,
+        "DELETE",
+        &format!("/api/v1/hours/{max_id}"),
+        Some(&t),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
     // another user's manual game can't be targeted
     let mine = api(
         &app,

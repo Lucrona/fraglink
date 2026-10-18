@@ -10,7 +10,9 @@
 //! - `alert_errors`: 5 or more 5xx responses within 10 minutes, or a background job failing.
 //!   At most one email an hour.
 //! - `alert_hours`: unusual tracked hours (a single session over 16 hours, or more than 20
-//!   hours a day on 3 or more days in a row, Sydney days). Checked every 15 minutes; the
+//!   hours a day on 3 or more days in a row, Sydney days), or a big jump in Imported hours (a
+//!   first import over 20,000 hours for one game, or a counter that grew faster than 20 hours a
+//!   day since the previous import). Checked every 15 minutes; the
 //!   account gets a flag in Admin > Users; at most one email every 15 minutes. Nothing is
 //!   removed: idle and away time count, so this is only for a human to look at.
 //! - `alert_daily`: a summary at 9:00 AM Sydney time (new and active users, hours, pending
@@ -408,8 +410,11 @@ pub const HOURS_SESSION_H: i32 = 16;
 /// Hours a day, and how many days in a row.
 pub const HOURS_DAY_H: i32 = 20;
 pub const HOURS_DAYS_RUN: i64 = 3;
+/// Imported hours: a first import over this many hours for one game is flagged. A later import is
+/// flagged when it grew faster than HOURS_DAY_H hours a day since the previous one (+1 h slack).
+pub const HOURS_FIRST_IMPORT_H: i32 = 20_000;
 
-/// Accounts with unusual tracked hours that aren't flagged yet (or were flagged over 7 days
+/// Accounts with unusual tracked hours or Imported-hours jumps that aren't flagged yet (or were flagged over 7 days
 /// ago): (user id, handle, reason). Test accounts and the owner's account are left out.
 pub async fn find_unusual_hours(st: &AppState) -> ApiResult<Vec<(uuid::Uuid, String, String)>> {
     let rows: Vec<(uuid::Uuid, String, String)> = sqlx::query_as(
@@ -425,15 +430,38 @@ pub async fn find_unusual_hours(st: &AppState) -> ApiResult<Vec<(uuid::Uuid, Str
          runs AS (
              SELECT user_id, count(*) AS n FROM (
                  SELECT user_id, d - (row_number() OVER (PARTITION BY user_id ORDER BY d))::int AS grp FROM daily) x
-             GROUP BY user_id, grp HAVING count(*) >= $3)
+             GROUP BY user_id, grp HAVING count(*) >= $3),
+         recent_imp AS (
+             SELECT DISTINCT user_id, game_id FROM hours_entries
+             WHERE tier = 'imported' AND created_at > now() - interval '2 days'),
+         steps AS (
+             SELECT e.user_id, e.game_id, e.created_at,
+                    e.minutes - coalesce(lag(e.minutes) OVER w, 0) AS gain,
+                    extract(epoch FROM e.created_at - lag(e.created_at) OVER w) / 60 AS gap_min,
+                    lag(e.id) OVER w IS NULL AS first
+             FROM hours_entries e JOIN recent_imp r USING (user_id, game_id)
+             WHERE e.tier = 'imported'
+             WINDOW w AS (PARTITION BY e.user_id, e.game_id ORDER BY e.created_at, e.id)),
+         jumps AS (
+             SELECT st.user_id,
+                    string_agg(CASE WHEN st.first THEN 'imported ' || round(st.gain / 60.0) || ' hours of ' || g.name || ' at once'
+                                    ELSE 'Imported hours of ' || g.name || ' jumped by ' || round(st.gain / 60.0) || ' hours in '
+                                         || round(st.gap_min / 1440.0, 1) || ' days' END, '; ' ORDER BY st.gain DESC) AS what
+             FROM steps st JOIN games g ON g.id = st.game_id
+             WHERE st.created_at > now() - interval '2 days'
+               AND ((st.first AND st.gain > $4 * 60)
+                    OR (NOT st.first AND st.gain > 60 + st.gap_min * $2 / 24.0))
+             GROUP BY st.user_id)
          SELECT u.id, u.handle,
                 concat_ws('; ',
                     CASE WHEN l.secs IS NOT NULL THEN 'one session of ' || round(l.secs / 3600.0, 1) || ' hours' END,
-                    CASE WHEN r.n IS NOT NULL THEN 'over ' || $2 || ' hours a day on ' || r.n || ' days in a row' END)
+                    CASE WHEN r.n IS NOT NULL THEN 'over ' || $2 || ' hours a day on ' || r.n || ' days in a row' END,
+                    j.what)
          FROM users u
          LEFT JOIN long l ON l.user_id = u.id
          LEFT JOIN (SELECT user_id, max(n) AS n FROM runs GROUP BY user_id) r ON r.user_id = u.id
-         WHERE (l.user_id IS NOT NULL OR r.user_id IS NOT NULL)
+         LEFT JOIN jumps j ON j.user_id = u.id
+         WHERE (l.user_id IS NOT NULL OR r.user_id IS NOT NULL OR j.user_id IS NOT NULL)
            AND NOT u.is_test AND u.deleted_at IS NULL AND u.role IS DISTINCT FROM 'owner'
            AND (u.hours_flag_at IS NULL OR u.hours_flag_at < now() - interval '7 days')
          ORDER BY u.handle LIMIT 50",
@@ -441,6 +469,7 @@ pub async fn find_unusual_hours(st: &AppState) -> ApiResult<Vec<(uuid::Uuid, Str
     .bind(HOURS_SESSION_H)
     .bind(HOURS_DAY_H)
     .bind(HOURS_DAYS_RUN)
+    .bind(HOURS_FIRST_IMPORT_H)
     .fetch_all(&st.db)
     .await?;
     Ok(rows)
