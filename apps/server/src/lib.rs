@@ -72,6 +72,8 @@ pub struct AppState {
     pub retired: Arc<retire::RetireCache>,
     /// WoW realm names (see `realms`).
     pub realms: Arc<realms::RealmCache>,
+    /// Signed-out `GET /api/v1/home` response, short-lived (see `home`).
+    pub home_public: Arc<std::sync::Mutex<Option<(std::time::Instant, serde_json::Value)>>>,
 }
 
 impl AppState {
@@ -90,6 +92,7 @@ impl AppState {
             overrides: Arc::new(game_overrides::OverrideCache::default()),
             retired: Arc::new(retire::RetireCache::default()),
             realms: Arc::new(realms::RealmCache::default()),
+            home_public: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 

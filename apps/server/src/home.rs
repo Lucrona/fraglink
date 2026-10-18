@@ -18,7 +18,6 @@ use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -49,15 +48,10 @@ pub async fn appids(st: &AppState, ids: &[String]) -> ApiResult<HashMap<String, 
     Ok(out)
 }
 
-fn public_cache() -> &'static Mutex<Option<(Instant, Value)>> {
-    static C: std::sync::OnceLock<Mutex<Option<(Instant, Value)>>> = std::sync::OnceLock::new();
-    C.get_or_init(|| Mutex::new(None))
-}
-
 async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>> {
     let viewer = m.0.as_ref().map(|a| a.user.id);
     if viewer.is_none() {
-        if let Some((t, v)) = public_cache().lock().unwrap().as_ref() {
+        if let Some((t, v)) = st.home_public.lock().unwrap().as_ref() {
             if t.elapsed() < Duration::from_secs(60) {
                 return Ok(Json(v.clone()));
             }
@@ -65,7 +59,7 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
     }
     let v = build(&st, viewer).await?;
     if viewer.is_none() {
-        *public_cache().lock().unwrap() = Some((Instant::now(), v.clone()));
+        *st.home_public.lock().unwrap() = Some((Instant::now(), v.clone()));
     }
     Ok(Json(v))
 }

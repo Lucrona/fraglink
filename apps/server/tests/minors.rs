@@ -371,3 +371,93 @@ async fn under_13_signup_refused_and_existing_pauses(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn private_and_minor_count_in_anonymous_aggregates(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let pub_tok = signup(&app, "pub@example.com", "pubby").await;
+    let priv_tok = signup(&app, "priv@example.com", "privy").await;
+    let minor_r = signup_dob(&app, "teeny", &years_ago(15, 0)).await;
+    assert_eq!(minor_r.status, StatusCode::CREATED, "{}", minor_r.text);
+    let _test_tok = signup(&app, "test@example.com", "testy").await;
+
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&priv_tok),
+        Some(json!({"public_profile": false})),
+    )
+    .await;
+    sqlx::query("UPDATE users SET is_test = true WHERE handle = 'testy'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true) ON CONFLICT DO NOTHING",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    for h in ["pubby", "privy", "teeny", "testy"] {
+        sqlx::query(
+            "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source)
+             SELECT gen_random_uuid(), id, 'wow', now() - interval '2 hours', now() - interval '1 hour', 3600, 'tracked'
+             FROM users WHERE handle = $1",
+        )
+        .bind(h)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO presence(user_id, status, game_id, game_name, session_started_at, heartbeat_at, updated_at)
+             SELECT id, 'online', 'wow', 'World of Warcraft', now() - interval '30 minutes', now(), now()
+             FROM users WHERE handle = $1
+             ON CONFLICT (user_id) DO UPDATE SET status = 'online', game_id = 'wow', game_name = 'World of Warcraft',
+               session_started_at = now() - interval '30 minutes', heartbeat_at = now(), updated_at = now()",
+        )
+        .bind(h)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let home = api(&app, "GET", "/api/v1/home", None, None).await;
+    assert!(home.status.is_success(), "{}", home.text);
+    let h = home.json();
+    // registered: pub + priv + minor (test excluded)
+    assert_eq!(h["stats"]["registered"], 3, "{}", home.text);
+    // presence strip counts private + minor, not test
+    assert_eq!(h["stats"]["online"], 3, "{}", home.text);
+    assert_eq!(h["stats"]["in_game"], 3, "{}", home.text);
+    // week minutes: 3 × 60 (test excluded)
+    assert_eq!(h["stats"]["minutes_7d"], 180, "{}", home.text);
+
+    let most = h["most_played"].as_array().unwrap();
+    let wow = most
+        .iter()
+        .find(|g| g["game_id"] == "wow")
+        .expect("wow in most_played");
+    assert_eq!(wow["minutes"], 180, "{wow}");
+    assert_eq!(wow["players"], 3, "{wow}"); // anonymous player count includes private+minor
+
+    // named lists never name private / minor / test
+    let blob = home.text;
+    assert!(!blob.contains("\"privy\""), "private named: {blob}");
+    assert!(!blob.contains("\"teeny\""), "minor named: {blob}");
+    assert!(!blob.contains("\"testy\""), "test named: {blob}");
+    assert!(
+        blob.contains("\"pubby\""),
+        "public should appear in newest: {blob}"
+    );
+
+    // named game leaderboard: only the public adult
+    let lb = api(&app, "GET", "/api/v1/leaderboard/wow", Some(&pub_tok), None).await;
+    let ranks: Vec<String> = lb.json()["ranks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["handle"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(ranks, ["pubby"], "{}", lb.text);
+}

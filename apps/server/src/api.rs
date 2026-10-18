@@ -829,7 +829,8 @@ async fn leaderboard(
         "7d" => {
             sqlx::query_as(
                 "SELECT u.handle, (sum(s.duration_s) / 60)::bigint AS m FROM sessions s JOIN users u ON u.id = s.user_id
-                 WHERE s.game_id = $1 AND s.started_at >= now() - interval '7 days' AND u.deleted_at IS NULL AND NOT u.is_test AND NOT u.is_minor
+                 WHERE s.game_id = $1 AND s.started_at >= now() - interval '7 days'
+                   AND u.deleted_at IS NULL AND NOT u.is_test AND u.public_profile AND NOT u.is_minor
                  GROUP BY u.handle HAVING sum(s.duration_s) >= 60 ORDER BY m DESC, u.handle LIMIT 50",
             )
             .bind(&game_id)
@@ -839,7 +840,8 @@ async fn leaderboard(
         "all" => {
             sqlx::query_as(
                 "SELECT u.handle, g.tracked_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
-                 WHERE g.game_id = $1 AND g.tracked_min > 0 AND u.deleted_at IS NULL AND NOT u.is_test AND NOT u.is_minor
+                 WHERE g.game_id = $1 AND g.tracked_min > 0
+                   AND u.deleted_at IS NULL AND NOT u.is_test AND u.public_profile AND NOT u.is_minor
                  ORDER BY g.tracked_min DESC, u.handle LIMIT 50",
             )
             .bind(&game_id)
