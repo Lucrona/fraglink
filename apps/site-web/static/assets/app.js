@@ -1006,7 +1006,7 @@ function verifyBar() {
 /* ---------- site banner (staff announcements) ---------- */
 async function banner() {
   try {
-    const r = await fetch(API + "/announcement");
+    const r = await fetch(API + "/announcement", { cache: "no-store" });
     if (!r.ok) return;
     const a = (await r.json()).announcement;
     if (!a || sessionStorage.getItem("fl_ann_closed") === String(a.id)) return;

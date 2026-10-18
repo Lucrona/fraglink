@@ -1950,7 +1950,8 @@ pub async fn active_announcement(st: &AppState) -> ApiResult<Option<Value>> {
     }))
 }
 
-/// `GET /api/v1/announcement`: the banner to show (or null). Public, cached 60 s.
+/// `GET /api/v1/announcement`: the banner to show (or null). Public, never cached: a cached
+/// `null` would hide a just-posted announcement until it expired.
 async fn announcement_public(State(st): State<AppState>) -> ApiResult<impl IntoResponse> {
     // Admin > Site settings > Announcement banner off: nothing to show (site + app)
     let a = if crate::features::on(&st, "announcement").await {
@@ -1959,7 +1960,7 @@ async fn announcement_public(State(st): State<AppState>) -> ApiResult<impl IntoR
         None
     };
     Ok((
-        [(header::CACHE_CONTROL, "public, max-age=60")],
+        [(header::CACHE_CONTROL, "no-store")],
         Json(json!({ "announcement": a })),
     ))
 }
