@@ -1000,14 +1000,18 @@
   // a nickname changed in Options (or on the website) shows up when the window is next focused
   addEventListener('focus', () => { if (realMode()) { LIVE.meAvFor = null; syncStatus(); } });
   /* Staff announcement banner under the header (the website's banner). Hidden ones stay hidden. */
-  let newsCur = null;
+  let newsCur = null, newsEnd = null;
   async function loadNews() {
     if (!FLB.announcement || (TAURI && !realMode())) return showNews(null);
     try { const r = await FLB.announcement(); showNews(r && r.announcement); } catch (e) { /* offline: keep what's shown */ }
   }
   function showNews(a) {
     const el = $('#news'), gone = (localStorage.getItem('fl-news-hidden') || '') === String(a && a.id);
-    newsCur = a && a.message && !gone ? a : null;
+    const expired = a && a.ends_at && Date.parse(a.ends_at) <= Date.now();
+    newsCur = a && a.message && !gone && !expired ? a : null;
+    // an announcement with an end time disappears right when it ends, not at the next check
+    clearTimeout(newsEnd); newsEnd = null;
+    if (newsCur && newsCur.ends_at) newsEnd = setTimeout(() => showNews(newsCur), Math.min(Date.parse(newsCur.ends_at) - Date.now() + 500, 2147483000));
     el.hidden = !newsCur; document.body.classList.toggle('has-news', !!newsCur);
     if (!newsCur) return;
     el.className = 'fl-news ' + (/^(warn|warning|alert)$/.test(a.style || '') ? 'warn' : 'info') + (a.link ? ' linked' : '');
@@ -1019,7 +1023,7 @@
     if (e.target.closest('.nw-x')) { localStorage.setItem('fl-news-hidden', String(newsCur.id)); showNews(null); return; }
     if (newsCur.link && /^https:\/\//.test(newsCur.link)) { if (FLB.openUrl) FLB.openUrl(newsCur.link).catch(() => {}); else open(newsCur.link, '_blank'); }
   });
-  setTimeout(loadNews, 1500); setInterval(loadNews, 15 * 60 * 1000); addEventListener('focus', () => loadNews());
+  setTimeout(loadNews, 1500); setInterval(loadNews, 2 * 60 * 1000); addEventListener('focus', () => loadNews());
   function notice(title, html) {
     const foot = $('#notice .dlg-foot'); foot.innerHTML = `<button class="hw" data-action="notice-close" type="button">OK</button>`;
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false; placeDlg($('#notice'));

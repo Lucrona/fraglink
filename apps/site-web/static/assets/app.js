@@ -1017,6 +1017,8 @@ async function banner() {
     $("button", d).addEventListener("click", () => { sessionStorage.setItem("fl_ann_closed", String(a.id)); d.remove(); });
     const flag = $(".preview-flag") || $(".top");
     flag.after(d);
+    // gone right when it ends (same as the app), not only on the next page load
+    if (a.ends_at) setTimeout(() => d.remove(), Math.max(0, Math.min(Date.parse(a.ends_at) - Date.now(), 2147483000)));
   } catch (e) { /* no banner */ }
 }
 
