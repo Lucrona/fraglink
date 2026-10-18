@@ -959,6 +959,19 @@ async fn profile_details_events_achievements_report(pool: PgPool) {
         .json();
     assert_eq!(p["country"], "AU");
     assert_eq!(p["real_name"], "Al");
+    // new accounts hide age by default
+    assert!(p["age"].is_null(), "{p:?}");
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&a),
+        Some(json!({"privacy": {"age": true}})),
+    )
+    .await;
+    let p = api(&app, "GET", "/api/v1/users/pda/profile", Some(&b), None)
+        .await
+        .json();
     assert!(p["age"].as_i64().unwrap() >= 25);
     let kinds: Vec<&str> = p["events"]
         .as_array()
