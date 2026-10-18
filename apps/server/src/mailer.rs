@@ -182,6 +182,12 @@ fn cf_address(from: &str) -> serde_json::Value {
     }
 }
 
+/// Email-dependent rules (like "verify before uploading an avatar") only apply once
+/// mail is actually being delivered.
+pub fn live(st: &AppState) -> bool {
+    st.cfg.mail_enabled && settings().provider.is_some()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -191,10 +197,4 @@ mod tests {
         assert_eq!(v["name"], "Fraglink");
         assert_eq!(super::cf_address("a@b.c"), "a@b.c");
     }
-}
-
-/// Email-dependent rules (like "verify before uploading an avatar") only apply once
-/// mail is actually being delivered.
-pub fn live(st: &AppState) -> bool {
-    st.cfg.mail_enabled && settings().provider.is_some()
 }

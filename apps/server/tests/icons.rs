@@ -90,10 +90,11 @@ async fn official_icons_are_cached_and_served(pool: PgPool) {
     let r = page(&app, "/icons/games/32/star_citizen.png", None).await;
     assert_eq!(r.status, StatusCode::OK);
     assert_eq!(r.headers[header::CONTENT_TYPE], "image/png");
+    // short cache + ETag so admin icon changes show within minutes
     assert!(r.headers[header::CACHE_CONTROL]
         .to_str()
         .unwrap()
-        .contains("max-age=604800"));
+        .contains("max-age=300"));
     let img = image::load_from_memory(&r.bytes).unwrap();
     assert_eq!((img.width(), img.height()), (32, 32));
     let after_first = hits.load(Ordering::SeqCst);

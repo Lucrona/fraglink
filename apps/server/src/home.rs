@@ -212,7 +212,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         .collect();
 
     // ---- news (Admin > News posts; pinned first)
-    let news = crate::news::latest(&st, 4).await?;
+    let news = crate::news::latest(st, 4).await?;
 
     // ---- your week
     let mut mine = Value::Null;
