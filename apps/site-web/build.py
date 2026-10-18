@@ -21,8 +21,6 @@ for name in sorted(os.listdir(os.path.join(HERE, "pages"))):
     body = src[m.end():] if m else src
     out = (layout.replace("{{title}}", meta.get("title", "Fraglink")).replace("{{page}}", meta.get("page", ""))
                  .replace("{{v}}", v).replace("{{body}}", body.strip())).replace("__SITEKEY__", SITEKEY)
-    if meta.get("page") in ("privacy", "terms"):  # published legal pages: no "Private preview" strip, even on beta
-        out = re.sub(r'<div class="preview-flag">.*?</div></div>\n?', "", out)
     assert "xfire" not in out.lower(), name
     open(os.path.join(DIST, name), "w").write(out)
 open(os.path.join(DIST, "robots.txt"), "w").write("User-agent: *\nDisallow: /\n")
