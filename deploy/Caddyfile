@@ -1,5 +1,7 @@
 # /etc/caddy/Caddyfile - Fraglink. The server itself listens on 127.0.0.1:8787.
 
+import /etc/caddy/beta-gate.caddy
+
 (fraglink) {
 	encode gzip
 	# desktop auto-update files (latest.json + signed installers), put there by scripts/publish-update.sh
@@ -23,31 +25,158 @@
 	}
 }
 
-# playfraglink.com: HTTPS with an automatic Let's Encrypt certificate.
-# http://playfraglink.com redirects to https automatically.
+# playfraglink.com: the website (apps/site-web, same files as the beta preview) on HTTPS with an
+# automatic Let's Encrypt certificate; http:// redirects to https automatically.
+# The Fraglink server answers /api/*, game icons, device pairing (/pair + its legacy sign-in),
+# Steam sign-in (/auth/*) and the old form posts (/web/*, /logout); Caddy serves the site files.
 playfraglink.com {
-	# Temporary "coming soon" page (apps/site-coming-soon): ONLY the bare root "/" for visitors
-	# who aren't signed in on the web (no fl_session cookie; signed in, "/" is the server's
-	# dashboard) and without a query string (the server's "/?msg=" redirects), plus its assets
-	# under /site/. Everything else goes to the Fraglink server as before.
-	@landing {
-		path /
-		expression {query} == ""
-		not header Cookie *fl_session=*
+	encode gzip
+	header {
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
 	}
-	handle @landing {
-		root * /var/www/fraglink-site
-		rewrite * /index.html
-		header Cache-Control "public, max-age=300"
+	# desktop auto-update files (latest.json + signed installers), put there by scripts/publish-update.sh
+	handle_path /updates/* {
+		root * /var/www/fraglink-updates
 		file_server
 	}
+	# Brand images (Discord webhook avatars, embed thumbnails/banners), from the media kit.
+	handle /brand/* {
+		root * /var/www/fraglink-site
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+	# old coming-soon page assets (kept so cached pages/links don't break)
 	handle /site/* {
 		root * /var/www/fraglink-site
 		header Cache-Control "public, max-age=3600"
 		file_server
 	}
-	import fraglink
+	# official game icons from the server (/icons/g/ is the site's alias)
+	handle_path /icons/g/* {
+		rewrite * /icons/games{path}
+		reverse_proxy 127.0.0.1:8787
+	}
+	@server path /api/* /icons/* /pair /auth/* /web/* /logout
+	handle @server {
+		reverse_proxy 127.0.0.1:8787
+	}
+	# the server's own sign-in pages, only for device pairing / Steam sign-in (next=/pair..., /auth...)
+	# and their form posts; normal /login and /signup are the website's pages
+	@legacy_login {
+		path /login /signup
+		expression `{query}.matches("(^|&)next=(%2[Ff]|/)(pair|auth)")`
+	}
+	@legacy_post {
+		method POST
+		path /login /signup
+	}
+	@legacy_msg {
+		path /
+		query msg=*
+	}
+	handle @legacy_login {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle @legacy_post {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle @legacy_msg {
+		reverse_proxy 127.0.0.1:8787
+	}
+	# staff tools: HTTP 404 for everyone; the page shows the admin UI only after the API confirms a staff role
+	@admin path /admin /admin/ /admin.html
+	handle @admin {
+		root * /var/www/fraglink-beta
+		rewrite * /admin.html
+		header Cache-Control "no-store"
+		file_server {
+			status 404
+		}
+	}
+	handle /u/* {
+		root * /var/www/fraglink-beta
+		rewrite * /u.html
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle {
+		root * /var/www/fraglink-beta
+		try_files {path} {path}.html {path}/index.html
+		header Cache-Control "no-cache"
+		header /assets/* Cache-Control "public, max-age=86400"
+		file_server
+	}
+	handle_errors {
+		root * /var/www/fraglink-beta
+		rewrite * /404.html
+		file_server
+	}
 	import updates_log updates-https.log
+}
+
+# Private website preview (apps/site-web). Only reachable with the secret link
+# (https://beta.playfraglink.com/?key=...), which sets a cookie; everyone else gets 404.
+# The gate snippet with the key lives in /etc/caddy/beta-gate.caddy (root:caddy 0640, not in git).
+beta.playfraglink.com {
+	encode gzip
+	header {
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+	handle /robots.txt {
+		respond "User-agent: *
+Disallow: /
+" 200
+	}
+	import beta_gate
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle_path /updates/* {
+		root * /var/www/fraglink-updates
+		header Cache-Control "no-cache"
+		file_server
+	}
+	# official game icons from the server (/icons/g/ is the preview site's alias)
+	handle /icons/games/* {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle_path /icons/g/* {
+		rewrite * /icons/games{path}
+		reverse_proxy 127.0.0.1:8787
+	}
+	# staff tools: HTTP 404 for everyone; the page shows the admin UI only after the API confirms a staff role
+	@admin path /admin /admin/ /admin.html
+	handle @admin {
+		root * /var/www/fraglink-beta
+		rewrite * /admin.html
+		header Cache-Control "no-store"
+		file_server {
+			status 404
+		}
+	}
+	handle /u/* {
+		root * /var/www/fraglink-beta
+		rewrite * /u.html
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle {
+		root * /var/www/fraglink-beta
+		try_files {path} {path}.html {path}/index.html
+		header Cache-Control "no-cache"
+		header /assets/* Cache-Control "public, max-age=86400"
+		file_server
+	}
+	handle_errors {
+		root * /var/www/fraglink-beta
+		rewrite * /404.html
+		file_server
+	}
 }
 
 www.playfraglink.com {

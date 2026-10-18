@@ -9,7 +9,7 @@ Everything below is already set up; this page is for redeploys and recovery.
 | Service | `fraglink-server.service` (user `fraglink-srv`, listens on `127.0.0.1:8787`; migrations run at start) |
 | Secrets / config | `/etc/fraglink/server.env` (root-only, `DATABASE_URL`, `FRAGLINK_BIND`, `FRAGLINK_PUBLIC_URL`, optional `STEAM_API_KEY`) |
 | Reverse proxy | Caddy, `/etc/caddy/Caddyfile`: HTTPS on `playfraglink.com` (Let's Encrypt, automatic), `www` redirects to it, plain HTTP on the IP kept for old clients |
-| Coming-soon page | `/var/www/fraglink-site` (`apps/site-coming-soon/`), served for `https://playfraglink.com/` only |
+| Website | `/var/www/fraglink-beta` (`apps/site-web/`), served on `https://playfraglink.com` (public, since 2026-10-18) and `https://beta.playfraglink.com` (gated); `/var/www/fraglink-site` keeps `/brand/` and the old coming-soon files |
 | Database | PostgreSQL 16, database and role `fraglink`, localhost only |
 | Backups | `/var/backups/fraglink/fraglink-YYYYMMDD-HHMMSS.dump` nightly at 03:30 (`fraglink-backup.timer`), 14 days kept |
 | Copies of the unit files, Caddyfile, backup script | `deploy/` in this repo |

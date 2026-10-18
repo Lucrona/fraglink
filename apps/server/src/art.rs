@@ -15,7 +15,7 @@
 use crate::AppState;
 use axum::body::Body;
 use axum::extract::{Path, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -50,11 +50,30 @@ fn fresh(p: &std::path::Path, secs: u64) -> bool {
         .is_some_and(|e| e < Duration::from_secs(secs))
 }
 
-fn send(b: Vec<u8>, max_age: u32) -> Response {
+/// Art response. `no-cache` + ETag: browsers keep the picture but re-check it on every
+/// view (a cheap 304 when unchanged), so art an admin saves shows up straight away.
+fn send(b: Vec<u8>, req: &HeaderMap) -> Response {
+    let h = Sha256::digest(&b);
+    let etag = format!(
+        "\"{}\"",
+        h[..10]
+            .iter()
+            .map(|x| format!("{x:02x}"))
+            .collect::<String>()
+    );
+    let cc = (header::CACHE_CONTROL, "public, no-cache".to_string());
+    let matches = req
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.split(',').any(|t| t.trim() == etag));
+    if matches {
+        return (StatusCode::NOT_MODIFIED, [cc, (header::ETAG, etag)]).into_response();
+    }
     (
         [
             (header::CONTENT_TYPE, "image/jpeg".to_string()),
-            (header::CACHE_CONTROL, format!("public, max-age={max_age}")),
+            cc,
+            (header::ETAG, etag),
         ],
         Body::from(b),
     )
@@ -206,7 +225,11 @@ pub async fn bytes(st: &AppState, id: &str) -> Option<Vec<u8>> {
     }
 }
 
-pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Response {
+pub async fn serve(
+    State(st): State<AppState>,
+    Path(file): Path<String>,
+    req: HeaderMap,
+) -> Response {
     let Some(id) = file
         .strip_suffix(".jpg")
         .filter(|i| !i.is_empty() && i.len() <= 120)
@@ -216,7 +239,7 @@ pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Resp
     let ov = override_path(&st, id);
     if use_override(pref(&st, id).await.as_deref()) {
         if let Ok(b) = tokio::fs::read(&ov).await {
-            return send(b, 3600);
+            return send(b, &req);
         }
     }
     let d = dir(&st);
@@ -225,7 +248,7 @@ pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Resp
     let miss = d.join(format!("{k}.miss"));
     if fresh(&p, 30 * 86400) {
         if let Ok(b) = tokio::fs::read(&p).await {
-            return send(b, 86400);
+            return send(b, &req);
         }
     }
     if fresh(&miss, 86400) {
@@ -235,11 +258,11 @@ pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Resp
     match resolve(&st, id).await {
         Some(b) => {
             let _ = std::fs::write(&p, &b);
-            send(b, 86400)
+            send(b, &req)
         }
         None => {
             if let Ok(b) = tokio::fs::read(&p).await {
-                return send(b, 3600);
+                return send(b, &req);
             }
             let _ = std::fs::write(&miss, b"");
             StatusCode::NOT_FOUND.into_response()

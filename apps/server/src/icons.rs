@@ -414,7 +414,7 @@ pub async fn serve(
     h.insert(header::ETAG, HeaderValue::from_str(&etag).unwrap());
     h.insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=604800"),
+        HeaderValue::from_static("public, max-age=300"),
     );
     r
 }
