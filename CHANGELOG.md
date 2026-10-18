@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The two-step sign-in code screen tells you to email support@playfraglink.com if you've lost your authenticator and backup codes.
 
 ### Changed
+- Website: private profiles now have friend actions. Signed in, you can send a friend request (and cancel it) or accept theirs; signed out, "Sign in to add <name>" brings you back to the profile after sign-in.
 - Website: the profile Miniprofile box shows the embed text and the Link, BBCode and HTML copy rows only on your own profile. Visitors see just the image, linking to the profile.
 
 ### Fixed

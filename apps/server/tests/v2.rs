@@ -1492,4 +1492,30 @@ async fn connection_names_switch(pool: PgPool) {
     .await;
     let p = prof(Some(b.clone())).await;
     assert!(p.get("linked").is_none(), "{p}");
+    // private card friend actions
+    assert_eq!(p["can_add"], true, "{p}");
+    assert_eq!(prof(None).await["can_add"], true);
+    api(
+        &app,
+        "POST",
+        "/api/v1/friends/request",
+        Some(&b),
+        Some(json!({"handle": "cnowner"})),
+    )
+    .await;
+    let p = prof(Some(b.clone())).await;
+    assert_eq!(
+        (p["relation"].as_str(), p["can_add"].as_bool()),
+        (Some("outgoing"), Some(false)),
+        "{p}"
+    );
+    api(&app, "DELETE", "/api/v1/friends/cnowner", Some(&b), None).await;
+    assert_eq!(prof(Some(b.clone())).await["can_add"], true);
+    // test accounts: no card at all for non-friends, so no button
+    sqlx::query("UPDATE users SET is_test = true WHERE handle = 'cnowner'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let r = api(&app, "GET", "/api/v1/users/cnowner/profile", Some(&b), None).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
 }

@@ -621,10 +621,26 @@ pages.profile = async () => {
   // old username (renamed by staff): show the new address
   if (p.handle && p.handle.toLowerCase() !== String(handle).toLowerCase()) history.replaceState(null, "", "/u/" + encodeURIComponent(p.handle) + location.search + location.hash);
   if (p.private) {
-    root.innerHTML = `<div class="narrow panel"><h2>${esc(p.display_name || p.handle)}</h2><div class="body" style="display:flex;gap:16px;align-items:center">${avatar(p.avatar, 64)}<div><p>This profile is private. Only ${esc(p.display_name || p.handle)}'s friends can see it.</p>
-      ${!token() ? `<a class="btn" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in</a>` : p.relation === "none" ? `<button class="btn blue" data-add>+ Add friend</button>` : p.relation === "outgoing" ? `<span class="muted">Friend request sent</span>` : p.relation === "incoming" ? `<a class="btn" href="/friends">Answer friend request</a>` : ""}</div></div></div>`;
-    const add = root.querySelector("[data-add]");
-    if (add) add.addEventListener("click", async () => { add.disabled = true; try { await api("/friends/request", { method: "POST", body: { handle: p.handle } }); add.textContent = "Friend request sent"; } catch (x) { add.disabled = false; alert(x.message); } });
+    const nm = esc(p.display_name || p.handle), next = encodeURIComponent(location.pathname + location.search);
+    // Friend actions: hidden for yourself, friends and test accounts (server says can_add).
+    let act = "";
+    if (p.relation === "outgoing") act = `<span class="muted" style="margin-right:8px">Request sent</span><button class="btn sm" type="button" data-cancel-req>Cancel</button>`;
+    else if (p.relation === "incoming") act = `<button class="btn dl" type="button" data-accept>Accept friend request</button>`;
+    else if (p.can_add) act = !token() ? `<a class="btn blue" href="/login?next=${next}">Sign in to add ${nm}</a>` : `<button class="btn blue" type="button" data-add>+ Add friend</button>`;
+    else if (!token()) act = `<a class="btn" href="/login?next=${next}">Sign in</a>`;
+    root.innerHTML = `<div class="narrow panel"><h2>${nm}</h2><div class="body" style="display:flex;gap:16px;align-items:center">${avatar(p.avatar, 64)}<div><p>This profile is private. Only ${nm}'s friends can see it.</p>
+      <div class="pact">${act}</div><div class="alert err" data-perr hidden style="margin-top:8px"></div></div></div></div>`;
+    const box = $(".pact", root), perr = $("[data-perr]", root);
+    const run = async (b, fn, done) => { b.disabled = true; perr.hidden = true; try { await fn(); box.innerHTML = done; wire(); } catch (x) { b.disabled = false; showErr(perr, x); } };
+    const wire = () => {
+      const add = $("[data-add]", box), can = $("[data-cancel-req]", box), acc = $("[data-accept]", box);
+      if (add) add.addEventListener("click", () => run(add, () => api("/friends/request", { method: "POST", body: { handle: p.handle } }),
+        `<span class="muted" style="margin-right:8px">Request sent</span><button class="btn sm" type="button" data-cancel-req>Cancel</button>`));
+      if (can) can.addEventListener("click", () => run(can, () => api("/friends/" + encodeURIComponent(p.handle), { method: "DELETE" }),
+        `<button class="btn blue" type="button" data-add>+ Add friend</button>`));
+      if (acc) acc.addEventListener("click", () => run(acc, async () => { await api("/friends/respond", { method: "POST", body: { handle: p.handle, accept: true } }); location.reload(); }, `<span class="muted">✓ Friends</span>`));
+    };
+    wire();
     return;
   }
   const pres = p.presence;

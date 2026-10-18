@@ -301,10 +301,20 @@ async fn profile(
     // Private profile: only friends (and the owner) see more than name and picture.
     let full = is_self || relation == "friend" || public;
     if !full {
+        // Friend actions on the private card: anyone but test accounts (blocked pairs never
+        // get here) while friend requests are switched on. Signed out it's a sign-in prompt.
+        let is_test: bool = sqlx::query_scalar("SELECT is_test FROM users WHERE id = $1")
+            .bind(p.id)
+            .fetch_one(&st.db)
+            .await?;
+        let can_add = !is_test
+            && matches!(relation, "none" | "public")
+            && crate::features::on(&st, "friend_requests").await;
         return Ok(Json(json!({
             "handle": p.handle,
             "display_name": p.display_name,
             "relation": relation,
+            "can_add": can_add,
             "private": true,
             "avatar": avatar,
             "public_profile": false,
