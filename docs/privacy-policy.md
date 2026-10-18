@@ -68,7 +68,7 @@ When you create an account we store:
 
 - **Friends** see your status, the game you're playing, and (unless you turn it off) your recent games and hours this week. **Invisible** shows you as offline, with no game, to everyone.
 - **Your profile** at playfraglink.com is **public by default**. Anyone, including people who aren't signed in, can see what your privacy switches allow. Public profiles can also appear in lists on the home page and on leaderboards, and you can share a signature image or a small profile card.
-- **Privacy switches.** You choose what your profile shows: what you're playing now, your games and hours, recent activity, friends, achievements, leaderboards, your gaming rig, previous nicknames, and each personal detail, including whether to show your age (hidden by default). The same switches are in the app (Options > Privacy) and on the website, and changing one changes the other.
+- **Privacy switches.** You choose what your profile shows: what you're playing now, your games and hours, recent activity, friends, achievements, leaderboards, your gaming rig, previous nicknames, the names of your connected accounts (Show connected account names, on by default), and each personal detail, including whether to show your age (hidden by default). The same switches are in the app (Options > Privacy) and on the website, and changing one changes the other.
 - **If you're 13–17,** your profile starts private. You can make it public yourself after a short confirmation, and then it works like any other public profile.
 - **Private profile.** Turn this on and only your friends can see your profile. You're taken off the home-page lists, and your signature image and profile card are switched off.
 - **Finding you.** Any signed-in player can find you in player search by username or nickname, or by typing your exact email address. **That includes private profiles.** Search shows only your username and nickname, and your email is never shown to anyone. Players you've blocked (or who blocked you) can't find you.
@@ -81,9 +81,9 @@ When you create an account we store:
 You can link other accounts in the app (Options > Connections) or on the website. Battle.net and Discord use their official sign-in, so we never see your password for them. We use the access they give us once to confirm who you are, and we don't keep it.
 - **Battle.net:** your account id and BattleTag.
 - **Discord:** your Discord user id and display name (or username).
-- **Steam:** your SteamID, plus each game's total playtime and playtime in the last two weeks, which we fetch from Steam and refresh once a day if your game details are public there. You can link by signing in through Steam (verified) or by pasting your Steam profile link or SteamID (not verified). We don't store your Steam name.
+- **Steam:** your SteamID, plus each game's total playtime and playtime in the last two weeks, which we fetch from Steam and refresh once a day if your game details are public there. You can link by signing in through Steam (verified) or by pasting your Steam profile link or SteamID (not verified). If you link by signing in through Steam, we also store your public Steam profile name so we can show it on your profile. If you paste a profile link or SteamID instead, we store only the SteamID, and the link isn't shown on your profile.
 
-Each link can show on your profile, and you can unlink it at any time. **Unlinking Steam removes the link but keeps the playtime already imported.** You can remove it by resetting a game's hours or by deleting your account.
+Verified linked accounts can show on your profile with their name and icon. If you don't want visitors to see the names, turn off **Show connected account names** in your privacy settings (it's on by default). The icons and verified ticks still show either way. You can unlink an account at any time. **Unlinking Steam removes the link but keeps the playtime already imported.** You can remove it by resetting a game's hours or by deleting your account.
 
 ## Email
 
@@ -125,7 +125,7 @@ Each link can show on your profile, and you can unlink it at any time. **Unlinki
 
 ## Your choices and rights
 
-- **Download your data:** Settings > Account lets you download a copy of your data (once an hour). It includes your account details, linked accounts, play sessions, imported hours, game stats, friends and the app sign-ins on your account. It doesn't yet include your profile details, picture, earlier nicknames, privacy settings or website sign-in history. Ask us for those and we'll send them. The app can export its local data too.
+- **Download your data:** Settings > Account lets you download a copy of your data (once an hour). It includes your account details, linked accounts, play sessions, imported hours, game stats, friends, your privacy settings and the app sign-ins on your account. It doesn't yet include your profile details, picture, earlier nicknames or website sign-in history. Ask us for those and we'll send them. The app can export its local data too.
 - **Correct it:** change your nickname, email, profile details and privacy switches at any time, and remove hours you imported or reset a game's hours.
 - **Delete your account:** in Settings, with your password (and two-step code if it's on). You're signed out everywhere straight away. The account is deleted for good after **7 days**. Signing in again within that time cancels it.
 - **Stop sending:** sign out in the app. Nothing about you is tracked while you're signed out.

@@ -145,7 +145,7 @@ the entries say what changing them would cost.
 3. **Discord login** (spec M2): not built yet. It needs a Discord application (client id/secret), which means creating an external account.
 4. **Email verification and password reset:** they need an email provider (external service), so they are not built. Accounts work without verification for now.
 5. **Grace period** for account deletion (D11) and whether excluded games should also be deleted server-side (D9).
-6. **Privacy policy / Terms:** Live 19 October 2026 (privacy v9, terms v6): under-18 starts private and may go public after confirm; new accounts get `age: false` in privacy at sign-up (existing rows unchanged). Regenerates via `apps/site-web/publish_legal.py`. Sources: `docs/privacy-policy.md`, `docs/terms.md`.
+6. **Privacy policy / Terms:** Live 19 October 2026 (privacy v10, terms v6; v10 adds the Steam profile name, "Show connected account names" and privacy settings in the export): under-18 starts private and may go public after confirm; new accounts get `age: false` in privacy at sign-up (existing rows unchanged). Regenerates via `apps/site-web/publish_legal.py`. Sources: `docs/privacy-policy.md`, `docs/terms.md`.
 7. **Presence scaling (D21):** fine for a single server. Pick Postgres LISTEN/NOTIFY or Redis when hosting is decided.
 
 ## D29. Dark resizable main window by default; Options in its own window

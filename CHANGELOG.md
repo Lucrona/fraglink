@@ -11,6 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The two-step sign-in code screen tells you to email support@playfraglink.com if you've lost your authenticator and backup codes.
 
 ### Changed
+- Privacy Policy v10 (19 October 2026): explains that a Steam account linked by signing in through Steam shows its public profile name, the new "Show connected account names" switch, and that the data export includes your privacy settings. Terms stay at v6.
+- Website: the Miniprofile image is larger (1.25x) and centred; on your own profile the embed text and the Link, BBCode and HTML rows sit underneath it.
+- Website: every form now posts to a safe fallback, and the sign-in, sign-up, two-step, forgot and reset buttons stay disabled until the page has loaded, so a form sent too early can never put a password or reset token in the address bar or server logs.
 - Hours integrity: only the desktop app can report the game you're playing. The website's live connection (and any other sign-in) can still change your status, but a game sent from it is ignored, and it never ends a game the app is tracking. Game switches are capped at 6 a minute and 30 an hour per account (extra switches are ignored and logged).
 - App (next build): the My Account totals show the server's hours plus the session running now, instead of whichever of the server and this PC was higher. The local Today, This week and Top Games figures are labelled "this PC".
 - Website: private profiles now have friend actions. Signed in, you can send a friend request (and cancel it) or accept theirs; signed out, "Sign in to add <name>" brings you back to the profile after sign-in.

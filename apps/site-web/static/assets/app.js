@@ -695,10 +695,10 @@ pages.profile = async () => {
   const codes = [["Link", shareUrl], ["BBCode", `[url=${shareUrl}][img]${sig}[/img][/url]`], ["HTML", `<a href="${shareUrl}"><img src="${sig}" alt="${p.display_name || p.handle} on Fraglink" width="460" height="100"></a>`]];
   const miniprofile = !p.public_profile
     ? (self ? sec("Miniprofile", `<div class="body empty">Your profile is private (friends only), so there's no public link or signature image. <a href="/settings#privacy">Privacy settings</a></div>`) : "")
-    : self ? sec("Miniprofile", `<div class="body mp"><div class="mpt">Embed this anywhere (forums, blogs, Discord). It updates live.</div>
-        ${sigPreview(p.handle)}
+    : self ? sec("Miniprofile", `<div class="body mp">${sigPreview(p.handle)}
+        <div class="mpt">Embed this anywhere (forums, blogs, Discord). It updates live.</div>
         <div class="mpcodes">${codes.map(([l, v]) => `<div class="code"><b>${l}</b><input class="t" readonly value="${esc(v)}"><button class="btn sm" type="button" data-copy="${esc(v)}">Copy</button></div>`).join("")}</div></div>`)
-    : sec("Miniprofile", `<div class="body mp"><a href="/u/${encodeURIComponent(p.handle)}" title="${esc(p.display_name || p.handle)} on Fraglink">${sigPreview(p.handle)}</a></div>`);
+    : sec("Miniprofile", `<div class="body mp mpv"><a href="/u/${encodeURIComponent(p.handle)}" title="${esc(p.display_name || p.handle)} on Fraglink">${sigPreview(p.handle)}</a></div>`);
 
   // Details + inset box
   const kv = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";

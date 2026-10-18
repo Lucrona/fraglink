@@ -473,11 +473,15 @@ table.achs td:nth-child(2){width:34%}
 .mact .ma-row span{flex:1;min-width:0}.mact .ma-tm{color:#8ea2b8}
 .pbar i{min-width:0}
 .flag,.inset img,.inset .gico{display:inline-block!important}
-.mp{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;text-align:left}
-.mp .mpt{grid-column:1/-1;margin:0 0 2px}
-.mp .sigimg{width:230px;height:auto;margin:0}
-.mp .mpcodes .code{margin:2px 0}.mp .mpcodes b{width:46px}
-@media(max-width:700px){.mp{grid-template-columns:1fr}}
+/* Miniprofile: the image centred at 1.25x (575 x 125; the PNG is 460 x 100, so it's scaled
+   modestly), then for the owner the embed text and copy rows stacked full width underneath. */
+.mp{display:block;text-align:center}
+.mp .sigprev{display:inline-block;max-width:100%}
+.mp .sigimg,.mp .sigprev .sigph{width:575px;max-width:100%;height:auto;margin:0 auto}
+.mp .sigprev .sigph{height:125px}
+.mp .mpt{margin:12px 0 6px;text-align:center}
+.mp .mpcodes{text-align:left;width:100%}
+.mp .mpcodes .code{margin:4px 0}.mp .mpcodes b{width:56px;flex:none}
 /* details: calmer */
 .details2 .kv{display:grid;grid-template-columns:90px 1fr;gap:3px 10px;font-size:12.5px}
 .details2 .kv dt{color:#8395a8!important;font-weight:400!important;font-size:11.5px;padding-top:1px}
