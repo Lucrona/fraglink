@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+- Privacy Policy v11 (19 October 2026): removes "hours you import yourself" from what we collect and "remove hours you imported" from Correct it, since manual hour imports are disabled. Terms stay at v6.
+
 ## [0.3.0-beta.3] - 2026-10-19
 
 ### Added

@@ -60,7 +60,6 @@ When you create an account we store:
 - **Profile picture,** if you upload one or pick a preset. We keep a fingerprint (hash) of uploaded pictures and when you changed your picture. If a picture is removed for breaking the rules, its fingerprint stays on a block list so it can't be uploaded again, even after the account is deleted.
 - **Date of birth,** which you give when you sign up. We use it to check you're old enough for Fraglink and to set up the right account for your age (see "Children and teens"). It's private by default. You can choose to show your age on your profile (never the date itself). You can't change your date of birth yourself after sign-up. If it's wrong, email support@playfraglink.com and we'll fix it.
 - **Optional profile details** you choose to add: about me, location, country, gaming style, your gaming PC (rig), real name and gender.
-- **Hours you import yourself,** for example from a game's own counter, with an optional note.
 - **Two-step sign-in,** if you turn it on: the authenticator secret and your backup codes (scrambled).
 - **Sign-ins:** for each browser or copy of the app you sign in with, its name or browser type, its IP address, and when it was created and last used. You can see your active sign-ins (with the IP partly hidden) and sign them out under Settings > Security. For new sign-ins we also record a rough country, worked out on our own server from the IP address (no outside service is asked). A website sign-in lasts 30 days. An app sign-in stays active until you sign out, remove it, or don't use that copy of the app for 180 days.
 
@@ -126,7 +125,7 @@ Verified linked accounts can show on your profile with their name and icon. If y
 ## Your choices and rights
 
 - **Download your data:** Settings > Account lets you download a copy of your data (once an hour). It includes your account details, linked accounts, play sessions, imported hours, game stats, friends, your privacy settings and the app sign-ins on your account. It doesn't yet include your profile details, picture, earlier nicknames or website sign-in history. Ask us for those and we'll send them. The app can export its local data too.
-- **Correct it:** change your nickname, email, profile details and privacy switches at any time, and remove hours you imported or reset a game's hours.
+- **Correct it:** change your nickname, email, profile details and privacy switches at any time, and reset a game's hours.
 - **Delete your account:** in Settings, with your password (and two-step code if it's on). You're signed out everywhere straight away. The account is deleted for good after **7 days**. Signing in again within that time cancels it.
 - **Stop sending:** sign out in the app. Nothing about you is tracked while you're signed out.
 - **Ask us:** email support@playfraglink.com to access, correct or delete your information, or with any question. We'll reply within **20 working days** (about a month).
