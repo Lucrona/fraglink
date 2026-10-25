@@ -340,6 +340,7 @@ pub async fn record_live_session(
     if (end - start).num_seconds() < MIN_LIVE_SECS {
         return Ok(());
     }
+    let game_id = &crate::names::list_id_for_exe(st, game_id);
     let game_id = &crate::names::resolve_alias(st, game_id).await?;
     crate::names::ensure_game_row(st, game_id).await?;
     let mut from = start;
@@ -435,7 +436,10 @@ pub async fn set_from(
     });
     // a retired game's program now counts for its successor
     let game = match game {
-        Some((id, d, h)) => Some((crate::retire::effective_id(st, &id).await?, d, h)),
+        Some((id, d, h)) => {
+            let id = crate::names::list_id_for_exe(st, &id);
+            Some((crate::retire::effective_id(st, &id).await?, d, h))
+        }
         None => None,
     };
     let now = Utc::now();

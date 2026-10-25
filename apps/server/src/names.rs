@@ -43,6 +43,22 @@ pub fn canonical_id(user: Uuid, id: &str) -> Option<String> {
     crate::hours::server_game_id(user, id)
 }
 
+/// beta.5: a program the user added (`exe:<name>.exe`) that Fraglink's games list now
+/// knows counts as that list game from here on. Earlier sessions stay under the
+/// `exe:` id until staff merge it (Admin > Games > Merge), so nothing is lost or
+/// counted twice.
+pub fn list_id_for_exe(st: &AppState, id: &str) -> String {
+    exe_to_list(&st.sigs, id)
+}
+
+fn exe_to_list(sigs: &fraglink_core::signatures::SignatureDb, id: &str) -> String {
+    id.strip_prefix("exe:")
+        .and_then(|exe| sigs.match_process(exe, None))
+        .filter(|g| !g.uncertain)
+        .map(|g| g.id.clone())
+        .unwrap_or_else(|| id.to_string())
+}
+
 /// Name from Fraglink's own lists (no database).
 pub fn list_name(st: &AppState, id: &str) -> Option<String> {
     if id.starts_with("manual:") || id.starts_with("exe:") {
@@ -296,5 +312,26 @@ mod tests {
             public_pair("exe:odd.exe", &names),
             ("unlisted".into(), "a game".into())
         );
+    }
+}
+
+#[cfg(test)]
+mod exe_list_tests {
+    #[test]
+    fn known_exe_counts_as_list_game_unknown_stays() {
+        let db = fraglink_core::signatures::SignatureDb::builtin();
+        let (g, exe) = db
+            .games()
+            .iter()
+            .filter(|g| !g.uncertain)
+            .flat_map(|g| g.exes.iter().map(move |e| (g, e.to_lowercase())))
+            .find(|(g, e)| db.match_process(e, None).map(|m| &m.id) == Some(&g.id))
+            .unwrap();
+        assert_eq!(super::exe_to_list(&db, &format!("exe:{exe}")), g.id);
+        assert_eq!(
+            super::exe_to_list(&db, "exe:zz_not_a_game_42.exe"),
+            "exe:zz_not_a_game_42.exe"
+        );
+        assert_eq!(super::exe_to_list(&db, &g.id), g.id);
     }
 }
