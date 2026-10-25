@@ -1,5 +1,6 @@
 //! Main window (destroyed when hidden to keep idle memory low) and toast window.
 
+use crate::LockOk;
 use crate::{AppState, ToastPayload, TOAST_EVENT};
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Size, WebviewUrl,
@@ -21,7 +22,7 @@ pub const SIDE_PANEL_MAX: f64 = 560.0;
 /// Options > Appearance > Text size: the dark window's content is zoomed by this.
 pub fn text_zoom(app: &AppHandle) -> f64 {
     let state = app.state::<AppState>();
-    let e = state.engine.lock().unwrap();
+    let e = state.engine.lock_ok();
     match e
         .tracker
         .store
@@ -41,7 +42,7 @@ pub fn text_zoom(app: &AppHandle) -> f64 {
 pub fn side_extra(app: &AppHandle) -> f64 {
     let tz = text_zoom(app);
     let state = app.state::<AppState>();
-    let e = state.engine.lock().unwrap();
+    let e = state.engine.lock_ok();
     let w = e
         .tracker
         .store
@@ -64,7 +65,7 @@ const TOAST_H: f64 = 90.0 + 8.0;
 /// A "1"/"0" checkbox setting from Options.
 pub fn flag(app: &AppHandle, key: &str) -> bool {
     let state = app.state::<AppState>();
-    let e = state.engine.lock().unwrap();
+    let e = state.engine.lock_ok();
     e.tracker.store.get_setting(key).ok().flatten().as_deref() == Some("1")
 }
 
@@ -79,8 +80,7 @@ pub fn parse_size(s: &str) -> Option<(f64, f64)> {
 fn dark_base(app: &AppHandle) -> (f64, f64) {
     app.state::<AppState>()
         .main_size
-        .lock()
-        .unwrap()
+        .lock_ok()
         .unwrap_or((DARK_MIN_W, DARK_MIN_H))
 }
 
@@ -107,9 +107,9 @@ fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
         .iter()
         .find(|w| w.label == "main")
         .cloned()
-        .expect("main window config");
+        .ok_or(tauri::Error::WindowNotFound)?;
     let b = WebviewWindowBuilder::from_config(app, &cfg)?;
-    *app.state::<AppState>().side_open.lock().unwrap() = false;
+    *app.state::<AppState>().side_open.lock_ok() = false;
     let (bw, bh) = dark_base(app);
     let tz = text_zoom(app);
     let w = b
@@ -120,7 +120,7 @@ fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     if flag(app, "always_on_top") {
         let _ = w.set_always_on_top(true);
     }
-    let pos = *app.state::<AppState>().main_pos.lock().unwrap();
+    let pos = *app.state::<AppState>().main_pos.lock_ok();
     if let Some((x, y)) = pos {
         if on_some_monitor(app, x, y) {
             let _ = w.set_position(PhysicalPosition::new(x, y));
@@ -214,9 +214,9 @@ pub fn hide_main(app: &AppHandle) {
 
 pub fn persist_main_pos(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let pos = *state.main_pos.lock().unwrap();
-    let size = *state.main_size.lock().unwrap();
-    let e = state.engine.lock().unwrap();
+    let pos = *state.main_pos.lock_ok();
+    let size = *state.main_size.lock_ok();
+    let e = state.engine.lock_ok();
     if let Some((x, y)) = pos {
         let _ = e.tracker.store.set_setting("main_pos", &format!("{x},{y}"));
     }
@@ -233,7 +233,7 @@ pub fn resize_main(app: &AppHandle, side_open: bool) {
     let Some(w) = app.get_webview_window("main") else {
         return;
     };
-    *app.state::<AppState>().side_open.lock().unwrap() = side_open;
+    *app.state::<AppState>().side_open.lock_ok() = side_open;
     let side = if side_open { side_extra(app) } else { 0.0 };
     let tz = text_zoom(app);
     let (bw, bh) = dark_base(app);
@@ -288,12 +288,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         WindowEvent::Moved(p) => {
             if p.x > -10_000 && p.y > -10_000 {
                 // minimised windows report -32000 on Windows
-                *window
-                    .app_handle()
-                    .state::<AppState>()
-                    .main_pos
-                    .lock()
-                    .unwrap() = Some((p.x, p.y));
+                *window.app_handle().state::<AppState>().main_pos.lock_ok() = Some((p.x, p.y));
             }
         }
         WindowEvent::Resized(sz) => {
@@ -309,10 +304,10 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
             // ignore minimised (0x0) and chassis-skin sizes
             if w >= DARK_MIN_W - 1.0 && h >= DARK_MIN_H - 1.0 {
-                let open = *app.state::<AppState>().side_open.lock().unwrap();
+                let open = *app.state::<AppState>().side_open.lock_ok();
                 let side = if open { side_extra(app) } else { 0.0 };
                 let st = app.state::<AppState>();
-                *st.main_size.lock().unwrap() = Some(((w - side).max(DARK_MIN_W), h));
+                *st.main_size.lock_ok() = Some(((w - side).max(DARK_MIN_W), h));
             }
         }
         WindowEvent::Destroyed => persist_main_pos(window.app_handle()),
@@ -334,7 +329,7 @@ pub fn show_toast(app: &AppHandle, mut payload: ToastPayload) {
     if let Some(h) = friend {
         crate::avatars::fill_toast(app, &h, &mut payload);
     }
-    *app.state::<AppState>().pending_toast.lock().unwrap() = Some(payload.clone());
+    *app.state::<AppState>().pending_toast.lock_ok() = Some(payload.clone());
     if app.get_webview_window("toast").is_some() {
         let _ = app.emit_to("toast", TOAST_EVENT, payload);
         return;

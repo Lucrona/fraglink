@@ -21,6 +21,7 @@ async function act(btn, fn) {
 const TABS = [
   ["approvals", "Game approvals", can.approvals],
   ["games", "Games", can.games],
+  ["detection", "Detection", can.games],
   ["users", "Users", can.users],
   ["hours", "Hours review", can.hours],
   ["avatars", "Reported pictures", can.avatars],
@@ -44,7 +45,7 @@ function route() {
   const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
   const t = tab === "user" ? "users" : tab;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
-  const fn = { approvals, games, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, settings: siteSettings, staff, user: userDetail }[tab];
+  const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, settings: siteSettings, staff, user: userDetail }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -129,6 +130,32 @@ async function avatarReports() {
   badge("avatars", d.reports.length + pr.reports.length);
 }
 function badge(tab, n) { const s = $(`.tabs a[data-tab=${tab}] .n`); if (s) { s.textContent = n; s.hidden = !n; } }
+
+/* ---------- detection fix-ups ---------- */
+const DKIND = { steam: "Steam app id", id: "Game id", path: "Folder + exe" };
+async function detection() {
+  const d = await api("/admin/detection");
+  view.innerHTML = `<section class="panel"><h2>Detection fix-ups</h2>
+    <div class="note">Sent to every app with the game rules, no app update needed. <b>Steam app id</b>: that Steam game counts as the game you pick (in the app and in the daily Steam sync). <b>Game id</b>: one detected id counts as another. <b>Folder + exe</b>: the end of the program's path, e.g. <span class="mono">world of warcraft/_retail_/wow.exe</span>; checked before the usual exe names.</div>
+    <div class="tools"><select class="in" id="dk">${Object.entries(DKIND).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
+      <input class="in mono" id="dp" placeholder="793460 / old_id / folder/game.exe" size="30" aria-label="Pattern">
+      <span class="muted">counts as</span><input class="in mono" id="dg" placeholder="game id" size="16" aria-label="Game id">
+      <input class="in" id="dn" placeholder="Note (optional)" size="22" aria-label="Note"><button class="btn sm dl" id="dadd">Add</button></div>
+    ${d.rules.length ? `<table><thead><tr><th>Kind</th><th>Pattern</th><th>Counts as</th><th>Note</th><th class="num"></th></tr></thead><tbody>
+    ${d.rules.map(r => `<tr data-id="${r.id}"><td>${esc(DKIND[r.kind] || r.kind)}</td><td class="mono">${esc(r.pattern)}</td><td class="mono">${esc(r.game_id)}</td><td class="muted">${esc(r.note || "")}</td>
+      <td class="num"><button class="btn sm danger" data-del>Delete</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No fix-ups yet.</div>`}</section>`;
+  view.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.id === "dadd") {
+      const body = { kind: $("#dk").value, pattern: $("#dp").value.trim(), game_id: $("#dg").value.trim(), note: $("#dn").value.trim() };
+      if (!body.pattern || !body.game_id) return alert("Fill in the pattern and the game id.");
+      await act(b, async () => { await api("/admin/detection", { method: "POST", body }); detection(); });
+    } else if (b.matches("[data-del]")) {
+      const tr = b.closest("tr"); if (!confirm("Delete this fix-up?")) return;
+      await act(b, async () => { await api(`/admin/detection/${tr.dataset.id}/delete`, { method: "POST" }); tr.remove(); });
+    }
+  };
+}
 
 /* ---------- 2. games ---------- */
 async function games(q) {

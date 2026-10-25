@@ -439,22 +439,36 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
         }
         OwnedGames::Games(g) => g,
     };
+    // Admin > Detection aliases and merged games, so merged Steam hours stay merged
+    let ids = crate::detection_aliases::SteamIds::load(state).await?;
     let mut tx = state.db.begin().await?;
     let mut n = 0;
     let mut total = 0;
     for g in games.iter().filter(|g| g.playtime_forever > 0) {
-        let gid = fraglink_core::detector::steam_game_id(sigs(), g.appid);
-        let name = sigs()
-            .by_steam_appid(g.appid)
-            .map(|s| s.name.clone())
-            .unwrap_or_else(|| {
-                if g.name.is_empty() {
-                    format!("Steam app {}", g.appid)
-                } else {
-                    g.name.clone()
-                }
-            });
-        sqlx::query(
+        let minted = fraglink_core::detector::steam_game_id(sigs(), g.appid);
+        let gid = ids.id(&minted);
+        if gid != minted {
+            // counted as a game staff picked: keep that game's row as it is
+            sqlx::query(
+                "INSERT INTO games(id, name, steam_appid, verified) VALUES($1, $2, $3, true) ON CONFLICT (id) DO NOTHING",
+            )
+            .bind(&gid)
+            .bind(if g.name.is_empty() { gid.clone() } else { g.name.clone() })
+            .bind(g.appid as i32)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            let name = sigs()
+                .by_steam_appid(g.appid)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| {
+                    if g.name.is_empty() {
+                        format!("Steam app {}", g.appid)
+                    } else {
+                        g.name.clone()
+                    }
+                });
+            sqlx::query(
             "INSERT INTO games(id, name, steam_appid, steam_icon_hash, verified) VALUES($1, $2, $3, $4, true)
              ON CONFLICT (id) DO UPDATE SET steam_appid = COALESCE(games.steam_appid, excluded.steam_appid),
                name = CASE WHEN games.verified THEN games.name ELSE excluded.name END, verified = true,
@@ -468,6 +482,7 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
         .bind(icon_hash(&g.img_icon_url))
         .execute(&mut *tx)
         .await?;
+        }
         sqlx::query(
             "INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at)
              VALUES($1, $2, $3, $4, $5, now())

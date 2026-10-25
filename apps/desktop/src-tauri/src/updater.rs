@@ -14,6 +14,7 @@
 //!   small green arrow in the title bar and a tray dot / "Restart to Update" install it.
 //! * **Check for Updates** (Help menu, tray): checks now; "You're up to date" or the
 //!   update downloads, installs and restarts.
+use crate::LockOk;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -47,8 +48,7 @@ pub struct UpdateState {
 pub fn ready_version(app: &AppHandle) -> Option<String> {
     app.try_state::<UpdateState>()?
         .ready
-        .lock()
-        .unwrap()
+        .lock_ok()
         .as_ref()
         .map(|(u, _)| u.version.clone())
 }
@@ -244,7 +244,7 @@ async fn download_with_progress(app: &AppHandle, up: Update, to_splash: bool) ->
         }
     };
     log::info!("update {} downloaded and verified", up.version);
-    *app.state::<UpdateState>().ready.lock().unwrap() = Some((up, bytes));
+    *app.state::<UpdateState>().ready.lock_ok() = Some((up, bytes));
     true
 }
 
@@ -253,14 +253,14 @@ async fn download_with_progress(app: &AppHandle, up: Update, to_splash: bool) ->
 async fn check(app: &AppHandle) -> bool {
     {
         let st = app.state::<UpdateState>();
-        let mut busy = st.checking.lock().unwrap();
+        let mut busy = st.checking.lock_ok();
         if *busy {
             return ready_version(app).is_some();
         }
         *busy = true;
     }
     let r = check_inner(app).await;
-    *app.state::<UpdateState>().checking.lock().unwrap() = false;
+    *app.state::<UpdateState>().checking.lock_ok() = false;
     r
 }
 
@@ -307,15 +307,15 @@ fn announce_ready(app: &AppHandle) {
 async fn install(app: &AppHandle) -> Result<(), String> {
     let st = app.state::<UpdateState>();
     {
-        let mut busy = st.installing.lock().unwrap();
+        let mut busy = st.installing.lock_ok();
         if *busy {
             return Ok(());
         }
         *busy = true;
     }
-    let ready = st.ready.lock().unwrap().clone();
+    let ready = st.ready.lock_ok().clone();
     let Some((up, bytes)) = ready else {
-        *st.installing.lock().unwrap() = false;
+        *st.installing.lock_ok() = false;
         return Err("no update ready".into());
     };
     log::info!("installing update {}", up.version);
@@ -323,7 +323,7 @@ async fn install(app: &AppHandle) -> Result<(), String> {
     crate::stop_for_update(app); // close open sessions before the installer takes over
     if let Err(e) = up.install(bytes) {
         // Windows: install() exits and the installer relaunches the app
-        *st.installing.lock().unwrap() = false;
+        *st.installing.lock_ok() = false;
         return Err(e.to_string());
     }
     app.restart();

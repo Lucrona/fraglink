@@ -8,6 +8,7 @@ mod avatars;
 mod commands;
 mod friends;
 mod gamelist;
+mod health;
 mod icons;
 mod sync;
 mod updater;
@@ -26,6 +27,8 @@ use tauri::menu::{CheckMenuItem, IconMenuItem, Menu, MenuItem, PredefinedMenuIte
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_autostart::MacosLauncher;
+
+pub use health::LockOk;
 
 pub const EVENTS: &str = "fraglink://events";
 pub const TOAST_EVENT: &str = "fraglink://toast";
@@ -70,7 +73,7 @@ pub const TRACK_PROMPT_EVENT: &str = "fraglink://track-prompt";
 /// An unknown program has been full screen for 5 minutes: ask (toast + in-app bar).
 fn offer_track(app: &AppHandle, c: fraglink_core::detector::Candidate) {
     log::info!("asking whether {} is a game", c.exe);
-    *app.state::<AppState>().track_prompt.lock().unwrap() = Some(c.clone());
+    *app.state::<AppState>().track_prompt.lock_ok() = Some(c.clone());
     let _ = app.emit(TRACK_PROMPT_EVENT, Some(&c));
     // the question also waits in the main window, so toasts-off just skips the popup
     if get_setting(app, keys::TOASTS).as_deref() != Some("0") {
@@ -178,7 +181,7 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
         friends::nudge(app);
     }
     let toasts_on = {
-        let e = state.engine.lock().unwrap();
+        let e = state.engine.lock_ok();
         e.tracker
             .store
             .get_setting(keys::TOASTS)
@@ -285,7 +288,7 @@ pub fn menu_icon(data_url: &str) -> Option<tauri::image::Image<'static>> {
 
 fn get_setting(app: &AppHandle, k: &str) -> Option<String> {
     let state = app.state::<AppState>();
-    let e = state.engine.lock().unwrap();
+    let e = state.engine.lock_ok();
     e.tracker.store.get_setting(k).ok().flatten()
 }
 
@@ -293,7 +296,7 @@ fn get_setting(app: &AppHandle, k: &str) -> Option<String> {
 fn put_setting(app: &AppHandle, k: &str, v: &str) {
     {
         let state = app.state::<AppState>();
-        let mut e = state.engine.lock().unwrap();
+        let mut e = state.engine.lock_ok();
         let _ = e.tracker.store.set_setting(k, v);
         let _ = e.apply_settings();
     }
@@ -553,7 +556,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 pub fn set_status(app: &AppHandle, status: &str) {
     let state = app.state::<AppState>();
     {
-        let e = state.engine.lock().unwrap();
+        let e = state.engine.lock_ok();
         let _ = e.tracker.store.set_setting(keys::STATUS, status);
     }
     refresh_tray(app);
@@ -619,7 +622,8 @@ fn on_menu(app: &AppHandle, id: &str) {
 /// Close sessions cleanly before an update replaces the app.
 pub fn stop_for_update(app: &AppHandle) {
     let state = app.state::<AppState>();
-    if let Ok(mut e) = state.engine.lock() {
+    {
+        let mut e = state.engine.lock_ok();
         let _ = e.tracker.stop();
     }
     windows::persist_main_pos(app);
@@ -627,7 +631,8 @@ pub fn stop_for_update(app: &AppHandle) {
 
 pub fn quit(app: &AppHandle) {
     let state = app.state::<AppState>();
-    if let Ok(mut e) = state.engine.lock() {
+    {
+        let mut e = state.engine.lock_ok();
         match e.tracker.stop() {
             Ok(evs) => log::info!("quit: closed {} session(s)", evs.len()),
             Err(err) => log::error!("quit: {err:#}"),
@@ -637,34 +642,58 @@ pub fn quit(app: &AppHandle) {
     app.exit(0);
 }
 
+fn tracker_poll(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    // The installed-games scan reads Steam's library files, launcher records and
+    // the registry: done without the engine lock so the window never waits on it.
+    let sigs = {
+        let e = state.engine.lock_ok();
+        e.installs_due(now()).then(|| e.detector.sigs.clone())
+    };
+    if let Some(sigs) = sigs {
+        health::beat_tracker("install scan");
+        let scan = fraglink_core::engine::InstallScan::load(&sigs);
+        state.engine.lock_ok().apply_installs(now(), scan);
+    }
+    health::beat_tracker("step");
+    let (evs, idle, ask, details) = {
+        let mut e = state.engine.lock_ok();
+        let evs = e.step(now());
+        (
+            evs,
+            e.idle_seconds(),
+            e.take_prompt(),
+            e.take_details_changed(),
+        )
+    };
+    health::beat_tracker("events");
+    update_auto_away(app, idle);
+    if details {
+        // the WoW realm appeared or changed: refresh my status and tell friends
+        let _ = app.emit(EVENTS, Vec::<TrackerEvent>::new());
+        friends::nudge(app);
+    }
+    if let Some(c) = ask {
+        offer_track(app, c);
+    }
+    match evs {
+        Ok(evs) => handle_events(app, evs),
+        Err(err) => log::error!("tracker step failed: {err:#}"),
+    }
+}
+
 fn start_tracker(app: AppHandle) {
     std::thread::Builder::new()
         .name("fraglink-tracker".into())
         .spawn(move || loop {
-            let (evs, idle, ask, details) = {
-                let state = app.state::<AppState>();
-                let mut e = state.engine.lock().unwrap();
-                let evs = e.step(now());
-                (
-                    evs,
-                    e.idle_seconds(),
-                    e.take_prompt(),
-                    e.take_details_changed(),
-                )
-            };
-            update_auto_away(&app, idle);
-            if details {
-                // the WoW realm appeared or changed: refresh my status and tell friends
-                let _ = app.emit(EVENTS, Vec::<TrackerEvent>::new());
-                friends::nudge(&app);
+            health::beat_tracker("poll");
+            // One bad poll (a panic in detection, a broken event) is logged and the
+            // next poll runs as normal instead of the tracker dying for good.
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tracker_poll(&app)));
+            if r.is_err() {
+                log::error!("tracker poll panicked (details above); carrying on");
             }
-            if let Some(c) = ask {
-                offer_track(&app, c);
-            }
-            match evs {
-                Ok(evs) => handle_events(&app, evs),
-                Err(err) => log::error!("tracker step failed: {err:#}"),
-            }
+            health::beat_tracker("sleep");
             std::thread::sleep(Duration::from_secs(DEFAULT_POLL_SECS));
         })
         .expect("spawn tracker thread");
@@ -705,6 +734,9 @@ pub fn run() {
         .manage(updater::UpdateState::default())
         .setup(move |app| {
             let handle = app.handle().clone();
+            if let Ok(dir) = app.path().app_log_dir() {
+                health::install_panic_hook(dir);
+            }
             let base = app.path().app_data_dir()?;
             let data_dir = if fl.sim { base.join("sim") } else { base };
             std::fs::create_dir_all(&data_dir)?;
@@ -805,7 +837,8 @@ pub fn run() {
             sync::init(&handle);
             gamelist::start(&handle);
             commands::start_first_folder_scan(&handle);
-            start_tracker(handle);
+            start_tracker(handle.clone());
+            health::start_watchdog(handle);
             Ok(())
         })
         .on_window_event(windows::on_window_event)

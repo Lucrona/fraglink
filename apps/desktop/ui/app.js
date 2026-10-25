@@ -1323,6 +1323,14 @@
     return h;
   }
   function hideTip() { clearTimeout(tipTimer); tipRow = null; tip.hidden = true; }
+  /* Measure at the top-left (a fixed box near the right edge shrinks to the space left
+     there, which wrapped tips into a thin column), then keep the whole tip in the window. */
+  function placeTip(el, x, below, above) {
+    el.style.left = '0px'; el.style.top = '0px';
+    const tw = el.offsetWidth, th = el.offsetHeight;
+    el.style.left = Math.max(2, Math.min(x, innerWidth - tw - 2)) + 'px';
+    el.style.top = Math.max(2, Math.min(below + th <= innerHeight ? below : above - th, innerHeight - th - 2)) + 'px';
+  }
   list.addEventListener('mouseover', e => {
     const r = e.target.closest('.xf-row[data-friend]');
     if (r === tipRow) return;
@@ -1331,10 +1339,8 @@
     tipTimer = setTimeout(() => {
       const f = friendsNow().find(x => x.id === r.dataset.friend); if (!f || !r.isConnected) return;
       tip.innerHTML = tipHtml(f); tip.hidden = false;
-      const rr = r.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
-      const x = Math.max(2, Math.min(mx + 4, innerWidth - tw - 2));
-      const y = rr.bottom + 2 + th <= innerHeight ? rr.bottom + 2 : Math.max(2, rr.top - th - 2); // never over the row
-      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+      const rr = r.getBoundingClientRect();
+      placeTip(tip, mx + 4, rr.bottom + 2, rr.top - 2); // never over the row
     }, 450);
   });
   list.addEventListener('mouseleave', hideTip);
@@ -1356,9 +1362,7 @@
     stipTimer = setTimeout(() => {
       if (!el.isConnected || stipEl !== el) return;
       stip.textContent = el.dataset.tip; stip.hidden = false;
-      const tw = stip.offsetWidth, th = stip.offsetHeight;
-      stip.style.left = Math.max(2, Math.min(mx + 4, innerWidth - tw - 2)) + 'px';
-      stip.style.top = (my + 20 + th <= innerHeight ? my + 20 : Math.max(2, my - th - 6)) + 'px';
+      placeTip(stip, mx + 4, my + 20, my - 6);
     }, 450);
   }, true);
   document.addEventListener('mousedown', hideSTip, true);

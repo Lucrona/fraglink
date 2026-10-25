@@ -8,6 +8,7 @@
 //! Only public lists are downloaded; nothing about this PC is sent.
 
 use crate::AppState;
+use crate::LockOk;
 use fraglink_core::detectable::DetectableDb;
 use fraglink_core::overrides::Overrides;
 use fraglink_sync::Client;
@@ -47,7 +48,7 @@ fn load_cache(app: &AppHandle, f: &Files) {
     if let Ok(b) = std::fs::read(&f.list) {
         match DetectableDb::from_bytes(&b) {
             Ok(db) if !db.is_empty() => {
-                let mut e = st.engine.lock().unwrap();
+                let mut e = st.engine.lock_ok();
                 if db.updated >= e.detector.detectable.updated {
                     log::info!(
                         "detectable list: {} games from cache ({})",
@@ -65,7 +66,7 @@ fn load_cache(app: &AppHandle, f: &Files) {
         match Overrides::from_json(&s) {
             Ok(o) => {
                 log::info!("detection overrides {} from cache", o.version);
-                st.engine.lock().unwrap().set_overrides(o);
+                st.engine.lock_ok().set_overrides(o);
             }
             Err(err) => log::warn!("overrides cache unusable: {err:#}"),
         }
@@ -121,7 +122,7 @@ fn refresh(app: &AppHandle, f: &Files) -> Result<(), String> {
                     db.updated
                 );
                 save(&f.list, &body, &f.list_etag, etag.as_deref());
-                st.engine.lock().unwrap().set_detectable(db);
+                st.engine.lock_ok().set_detectable(db);
             }
             Ok(db) => log::warn!("detectable list: only {} games, ignored", db.len()),
             Err(e) => log::warn!("detectable list: bad download: {e:#}"),
@@ -144,7 +145,7 @@ fn refresh(app: &AppHandle, f: &Files) -> Result<(), String> {
                         &f.overrides_etag,
                         etag.as_deref(),
                     );
-                    st.engine.lock().unwrap().set_overrides(o);
+                    st.engine.lock_ok().set_overrides(o);
                 }
                 Err(e) => log::warn!("detection overrides: bad download: {e:#}"),
             }

@@ -4,6 +4,7 @@
 //! the server records them from live presence (friends.rs), so nothing is queued
 //! or uploaded from here. The worker just refreshes the account totals.
 
+use crate::LockOk;
 use crate::{now, AppState};
 use fraglink_sync::{
     secret, Client, PollResult, SyncError, DEFAULT_SERVER, FALLBACK_SERVER, LEGACY_DEFAULT_SERVER,
@@ -66,7 +67,7 @@ pub struct SyncView {
 
 fn setting(app: &AppHandle, k: &str) -> Option<String> {
     let st = app.state::<AppState>();
-    let e = st.engine.lock().unwrap();
+    let e = st.engine.lock_ok();
     e.tracker
         .store
         .get_setting(k)
@@ -77,7 +78,7 @@ fn setting(app: &AppHandle, k: &str) -> Option<String> {
 
 fn set(app: &AppHandle, k: &str, v: &str) {
     let st = app.state::<AppState>();
-    let e = st.engine.lock().unwrap();
+    let e = st.engine.lock_ok();
     if let Err(err) = e.tracker.store.set_setting(k, v) {
         log::error!("sync: saving {k} failed: {err:#}");
     }
@@ -108,7 +109,7 @@ pub fn server_stats(app: &AppHandle) -> Option<serde_json::Value> {
         return None;
     }
     let st = app.state::<AppState>();
-    let g = st.sync.server_stats.lock().unwrap();
+    let g = st.sync.server_stats.lock_ok();
     g.as_ref().map(|(at, v)| {
         let mut v = v.clone();
         v["fetched_at"] = serde_json::json!(at);
@@ -153,8 +154,8 @@ pub fn view(app: &AppHandle) -> SyncView {
     let st = app.state::<AppState>();
     // Nothing waits to upload any more (dev.14: no offline sessions).
     let pending = 0;
-    let pairing = st.sync.pairing.lock().unwrap().clone();
-    let pairing_error = st.sync.pairing_error.lock().unwrap().clone();
+    let pairing = st.sync.pairing.lock_ok().clone();
+    let pairing_error = st.sync.pairing_error.lock_ok().clone();
     SyncView {
         signed_in: token(app).is_some(),
         server: server(app),
@@ -181,7 +182,7 @@ pub fn init(app: &AppHandle) {
 /// Ask the worker to refresh now (after a session closes, or "Sync now").
 pub fn nudge(app: &AppHandle) {
     let st = app.state::<AppState>();
-    let tx = st.sync.nudge.lock().unwrap().clone();
+    let tx = st.sync.nudge.lock_ok().clone();
     if let Some(tx) = tx {
         let _ = tx.send(());
     }
@@ -194,7 +195,7 @@ fn start_worker(app: AppHandle) {
         return;
     }
     let (tx, rx) = channel::<()>();
-    *st.sync.nudge.lock().unwrap() = Some(tx);
+    *st.sync.nudge.lock_ok() = Some(tx);
     let worker_app = app.clone();
     let spawned = std::thread::Builder::new()
         .name("fraglink-sync".into())
@@ -207,8 +208,7 @@ fn start_worker(app: AppHandle) {
                     Ok(v) => {
                         set(&app, keys::LAST_OK, &now().to_string());
                         set(&app, keys::LAST_ERROR, "");
-                        *app.state::<AppState>().sync.server_stats.lock().unwrap() =
-                            Some((now(), v));
+                        *app.state::<AppState>().sync.server_stats.lock_ok() = Some((now(), v));
                     }
                     Err(SyncError::Unauthorized) => {
                         log::warn!("sync: the server signed this device out");
@@ -223,7 +223,7 @@ fn start_worker(app: AppHandle) {
                     Err(e) => {
                         log::warn!("sync: {e}");
                         set(&app, keys::LAST_ERROR, &e.to_string());
-                        *app.state::<AppState>().sync.server_stats.lock().unwrap() = None;
+                        *app.state::<AppState>().sync.server_stats.lock_ok() = None;
                     }
                 }
                 emit(&app);
@@ -235,7 +235,7 @@ fn start_worker(app: AppHandle) {
                 while rx.try_recv().is_ok() {}
             }
             let st = app.state::<AppState>();
-            *st.sync.nudge.lock().unwrap() = None;
+            *st.sync.nudge.lock_ok() = None;
             st.sync.worker_running.store(false, Ordering::SeqCst);
             log::info!("sync: worker stopped");
         });
@@ -253,7 +253,7 @@ fn clear_local(app: &AppHandle, reason: &str) {
     set(app, keys::USER, "");
     set(app, keys::LAST_ERROR, reason);
     let st = app.state::<AppState>();
-    *st.sync.server_stats.lock().unwrap() = None;
+    *st.sync.server_stats.lock_ok() = None;
 }
 
 fn device_label() -> String {
@@ -271,8 +271,8 @@ fn finish_sign_in(app: &AppHandle, token: &str, handle: &str) {
     set(app, keys::TOKEN, &secret::protect(token));
     set(app, keys::USER, handle);
     set(app, keys::LAST_ERROR, "");
-    *st.sync.pairing.lock().unwrap() = None;
-    *st.sync.pairing_error.lock().unwrap() = None;
+    *st.sync.pairing.lock_ok() = None;
+    *st.sync.pairing_error.lock_ok() = None;
     log::info!("sync: signed in as {handle}");
     start_worker(app.clone());
     crate::friends::start(app);
@@ -427,8 +427,8 @@ pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
     let base = sign_in_base(server_url)?;
     let st = app.state::<AppState>();
     let gen = st.sync.pairing_gen.fetch_add(1, Ordering::SeqCst) + 1;
-    *st.sync.pairing_error.lock().unwrap() = None;
-    *st.sync.pairing.lock().unwrap() = None;
+    *st.sync.pairing_error.lock_ok() = None;
+    *st.sync.pairing.lock_ok() = None;
     set(app, keys::SERVER, &base);
     let app = app.clone();
     std::thread::Builder::new()
@@ -437,8 +437,8 @@ pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
             let st = app.state::<AppState>();
             let fail = |msg: String| {
                 if st.sync.pairing_gen.load(Ordering::SeqCst) == gen {
-                    *st.sync.pairing.lock().unwrap() = None;
-                    *st.sync.pairing_error.lock().unwrap() = Some(msg);
+                    *st.sync.pairing.lock_ok() = None;
+                    *st.sync.pairing_error.lock_ok() = Some(msg);
                     emit(&app);
                 }
             };
@@ -447,7 +447,7 @@ pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
                 Ok(s) => s,
                 Err(e) => return fail(format!("Couldn't start sign-in: {e}")),
             };
-            *st.sync.pairing.lock().unwrap() = Some(PairingView {
+            *st.sync.pairing.lock_ok() = Some(PairingView {
                 user_code: start.user_code.clone(),
                 verification_uri: start.verification_uri.clone(),
                 verification_uri_complete: start.verification_uri_complete.clone(),
@@ -490,8 +490,8 @@ pub fn start_pairing(app: &AppHandle, server_url: &str) -> Result<(), String> {
 pub fn cancel_pairing(app: &AppHandle) {
     let st = app.state::<AppState>();
     st.sync.pairing_gen.fetch_add(1, Ordering::SeqCst);
-    *st.sync.pairing.lock().unwrap() = None;
-    *st.sync.pairing_error.lock().unwrap() = None;
+    *st.sync.pairing.lock_ok() = None;
+    *st.sync.pairing_error.lock_ok() = None;
     emit(app);
 }
 

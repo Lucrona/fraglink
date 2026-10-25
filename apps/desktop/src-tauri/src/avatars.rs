@@ -6,6 +6,7 @@
 //! file name on the server carries a content hash, so a new picture is a new URL and
 //! old entries simply age out.
 
+use crate::LockOk;
 use base64::Engine;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -70,7 +71,7 @@ pub fn resolve(app: &AppHandle, urls: &[String]) -> HashMap<String, String> {
     let mut out = HashMap::new();
     let mut ask = vec![];
     {
-        let mut m = MEM.lock().unwrap();
+        let mut m = MEM.lock_ok();
         let m = m.get_or_insert_with(HashMap::new);
         for u in urls {
             match m.get(u) {
@@ -103,7 +104,7 @@ pub fn resolve(app: &AppHandle, urls: &[String]) -> HashMap<String, String> {
         };
         if let Some(b) = bytes {
             let du = data_url(&b);
-            let mut m = MEM.lock().unwrap();
+            let mut m = MEM.lock_ok();
             let m = m.get_or_insert_with(HashMap::new);
             if m.len() >= MEM_LIMIT {
                 m.clear();
@@ -121,7 +122,7 @@ pub fn resolve(app: &AppHandle, urls: &[String]) -> HashMap<String, String> {
 /// The avatar JSON the server sent for `handle` (friends, incoming / outgoing requests).
 fn avatar_of(app: &AppHandle, handle: &str) -> Option<serde_json::Value> {
     let st = app.state::<crate::AppState>();
-    let list = st.friends.list.lock().unwrap().clone()?;
+    let list = st.friends.list.lock_ok().clone()?;
     ["friends", "incoming", "outgoing"]
         .iter()
         .filter_map(|k| list.get(*k).and_then(|v| v.as_array()))

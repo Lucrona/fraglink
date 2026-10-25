@@ -134,6 +134,10 @@ pub struct Engine {
     steam_loaded_at: Option<i64>,
     /// Exe path and Steam app id of games detected since start (for icons).
     pub seen: std::collections::HashMap<String, SeenGame>,
+    /// "pid|exe path" -> (game id, name) of each running game process, so one
+    /// process keeps its first id for its lifetime (a Steam rescan or a list update
+    /// can't switch it to another id mid-session).
+    pinned: std::collections::HashMap<String, (String, String)>,
     prompt: PromptWatch,
     /// Seconds before the "Track it as a game?" prompt (tests and simulation shorten it).
     pub prompt_after_secs: i64,
@@ -171,6 +175,7 @@ impl Engine {
             last_procs: vec![],
             steam_loaded_at: None,
             seen: Default::default(),
+            pinned: Default::default(),
             prompt: PromptWatch::default(),
             prompt_after_secs: PROMPT_AFTER_SECS,
             dismissed: Default::default(),
@@ -387,11 +392,24 @@ impl Engine {
         self.steam_loaded_at.is_some()
     }
 
+    /// True when the installed-games scan should run again.
+    pub fn installs_due(&self, now: i64) -> bool {
+        self.steam_loaded_at
+            .is_none_or(|t| now - t >= STEAM_REFRESH_SECS)
+    }
+
     pub fn refresh_steam(&mut self, now: i64) {
+        let scan = InstallScan::load(&self.detector.sigs);
+        self.apply_installs(now, scan);
+    }
+
+    /// Swap in a scan made by [`InstallScan::load`] (which reads the disk and the
+    /// registry, so the app runs it without holding the engine lock).
+    pub fn apply_installs(&mut self, now: i64, scan: InstallScan) {
         self.steam_loaded_at = Some(now);
-        match steam::steam_root() {
-            Some(root) => {
-                self.detector.steam = SteamIndex::load(&root);
+        match scan.steam {
+            Some((root, idx)) => {
+                self.detector.steam = idx;
                 log::info!(
                     "steam: {} apps in {} libraries ({})",
                     self.detector.steam.len(),
@@ -401,9 +419,7 @@ impl Engine {
             }
             None => log::info!("steam: not installed / not found"),
         }
-        let mut libs = crate::libraries::LibraryIndex::load();
-        crate::installs::resolve(&mut libs, &self.detector.sigs);
-        self.detector.libs = libs;
+        self.detector.libs = scan.libs;
         self.merge_folder_scan();
         {
             use crate::libraries::Launcher::*;
@@ -491,17 +507,15 @@ impl Engine {
 
     /// One poll of the environment. Call every [`DEFAULT_POLL_SECS`].
     pub fn step(&mut self, now: i64) -> Result<Vec<TrackerEvent>> {
-        if self
-            .steam_loaded_at
-            .is_none_or(|t| now - t >= STEAM_REFRESH_SECS)
-        {
+        if self.installs_due(now) {
             self.refresh_steam(now);
         }
         let procs = self.env.processes();
         // Idle time counts the same as active time, so input idleness is never read.
         let idle = 0;
         let appid = self.env.steam_running_appid();
-        let dets = self.detector.detect(&procs, appid);
+        let mut dets = self.detector.detect(&procs, appid);
+        pin_identities(&mut self.pinned, &mut dets, &procs);
         let mut running = Vec::with_capacity(dets.len());
         for d in &dets {
             let path = d.exe.as_ref().and_then(|x| {
@@ -615,6 +629,73 @@ impl Engine {
             self.tracker.is_paused(),
         )
     }
+}
+
+/// Steam libraries plus other launchers' install records, read from disk.
+pub struct InstallScan {
+    pub steam: Option<(std::path::PathBuf, SteamIndex)>,
+    pub libs: crate::libraries::LibraryIndex,
+}
+
+impl InstallScan {
+    pub fn load(sigs: &SignatureDb) -> Self {
+        let steam = steam::steam_root().map(|root| {
+            let idx = SteamIndex::load(&root);
+            (root, idx)
+        });
+        let mut libs = crate::libraries::LibraryIndex::load();
+        crate::installs::resolve(&mut libs, sigs);
+        InstallScan { steam, libs }
+    }
+}
+
+/// Keep each running game process on the id it was first detected as. Processes
+/// that exited are forgotten; two detections that end up on one id count once.
+pub fn pin_identities(
+    pinned: &mut std::collections::HashMap<String, (String, String)>,
+    dets: &mut Vec<crate::detector::Detection>,
+    procs: &[ProcInfo],
+) {
+    let key = |p: &ProcInfo| {
+        p.path
+            .as_deref()
+            .map(|x| format!("{}|{}", p.pid, crate::signatures::normalize_path(x)))
+    };
+    let live: std::collections::HashSet<String> = procs.iter().filter_map(key).collect();
+    pinned.retain(|k, _| live.contains(k));
+    for d in dets.iter_mut() {
+        let Some(exe) = d.exe.as_deref() else {
+            continue;
+        };
+        let Some(k) = procs
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(exe))
+            .and_then(key)
+        else {
+            continue;
+        };
+        match pinned.get(&k) {
+            Some((id, name)) if *id != d.game_id => {
+                log::info!("keeping {exe} as {id} (now detected as {})", d.game_id);
+                d.game_id = id.clone();
+                d.name = name.clone();
+            }
+            Some(_) => {}
+            None => {
+                pinned.insert(k, (d.game_id.clone(), d.name.clone()));
+            }
+        }
+    }
+    let exe_apps: std::collections::HashSet<u32> = dets
+        .iter()
+        .filter(|d| d.exe.is_some())
+        .filter_map(|d| d.steam_appid)
+        .collect();
+    let mut seen = std::collections::HashSet::new();
+    dets.retain(|d| {
+        !(d.exe.is_none() && d.steam_appid.is_some_and(|a| exe_apps.contains(&a)))
+            && seen.insert(d.game_id.clone())
+    });
 }
 
 #[cfg(test)]
@@ -859,5 +940,43 @@ mod tests {
         e.set_game_excluded("dota2", true, t0 + 2600).unwrap();
         let g = e.glance(t0 + 2600).unwrap();
         assert!(g.top.iter().all(|t| t.game_id != "dota2"));
+    }
+
+    #[test]
+    fn a_running_process_keeps_its_first_id() {
+        use crate::detector::{DetectSource, Detection};
+        let det = |id: &str, exe: Option<&str>| Detection {
+            game_id: id.into(),
+            name: id.into(),
+            source: DetectSource::Detectable,
+            exe: exe.map(Into::into),
+            steam_appid: id.strip_prefix("steam:").and_then(|a| a.parse().ok()),
+        };
+        let procs = vec![ProcInfo {
+            pid: 7,
+            name: "Operator 112.exe".into(),
+            path: Some(r"D:\Games\112 Operator\Operator 112.exe".into()),
+        }];
+        let mut pinned = Default::default();
+        let mut d = vec![det("112_operator", Some("Operator 112.exe"))];
+        pin_identities(&mut pinned, &mut d, &procs);
+        assert_eq!(d[0].game_id, "112_operator");
+        // the Steam rescan: same process, new id, plus RunningAppID under the new id
+        let mut d = vec![
+            det("steam:793460", Some("Operator 112.exe")),
+            det("steam:793460", None),
+        ];
+        pin_identities(&mut pinned, &mut d, &procs);
+        assert_eq!(d.len(), 1, "{d:?}");
+        assert_eq!(d[0].game_id, "112_operator");
+        // restarted (new pid): the new id is used
+        let procs2 = vec![ProcInfo {
+            pid: 8,
+            ..procs[0].clone()
+        }];
+        let mut d = vec![det("steam:793460", Some("Operator 112.exe"))];
+        pin_identities(&mut pinned, &mut d, &procs2);
+        assert_eq!(d[0].game_id, "steam:793460");
+        assert_eq!(pinned.len(), 1);
     }
 }

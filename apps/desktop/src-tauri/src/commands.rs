@@ -1,5 +1,6 @@
 //! Tauri commands called from the webview (`window.__TAURI__.core.invoke`).
 
+use crate::LockOk;
 use crate::{now, windows, AppState, ToastPayload};
 use fraglink_core::catalog;
 use fraglink_core::detector::Candidate;
@@ -20,15 +21,14 @@ fn err(e: impl std::fmt::Display) -> String {
 
 #[tauri::command]
 pub fn get_glance(state: State<'_, AppState>) -> CmdResult<Glance> {
-    state.engine.lock().unwrap().glance(now()).map_err(err)
+    state.engine.lock_ok().glance(now()).map_err(err)
 }
 
 #[tauri::command]
 pub fn get_activity(state: State<'_, AppState>, limit: Option<i64>) -> CmdResult<Vec<ActivityRow>> {
     state
         .engine
-        .lock()
-        .unwrap()
+        .lock_ok()
         .tracker
         .store
         .recent_activity(limit.unwrap_or(50).clamp(1, 500))
@@ -39,8 +39,7 @@ pub fn get_activity(state: State<'_, AppState>, limit: Option<i64>) -> CmdResult
 pub fn get_games(state: State<'_, AppState>) -> CmdResult<Vec<GameRow>> {
     state
         .engine
-        .lock()
-        .unwrap()
+        .lock_ok()
         .tracker
         .store
         .list_games()
@@ -49,7 +48,7 @@ pub fn get_games(state: State<'_, AppState>) -> CmdResult<Vec<GameRow>> {
 
 #[tauri::command]
 pub fn get_candidates(state: State<'_, AppState>) -> CmdResult<Vec<Candidate>> {
-    Ok(state.engine.lock().unwrap().candidates())
+    Ok(state.engine.lock_ok().candidates())
 }
 
 #[tauri::command]
@@ -61,8 +60,7 @@ pub fn tag_process(
 ) -> CmdResult<String> {
     let id = state
         .engine
-        .lock()
-        .unwrap()
+        .lock_ok()
         .tag_exe(&exe, &name, now())
         .map_err(err)?;
     log::info!("tagged {exe} as {id}");
@@ -73,7 +71,7 @@ pub fn tag_process(
 /// The pending "Track <exe> as a game?" question, if any.
 #[tauri::command]
 pub fn track_prompt(state: State<'_, AppState>) -> Option<Candidate> {
-    state.track_prompt.lock().unwrap().clone()
+    state.track_prompt.lock_ok().clone()
 }
 
 /// `OddGame.exe` -> `OddGame`, `my_cool-game.exe` -> `my cool game`.
@@ -114,8 +112,7 @@ pub fn track_prompt_answer(
             .unwrap_or_else(|| name_from_exe(&exe));
         let id = state
             .engine
-            .lock()
-            .unwrap()
+            .lock_ok()
             .tag_exe(&exe, &name, now())
             .map_err(err)?;
         log::info!("track prompt: {exe} is a game ({id})");
@@ -130,24 +127,18 @@ pub fn track_prompt_answer(
         });
         out = Some(id);
     } else {
-        state
-            .engine
-            .lock()
-            .unwrap()
-            .dismiss_prompt(&exe)
-            .map_err(err)?;
+        state.engine.lock_ok().dismiss_prompt(&exe).map_err(err)?;
         log::info!("track prompt: {exe} is not a game");
     }
     {
-        let mut p = state.track_prompt.lock().unwrap();
+        let mut p = state.track_prompt.lock_ok();
         if p.as_ref().is_some_and(|c| c.exe.eq_ignore_ascii_case(&exe)) {
             *p = None;
         }
     }
     let toast_is_prompt = state
         .pending_toast
-        .lock()
-        .unwrap()
+        .lock_ok()
         .as_ref()
         .is_some_and(|t| t.kind.starts_with("track:"));
     if toast_is_prompt {
@@ -175,7 +166,7 @@ mod track_tests {
 
 #[tauri::command]
 pub fn untag_process(state: State<'_, AppState>, exe: String) -> CmdResult<()> {
-    state.engine.lock().unwrap().untag_exe(&exe).map_err(err)
+    state.engine.lock_ok().untag_exe(&exe).map_err(err)
 }
 
 #[tauri::command]
@@ -187,8 +178,7 @@ pub fn set_game_excluded(
 ) -> CmdResult<()> {
     let evs = state
         .engine
-        .lock()
-        .unwrap()
+        .lock_ok()
         .set_game_excluded(&game_id, excluded, now())
         .map_err(err)?;
     crate::handle_events(&app, evs);
@@ -213,7 +203,8 @@ pub struct SettingsView {
 
 #[tauri::command]
 pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> CmdResult<SettingsView> {
-    let e = state.engine.lock().unwrap();
+    let autostart = app.autolaunch().is_enabled().unwrap_or(false);
+    let e = state.engine.lock_ok();
     Ok(SettingsView {
         settings: {
             let mut s = e.tracker.store.all_settings().map_err(err)?;
@@ -221,7 +212,7 @@ pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Set
             s.remove(fraglink_core::folderscan::CACHE_KEY);
             s
         },
-        autostart: app.autolaunch().is_enabled().unwrap_or(false),
+        autostart,
         sim: state.sim,
         data_dir: state.data_dir.display().to_string(),
         log_dir: app
@@ -339,12 +330,12 @@ pub fn set_setting(
         _ => {}
     }
     {
-        let mut e = state.engine.lock().unwrap();
+        let mut e = state.engine.lock_ok();
         e.tracker.store.set_setting(&key, &value).map_err(err)?;
         e.apply_settings().map_err(err)?;
     }
     if key == "text_size" {
-        let open = *state.side_open.lock().unwrap();
+        let open = *state.side_open.lock_ok();
         windows::resize_main(&app, open);
     }
     // let the other windows (main <-> Options) follow the change
@@ -376,13 +367,12 @@ pub fn set_side_width(app: AppHandle, state: State<'_, AppState>, width: f64) ->
     let w = width.clamp(windows::SIDE_PANEL_MIN, windows::SIDE_PANEL_MAX);
     state
         .engine
-        .lock()
-        .unwrap()
+        .lock_ok()
         .tracker
         .store
         .set_setting("side_w", &format!("{w:.0}"))
         .map_err(err)?;
-    let open = *state.side_open.lock().unwrap();
+    let open = *state.side_open.lock_ok();
     if open {
         windows::resize_main(&app, true);
     }
@@ -594,7 +584,7 @@ pub fn do_export(app: &AppHandle) -> anyhow::Result<PathBuf> {
         .document_dir()
         .map(|d| d.join("Fraglink"))
         .unwrap_or_else(|_| state.data_dir.join("exports"));
-    let e = state.engine.lock().unwrap();
+    let e = state.engine.lock_ok();
     let paths = fraglink_core::export::write_export(&e.tracker.store, &dir, now())?;
     drop(e);
     let _ = tauri_plugin_opener::reveal_item_in_dir(&paths);
@@ -632,7 +622,7 @@ pub fn set_window_scale(
 
 #[tauri::command]
 pub fn toast_payload(state: State<'_, AppState>) -> Option<ToastPayload> {
-    state.pending_toast.lock().unwrap().clone()
+    state.pending_toast.lock_ok().clone()
 }
 
 #[tauri::command]
@@ -640,8 +630,7 @@ pub async fn toast_clicked(app: AppHandle) {
     let (kind, link) = app
         .state::<AppState>()
         .pending_toast
-        .lock()
-        .unwrap()
+        .lock_ok()
         .as_ref()
         .map(|t| (t.kind.clone(), t.game_id.clone()))
         .unwrap_or_default();
@@ -809,7 +798,7 @@ async fn friend_call<T: Send + 'static>(
         let r = f(&client).map_err(|e| e.to_string());
         if r.is_ok() {
             if let Ok(v) = client.friends() {
-                *app.state::<AppState>().friends.list.lock().unwrap() = Some(v);
+                *app.state::<AppState>().friends.list.lock_ok() = Some(v);
                 crate::friends::emit(&app);
             }
         }
@@ -956,16 +945,20 @@ pub async fn avatar_images(
 }
 
 pub(crate) fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {
-    let e = state.engine.lock().unwrap();
-    let games = e.tracker.store.list_games().unwrap_or_default();
-    let settings = e.tracker.store.all_settings().unwrap_or_default();
-    let mut out = catalog::build(
-        &e.detector.sigs,
-        &e.detector.steam,
-        &e.detector.libs,
-        &games,
-        &settings,
-    );
+    // catalog::build looks for exes on disk: copy its inputs and let go of the
+    // engine lock first, so a slow disk never freezes the tracker or the window
+    let (sigs, steam, libs, games, settings) = {
+        let e = state.engine.lock_ok();
+        (
+            e.detector.sigs.clone(),
+            e.detector.steam.clone(),
+            e.detector.libs.clone(),
+            e.tracker.store.list_games().unwrap_or_default(),
+            e.tracker.store.all_settings().unwrap_or_default(),
+        )
+    };
+    let mut out = catalog::build(&sigs, &steam, &libs, &games, &settings);
+    let e = state.engine.lock_ok();
     // staff renames (override rules) win over the bundled signature names
     for g in out.iter_mut() {
         if let Some(n) = e.override_name(&g.id) {
@@ -989,7 +982,9 @@ pub async fn detect_games(app: AppHandle) -> Vec<catalog::Entry> {
     let state = app.state::<AppState>();
     fraglink_core::installs::clear_exe_cache();
     if !state.sim {
-        state.engine.lock().unwrap().refresh_steam(now());
+        let sigs = state.engine.lock_ok().detector.sigs.clone();
+        let scan = fraglink_core::engine::InstallScan::load(&sigs);
+        state.engine.lock_ok().apply_installs(now(), scan);
     }
     crate::refresh_tray(&app);
     catalog_now(&state)
@@ -1006,7 +1001,7 @@ pub(crate) fn run_folder_scan(app: &AppHandle) -> Option<usize> {
         return None;
     }
     let state = app.state::<AppState>();
-    let roots = state.engine.lock().unwrap().folder_scan_roots();
+    let roots = state.engine.lock_ok().folder_scan_roots();
     fraglink_core::folderscan::background_priority();
     let started = std::time::Instant::now();
     let (exes, dirs) = fraglink_core::folderscan::walk_exes(
@@ -1019,11 +1014,7 @@ pub(crate) fn run_folder_scan(app: &AppHandle) -> Option<usize> {
         dirs,
         started.elapsed().as_secs_f32()
     );
-    let n = state
-        .engine
-        .lock()
-        .unwrap()
-        .apply_folder_scan(&exes, dirs, now());
+    let n = state.engine.lock_ok().apply_folder_scan(&exes, dirs, now());
     SCANNING.store(false, Ordering::SeqCst);
     crate::refresh_tray(app);
     let _ = app.emit("games-changed", ());
@@ -1033,7 +1024,7 @@ pub(crate) fn run_folder_scan(app: &AppHandle) -> Option<usize> {
 /// First start: one background folder scan after the app has settled.
 pub(crate) fn start_first_folder_scan(app: &AppHandle) {
     let state = app.state::<AppState>();
-    if state.sim || state.engine.lock().unwrap().folder_scan_cache().is_some() {
+    if state.sim || state.engine.lock_ok().folder_scan_cache().is_some() {
         return;
     }
     let app = app.clone();
@@ -1067,7 +1058,7 @@ pub async fn launch_game(app: AppHandle, id: String) -> CmdResult<()> {
     let entries = catalog_now(&state);
     let entry = entries.iter().find(|e| e.id == id).ok_or("unknown game")?;
     let how = {
-        let e = state.engine.lock().unwrap();
+        let e = state.engine.lock_ok();
         catalog::launch_for(entry, &e.detector.libs)
     };
     match how.ok_or(
