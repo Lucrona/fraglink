@@ -28,6 +28,7 @@ pub mod home;
 pub mod hours;
 pub mod icons;
 pub mod mailer;
+pub mod merge_suggest;
 pub mod mfa;
 pub mod names;
 pub mod news;
@@ -152,6 +153,7 @@ pub fn router(state: AppState) -> Router {
         .merge(profile::routes())
         .merge(admin::routes())
         .merge(detection_aliases::routes())
+        .merge(merge_suggest::routes())
         .merge(news::routes())
         .merge(mfa::routes())
         .merge(account::routes())
