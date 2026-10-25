@@ -1296,9 +1296,11 @@
     if (!c || !c.exe) { if (bar) bar.hidden = true; return; }
     if (!bar) { bar = document.createElement('div'); bar.id = 'track-ask'; bar.className = 'fl-ask'; document.body.appendChild(bar); }
     const name = exeName(c.exe);
-    bar.innerHTML = `Track <b>${esc(name)}</b> as a game? <span class="fl-ask-b"><button type="button" data-yes="1">Yes</button><button type="button" data-yes="0">Not a game</button></span>`;
+    // beta.5: Discord-style "Playing <name>? Add it!"; × just hides it for now
+    bar.innerHTML = `Playing <b>${esc(name)}</b>? <span class="fl-ask-b"><button type="button" class="add-it" data-yes="1">Add it!</button><button type="button" class="not-game" data-yes="0">Not a game</button><button type="button" class="ask-x" aria-label="Hide">×</button></span>`;
     bar.dataset.tip = c.path || c.exe; bar.hidden = false;
-    bar.querySelectorAll('button').forEach(b => b.onclick = async () => {
+    bar.querySelector('.ask-x').onclick = () => { bar.hidden = true; };
+    bar.querySelectorAll('button[data-yes]').forEach(b => b.onclick = async () => {
       bar.hidden = true;
       try { await FLB.trackAnswer(c.exe, b.dataset.yes === '1', name); refreshSoon(); } catch (e) { toastErr(e); }
     });

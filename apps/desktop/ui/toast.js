@@ -42,9 +42,10 @@
     el.hidden = false; el.classList.remove('out');
     clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 6000);
   }
-  // "Track <name> as a game?" with Yes / Not a game (the question also waits in the main window)
+  // beta.5, Discord-style: "Playing <name>?" with Add it! (and a quiet Not a game).
+  // The close button only hides it; the question also waits in the main window.
   function ask(p, icon) {
-    body.innerHTML = `<i class="gi">${icon}</i><div>Track <b>${esc(p.title)}</b> as a game?<div class="tq"><button type="button" data-yes="1">Yes</button><button type="button" data-yes="0">Not a game</button></div></div>`;
+    body.innerHTML = `<i class="gi">${icon}</i><div class="tx"><span class="ln">Playing</span><b>${esc(p.title)}</b>?<small>Fraglink doesn't know this one yet.</small><div class="tq"><button type="button" class="add-it" data-yes="1">Add it!</button><button type="button" class="not-game" data-yes="0">Not a game</button></div></div>`;
     body.querySelectorAll('button[data-yes]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
       if (!T) return close();
@@ -58,6 +59,7 @@
   (async () => {
     if (!T) { document.body.className = 'toast-page skin-dark'; el.style.cssText = 'inset:auto;right:4px;bottom:4px;width:283px;box-sizing:border-box;left:auto;animation:none'; // preview: native window width, height grows
       const q = new URLSearchParams(location.search), t = q.get('t') || (q.get('logon') ? 'online' : 'playing');
+      if (t === 'track') { ask({ kind: 'track:OddGame.exe', title: 'OddGame', game: 'OddGame.exe' }, GENERIC); return; }
       show(({ played: { kind: 'friend:you', title: 'You', line: 'played 1h 33m of', game_id: 'wow', game: 'World of Warcraft: Forever - Beta', icon: q.get('icon') || '' },
         long: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'x', game: 'The Elder Scrolls V: Skyrim Special Edition Anniversary Upgrade Bundle Deluxe', icon: '' },
         online: { kind: 'friend:nova', title: 'Nova', line: 'logged on', game_id: '', game: '', avatar_color: 3 },

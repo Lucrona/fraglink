@@ -267,7 +267,8 @@ impl Store {
     pub fn add_manual_tag(&self, exe: &str, game_id: &str, name: &str, now: i64) -> Result<()> {
         self.conn.execute(
             "INSERT INTO games(id, name, source, created_at) VALUES(?1, ?2, 'manual', ?3)
-             ON CONFLICT(id) DO UPDATE SET excluded = 0",
+             ON CONFLICT(id) DO UPDATE SET excluded = 0,
+                 source = CASE WHEN games.source = 'removed' THEN 'manual' ELSE games.source END",
             params![game_id, name, now],
         )?;
         self.conn.execute(
@@ -286,6 +287,20 @@ impl Store {
         self.conn.execute(
             "DELETE FROM manual_tags WHERE exe_name = ?1",
             params![exe.to_lowercase()],
+        )?;
+        Ok(())
+    }
+
+    /// beta.5: "Remove" on a game the user added: stop detecting it and hide it from
+    /// Options > Games. The row and its sessions stay (hours live on the server anyway).
+    pub fn remove_manual_game(&self, game_id: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM manual_tags WHERE game_id = ?1",
+            params![game_id],
+        )?;
+        self.conn.execute(
+            "UPDATE games SET source = 'removed' WHERE id = ?1 AND source = 'manual'",
+            params![game_id],
         )?;
         Ok(())
     }
@@ -626,6 +641,32 @@ mod tests {
             .query_row("PRAGMA journal_mode", [], |r| r.get(0))
             .unwrap();
         assert_eq!(mode.to_lowercase(), "wal");
+    }
+
+    #[test]
+    fn removed_manual_game_hides_and_can_come_back() {
+        let s = Store::open_in_memory().unwrap();
+        s.add_manual_tag("GrokBot.exe", "manual:grok-bot", "Grok Bot", 1)
+            .unwrap();
+        s.remove_manual_game("manual:grok-bot").unwrap();
+        assert!(s.manual_tags().unwrap().is_empty());
+        let sigs = crate::signatures::SignatureDb::builtin();
+        let c = crate::catalog::build(
+            &sigs,
+            &Default::default(),
+            &Default::default(),
+            &s.list_games().unwrap(),
+            &Default::default(),
+        );
+        assert!(!c.iter().any(|e| e.id == "manual:grok-bot"));
+        s.add_manual_tag("GrokBot.exe", "manual:grok-bot", "Grok Bot", 2)
+            .unwrap();
+        assert_eq!(s.manual_tags().unwrap().len(), 1);
+        assert!(s
+            .list_games()
+            .unwrap()
+            .iter()
+            .any(|g| g.id == "manual:grok-bot" && g.source == "manual"));
     }
 
     #[test]

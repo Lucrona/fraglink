@@ -94,12 +94,27 @@ pub fn my_presence(app: &AppHandle) -> MyPresence {
         Default::default()
     };
     let game = e.now_playing().map(|n| GameRef {
+        name: own_name(&n.game_id, &tags),
         id: public_game_id(&n.game_id, &tags),
         started_at: Some(n.started_at),
         detail: n.detail.filter(|_| share),
         hidden: !share,
     });
     MyPresence { status, game }
+}
+
+/// beta.5: the user's own name for a program they added, so their own profile shows
+/// it (not "A game") until an admin approves it. Friends never see it.
+pub fn own_name(
+    id: &str,
+    tags: &std::collections::HashMap<String, (String, String)>,
+) -> Option<String> {
+    if !id.starts_with("manual:") {
+        return None;
+    }
+    tags.values()
+        .find(|(gid, _)| gid == id)
+        .map(|(_, n)| n.clone())
 }
 
 /// The id sent for a game: a program the user tagged ("This is a game") goes as
@@ -550,6 +565,11 @@ mod tests {
         assert_eq!(public_game_id("manual:my-indie", &tags), "exe:myindie.exe");
         assert_eq!(public_game_id("wow", &tags), "wow");
         assert_eq!(public_game_id("manual:gone", &tags), "manual:gone");
+        assert_eq!(
+            own_name("manual:my-indie", &tags).as_deref(),
+            Some("My Indie")
+        );
+        assert_eq!(own_name("wow", &tags), None);
     }
 
     fn fp(started: bool) -> FriendPresence {

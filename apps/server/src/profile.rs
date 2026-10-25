@@ -342,6 +342,9 @@ async fn profile(
         let mut v = m
             .remove(&p.id)
             .unwrap_or_else(presence::PresenceView::offline);
+        if is_self {
+            presence::apply_own_name(&st, p.id, &mut v);
+        }
         if !show_game || v.game_id.as_ref().is_some_and(|g| hidden.contains(g)) {
             v.game_id = None;
             v.game_name = None;

@@ -264,6 +264,19 @@ fn to_view(r: Row) -> PresenceView {
     }
 }
 
+/// beta.5: on the user's own views, an unapproved program they added shows their own
+/// name for it instead of "A game". Never call this for what friends see.
+pub fn apply_own_name(st: &AppState, user: Uuid, v: &mut PresenceView) {
+    if v.game_id.as_deref() != Some(crate::names::UNLISTED_ID) {
+        return;
+    }
+    let own = st.own_names.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((id, n)) = own.get(&user) {
+        v.game_id = Some(id.clone());
+        v.game_name = Some(n.clone());
+    }
+}
+
 /// What friends are allowed to see of `user` right now.
 pub async fn visible_presence(st: &AppState, user: Uuid) -> ApiResult<Option<PresenceView>> {
     let r: Option<Row> = sqlx::query_as("SELECT status, game_id, game_name, game_detail, session_started_at, heartbeat_at, game_hidden FROM presence WHERE user_id = $1")
@@ -327,6 +340,7 @@ pub async fn record_live_session(
     if (end - start).num_seconds() < MIN_LIVE_SECS {
         return Ok(());
     }
+    let game_id = &crate::names::list_id_for_exe(st, game_id);
     let game_id = &crate::names::resolve_alias(st, game_id).await?;
     crate::names::ensure_game_row(st, game_id).await?;
     let mut from = start;
@@ -406,6 +420,11 @@ pub async fn set_from(
         "online" | "away" | "invisible" | "offline" => status,
         _ => "online",
     };
+    let own_name = game
+        .as_ref()
+        .and_then(|g| g.name.as_deref())
+        .map(|n| clean(n, 80))
+        .filter(|n| !n.trim().is_empty());
     let game = game.filter(|_| status != "offline").and_then(|g| {
         let id = crate::names::canonical_id(user, &clean(&g.id, 120))?;
         let detail = g
@@ -417,7 +436,10 @@ pub async fn set_from(
     });
     // a retired game's program now counts for its successor
     let game = match game {
-        Some((id, d, h)) => Some((crate::retire::effective_id(st, &id).await?, d, h)),
+        Some((id, d, h)) => {
+            let id = crate::names::list_id_for_exe(st, &id);
+            Some((crate::retire::effective_id(st, &id).await?, d, h))
+        }
         None => None,
     };
     let now = Utc::now();
@@ -452,6 +474,17 @@ pub async fn set_from(
         game
     };
     let new_id = game.as_ref().map(|g| g.0.clone());
+    if !keep_game {
+        let mut own = st.own_names.lock().unwrap_or_else(|e| e.into_inner());
+        match (&new_id, own_name) {
+            (Some(id), Some(n)) if id.starts_with("exe:") => {
+                own.insert(user, (id.clone(), n));
+            }
+            _ => {
+                own.remove(&user);
+            }
+        }
+    }
     let continuing = live && prev_game.is_some() && prev_game == new_id;
     if let (Some(pg), Some(ps), false) = (&prev_game, prev_start, continuing) {
         record_live_session(st, user, pg, ps, session_end(now, prev_hb)).await?;

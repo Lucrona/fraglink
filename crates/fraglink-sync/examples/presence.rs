@@ -14,6 +14,7 @@ fn main() {
         std::process::exit(2);
     }
     let game = (a.len() >= 4).then(|| GameRef {
+        name: None,
         id: a[3].clone(),
         started_at: Some(chrono_now() - 38 * 60),
         detail: a.get(4).cloned(),

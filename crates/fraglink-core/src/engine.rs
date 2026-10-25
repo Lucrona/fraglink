@@ -570,6 +570,15 @@ impl Engine {
         Ok(id)
     }
 
+    /// beta.5: remove a game the user added (Options > Games > Remove).
+    pub fn remove_manual_game(&mut self, game_id: &str) -> Result<()> {
+        if !game_id.starts_with("manual:") {
+            bail!("only games you added can be removed");
+        }
+        self.tracker.store.remove_manual_game(game_id)?;
+        self.reload_rules()
+    }
+
     pub fn untag_exe(&mut self, exe: &str) -> Result<()> {
         self.tracker.store.remove_manual_tag(exe)?;
         self.reload_rules()

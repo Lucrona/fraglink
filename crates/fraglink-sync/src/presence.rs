@@ -25,6 +25,10 @@ pub struct GameRef {
     /// Count the time but don't show the game to friends ("Share what I'm playing" off).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    /// beta.5: the user's own name for a program they added (`exe:` ids only). The
+    /// server shows it to the user themself until the game is approved, never to friends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 /// What this client publishes. `invisible` is stored but friends see offline.
@@ -200,6 +204,7 @@ mod tests {
         let Event::Presence(p) = e else { panic!() };
         assert_eq!(p.game_detail.as_deref(), Some("Frostmourne"));
         let g = GameRef {
+            name: None,
             id: "wow".into(),
             started_at: None,
             detail: None,
