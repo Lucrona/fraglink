@@ -36,7 +36,7 @@ use std::time::{Duration, Instant};
 
 /// (key, label, help) in display order. All default to on.
 pub const ALERTS: [(&str, &str, &str); 6] = [
-    ("alert_approvals", "New games waiting for approval", "Unknown game IDs from the app and game suggestions. At most one email every 15 minutes, listing everything new."),
+    ("alert_approvals", "New games waiting for approval", "Unknown game IDs from the app, game suggestions and suggested merges. At most one email every 15 minutes, listing everything new."),
     ("alert_reports", "New player reports", "Reported profiles and pictures. At most one email every 15 minutes."),
     ("alert_age_review", "Accounts paused for an age check", "Someone entered a birthday under 13; the account is paused until you review it in Admin > Users. At most one email every 15 minutes."),
     ("alert_errors", "Server errors", "5 or more server errors (5xx) within 10 minutes, or a background job failing. At most one email an hour."),
@@ -254,7 +254,8 @@ async fn check_approvals(st: &AppState) -> ApiResult<()> {
     let Some(mark) = watermark(st, "approvals_mark").await? else {
         return Ok(());
     };
-    let rows: Vec<(String, String, Option<String>, DateTime<Utc>)> = sqlx::query_as(
+    crate::merge_suggest::refresh(st).await?;
+    let mut rows: Vec<(String, String, Option<String>, DateTime<Utc>)> = sqlx::query_as(
         "SELECT 'Unknown game ID', game_id, exe, first_at FROM unknown_games WHERE status = 'new' AND first_at > $1
          UNION ALL
          SELECT 'Suggested game', name, exe, first_at FROM game_suggestions WHERE status = 'new' AND first_at > $1
@@ -263,14 +264,24 @@ async fn check_approvals(st: &AppState) -> ApiResult<()> {
     .bind(mark)
     .fetch_all(&st.db)
     .await?;
+    for (id, into, at) in crate::merge_suggest::new_since(st, mark).await? {
+        rows.push((
+            "Suggested merge".into(),
+            id,
+            Some(format!("into {into}")),
+            at,
+        ));
+    }
+    rows.sort_by_key(|r| r.3);
     if rows.is_empty() || !due(st, "approvals_sent", QUEUE_GAP).await? {
         return Ok(());
     }
-    let pending: i64 = sqlx::query_scalar(
+    let pending: i64 = sqlx::query_scalar::<_, i64>(
         "SELECT (SELECT count(*) FROM unknown_games WHERE status = 'new') + (SELECT count(*) FROM game_suggestions WHERE status = 'new')",
     )
     .fetch_one(&st.db)
-    .await?;
+    .await?
+        + crate::merge_suggest::open_count(st).await?;
     let newest = rows.iter().map(|r| r.3).max().unwrap_or(mark);
     let n = rows.len().min(50) as i64;
     let mut lines: Vec<String> = rows

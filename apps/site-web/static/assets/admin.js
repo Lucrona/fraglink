@@ -58,7 +58,13 @@ async function approvals() {
   const d = await api("/admin/suggestions" + (decided ? "?status=decided" : ""));
   const rows = d.suggestions;
   const unk = decided ? [] : (await api("/admin/unknown_games").catch(() => ({ unknown: [] }))).unknown;
-  if (!decided) badge("approvals", rows.length + unk.length);
+  const mrg = decided ? [] : (await api("/admin/merge_suggestions").catch(() => ({ merges: [] }))).merges;
+  if (!decided) badge("approvals", rows.length + unk.length + mrg.length);
+  const mrgHtml = mrg.length ? `<section class="panel"><h2>Suggested merges (${mrg.length})</h2>
+    <div class="note">Programs players added themselves that are now on the games list. Merge moves their sessions and hours into the list game (same as Admin &gt; Games &gt; Merge) and future play counts there. Dismiss keeps them apart.</div>
+    <table><thead><tr><th>Program</th><th>Merge into</th><th class="num">Players</th><th class="num">Hours</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
+    ${mrg.map(m => `<tr data-mrg="${esc(m.game_id)}" data-into="${esc(m.into)}"><td><span class="mono">${esc(m.exe)}</span>${m.name ? `<div class="dimt">${esc(m.name)}</div>` : ""}</td><td>${esc(m.into_name || m.into)} <span class="mono dimt">${esc(m.into)}</span></td><td class="num">${m.players}</td><td class="num">${hrs(m.seconds / 60)}</td><td>${day(m.first_seen)}</td>
+      <td class="num"><div class="acts"><button class="btn sm dl" data-merge>Merge</button><button class="btn sm danger" data-dismiss>Dismiss</button></div></td></tr>`).join("")}</tbody></table></section>` : "";
   const unkHtml = unk.length ? `<section class="panel"><h2>Unknown game IDs from the app (${unk.length})</h2>
     <div class="note">The app reported a game id the server doesn't know. Until you decide, it shows as "Playing a game". Map it to an existing game (moves its sessions, and future reports go there), approve it as a new game, or reject it.</div>
     <table><thead><tr><th>Game id</th><th>Exe</th><th class="num">Players</th><th class="num">Hours</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
@@ -66,7 +72,7 @@ async function approvals() {
       <td class="num"><div class="acts"><input class="in" list="unk-games" data-map placeholder="Map to game…" size="20" aria-label="Map to existing game"><button class="btn sm" data-domap>Map</button>
         <input class="in" data-uname placeholder="Official name" size="16" aria-label="Name for a new game"><button class="btn sm dl" data-uapprove>Approve new</button><button class="btn sm danger" data-ureject>Reject</button></div></td></tr>`).join("")}</tbody></table>
     <datalist id="unk-games"></datalist></section>` : "";
-  view.innerHTML = unkHtml + `<section class="panel"><h2>${decided ? "Decided" : "Pending"} game suggestions <span class="more"><a href="#" data-flip>${decided ? "Show pending" : "Show decided"}</a></span></h2>
+  view.innerHTML = mrgHtml + unkHtml + `<section class="panel"><h2>${decided ? "Decided" : "Pending"} game suggestions <span class="more"><a href="#" data-flip>${decided ? "Show pending" : "Show decided"}</a></span></h2>
     <div class="note">When someone picks "Track it as a game?" in the app, the program lands here. Approve it with an official name and every app detects it and shows that name. "Not a game" keeps it as "Playing a game".</div>
     ${rows.length ? `<table><thead><tr><th>Program</th><th>Names submitted</th><th class="num">Reports</th><th class="num">Users</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
     ${rows.map(r => {
@@ -86,6 +92,13 @@ async function approvals() {
     mt = setTimeout(async () => { const v = i.value.trim(); if (v.length < 2) return; const d2 = await api("/admin/games?q=" + encodeURIComponent(v)); $("#unk-games").innerHTML = d2.games.filter(g => g.source !== "unlisted").map(g => `<option value="${esc(g.id)}">${esc(g.public_name || g.name)}</option>`).join(""); }, 250);
   };
   view.onclick = async e => {
+    const mt2 = e.target.closest("tr[data-mrg]");
+    if (mt2) {
+      const id = mt2.dataset.mrg, into = mt2.dataset.into, b = e.target.closest("button"); if (!b) return;
+      if (b.matches("[data-merge]")) { if (!confirm(`Merge ${id} into ${into}? Its sessions and hours move there. This can't be undone.`)) return; await act(b, async () => { await api(`/admin/games/${encodeURIComponent(id)}/merge`, { method: "POST", body: { into, confirm: id } }); mt2.remove(); }); }
+      else if (b.matches("[data-dismiss]")) await act(b, async () => { await api(`/admin/merge_suggestions/${encodeURIComponent(id)}/dismiss`, { method: "POST" }); mt2.remove(); });
+      return;
+    }
     const ut = e.target.closest("tr[data-unk]");
     if (ut) {
       const id = ut.dataset.unk, b = e.target.closest("button"); if (!b) return;
@@ -722,5 +735,5 @@ async function renderMedia(id, g) {
 }
 
 route();
-if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] }))]).then(([d, u]) => badge("approvals", d.suggestions.length + u.unknown.length)).catch(() => {});
+if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] })), api("/admin/merge_suggestions").catch(() => ({ merges: [] }))]).then(([d, u, m]) => badge("approvals", d.suggestions.length + u.unknown.length + m.merges.length)).catch(() => {});
 };
