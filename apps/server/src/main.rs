@@ -44,7 +44,18 @@ async fn main() -> anyhow::Result<()> {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {
             tick.tick().await;
-            match fraglink_server::steam::sync_due(&bg, 200).await {
+            let r = fraglink_server::steam::sync_due(&bg, 200).await;
+            fraglink_server::admin::record_job(
+                &bg,
+                "steam_sync",
+                r.as_ref()
+                    .ok()
+                    .map(|n| format!("{n} account(s) refreshed"))
+                    .as_deref(),
+                r.is_ok(),
+            )
+            .await;
+            match r {
                 Ok(n) if n > 0 => tracing::info!("daily Steam sync: refreshed {n} account(s)"),
                 Ok(_) => {}
                 Err(e) => {

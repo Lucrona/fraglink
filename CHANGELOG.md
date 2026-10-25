@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Admin > Games: every detection source is shown as a chip (Steam app ids with store links, games list, built-in, folder rule, fix-up, extra exe), so built-in games on Steam no longer look like "games list" only. New filters (no Steam link, on Steam, unverified), a "Changed" column and sort, and a last-updated line (Steam sync, games list, last game edit, last fix-up).
+- Admin > Detection: server-side search, kind filter, sort and paging; each fix-up shows its game name and when and by whom it was last changed, and can be edited.
+- Escape from Tarkov and World of Tanks are linked to their Steam app ids (3932890, 1407200).
+
 ## [0.3.0-beta.4] - 2026-10-25
 
 ### Fixed

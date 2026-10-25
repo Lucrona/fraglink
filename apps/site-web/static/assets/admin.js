@@ -133,28 +133,64 @@ function badge(tab, n) { const s = $(`.tabs a[data-tab=${tab}] .n`); if (s) { s.
 
 /* ---------- detection fix-ups ---------- */
 const DKIND = { steam: "Steam app id", id: "Game id", path: "Folder + exe" };
+const DS = { q: "", kind: "", sort: "", offset: 0 };
+async function lastUpdated() {
+  const m = await api("/admin/games-meta").catch(() => null); if (!m) return "";
+  const ss = m.steam_sync, gl = m.games_list;
+  return `<div class="note">Last updated · Steam sync: ${ss ? `checked ${when(ss.last_run_at)}${ss.detail ? ` (${esc(ss.detail)})` : ""}` : "not recorded yet"}${m.steam_last_account_sync ? ` · newest account refresh ${when(m.steam_last_account_sync)}` : ""}
+    · Games list: ${gl && gl.updated ? `${esc(gl.updated)} (${(gl.games || 0).toLocaleString("en")} games)` : "built-in copy"}
+    · Game edit: ${m.last_game_edit ? when(m.last_game_edit) : "never"} · Fix-up: ${m.last_fixup_change ? when(m.last_fixup_change) : "never"}</div>`;
+}
 async function detection() {
-  const d = await api("/admin/detection");
-  view.innerHTML = `<section class="panel"><h2>Detection fix-ups</h2>
+  view.innerHTML = `<section class="panel"><h2>Detection fix-ups</h2><div id="dmeta"></div>
     <div class="note">Sent to every app with the game rules, no app update needed. <b>Steam app id</b>: that Steam game counts as the game you pick (in the app and in the daily Steam sync). <b>Game id</b>: one detected id counts as another. <b>Folder + exe</b>: the end of the program's path, e.g. <span class="mono">world of warcraft/_retail_/wow.exe</span>; checked before the usual exe names.</div>
     <div class="tools"><select class="in" id="dk">${Object.entries(DKIND).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
       <input class="in mono" id="dp" placeholder="793460 / old_id / folder/game.exe" size="30" aria-label="Pattern">
       <span class="muted">counts as</span><input class="in mono" id="dg" placeholder="game id" size="16" aria-label="Game id">
       <input class="in" id="dn" placeholder="Note (optional)" size="22" aria-label="Note"><button class="btn sm dl" id="dadd">Add</button></div>
-    ${d.rules.length ? `<table><thead><tr><th>Kind</th><th>Pattern</th><th>Counts as</th><th>Note</th><th class="num"></th></tr></thead><tbody>
-    ${d.rules.map(r => `<tr data-id="${r.id}"><td>${esc(DKIND[r.kind] || r.kind)}</td><td class="mono">${esc(r.pattern)}</td><td class="mono">${esc(r.game_id)}</td><td class="muted">${esc(r.note || "")}</td>
-      <td class="num"><button class="btn sm danger" data-del>Delete</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No fix-ups yet.</div>`}</section>`;
+    <div class="tools"><input class="in grow" type="search" id="dq" placeholder="Search pattern, game or note" value="${esc(DS.q)}" autocomplete="off">
+      <select class="in" id="dkf" aria-label="Kind"><option value="">All kinds</option>${Object.entries(DKIND).map(([k, v]) => `<option value="${k}"${DS.kind === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select></div>
+    <div id="dlist"><div class="body empty">Loading…</div></div></section>`;
+  lastUpdated().then(h => { const e = $("#dmeta"); if (e) e.innerHTML = h; });
+  let t; $("#dq").oninput = e => { clearTimeout(t); t = setTimeout(() => { DS.q = e.target.value.trim(); DS.offset = 0; listDetection(); }, 300); };
+  $("#dkf").onchange = e => { DS.kind = e.target.value; DS.offset = 0; listDetection(); };
   view.onclick = async e => {
+    const s_ = e.target.closest("th[data-dsort]"); if (s_) { DS.sort = s_.dataset.dsort; DS.offset = 0; listDetection(); return; }
+    const pg = e.target.closest("[data-doff]"); if (pg) { DS.offset = +pg.dataset.doff; listDetection(); return; }
     const b = e.target.closest("button"); if (!b) return;
     if (b.id === "dadd") {
       const body = { kind: $("#dk").value, pattern: $("#dp").value.trim(), game_id: $("#dg").value.trim(), note: $("#dn").value.trim() };
       if (!body.pattern || !body.game_id) return alert("Fill in the pattern and the game id.");
       await act(b, async () => { await api("/admin/detection", { method: "POST", body }); detection(); });
+    } else if (b.matches("[data-edit]")) {
+      const tr = b.closest("tr"), g = prompt("Counts as (game id):", tr.dataset.game); if (g === null) return;
+      const n = prompt("Note:", tr.dataset.note || ""); if (n === null) return;
+      await act(b, async () => { await api(`/admin/detection/${tr.dataset.id}`, { method: "POST", body: { game_id: g.trim(), note: n.trim() } }); listDetection(); });
     } else if (b.matches("[data-del]")) {
       const tr = b.closest("tr"); if (!confirm("Delete this fix-up?")) return;
-      await act(b, async () => { await api(`/admin/detection/${tr.dataset.id}/delete`, { method: "POST" }); tr.remove(); });
+      await act(b, async () => { await api(`/admin/detection/${tr.dataset.id}/delete`, { method: "POST" }); listDetection(); });
     }
   };
+  listDetection();
+}
+async function listDetection() {
+  const box = $("#dlist"); if (!box) return;
+  const d = await api("/admin/detection?" + new URLSearchParams(DS));
+  if (!d.rules.length) { box.innerHTML = `<div class="body empty">${DS.q || DS.kind ? "No fix-ups match." : "No fix-ups yet."}</div>`; return; }
+  const th = (k, l) => `<th class="srt${DS.sort === k ? " on" : ""}" data-dsort="${k}">${l}${DS.sort === k ? " ▾" : ""}</th>`;
+  const to = d.offset + d.rules.length;
+  box.innerHTML = `<table><thead><tr>${th("", "Kind")}<th>Pattern</th>${th("game", "Counts as")}<th>Note</th>${th("updated", "Last changed")}<th class="num"></th></tr></thead><tbody>
+    ${d.rules.map(r => `<tr data-id="${r.id}" data-game="${esc(r.game_id)}" data-note="${esc(r.note || "")}"><td>${esc(DKIND[r.kind] || r.kind)}</td><td class="mono">${esc(r.pattern)}</td>
+      <td>${esc(r.game_name || "")} <span class="mono dimt">${esc(r.game_id)}</span></td><td class="muted">${esc(r.note || "")}</td>
+      <td class="dimt">${when(r.updated_at)}${r.updated_by ? ` · ${esc(r.updated_by)}` : ""}</td>
+      <td class="num"><button class="btn sm" data-edit>Edit</button> <button class="btn sm danger" data-del>Delete</button></td></tr>`).join("")}</tbody></table>
+    ${d.total > d.limit ? `<div class="pager"><button class="btn sm" data-doff="${Math.max(0, d.offset - d.limit)}" ${d.offset ? "" : "disabled"}>‹ Prev</button><span>${d.offset + 1}–${to} of ${d.total.toLocaleString("en")}</span><button class="btn sm" data-doff="${d.offset + d.limit}" ${to < d.total ? "" : "disabled"}>Next ›</button></div>` : `<div class="dimt">${d.total} fix-up${d.total === 1 ? "" : "s"}</div>`}`;
+}
+const SRC_LBL = { steam: "Steam", "games list": "Games list", "built-in": "Built-in", "folder rule": "Folder rule", "fix-up": "Fix-up", "extra exe": "Extra exe", approved: "Approved", unlisted: "Unlisted" };
+function srcChips(g) {
+  return (g.sources || [g.source]).map(k => k === "steam" && (g.steam_appids || []).length
+    ? g.steam_appids.map(a => `<a class="pill" href="https://store.steampowered.com/app/${a}" target="_blank" rel="noopener" title="Steam app ${a}">Steam ${a}</a>`).join("")
+    : `<span class="pill${k === "unlisted" ? " warn" : ""}">${esc(SRC_LBL[k] || k)}</span>`).join("");
 }
 
 /* ---------- 2. games ---------- */
@@ -162,11 +198,13 @@ async function games(q) {
   q = q || "";
   view.innerHTML = `<div class="split"><section class="panel"><h2>Games</h2>
     <form method="post" action="/api/v1/form-fallback" class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off">
-      <select class="in" id="gshow" aria-label="Show"><option value="">All games with hours</option><option value="edited">Edited / retired / status set</option></select></form>
+      <select class="in" id="gshow" aria-label="Show"><option value="">All games with hours</option><option value="edited">Edited / retired / status set</option><option value="no_steam">With hours, no Steam link</option><option value="steam">With hours, on Steam</option><option value="unverified">With hours, unverified</option></select></form>
+    <div id="gmeta"></div>
     <div id="glist"><div class="body empty">Loading…</div></div></section>
     <section class="panel" id="gedit"><h2>Edit game</h2><div class="body empty">Pick a game on the left.</div></section></div>`;
   $("#gs").addEventListener("submit", e => { e.preventDefault(); history.replaceState(null, "", "#games/" + encodeURIComponent(e.target.q.value.trim())); listGames(e.target.q.value.trim()); });
   liveSearch($("#gs"));
+  lastUpdated().then(h => { const e = $("#gmeta"); if (e) e.innerHTML = h; });
   GS.offset = 0;
   $("#gshow").onchange = e => { GS.show = e.target.value; GS.offset = 0; listGames($("#gs").q.value.trim()); };
   listGames(q);
@@ -185,7 +223,7 @@ async function listGames(q) {
   const th = (k, l, c) => `<th class="${c || ""} srt${GS.sort === k ? " on" : ""}" data-sort="${k}" title="Sort by ${l.toLowerCase()}">${l}${GS.sort === k ? (k === "name" ? " ▴" : " ▾") : ""}</th>`;
   const from = GS.offset + 1, to = GS.offset + d.games.length;
   box.innerHTML = `<div class="note">${q ? "Matches" : GS.show ? "Edited, retired or with a status" : "Every game with hours"} · players and hours count both tiers (tracked and imported; best figure per player) and include test accounts (the public site leaves those out).</div>
-    <table><thead><tr><th></th>${th("name", "Name")}<th>Id</th><th>Source</th>${th("players", "Players", "num")}${th("hours", "Hours", "num")}${th("recent", "Last played", "num")}</tr></thead><tbody>
+    <table><thead><tr><th></th>${th("name", "Name")}<th>Id</th><th>Source</th>${th("players", "Players", "num")}${th("hours", "Hours", "num")}${th("recent", "Last played", "num")}${th("updated", "Changed", "num")}</tr></thead><tbody>
     ${d.games.map(g => {
       const o = g.override || {};
       const flags = (o.name ? `<span class="pill warn">renamed</span>` : "") + (o.hidden ? `<span class="pill bad">hidden</span>` : "") +
@@ -194,8 +232,8 @@ async function listGames(q) {
         (g.status && g.status.lifecycle !== "live" ? `<span class="pill ${g.status.lifecycle === "ended" ? "bad" : "warn"}">${esc(LIFE[g.status.lifecycle] || g.status.lifecycle)}</span>` : "");
       const bd = [["tracked", g.tracked_min], ["imported", g.imported_min]].filter(x => x[1] > 0).map(([k, m]) => `${k} ${hrs(m)}`).join(" · ");
       return `<tr class="click" data-id="${esc(g.id)}"><td class="ic"><img src="${esc(g.icon)}" width="20" height="20" alt="" onerror="this.style.visibility='hidden'"></td>
-        <td>${esc(g.public_name || g.name)}${flags}</td><td class="mono dimt">${esc(g.id)}</td><td class="muted">${esc(g.source)}</td>
-        <td class="num">${g.players}</td><td class="num" title="${esc(bd || "no hours")}">${hrs(g.total_min)}${bd ? `<div class="dimt" style="font-size:10.5px;white-space:nowrap">${esc(bd)}</div>` : ""}</td><td class="num dimt">${g.last_played_at ? day(g.last_played_at) : "-"}</td></tr>`;
+        <td>${esc(g.public_name || g.name)}${flags}</td><td class="mono dimt">${esc(g.id)}</td><td>${srcChips(g)}</td>
+        <td class="num">${g.players}</td><td class="num" title="${esc(bd || "no hours")}">${hrs(g.total_min)}${bd ? `<div class="dimt" style="font-size:10.5px;white-space:nowrap">${esc(bd)}</div>` : ""}</td><td class="num dimt">${g.last_played_at ? day(g.last_played_at) : "-"}</td><td class="num dimt">${g.updated_at ? day(g.updated_at) : "-"}</td></tr>`;
     }).join("")}</tbody></table>
     ${d.total > d.limit ? `<div class="pager"><button class="btn sm" data-goff="${Math.max(0, GS.offset - d.limit)}" ${GS.offset ? "" : "disabled"}>‹ Prev</button><span>${from}–${to} of ${d.total.toLocaleString("en")}</span><button class="btn sm" data-goff="${GS.offset + d.limit}" ${to < d.total ? "" : "disabled"}>Next ›</button></div>` : ""}`;
   box.onclick = e => {
@@ -233,7 +271,7 @@ async function editGame(id) {
   const o = g.override || {};
   const bust = "?t=" + Date.now();
   box.innerHTML = `<h2>Edit game</h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="gf">
-    <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">From: ${esc(g.source)} · ${g.players} players · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})</div></div>
+    <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">Sources: ${srcChips(g)}${g.updated_at ? ` · last changed ${when(g.updated_at)}` : ""} · ${g.players} players · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})</div></div>
     <label>Display name override<input type="text" name="name" maxlength="80" value="${esc(o.name || "")}" placeholder="${esc(g.name)}"><small>Leave empty to use the list name.</small></label>
     <label class="check"><input type="checkbox" name="hidden" ${o.hidden ? "checked" : ""}> Hide from public (shown as "Playing a game")</label>
     <label>Extra exe names (one per line)<textarea class="in" name="exes" placeholder="GameClient-Win64.exe">${esc((o.extra_exes || []).join("\n"))}</textarea><small>Apps detect these as this game (picked up within a day or on restart).</small></label>
