@@ -343,7 +343,7 @@ async fn profile(
             .remove(&p.id)
             .unwrap_or_else(presence::PresenceView::offline);
         if is_self {
-            presence::apply_own_name(&st, p.id, &mut v);
+            presence::apply_own_name(&st, p.id, &mut v).await?;
         }
         if !show_game || v.game_id.as_ref().is_some_and(|g| hidden.contains(g)) {
             v.game_id = None;
@@ -363,6 +363,11 @@ async fn profile(
         let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
         let named = names::public_names(&st, &ids).await?;
         let apps = crate::home::appids(&st, &ids).await?;
+        let own = if is_self {
+            presence::own_names_for(&st, p.id, &ids).await?
+        } else {
+            std::collections::HashMap::new()
+        };
         let mine_hidden = if is_self {
             crate::account::hidden_games(&st, p.id).await?
         } else {
@@ -380,7 +385,7 @@ async fn profile(
             }
             games.push(json!({
                 "game_id": if listed || is_self { g.game_id.clone() } else { names::UNLISTED_ID.to_string() },
-                "name": g.name,
+                "name": own.get(&g.game_id).cloned().unwrap_or(g.name),
                 "listed": listed,
                 "minutes_7d": g.minutes_7d,
                 "total_min": g.display_min,
@@ -599,12 +604,20 @@ async fn recent_sessions(st: &AppState, user: Uuid, is_self: bool) -> ApiResult<
     .await?;
     let ids: Vec<String> = rows.iter().map(|r| r.0.clone()).collect();
     let named = names::public_names(st, &ids).await?;
+    let own = if is_self {
+        presence::own_names_for(st, user, &ids).await?
+    } else {
+        std::collections::HashMap::new()
+    };
     Ok(rows
         .into_iter()
         .map(|(gid, ended, secs)| {
             let (id, name) = match named.get(&gid) {
                 Some(n) => (gid, n.clone()),
-                None if is_self => (gid, names::UNLISTED_TITLE.to_string()),
+                None if is_self => {
+                    let n = own.get(&gid).cloned();
+                    (gid, n.unwrap_or_else(|| names::UNLISTED_TITLE.to_string()))
+                }
                 None => (
                     names::UNLISTED_ID.to_string(),
                     names::UNLISTED_NAME.to_string(),

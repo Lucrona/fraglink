@@ -45,7 +45,7 @@
   // beta.5, Discord-style: "Playing <name>?" with Add it! (and a quiet Not a game).
   // The close button only hides it; the question also waits in the main window.
   function ask(p, icon) {
-    body.innerHTML = `<i class="gi">${icon}</i><div class="tx"><span class="ln">Playing</span><b>${esc(p.title)}</b>?<small>Fraglink doesn't know this one yet.</small><div class="tq"><button type="button" class="add-it" data-yes="1">Add it!</button><button type="button" class="not-game" data-yes="0">Not a game</button></div></div>`;
+    body.innerHTML = `<i class="gi">${icon}</i><div class="tx"><span class="ln">Playing</span><b>${esc(p.title)}?</b><small>Fraglink doesn't know this one yet.</small><div class="tq"><button type="button" class="add-it" data-yes="1">Add it!</button><button type="button" class="not-game" data-yes="0">Not a game</button></div></div>`;
     body.querySelectorAll('button[data-yes]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
       if (!T) return close();

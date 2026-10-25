@@ -99,6 +99,21 @@ fn on_some_monitor(app: &AppHandle, x: i32, y: i32) -> bool {
         .unwrap_or(false)
 }
 
+/// The primary monitor's work area in logical pixels, less a small margin.
+fn work_area_logical(app: &AppHandle) -> (f64, f64) {
+    match app.primary_monitor().ok().flatten() {
+        Some(m) => {
+            let sf = m.scale_factor().max(0.5);
+            let a = m.work_area();
+            (
+                a.size.width as f64 / sf - 16.0,
+                a.size.height as f64 / sf - 40.0,
+            )
+        }
+        None => (f64::MAX, f64::MAX),
+    }
+}
+
 fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     let cfg = app
         .config()
@@ -112,9 +127,13 @@ fn create_main(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     *app.state::<AppState>().side_open.lock_ok() = false;
     let (bw, bh) = dark_base(app);
     let tz = text_zoom(app);
+    // beta.6: never taller/wider than the screen's work area (e.g. 1366x768 at 125% with
+    // Large text), minus room for the title bar; content scrolls instead.
+    let (max_w, max_h) = work_area_logical(app);
+    let (min_w, min_h) = ((DARK_MIN_W * tz).min(max_w), (DARK_MIN_H * tz).min(max_h));
     let w = b
-        .inner_size(bw.max(DARK_MIN_W * tz), bh.max(DARK_MIN_H * tz))
-        .min_inner_size(DARK_MIN_W * tz, DARK_MIN_H * tz)
+        .inner_size(bw.max(min_w).min(max_w), bh.max(min_h).min(max_h))
+        .min_inner_size(min_w, min_h)
         .resizable(true)
         .build()?;
     if flag(app, "always_on_top") {
@@ -237,13 +256,15 @@ pub fn resize_main(app: &AppHandle, side_open: bool) {
     let side = if side_open { side_extra(app) } else { 0.0 };
     let tz = text_zoom(app);
     let (bw, bh) = dark_base(app);
-    let (bw, bh) = (bw.max(DARK_MIN_W * tz), bh.max(DARK_MIN_H * tz));
+    let (mw, mh) = work_area_logical(app);
+    let (min_w, min_h) = ((DARK_MIN_W * tz).min(mw), (DARK_MIN_H * tz).min(mh));
+    let (bw, bh) = (bw.max(min_w), bh.max(min_h).min(mh));
     let _ = w.set_resizable(true);
     let _ = w.set_min_size(Some(Size::Logical(LogicalSize::new(
-        DARK_MIN_W * tz + side,
-        DARK_MIN_H * tz,
+        (min_w + side).min(mw),
+        min_h,
     ))));
-    let _ = w.set_size(LogicalSize::new(bw + side, bh));
+    let _ = w.set_size(LogicalSize::new((bw + side).min(mw), bh));
 }
 
 /// Open (or focus) the Options window: its own resizable window with the same
@@ -265,11 +286,12 @@ pub fn show_options(app: &AppHandle, page: Option<String>) {
         if app.get_webview_window("options").is_some() {
             return;
         }
+        let (ow, oh) = work_area_logical(app);
         let r = WebviewWindowBuilder::new(app, "options", WebviewUrl::App(url.into()))
             .title("Fraglink Options")
             .decorations(false)
-            .inner_size(600.0, 580.0)
-            .min_inner_size(520.0, 480.0)
+            .inner_size(600.0_f64.min(ow), 580.0_f64.min(oh))
+            .min_inner_size(520.0_f64.min(ow), 480.0_f64.min(oh))
             .resizable(true)
             .maximizable(true)
             .center()
@@ -294,7 +316,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         WindowEvent::Resized(sz) => {
             let app = window.app_handle();
             if window.is_minimized().unwrap_or(false) {
-                // Options > General: "Minimise to the system tray"
+                // Options > General: "Minimise button sends Fraglink to the tray"
                 if flag(app, "minimize_to_tray") {
                     let _ = window.hide();
                 }
