@@ -57,6 +57,11 @@ async fn detectable_list_is_gzipped_and_cacheable(pool: PgPool) {
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn overrides_from_the_data_dir_win(pool: PgPool) {
+    // without Admin fix-ups the file goes out exactly as written
+    sqlx::query("DELETE FROM detection_aliases")
+        .execute(&pool)
+        .await
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path().to_path_buf();
     let app = fraglink_server::router(state_with(pool, |c| c.data_dir = d.clone()));
@@ -74,6 +79,27 @@ async fn overrides_from_the_data_dir_win(pool: PgPool) {
     .await;
     assert_eq!(r2.status, StatusCode::OK, "changed file, new etag");
     assert_eq!(r2.text, custom);
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn detection_fixups_reach_the_apps(pool: PgPool) {
+    sqlx::query(
+        "INSERT INTO detection_aliases(kind, pattern, game_id) VALUES('path', 'world of warcraft forever/wow.exe', 'wow_forever')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = fraglink_server::router(state(pool));
+    let r = send(&app, get("/api/v1/games/overrides", &[])).await;
+    assert_eq!(r.status, StatusCode::OK);
+    let f: fraglink_core::overrides::OverrideFile = serde_json::from_str(&r.text).unwrap();
+    assert!(f
+        .aliases
+        .iter()
+        .any(|a| a.from == "steam:793460" && a.to == "112_operator"));
+    assert_eq!(f.rules[0].id, "wow_forever");
+    let ov = fraglink_core::overrides::Overrides::from_json(&r.text).unwrap();
+    assert_eq!(ov.resolve("steam:793460"), "112_operator");
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]

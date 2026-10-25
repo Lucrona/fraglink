@@ -36,6 +36,10 @@ pub struct DGame {
     /// Lower-case exe names / path suffixes (Windows, non-launcher).
     #[serde(rename = "e")]
     pub exes: Vec<String>,
+    /// Steam app ids Discord lists for this game (`third_party_skus`), so a Steam
+    /// install of it keeps this id instead of becoming `steam:<appid>`.
+    #[serde(rename = "st", default, skip_serializing_if = "Vec::is_empty")]
+    pub steam: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -81,6 +85,8 @@ pub struct DetectableDb {
     games: Vec<DGame>,
     /// exe file name -> (game index, pattern)
     by_exe: HashMap<String, Vec<(u32, String)>>,
+    /// Steam app id -> game index
+    by_steam: HashMap<u32, u32>,
 }
 
 /// The match for one process.
@@ -104,7 +110,11 @@ impl DetectableDb {
     pub fn from_file(mut f: DetectableFile) -> Self {
         f.games.retain(|g| !is_test_build(&g.name));
         let mut by_exe: HashMap<String, Vec<(u32, String)>> = HashMap::new();
+        let mut by_steam: HashMap<u32, u32> = HashMap::new();
         for (i, g) in f.games.iter().enumerate() {
+            for a in &g.steam {
+                by_steam.entry(*a).or_insert(i as u32);
+            }
             for e in &g.exes {
                 let pat = e.trim().to_lowercase().replace('\\', "/");
                 let pat = pat.trim_start_matches('/').to_string();
@@ -119,6 +129,7 @@ impl DetectableDb {
             updated: f.updated,
             games: f.games,
             by_exe,
+            by_steam,
         }
     }
 
@@ -172,6 +183,11 @@ impl DetectableDb {
         self.games.iter().find(|g| g.slug == slug)
     }
 
+    /// The entry Discord links to this Steam app id, if any.
+    pub fn by_steam_appid(&self, appid: u32) -> Option<&DGame> {
+        self.by_steam.get(&appid).map(|i| &self.games[*i as usize])
+    }
+
     /// Most specific entry matching this process, if any.
     pub fn match_process(&self, exe: &str, path: Option<&str>) -> Option<DMatch<'_>> {
         let exe_l = exe.to_lowercase();
@@ -208,6 +224,16 @@ struct RawApp {
     name: String,
     #[serde(default)]
     executables: Option<Vec<RawExe>>,
+    #[serde(default)]
+    third_party_skus: Option<Vec<RawSku>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawSku {
+    #[serde(default)]
+    distributor: String,
+    #[serde(default)]
+    id: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -327,11 +353,30 @@ pub fn build_from_discord(
             slugs.insert(a.id.clone(), s.clone());
             s
         };
+        let mut steam: Vec<u32> = Vec::new();
+        for k in a.third_party_skus.unwrap_or_default() {
+            if k.distributor != "steam" {
+                continue;
+            }
+            let n = match &k.id {
+                Some(serde_json::Value::String(s)) => s.trim().parse().ok(),
+                Some(serde_json::Value::Number(n)) => {
+                    n.as_u64().and_then(|n| u32::try_from(n).ok())
+                }
+                _ => None,
+            };
+            if let Some(n) = n.filter(|n| *n > 0) {
+                if !steam.contains(&n) {
+                    steam.push(n);
+                }
+            }
+        }
         games.push(DGame {
             id: a.id,
             slug,
             name,
             exes,
+            steam,
         });
     }
     Ok((

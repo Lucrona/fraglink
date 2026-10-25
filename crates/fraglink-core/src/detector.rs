@@ -98,6 +98,13 @@ pub fn steam_game_id(sigs: &SignatureDb, appid: u32) -> String {
         .unwrap_or_else(|| format!("steam:{appid}"))
 }
 
+/// The id of a Steam app: a signature id, else `steam:<appid>`, then any Admin
+/// alias / merge (`steam:793460` -> `112_operator`). The server's Steam sync uses
+/// the same order, so app sessions and Steam playtime land on one game.
+pub fn steam_identity(sigs: &SignatureDb, overrides: &Overrides, appid: u32) -> String {
+    overrides.resolve(&steam_game_id(sigs, appid)).to_string()
+}
+
 fn looks_like_helper(exe_l: &str, path_n: &str) -> bool {
     const BAD: &[&str] = &[
         "crash",
@@ -131,8 +138,15 @@ impl Detector {
         }
     }
 
+    fn steam_id(&self, appid: u32) -> String {
+        steam_identity(&self.sigs, &self.overrides, appid)
+    }
+
     fn steam_name(&self, appid: u32) -> String {
         if let Some(g) = self.sigs.by_steam_appid(appid) {
+            return g.name.clone();
+        }
+        if let Some(g) = self.detectable.by_steam_appid(appid) {
             return g.name.clone();
         }
         self.steam
@@ -168,7 +182,27 @@ impl Detector {
         })
     }
 
+    /// [`classify_raw`](Self::classify_raw) with Admin aliases applied.
     fn classify(&self, p: &ProcInfo) -> Option<Detection> {
+        let mut d = self.classify_raw(p)?;
+        if d.source != DetectSource::Manual {
+            let to = self.overrides.resolve(&d.game_id);
+            if to != d.game_id {
+                if let Some(n) = self
+                    .sigs
+                    .get(to)
+                    .map(|g| g.name.clone())
+                    .or_else(|| self.detectable.by_slug(to).map(|g| g.name.clone()))
+                {
+                    d.name = n;
+                }
+                d.game_id = to.to_string();
+            }
+        }
+        Some(d)
+    }
+
+    fn classify_raw(&self, p: &ProcInfo) -> Option<Detection> {
         let exe_l = p.name.to_lowercase();
         if self.excluded_exes.contains(&exe_l) {
             return None;
@@ -212,8 +246,9 @@ impl Detector {
                 // Same game, old id: inside a Steam / launcher install keep that id.
                 if let Some(path) = &p.path {
                     if let Some(app) = self.steam.app_for_path(path) {
+                        // (the list's own id when Discord links it to this app id)
                         return Some(Detection {
-                            game_id: steam_game_id(&self.sigs, app.appid),
+                            game_id: self.steam_id(app.appid),
                             name: self.steam_name(app.appid),
                             source: DetectSource::Detectable,
                             exe: Some(p.name.clone()),
@@ -233,6 +268,23 @@ impl Detector {
                         }
                     }
                 }
+                // Discord links the game to a Steam app installed here: it is that
+                // Steam game, whatever folder the Steam index knows it by.
+                if let Some(appid) = m
+                    .game
+                    .steam
+                    .iter()
+                    .copied()
+                    .find(|a| self.steam.get(*a).is_some())
+                {
+                    return Some(Detection {
+                        game_id: self.steam_id(appid),
+                        name: self.steam_name(appid),
+                        source: DetectSource::Detectable,
+                        exe: Some(p.name.clone()),
+                        steam_appid: Some(appid),
+                    });
+                }
                 let sig = self.sigs.get(&m.game.slug);
                 return Some(Detection {
                     game_id: m.game.slug.clone(),
@@ -249,7 +301,7 @@ impl Detector {
             if let Some(app) = self.steam.app_for_path(path) {
                 if !looks_like_helper(&exe_l, path_n) {
                     return Some(Detection {
-                        game_id: steam_game_id(&self.sigs, app.appid),
+                        game_id: self.steam_id(app.appid),
                         name: self.steam_name(app.appid),
                         source: DetectSource::SteamLibrary,
                         exe: Some(p.name.clone()),
@@ -261,11 +313,20 @@ impl Detector {
         None
     }
 
-    /// All games currently running, de-duplicated by game id, in process order.
+    /// All games currently running, de-duplicated by game id and by exe path (one
+    /// program is never two games), in process order.
     pub fn detect(&self, procs: &[ProcInfo], steam_running: Option<u32>) -> Vec<Detection> {
         let mut out: Vec<Detection> = Vec::new();
+        let mut paths: HashSet<String> = HashSet::new();
         for p in procs {
+            let key = p.path.as_deref().map(normalize_path);
+            if key.as_ref().is_some_and(|k| paths.contains(k)) {
+                continue;
+            }
             if let Some(d) = self.classify(p) {
+                if let Some(k) = key {
+                    paths.insert(k);
+                }
                 if !out.iter().any(|x| x.game_id == d.game_id) {
                     out.push(d);
                 }
@@ -279,8 +340,12 @@ impl Detector {
             });
             let name = self.steam_name(appid);
             if steam_up && !crate::steam::is_tool_app(appid, &name) {
-                let id = steam_game_id(&self.sigs, appid);
-                if !out.iter().any(|x| x.game_id == id) {
+                let id = self.steam_id(appid);
+                // the same Steam app already seen through its exe counts once
+                if !out
+                    .iter()
+                    .any(|x| x.game_id == id || x.steam_appid == Some(appid))
+                {
                     out.push(Detection {
                         game_id: id,
                         name,
@@ -476,7 +541,85 @@ mod tests {
             slug: slug.into(),
             name: name.into(),
             exes: exes.iter().map(|e| e.to_string()).collect(),
+            steam: vec![],
         }
+    }
+
+    #[test]
+    fn steam_linked_game_has_one_id() {
+        // 24 Oct: 112 Operator was first seen by the detectable list, then a Steam
+        // rescan made the same process steam:793460. Every route now gives one id.
+        let mut steam = SteamIndex::default();
+        steam.insert(r"D:\SteamLibrary", 793460, "112 Operator", "112 Operator");
+        let mut g = dgame(
+            "1",
+            "112_operator",
+            "112 Operator",
+            &["112 operator/operator 112.exe"],
+        );
+        g.steam = vec![793460];
+        let d = with_list(Detector::new(SignatureDb::builtin(), steam), vec![g]);
+        let steam_proc = p(2, "steam.exe", Some(r"C:\Steam\steam.exe"));
+        let in_steam = p(
+            1,
+            "Operator 112.exe",
+            Some(r"D:\SteamLibrary\steamapps\common\112 Operator\Operator 112.exe"),
+        );
+        // a path the Steam index does not cover (moved library, symlink)
+        let elsewhere = p(
+            1,
+            "Operator 112.exe",
+            Some(r"E:\Games\112 Operator\Operator 112.exe"),
+        );
+        for procs in [
+            vec![in_steam.clone(), steam_proc.clone()],
+            vec![elsewhere.clone(), steam_proc.clone()],
+        ] {
+            let found = d.detect(&procs, Some(793460));
+            assert_eq!(found.len(), 1, "{found:?}");
+            assert_eq!(found[0].game_id, "steam:793460");
+            assert_eq!(found[0].name, "112 Operator");
+        }
+        assert_eq!(
+            d.detect(&[steam_proc], Some(793460))[0].game_id,
+            "steam:793460"
+        );
+        // not installed through Steam: the list's own id
+        let mut d2 = d.clone();
+        d2.steam = SteamIndex::default();
+        assert_eq!(d2.detect(&[elsewhere], None)[0].game_id, "112_operator");
+    }
+
+    #[test]
+    fn admin_alias_maps_steam_id() {
+        let mut steam = SteamIndex::default();
+        steam.insert(r"D:\SteamLibrary", 793460, "112 Operator", "112 Operator");
+        let mut d = Detector::new(SignatureDb::builtin(), steam);
+        d.overrides = Overrides::from_json(
+            r#"{"schema":1,"version":"t","rules":[],"aliases":[{"from":"steam:793460","to":"112_operator"}]}"#,
+        )
+        .unwrap();
+        let procs = vec![p(
+            1,
+            "Operator 112.exe",
+            Some(r"D:\SteamLibrary\steamapps\common\112 Operator\Operator 112.exe"),
+        )];
+        assert_eq!(d.detect(&procs, None)[0].game_id, "112_operator");
+        assert_eq!(d.steam_id(793460), "112_operator");
+    }
+
+    #[test]
+    fn dedup_by_exe_path() {
+        let d = det();
+        let path = r"D:\SteamLibrary\steamapps\common\TinyIndie\TinyIndie.exe";
+        let procs = vec![
+            p(3, "TinyIndie.exe", Some(path)),
+            p(4, "TinyIndie.exe", Some(path)),
+            p(9, "steam.exe", Some(r"C:\Steam\steam.exe")),
+        ];
+        let found = d.detect(&procs, Some(999999));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].game_id, "steam:999999");
     }
 
     fn with_list(mut d: Detector, games: Vec<crate::detectable::DGame>) -> Detector {

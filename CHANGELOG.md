@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+- Desktop: a panic no longer freezes the app silently. It is written to the log and to crash-<time>.txt, the tracker recovers, and locks recover after a panic.
+- Desktop: the Steam/install scan and the game catalogue's disk walk no longer run while the tracker lock is held (likely cause of the freeze).
+- Desktop: a watchdog logs when the tracker or window stops responding for 30 s.
+- One game identity per running game (no duplicate Steam + exe entry).
+- Tooltips have a min/max width and stay inside the window.
+
+### Added
+- Admin > Detection: Steam app, game id and folder+exe fix-ups. The apps and the Steam sync both use them. Seeded: Steam 793460 counts as 112 Operator.
+- Folder + exe path rules (for example `wow/wow.exe`) for games whose exe name is shared.
+
 ### Changed
 - Privacy Policy v11 (19 October 2026): removes "hours you import yourself" from what we collect and "remove hours you imported" from Correct it, since manual hour imports are disabled. Terms stay at v6.
 

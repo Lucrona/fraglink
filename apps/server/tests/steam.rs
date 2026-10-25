@@ -98,6 +98,11 @@ async fn link_by_vanity_and_import(pool: PgPool) {
     assert_eq!(r.json()["steamid"], GABEN);
     assert_eq!(r.json()["verified"], false);
 
+    // an Admin > Detection alias: this Steam app counts as a game staff merged it into
+    sqlx::query("INSERT INTO detection_aliases(kind, pattern, game_id) VALUES('steam', '1145350', 'hades_ii')")
+        .execute(&pool)
+        .await
+        .unwrap();
     let r = api(&app, "POST", "/api/v1/steam/sync", Some(&t), None).await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     let v = r.json();
@@ -165,6 +170,15 @@ async fn link_by_vanity_and_import(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(n, 3, "re-import updates in place");
+    let hades: String =
+        sqlx::query_scalar("SELECT game_id FROM steam_playtime WHERE steam_appid = 1145350")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        hades, "hades_ii",
+        "aliased Steam app stays merged after a re-sync"
+    );
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]

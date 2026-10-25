@@ -15,6 +15,7 @@ pub mod auth;
 pub mod avatars;
 pub mod config;
 pub mod connect;
+pub mod detection_aliases;
 pub mod emails;
 pub mod error;
 pub mod features;
@@ -146,6 +147,7 @@ pub fn router(state: AppState) -> Router {
         .merge(web::routes())
         .merge(profile::routes())
         .merge(admin::routes())
+        .merge(detection_aliases::routes())
         .merge(news::routes())
         .merge(mfa::routes())
         .merge(account::routes())

@@ -5,6 +5,7 @@
 //! a generic icon). Everything is cached on disk so it works offline. See
 //! `fraglink_core::icons`.
 
+use crate::LockOk;
 use crate::{sync, AppState};
 use base64::Engine as _;
 use fraglink_core::icons::{self, IconCache, LocalSources};
@@ -50,7 +51,7 @@ fn sources(app: &AppHandle, ids: &[String]) -> HashMap<String, LocalSources> {
             })
             .collect()
     };
-    let e = st.engine.lock().unwrap();
+    let e = st.engine.lock_ok();
     let rows: HashMap<String, Option<u32>> = e
         .tracker
         .store

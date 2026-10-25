@@ -6,6 +6,7 @@
 //! Privacy: "Invisible" is sent as invisible and the server shows it to friends
 //! as offline. Excluded games are never tracked, so they never appear here.
 
+use crate::LockOk;
 use crate::{now, sync, AppState, ToastPayload};
 use fraglink_core::engine::keys as core_keys;
 use fraglink_sync::presence::{Event, FriendPresence, GameRef, MyPresence, PresenceSocket};
@@ -49,7 +50,7 @@ pub struct FriendsShared {
 
 fn setting(app: &AppHandle, k: &str) -> Option<String> {
     let st = app.state::<AppState>();
-    let e = st.engine.lock().unwrap();
+    let e = st.engine.lock_ok();
     e.tracker.store.get_setting(k).ok().flatten()
 }
 
@@ -60,7 +61,7 @@ pub fn emit(app: &AppHandle) {
 /// What I publish right now: status setting + the game being tracked (if any).
 pub fn my_presence(app: &AppHandle) -> MyPresence {
     let st = app.state::<AppState>();
-    let e = st.engine.lock().unwrap();
+    let e = st.engine.lock_ok();
     let mut status = e
         .tracker
         .store
@@ -204,7 +205,7 @@ pub fn set_muted(app: &AppHandle, handle: &str, mute: bool) {
     }
     m.truncate(500);
     let st = app.state::<AppState>();
-    let e = st.engine.lock().unwrap();
+    let e = st.engine.lock_ok();
     let _ = e.tracker.store.set_setting(keys::MUTED, &m.join(","));
 }
 
@@ -217,7 +218,7 @@ pub fn view(app: &AppHandle) -> Value {
         "signed_in": signed_in,
         "connected": signed_in && st.friends.connected.load(Ordering::SeqCst),
         "me": setting(app, sync::keys::USER),
-        "list": if signed_in { st.friends.list.lock().unwrap().clone() } else { None },
+        "list": if signed_in { st.friends.list.lock_ok().clone() } else { None },
         "muted": muted(app),
     })
 }
@@ -235,7 +236,7 @@ pub fn start(app: &AppHandle) {
             run(&app2);
             let st = app2.state::<AppState>();
             st.friends.connected.store(false, Ordering::SeqCst);
-            *st.friends.list.lock().unwrap() = None;
+            *st.friends.list.lock_ok() = None;
             st.friends.running.store(false, Ordering::SeqCst);
             emit(&app2);
             log::info!("presence: stopped");
@@ -249,7 +250,7 @@ pub fn start(app: &AppHandle) {
 /// presence socket is up, and the server records the time it sees.
 fn set_live(app: &AppHandle, live: bool) {
     let st = app.state::<AppState>();
-    let r = st.engine.lock().unwrap().set_live(live);
+    let r = st.engine.lock_ok().set_live(live);
     if let Err(e) = r {
         log::warn!("presence: set_live({live}) failed: {e:#}");
     }
@@ -409,7 +410,7 @@ fn session(app: &AppHandle, client: &Client, sock: &mut PresenceSocket) -> Resul
 fn refresh(app: &AppHandle, client: &Client) {
     match client.friends() {
         Ok(v) => {
-            *app.state::<AppState>().friends.list.lock().unwrap() = Some(v);
+            *app.state::<AppState>().friends.list.lock_ok() = Some(v);
             emit(app);
         }
         Err(e) => log::info!("presence: friends refresh failed: {e}"),
@@ -449,12 +450,12 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
     let st = app.state::<AppState>();
     match ev {
         Event::Hello { friends } => {
-            *st.friends.list.lock().unwrap() = Some(friends);
+            *st.friends.list.lock_ok() = Some(friends);
             emit(app);
         }
         Event::Presence(p) => {
             let (name, was) = {
-                let mut l = st.friends.list.lock().unwrap();
+                let mut l = st.friends.list.lock_ok();
                 let was = old_status(&l, &p.handle);
                 if let Some(v) = l.as_mut() {
                     apply_presence(v, &p);
@@ -462,11 +463,11 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
                 (display_name(&l, &p.handle), was)
             };
             emit(app);
-            let playing = st.engine.lock().unwrap().tracker.now_playing().is_some();
+            let playing = st.engine.lock_ok().tracker.now_playing().is_some();
             let key = p.handle.to_lowercase();
-            let last = st.friends.last_toast.lock().unwrap().get(&key).copied();
+            let last = st.friends.last_toast.lock_ok().get(&key).copied();
             if should_toast(&p, &prefs(app), playing, last, now()) {
-                st.friends.last_toast.lock().unwrap().insert(key, now());
+                st.friends.last_toast.lock_ok().insert(key, now());
                 crate::windows::show_toast(
                     app,
                     ToastPayload {
@@ -484,7 +485,7 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
                 && setting(app, "friend_toasts_logon").as_deref() != Some("0")
                 && should_toast_logon(&p.handle, &prefs(app), playing, last, now())
             {
-                st.friends.last_toast.lock().unwrap().insert(key, now());
+                st.friends.last_toast.lock_ok().insert(key, now());
                 crate::windows::show_toast(
                     app,
                     ToastPayload {

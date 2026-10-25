@@ -441,16 +441,14 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         .filter_map(|o| o.name.as_ref().map(|n| (&o.game_id, n)))
         .collect();
     let detached = crate::retire::detached_exes(st).await?;
-    let merged: Vec<(String, String)> = sqlx::query_as(
-        "SELECT game_id, successor_id FROM game_retirements WHERE merged ORDER BY game_id",
-    )
-    .fetch_all(&st.db)
-    .await?;
+    let merged = crate::detection_aliases::merged(st).await?;
+    let fixups = crate::detection_aliases::load(st).await?;
     if approved.is_empty()
         && extra.is_empty()
         && renamed.is_empty()
         && detached.is_empty()
         && merged.is_empty()
+        && fixups.is_empty()
     {
         return Ok(s);
     }
@@ -556,6 +554,14 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
             });
         }
     }
+    // Admin > Detection fix-ups (and merges as aliases, so `steam:N` follows too)
+    let aliases = crate::detection_aliases::alias_map(&fixups, &merged);
+    crate::detection_aliases::apply(&mut f, &fixups, &aliases, |id| {
+        ov.get(id)
+            .and_then(|o| o.name.clone())
+            .or_else(|| crate::names::list_name(st, id))
+            .unwrap_or_else(|| id.to_string())
+    });
     Ok(serde_json::to_string_pretty(&f).unwrap_or(s))
 }
 
