@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.5] - 2026-10-25
+
+### Added
+- Desktop: unknown programs get a light "Playing X? Add it!" prompt (Add it! / Not a game). Any program you add, from the prompt or with "Add game manually…", goes to Game approvals as a suggestion.
+- Your own name for a program you added shows on your profile and now-playing (everyone else sees "A game") until it is approved or rejected.
+- Options > Games: "Remove game" for games you added yourself. Their hours stay on your profile.
+- Admin > Game approvals: Suggested merges. A program players added themselves that is now on the games list is listed with its players and hours, with Merge (same as Admin > Games > Merge) and Dismiss. New suggestions are included in the Game approvals alert email. Nothing is merged automatically.
+
+### Fixed
+- Options > Games: World of Warcraft (retail) detect path stays in `_retail_` and never shows the Classic/Forever folder (`_forever_\Wow.exe`).
+- Options > Games applies detection fix-ups, folds store entries for the same folder, and drops programs that are no longer installed.
+- A program you added that the games list later knows now counts its new play under that game.
+
 ### Changed
 
 - Admin > Games: every detection source is shown as a chip (Steam app ids with store links, games list, built-in, folder rule, fix-up, extra exe), so built-in games on Steam no longer look like "games list" only. New filters (no Steam link, on Steam, unverified), a "Changed" column and sort, and a last-updated line (Steam sync, games list, last game edit, last fix-up).
