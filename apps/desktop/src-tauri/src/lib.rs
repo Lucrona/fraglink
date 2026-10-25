@@ -849,6 +849,7 @@ pub fn run() {
             commands::get_candidates,
             commands::tag_process,
             commands::untag_process,
+            commands::remove_manual_game,
             commands::set_game_excluded,
             commands::get_settings,
             commands::set_setting,

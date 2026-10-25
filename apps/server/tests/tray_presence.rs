@@ -37,6 +37,7 @@ fn playing(status: &str, game: Option<(&str, &str)>) -> MyPresence {
     MyPresence {
         status: status.into(),
         game: game.map(|(id, _label)| GameRef {
+            name: None,
             id: id.into(),
             started_at: Some(now() - 60),
             detail: None,

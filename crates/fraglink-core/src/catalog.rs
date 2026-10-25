@@ -221,7 +221,8 @@ pub fn build(
         });
     }
     for r in games {
-        if seen_ids.contains(&r.id) {
+        // beta.5: a game the user added and then removed
+        if seen_ids.contains(&r.id) || r.source == "removed" {
             continue;
         }
         let exe = set(EXE_KEY, &r.id);

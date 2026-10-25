@@ -171,9 +171,11 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
         .fetch_one(&st.db)
         .await?;
     let presence = if p.id == me {
-        presence::visible_presence(st, me)
+        let mut v = presence::visible_presence(st, me)
             .await?
-            .unwrap_or_else(presence::PresenceView::offline)
+            .unwrap_or_else(presence::PresenceView::offline);
+        presence::apply_own_name(st, me, &mut v);
+        v
     } else {
         presence::visible_presence_many(st, &[p.id])
             .await?

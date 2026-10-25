@@ -157,6 +157,7 @@
     $('#gd-detect').value = $('#gd-detect').title = g ? g.detect_path : '';
     $('#gd-args').value = g ? staged(g.id, 'launch_args:', g.launch_args || '') : '';
     $('#gd-ex').checked = !!g && isEx(g);
+    $('#gd-rm-row').hidden = !(g && g.source === 'manual' && /^manual:/.test(g.id));
     const mode = g ? staged(g.id, 'detect_mode:', (st.settings || {})['detect_mode:' + g.id] || 'auto') : 'auto';
     $('#gd-auto').checked = mode !== 'manual'; $('#gd-manual').checked = mode === 'manual';
   }
@@ -355,6 +356,12 @@
     browse: async () => { if (!gsel) return; try { const p = await FLB.pickExe(); if (p) { $('#gd-path').value = p; pending.set('game_path:' + gsel, p); pending.set('detect_mode:' + gsel, 'manual'); $('#gd-manual').checked = true; $('#apply').disabled = false; } } catch (e) { fail(e); } },
     'add-manual': () => { $('#manual').hidden = !$('#manual').hidden; if (!$('#manual').hidden) loadCands(); },
     'man-refresh': loadCands,
+    'remove-game': async () => {
+      const g = catalog && catalog.find(x => x.id === gsel);
+      if (!g || !/^manual:/.test(g.id)) return;
+      if (!confirm(`Remove ${g.name} from your games? Fraglink stops tracking it. Your hours are kept.`)) return;
+      try { await FLB.removeGame(g.id); gsel = null; catalog = null; await detect(); } catch (e) { fail(e); }
+    },
     'man-add': async () => {
       const exe = $('#cands').value, name = $('#man-name').value.trim();
       if (!exe || !name) { alert('Pick a running program and type the game name.'); return; }

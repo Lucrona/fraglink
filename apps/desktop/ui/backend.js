@@ -15,6 +15,7 @@
       candidates: () => inv('get_candidates'),
       tag: (exe, name) => inv('tag_process', { exe, name }),
       untag: (exe) => inv('untag_process', { exe }),
+      removeGame: (id) => inv('remove_manual_game', { id }),
       exclude: (gameId, excluded) => inv('set_game_excluded', { gameId, excluded }),
       settings: () => inv('get_settings'),
       set: (key, value) => inv('set_setting', { key, value: String(value) }),

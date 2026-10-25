@@ -159,3 +159,9 @@ body.toast-page.skin-dark .toast-body .tx b { font-size: 12px; font-weight: bold
 body.toast-page.skin-dark .toast-body .ln { color: #8b929a; font-size: 11px; }
 body.toast-page.skin-dark .toast-body .g { font-size: 11px; }
 body.toast-page.skin-dark .toast-body small { font-size: 11px; }
+
+/* beta.5: Discord-style "Add it!" (track prompt), retro gold button, quiet "Not a game" */
+.toast-body .tq button.add-it, .fl-ask button.add-it { color: #1b1404; font-weight: bold; border-color: #5a4210; background: linear-gradient(#ffe08a, #e0a82e 50%, #c98f17 51%, #e7b53e); }
+.toast-body .tq button.add-it:hover, .fl-ask button.add-it:hover { background: linear-gradient(#fff0b8, #f0bd45 50%, #d99f22 51%, #f3c552); }
+.toast-body .tq button.not-game, .fl-ask button.not-game, .fl-ask button.ask-x { background: none; border-color: transparent; color: #9aa3b2; text-decoration: underline; }
+.fl-ask button.ask-x { text-decoration: none; }

@@ -64,6 +64,8 @@ pub fn tag_process(
         .tag_exe(&exe, &name, now())
         .map_err(err)?;
     log::info!("tagged {exe} as {id}");
+    // beta.5: "Add game manually" goes to Game approvals like the prompt's Add it!
+    send_suggestion(&app, &exe, &name);
     crate::handle_events(&app, vec![]);
     Ok(id)
 }
@@ -72,6 +74,20 @@ pub fn tag_process(
 #[tauri::command]
 pub fn track_prompt(state: State<'_, AppState>) -> Option<Candidate> {
     state.track_prompt.lock_ok().clone()
+}
+
+/// Report a program the user chose to track (exe + name, no user id) so it shows up in
+/// Admin > Game approvals. Background thread; failures are only logged.
+fn send_suggestion(app: &AppHandle, exe: &str, name: &str) {
+    let app2 = app.clone();
+    let (e2, n2) = (exe.trim().to_string(), name.trim().to_string());
+    std::thread::spawn(move || {
+        let c = crate::sync::client(&app2)
+            .unwrap_or_else(|| fraglink_sync::Client::new(&crate::sync::server(&app2), None));
+        if let Err(e) = c.suggest_game(&e2, &n2) {
+            log::info!("game suggestion not sent: {e}");
+        }
+    });
 }
 
 /// `OddGame.exe` -> `OddGame`, `my_cool-game.exe` -> `my cool game`.
@@ -116,15 +132,7 @@ pub fn track_prompt_answer(
             .tag_exe(&exe, &name, now())
             .map_err(err)?;
         log::info!("track prompt: {exe} is a game ({id})");
-        let app2 = app.clone();
-        let (e2, n2) = (exe.clone(), name.clone());
-        std::thread::spawn(move || {
-            let c = crate::sync::client(&app2)
-                .unwrap_or_else(|| fraglink_sync::Client::new(&crate::sync::server(&app2), None));
-            if let Err(e) = c.suggest_game(&e2, &n2) {
-                log::info!("game suggestion not sent: {e}");
-            }
-        });
+        send_suggestion(&app, &exe, &name);
         out = Some(id);
     } else {
         state.engine.lock_ok().dismiss_prompt(&exe).map_err(err)?;
@@ -162,6 +170,19 @@ mod track_tests {
         assert_eq!(name_from_exe("noext"), "noext");
         assert_eq!(name_from_exe(".exe"), ".exe");
     }
+}
+
+/// Options > Games > Remove (games the user added only). Hours stay on the server.
+#[tauri::command]
+pub fn remove_manual_game(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state
+        .engine
+        .lock_ok()
+        .remove_manual_game(&id)
+        .map_err(err)?;
+    log::info!("removed added game {id}");
+    let _ = app.emit("fraglink://catalog", ());
+    Ok(())
 }
 
 #[tauri::command]
