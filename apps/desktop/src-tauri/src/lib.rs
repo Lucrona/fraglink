@@ -454,7 +454,7 @@ pub fn refresh_tray(app: &AppHandle) {
     }
 }
 
-/// Tray icons: the silver app-icon design, drawn for each size Windows uses for the
+/// Tray icons: the white Fraglink mark (beta.6 option B, faint dark outline), drawn for each size Windows uses for the
 /// notification area (16 px at 100 %, 20 at 125 %, 24 at 150 %, 32 at 200 % scaling).
 const TRAY_PNGS: [(u32, &[u8]); 4] = [
     (16, include_bytes!("../icons/tray-16.png")),
@@ -462,6 +462,66 @@ const TRAY_PNGS: [(u32, &[u8]); 4] = [
     (24, include_bytes!("../icons/tray-24.png")),
     (32, include_bytes!("../icons/tray-32.png")),
 ];
+
+/// beta.6: black versions of the mark, for a light Windows taskbar.
+const TRAY_PNGS_LIGHT: [(u32, &[u8]); 4] = [
+    (16, include_bytes!("../icons/tray-16-light.png")),
+    (20, include_bytes!("../icons/tray-20-light.png")),
+    (24, include_bytes!("../icons/tray-24-light.png")),
+    (32, include_bytes!("../icons/tray-32-light.png")),
+];
+
+/// Whether the update dot is showing (so a theme change can redraw the same state).
+static TRAY_DOT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// True when Windows uses a light taskbar (`SystemUsesLightTheme` = 1). Dark (the
+/// Windows default) when the value is missing or this isn't Windows.
+#[cfg(windows)]
+fn taskbar_light() -> bool {
+    {
+        use windows_sys::Win32::System::Registry::{
+            RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD,
+        };
+        let w = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+        let key = w(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+        let val = w("SystemUsesLightTheme");
+        let mut data: u32 = 0;
+        let mut len = std::mem::size_of::<u32>() as u32;
+        let rc = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                val.as_ptr(),
+                RRF_RT_REG_DWORD,
+                std::ptr::null_mut(),
+                &mut data as *mut u32 as *mut _,
+                &mut len,
+            )
+        };
+        rc == 0 && data == 1
+    }
+}
+
+#[cfg(not(windows))]
+fn taskbar_light() -> bool {
+    false
+}
+
+/// Redraw the tray icon when the taskbar switches between light and dark (checked
+/// every few seconds; reading one registry value is cheap).
+fn watch_taskbar_theme(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last = taskbar_light();
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            let now = taskbar_light();
+            if now != last {
+                last = now;
+                set_tray_update_dot(&app, TRAY_DOT.load(std::sync::atomic::Ordering::Relaxed));
+            }
+        }
+    });
+}
 
 /// The small-icon size of the primary display (what the tray draws at).
 fn tray_size() -> u32 {
@@ -481,10 +541,12 @@ fn tray_size() -> u32 {
 fn tray_image(update_ready: bool) -> Option<tauri::image::Image<'static>> {
     let want = tray_size();
     // exact size, else the next bigger one (Windows scales down more cleanly than up)
-    let (_, bytes) = TRAY_PNGS
-        .iter()
-        .find(|(n, _)| *n >= want)
-        .unwrap_or(&TRAY_PNGS[3]);
+    let set = if taskbar_light() {
+        &TRAY_PNGS_LIGHT
+    } else {
+        &TRAY_PNGS
+    };
+    let (_, bytes) = set.iter().find(|(n, _)| *n >= want).unwrap_or(&set[3]);
     let mut img = image::load_from_memory(bytes).ok()?.to_rgba8();
     if update_ready {
         let (w, h) = img.dimensions();
@@ -523,6 +585,7 @@ fn tray_image(update_ready: bool) -> Option<tauri::image::Image<'static>> {
 
 /// Switch the tray icon's update dot on or off.
 pub fn set_tray_update_dot(app: &AppHandle, on: bool) {
+    TRAY_DOT.store(on, std::sync::atomic::Ordering::Relaxed);
     if let (Some(tray), Some(img)) = (app.tray_by_id("main"), tray_image(on)) {
         let _ = tray.set_icon(Some(img));
     }
@@ -530,11 +593,14 @@ pub fn set_tray_update_dot(app: &AppHandle, on: bool) {
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = tray_menu(app)?;
-    // Same silver design as the app icon, at the size the taskbar wants.
+    // The Fraglink mark at the size the taskbar wants, black on a light taskbar.
     let mut tb = TrayIconBuilder::with_id("main");
-    if let Some(icon) = tray_image(updater::ready_version(app).is_some()) {
+    let dot = updater::ready_version(app).is_some();
+    TRAY_DOT.store(dot, std::sync::atomic::Ordering::Relaxed);
+    if let Some(icon) = tray_image(dot) {
         tb = tb.icon(icon);
     }
+    watch_taskbar_theme(app.clone());
     tb.tooltip("Fraglink")
         .menu(&menu)
         .show_menu_on_left_click(false)

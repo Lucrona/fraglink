@@ -9,7 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Options > Games: new **Detected, not added** list (collapsed at the top of the tab). Programs Fraglink asked "Playing …?" about that were never answered stay there across restarts, each with **Add it!** (opens Add game manually, prefilled) and **Not a game**. Up to 200 are kept; a program drops off once it is added or marked not a game.
 - Options > Games: a blue tick next to games whose detection Fraglink has checked ("Verified by Fraglink"). It comes from `verified` in games.json and a `verified` id list in the server's detection overrides. Starting list: World of Warcraft, Hearthstone, Marvel Rivals, Star Citizen, 112 Operator.
-- New tray icon: the Fraglink mark on its own, white with a faint outline so it reads on dark and light taskbars.
+- New tray icon: the Fraglink mark on its own, white on a dark taskbar and black on a light one (follows the Windows "SystemUsesLightTheme" setting, switching within a few seconds of a theme change).
+- `scripts/deploy.sh` builds the server with cargo zigbuild (glibc 2.39) by default, no docker needed; `BUILD=docker` keeps the old container build.
 
 ### Changed
 - Options > Games lists only installed games (the game's exe is on this PC now), including games you added while their exe is there. The "Played before" section is gone.
