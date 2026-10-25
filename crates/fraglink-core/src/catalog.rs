@@ -32,6 +32,9 @@ pub struct Entry {
     /// Tracked play time on this PC (seconds) and the last session's end, for sorting.
     pub total_seconds: i64,
     pub last_played: Option<i64>,
+    /// beta.6: staff checked that detection works (games.json or server overrides).
+    #[serde(default)]
+    pub verified: bool,
 }
 
 /// A folder in normal Windows form for Options > Games: real casing (asked from the
@@ -185,6 +188,7 @@ pub fn build(
             can_launch: false,
             total_seconds: row.map_or(0, |r| r.total_seconds),
             last_played: row.and_then(|r| r.last_played),
+            verified: g.verified,
         });
         seen_ids.insert(g.id.clone());
     }
@@ -217,6 +221,7 @@ pub fn build(
             can_launch: false,
             total_seconds: rows.get(id.as_str()).map_or(0, |r| r.total_seconds),
             last_played: rows.get(id.as_str()).and_then(|r| r.last_played),
+            verified: false,
             id,
         });
     }
@@ -249,6 +254,7 @@ pub fn build(
             can_launch: false,
             total_seconds: r.total_seconds,
             last_played: r.last_played,
+            verified: false,
         });
     }
     for e in &mut out {
@@ -300,6 +306,7 @@ fn absorb(into: &mut Entry, from: Entry) {
     }
     into.excluded |= from.excluded;
     into.total_seconds += from.total_seconds;
+    into.verified |= from.verified;
     into.last_played = into.last_played.max(from.last_played);
 }
 
@@ -555,6 +562,7 @@ mod tests {
             can_launch: false,
             total_seconds: secs,
             last_played: Some(secs),
+            verified: false,
         };
         let dir = r"E:\Steam\steamapps\common\112 Operator\";
         let mut a = mk("steam:793460", "112 Operator", Some(dir), 100);

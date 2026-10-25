@@ -74,6 +74,15 @@ pub const TRACK_PROMPT_EVENT: &str = "fraglink://track-prompt";
 fn offer_track(app: &AppHandle, c: fraglink_core::detector::Candidate) {
     log::info!("asking whether {} is a game", c.exe);
     *app.state::<AppState>().track_prompt.lock_ok() = Some(c.clone());
+    // beta.6: kept for Options > Games > Detected, not added, until answered there
+    if let Err(e) = app
+        .state::<AppState>()
+        .engine
+        .lock_ok()
+        .note_prompted(&c, chrono::Utc::now().timestamp())
+    {
+        log::warn!("could not save the prompt: {e}");
+    }
     let _ = app.emit(TRACK_PROMPT_EVENT, Some(&c));
     // the question also waits in the main window, so toasts-off just skips the popup
     if get_setting(app, keys::TOASTS).as_deref() != Some("0") {
@@ -915,6 +924,7 @@ pub fn run() {
             commands::friend_mute,
             commands::track_prompt,
             commands::track_prompt_answer,
+            commands::get_prompted,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Fraglink");

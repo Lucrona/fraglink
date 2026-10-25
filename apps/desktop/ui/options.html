@@ -87,6 +87,10 @@
 
     <section data-page="games" hidden>
       <p class="add-it">Not seeing your game? <a data-do="add-manual" class="hint-link" role="button" tabindex="0">Add it!</a></p>
+      <details id="detected" class="detected" hidden>
+        <summary><b>Detected, not added</b> <span id="det-count" class="hint"></span> <span class="hint">· Fraglink asked about these and didn't get an answer.</span></summary>
+        <ul id="det-list" class="det-list"></ul>
+      </details>
       <div class="detect"><div class="bar"><b id="det-bar"></b></div><span id="det-msg">Detecting games…</span><select id="g-sort" title="Sort games"><option value="az">A–Z</option><option value="most">Most played</option><option value="recent">Recently played</option></select><button type="button" data-do="detect">Detect Games</button><button type="button" data-do="scan" title="Look through your game folders for installed games (stays on this PC)">Scan for games</button></div>
       <div class="games-split">
         <div class="tree-col"><div class="tree" id="tree" tabindex="0"></div><p class="hint tree-hint">Still missing an installed game? Click <a data-do="scan" class="hint-link">Scan for games</a>.</p></div>

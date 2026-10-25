@@ -192,7 +192,8 @@
    "steam_appids": [],
    "platform": "battlenet",
    "uncertain": false,
-   "genre": "mmo"
+   "genre": "mmo",
+   "verified": true
   },
   {
    "id": "wow_classic",
@@ -233,7 +234,8 @@
    "steam_appids": [],
    "platform": "rsi",
    "uncertain": false,
-   "genre": "action"
+   "genre": "action",
+   "verified": true
   },
   {
    "id": "overwatch2",
@@ -321,7 +323,8 @@
    "steam_appids": [],
    "platform": "battlenet",
    "uncertain": false,
-   "genre": "card"
+   "genre": "card",
+   "verified": true
   },
   {
    "id": "sc2",
@@ -1798,7 +1801,8 @@
    ],
    "platform": "steam",
    "uncertain": false,
-   "genre": "fps"
+   "genre": "fps",
+   "verified": true
   },
   {
    "id": "thefinals",
