@@ -372,19 +372,16 @@ async fn server_names_and_live_sessions(pool: PgPool) {
     );
     backdate(10).await;
 
-    // a tagged program nobody approved: "a game", and its label never leaves the PC
-    ca.presence("online", Some(("exe:MyThing.exe", "My Secret Label")))
+    // a program the player added, nobody approved: beta.6 shows friends the name the
+    // player gave it (like Discord)
+    ca.presence("online", Some(("exe:MyThing.exe", "My Own Label")))
         .await;
     let m = cb.expect("presence").await;
-    assert_eq!(
-        (m["game_id"].as_str(), m["game_name"].as_str()),
-        (Some("unlisted"), Some("a game"))
-    );
-    assert!(!m.to_string().contains("Secret") && !m.to_string().contains("mything"));
+    assert_eq!(m["game_name"].as_str(), Some("My Own Label"), "{m}");
     let l = api(&app, "GET", "/api/v1/friends", Some(&b), None)
         .await
         .json();
-    assert_eq!(l["friends"][0]["presence"]["game_name"], "a game");
+    assert_eq!(l["friends"][0]["presence"]["game_name"], "My Own Label");
     // switching games closed the WoW session the server saw (~10 minutes)
     let rows: Vec<(String, i32, String)> =
         sqlx::query_as("SELECT game_id, duration_s, source FROM sessions ORDER BY started_at")

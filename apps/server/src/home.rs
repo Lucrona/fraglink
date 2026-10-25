@@ -146,7 +146,12 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         let Some(gid) = p.game_id.as_ref() else {
             continue;
         };
-        let Some(gname) = lnamed.get(gid) else {
+        // beta.6: a program they added comes with the name they gave it
+        let own = gid
+            .starts_with("exe:")
+            .then_some(())
+            .and(p.game_name.as_ref());
+        let Some(gname) = lnamed.get(gid).or(own) else {
             continue;
         };
         now_playing.push(json!({

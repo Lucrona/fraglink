@@ -13,6 +13,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `scripts/deploy.sh` builds the server with cargo zigbuild (glibc 2.39) by default, no docker needed; `BUILD=docker` keeps the old container build.
 
 ### Changed
+- The name you give a game you added yourself is now shown to everyone: friends, your public profile, the activity feed and Now playing (like Discord). Before, only you saw it and others saw "a game". Games Fraglink staff have approved or renamed still use the approved name, and Report a name keeps working.
+- Admin merge suggestions and the server's exe-to-game matching now also check Discord's detectable games list, not only Fraglink's built-in list, so a program Discord already knows counts as a known game.
 - Options > Games lists only installed games (the game's exe is on this PC now), including games you added while their exe is there. The "Played before" section is gone.
 - Options > Games: "Add game manually…" moved out of the game details panel to a line at the top of the tab: "Not seeing your game? Add it!". The hint under the list points to Scan for games.
 - Options > General: clearer startup labels, "Start hidden in the tray when Windows starts" and "Minimise button sends Fraglink to the tray". The first now only applies when Windows starts Fraglink; opening it yourself always shows the window.
