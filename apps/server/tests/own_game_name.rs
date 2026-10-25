@@ -1,12 +1,12 @@
-//! beta.5: a program the user added shows their own name for it on their own views
-//! only; friends keep seeing "a game" until it is approved.
+//! A program the user added shows the name they gave it. beta.6: to everyone, like
+//! Discord (it was own-views-only in beta.5).
 mod common;
 use common::*;
 use fraglink_server::presence::{self, GameRef};
 use sqlx::PgPool;
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn own_name_only_for_self(pool: PgPool) {
+async fn own_name_shown_to_everyone(pool: PgPool) {
     let st = state(pool.clone());
     let app = fraglink_server::router(st.clone());
     signup(&app, "carol@example.com", "carol").await;
@@ -25,7 +25,10 @@ async fn own_name_only_for_self(pool: PgPool) {
         .await
         .unwrap();
     let friends_view = presence::visible_presence(&st, uid).await.unwrap().unwrap();
-    assert_eq!(friends_view.game_id.as_deref(), Some("unlisted"));
+    assert_eq!(friends_view.game_name.as_deref(), Some("Odd Game"));
+    assert_eq!(friends_view.game_id.as_deref(), Some("exe:oddgame.exe"));
+    let many = presence::visible_presence_many(&st, &[uid]).await.unwrap();
+    assert_eq!(many[&uid].game_name.as_deref(), Some("Odd Game"));
     let mut mine = friends_view.clone();
     presence::apply_own_name(&st, uid, &mut mine).await.unwrap();
     assert_eq!(mine.game_name.as_deref(), Some("Odd Game"));
@@ -65,7 +68,7 @@ async fn own_name_survives_restart(pool: PgPool) {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(v.game_name.as_deref(), Some("a game"));
+    assert_eq!(v.game_name.as_deref(), Some("Odd Game"));
     presence::apply_own_name(&st2, uid, &mut v).await.unwrap();
     assert_eq!(v.game_name.as_deref(), Some("Odd Game"));
     let names = presence::own_names_for(&st2, uid, &["exe:oddgame.exe".to_string()])

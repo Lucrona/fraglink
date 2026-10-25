@@ -160,3 +160,18 @@ body.dark .conn .soon.ok { color: #6fd27b; }
 .confirm-actions button{min-width:80px}
 .add-it { margin: 0 0 6px; font-weight: bold; }
 .add-it .hint-link { font-weight: bold; }
+
+/* beta.6: Games > Detected, not added */
+.detected { margin: 2px 0 6px; border: 1px solid var(--line, #c9ced6); border-radius: 4px; padding: 6px 8px; }
+.detected summary { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detected[open] summary { margin-bottom: 4px; }
+.det-list { list-style: none; margin: 0; padding: 0; max-height: 7.6em; overflow-y: auto; }
+.det-list li { display: flex; align-items: center; gap: 6px; padding: 2px 0; border-top: 1px solid rgba(0,0,0,.06); }
+.det-list li:first-child { border-top: 0; }
+.det-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.det-name small { opacity: .7; margin-left: 4px; }
+.det-list button { flex: none; }
+
+/* beta.6: verified tick */
+.vtick { display: inline-block; vertical-align: -1px; margin-left: 4px; line-height: 0; font-style: normal; }
+.vtick svg { width: 1em; height: 1em; }

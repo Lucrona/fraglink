@@ -84,6 +84,7 @@
       // 0.2.0-dev.12
       trackPrompt: () => inv('track_prompt'),
       trackAnswer: (exe, yes, name) => inv('track_prompt_answer', { exe, yes: !!yes, name }),
+      prompted: () => inv('get_prompted'),
     };
     return;
   }
@@ -112,6 +113,14 @@
   try { Object.assign(settings, JSON.parse(new URLSearchParams(location.search).get('set') || '{}')); } catch (e) { /* preview only */ }
   let paused = false;
   const ok = v => Promise.resolve(v);
+  const ago = d => Math.floor(Date.now() / 1000) - d * 86400;
+  const prompted = [
+    { exe: 'HollowRidge-Win64-Shipping.exe', path: 'C:\\Games\\HollowRidge\\HollowRidge-Win64-Shipping.exe', at: ago(0.1) },
+    { exe: 'tinyrally.exe', path: 'D:\\itch\\tinyrally\\tinyrally.exe', at: ago(2) },
+    { exe: 'Obscure2004.exe', path: 'D:\\Old\\Obscure2004.exe', at: ago(9) },
+    { exe: 'pixel_farm_dx11.exe', path: 'C:\\Games\\PixelFarm\\pixel_farm_dx11.exe', at: ago(30) },
+    { exe: 'StarSkiff.exe', path: 'E:\\GOG\\StarSkiff\\StarSkiff.exe', at: ago(65) },
+  ];
   window.FL = {
     tauri: false,
     glance: () => {
@@ -127,8 +136,10 @@
     },
     activity: () => ok(activity),
     games: () => ok(games.map(g => ({ ...g }))),
+    prompted: () => ok(prompted.slice()),
+    trackAnswer: (exe, yes, name) => { const i = prompted.findIndex(p => p.exe === exe); if (i >= 0) prompted.splice(i, 1); return yes ? window.FL.tag(exe, name) : ok(); },
     candidates: () => ok([{ exe: 'MyIndie.exe', path: 'C:\\Games\\MyIndie\\MyIndie.exe' }, { exe: 'Obscure2004.exe', path: 'D:\\Old\\Obscure2004.exe' }]),
-    tag: (exe, name) => { games.push({ id: 'manual:' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, source: 'manual', excluded: false, total_seconds: 0, sessions: 0 }); return ok('manual:x'); },
+    tag: (exe, name) => { const pi = prompted.findIndex(p => p.exe.toLowerCase() === exe.toLowerCase()); if (pi >= 0) prompted.splice(pi, 1); games.push({ id: 'manual:' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, source: 'manual', excluded: false, total_seconds: 0, sessions: 0 }); return ok('manual:x'); },
     untag: () => ok(),
     exclude: (id, ex) => { const g = games.find(x => x.id === id); if (g) g.excluded = ex; return ok(); },
     settings: () => ok({ settings, autostart: false, sim: false, data_dir: '(browser preview: no data is stored)', log_dir: '', version: 'preview', signatures: 170, signatures_version: 'preview', steam_apps: 0 }),
@@ -212,7 +223,9 @@
   }
   const cat = (id, name, genre, installed, source, extra = {}) => ({ id, name, genre, installed, source, steam_appid: null, game_path: null, detect_path: '', launch_args: '', excluded: false, can_launch: installed, ...extra });
   const catalog = [
-    cat('wow', 'World of Warcraft', 'mmo', true, 'seen', { game_path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe', detect_path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe' }),
+    cat('wow', 'World of Warcraft', 'mmo', true, 'seen', { game_path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe', detect_path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe', verified: true }),
+    cat('hearthstone', 'Hearthstone', 'card', true, 'battlenet', { verified: true, game_path: 'C:\\Program Files (x86)\\Hearthstone\\', detect_path: 'C:\\Program Files (x86)\\Hearthstone\\Hearthstone.exe' }),
+    cat('112_operator', '112 Operator', 'sim', true, 'steam', { verified: true, steam_appid: 793460, game_path: 'E:\\Steam\\steamapps\\common\\112 Operator\\', detect_path: 'E:\\Steam\\steamapps\\common\\112 Operator\\Operator 112.exe' }),
     cat('cs2', 'Counter-Strike 2', 'fps', true, 'steam', { steam_appid: 730, game_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\', detect_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\bin\\win64\\cs2.exe' }),
     cat('hl2', 'Half-Life 2', 'fps', true, 'steam', { steam_appid: 220, game_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Half-Life 2\\', detect_path: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Half-Life 2\\hl2.exe' }),
     cat('steam:1145350', 'Hades II', 'action', true, 'steam', { steam_appid: 1145350, game_path: 'E:\\Steam\\steamapps\\common\\Hades II\\', detect_path: 'E:\\Steam\\steamapps\\common\\Hades II\\Ship\\Hades2.exe' }),

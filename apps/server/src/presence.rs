@@ -264,9 +264,9 @@ fn to_view(r: Row) -> PresenceView {
     }
 }
 
-/// beta.5: on the user's own views, an unapproved program they added shows their own
-/// name for it instead of "A game". Never call this for what friends see.
-/// beta.6: the name is kept in `own_game_names`, so it survives a server restart.
+/// An unapproved program the user added shows the name they gave it instead of "A game".
+/// beta.6: kept in `own_game_names` (survives a restart) and shown to everyone, like
+/// Discord. Staff renames/approvals still win: an approved game is listed, not unlisted.
 pub async fn apply_own_name(st: &AppState, user: Uuid, v: &mut PresenceView) -> ApiResult<()> {
     if v.game_id.as_deref() != Some(crate::names::UNLISTED_ID) {
         return Ok(());
@@ -295,7 +295,7 @@ pub async fn apply_own_name(st: &AppState, user: Uuid, v: &mut PresenceView) -> 
     Ok(())
 }
 
-/// The player's own names for `ids` (programs they added), for their own views only.
+/// The player's own names for `ids` (programs they added). beta.6: shown to everyone.
 pub async fn own_names_for(
     st: &AppState,
     user: Uuid,
@@ -321,7 +321,9 @@ pub async fn visible_presence(st: &AppState, user: Uuid) -> ApiResult<Option<Pre
         .bind(user)
         .fetch_optional(&st.db)
         .await?;
-    Ok(Some(r.map(to_view).unwrap_or_else(PresenceView::offline)))
+    let mut v = r.map(to_view).unwrap_or_else(PresenceView::offline);
+    apply_own_name(st, user, &mut v).await?;
+    Ok(Some(v))
 }
 
 pub async fn visible_presence_many(
@@ -341,6 +343,28 @@ pub async fn visible_presence_many(
         .collect();
     for (u, s, gid, gname, gdetail, started, hb, hidden) in rows {
         m.insert(u, to_view((s, gid, gname, gdetail, started, hb, hidden)));
+    }
+    // beta.6: a program someone added shows the name they gave it, to everyone (like Discord)
+    let unlisted: Vec<Uuid> = m
+        .iter()
+        .filter(|(_, v)| v.game_id.as_deref() == Some(crate::names::UNLISTED_ID))
+        .map(|(u, _)| *u)
+        .collect();
+    if !unlisted.is_empty() {
+        let own: Vec<(Uuid, String, String)> = sqlx::query_as(
+            "SELECT p.user_id, o.game_id, o.name FROM presence p
+             JOIN own_game_names o ON o.user_id = p.user_id AND o.game_id = p.game_id
+             WHERE p.user_id = ANY($1)",
+        )
+        .bind(&unlisted)
+        .fetch_all(&st.db)
+        .await?;
+        for (u, id, n) in own {
+            if let Some(v) = m.get_mut(&u) {
+                v.game_id = Some(id);
+                v.game_name = Some(n);
+            }
+        }
     }
     Ok(m)
 }

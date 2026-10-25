@@ -632,6 +632,12 @@ pub(crate) fn rename_patterns(st: &AppState, id: &str) -> Vec<(Vec<String>, Vec<
 
 /// A game of the current detectable list by Fraglink id (the parsed list is kept per ETag).
 fn detectable_game(st: &AppState, slug: &str) -> Option<detectable::DGame> {
+    detectable_db(st)?.by_slug(slug).cloned()
+}
+
+/// The current detectable list (Discord's big list as the server serves it), parsed
+/// once per ETag. `None` before the first copy is loaded.
+pub fn detectable_db(st: &AppState) -> Option<Arc<DetectableDb>> {
     use std::sync::{Mutex, OnceLock};
     static CACHE: OnceLock<Mutex<Option<(String, Arc<DetectableDb>)>>> = OnceLock::new();
     let b = st.games.current()?;
@@ -642,7 +648,7 @@ fn detectable_game(st: &AppState, slug: &str) -> Option<detectable::DGame> {
             Arc::new(DetectableDb::from_json(&b.json).ok()?),
         ));
     }
-    c.as_ref()?.1.by_slug(slug).cloned()
+    c.as_ref().map(|(_, d)| d.clone())
 }
 
 pub async fn overrides(

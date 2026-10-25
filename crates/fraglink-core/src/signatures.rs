@@ -36,6 +36,9 @@ pub struct GameSig {
     /// Broad genre, used for the fallback icon when there is no real one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
+    /// beta.6: Fraglink staff checked that detection works (tick in Options > Games).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub verified: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

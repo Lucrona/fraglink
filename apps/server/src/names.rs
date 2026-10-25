@@ -47,15 +47,24 @@ pub fn canonical_id(user: Uuid, id: &str) -> Option<String> {
 /// knows counts as that list game from here on. Earlier sessions stay under the
 /// `exe:` id until staff merge it (Admin > Games > Merge), so nothing is lost or
 /// counted twice.
+/// beta.6: checks Discord's detectable list too, not only the built-in games.json.
 pub fn list_id_for_exe(st: &AppState, id: &str) -> String {
-    exe_to_list(&st.sigs, id)
+    exe_to_list(&st.sigs, crate::games::detectable_db(st).as_deref(), id)
 }
 
-fn exe_to_list(sigs: &fraglink_core::signatures::SignatureDb, id: &str) -> String {
-    id.strip_prefix("exe:")
-        .and_then(|exe| sigs.match_process(exe, None))
+fn exe_to_list(
+    sigs: &fraglink_core::signatures::SignatureDb,
+    det: Option<&fraglink_core::detectable::DetectableDb>,
+    id: &str,
+) -> String {
+    let Some(exe) = id.strip_prefix("exe:") else {
+        return id.to_string();
+    };
+    sigs.match_process(exe, None)
         .filter(|g| !g.uncertain)
         .map(|g| g.id.clone())
+        // a bare exe name only: path-only entries and generic names (game.exe) never match
+        .or_else(|| det?.match_process(exe, None).map(|m| m.game.slug.clone()))
         .unwrap_or_else(|| id.to_string())
 }
 
@@ -327,11 +336,36 @@ mod exe_list_tests {
             .flat_map(|g| g.exes.iter().map(move |e| (g, e.to_lowercase())))
             .find(|(g, e)| db.match_process(e, None).map(|m| &m.id) == Some(&g.id))
             .unwrap();
-        assert_eq!(super::exe_to_list(&db, &format!("exe:{exe}")), g.id);
+        assert_eq!(super::exe_to_list(&db, None, &format!("exe:{exe}")), g.id);
         assert_eq!(
-            super::exe_to_list(&db, "exe:zz_not_a_game_42.exe"),
+            super::exe_to_list(&db, None, "exe:zz_not_a_game_42.exe"),
             "exe:zz_not_a_game_42.exe"
         );
-        assert_eq!(super::exe_to_list(&db, &g.id), g.id);
+        assert_eq!(super::exe_to_list(&db, None, &g.id), g.id);
+    }
+
+    #[test]
+    fn discord_list_exe_counts_as_list_game() {
+        // beta.6: a program only Discord's detectable list knows maps onto that game too
+        let db = fraglink_core::signatures::SignatureDb::builtin();
+        let det = fraglink_core::detectable::DetectableDb::bundled();
+        let (slug, exe) = det
+            .games()
+            .iter()
+            .flat_map(|g| g.exes.iter().map(move |e| (g, e)))
+            .filter(|(_, e)| !e.contains('/') && db.match_process(e, None).is_none())
+            .find(|(g, e)| {
+                det.match_process(e, None)
+                    .is_some_and(|m| m.game.slug == g.slug)
+            })
+            .map(|(g, e)| (g.slug.clone(), e.clone()))
+            .unwrap();
+        let id = format!("exe:{exe}");
+        assert_eq!(super::exe_to_list(&db, None, &id), id);
+        assert_eq!(super::exe_to_list(&db, Some(&det), &id), slug);
+        assert_eq!(
+            super::exe_to_list(&db, Some(&det), "exe:zz_not_a_game_42.exe"),
+            "exe:zz_not_a_game_42.exe"
+        );
     }
 }

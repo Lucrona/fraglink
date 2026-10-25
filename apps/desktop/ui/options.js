@@ -38,6 +38,8 @@
     });
   }
   const SOURCES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', rsi: 'RSI Launcher', scan: 'found in your game folders', windows: 'installed', seen: 'seen running', manual: 'added by you', tracked: 'played before', signature: '', detectable: '' };
+  // beta.6: Discord-style tick for games staff confirmed detection for
+  const VTICK = '<i class="vtick" title="Verified by Fraglink" aria-label="Verified by Fraglink" role="img"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="#3b82f6" d="M8 0l1.9 1.4 2.3-.2.8 2.2 2 1.2-.6 2.3.6 2.3-2 1.2-.8 2.2-2.3-.2L8 16l-1.9-1.4-2.3.2-.8-2.2-2-1.2.6-2.3L1 6.8l2-1.2.8-2.2 2.3.2z"/><path fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 8.2l2 2 4-4.2"/></svg></i>';
   const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
   // Options always uses the dark look (Dark is the only skin since 0.2.0-dev.20).
@@ -51,7 +53,7 @@
     if (page === 'account') renderSync();
     if (page === 'privacy') { renderBlocked(); renderPrivacy(); }
     if (page === 'connections') renderConnections();
-    if (page === 'games' && !catalog && !detecting) detect();
+    if (page === 'games') { renderDetected(); if (!catalog && !detecting) detect(); }
   }
 
   const value = el => el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
@@ -131,7 +133,7 @@
     const t = $('#tree');
     if (!catalog) { t.innerHTML = ''; return; }
     const inst = sorted(shown());
-    const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}" title="${esc(SOURCES[g.source] ?? g.source)}">${iconHtml(g.id)}<span>${esc(g.name)}</span></div>`;
+    const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}" title="${esc(SOURCES[g.source] ?? g.source)}">${iconHtml(g.id)}<span>${esc(g.name)}</span>${g.verified ? VTICK : ''}</div>`;
     const node = (k, label, arr) => `<div class="node" data-node="${k}"><span class="tw">${open[k] ? '−' : '+'}</span>${label} (${arr.length})</div>` + (open[k] ? arr.map(leaf).join('') : '');
     t.innerHTML = node('inst', 'Installed games', inst);
   }
@@ -148,7 +150,7 @@
   function renderDetail() {
     const g = catalog && catalog.find(x => x.id === gsel);
     $('#gd-name').textContent = 'Select Game';
-    $('#gd-title').textContent = g ? g.name : 'Select a game on the left';
+    $('#gd-title').innerHTML = g ? esc(g.name) + (g.verified ? VTICK : '') : 'Select a game on the left';
     $('#gd-src').textContent = g ? 'Installed' + (SOURCES[g.source] ? ' · ' + SOURCES[g.source] : '') : '';
     $('#gd-icon').innerHTML = g ? iconHtml(g.id) : '';
     $$('#gd input, #gd button').forEach(x => { x.disabled = !g; });
@@ -178,6 +180,36 @@
     if (gsel && !list.some(x => x.id === gsel)) gsel = null;
     renderTree(); renderDetail(); loadIcons();
   }
+  /* ---- Games: Detected, not added (beta.6) ---- */
+  let detected = [];
+  const agoTxt = at => { const d = Math.floor((Date.now() / 1000 - at) / 86400); return d < 1 ? 'today' : d === 1 ? 'yesterday' : d < 60 ? `${d} days ago` : `${Math.floor(d / 30)} months ago`; };
+  async function renderDetected() {
+    try { detected = await FLB.prompted(); } catch (e) { detected = []; }
+    const box = $('#detected');
+    box.hidden = !detected.length;
+    $('#det-count').textContent = detected.length ? `(${detected.length})` : '';
+    $('#det-list').innerHTML = detected.map((p, i) => `<li title="${esc(p.path)}"><span class="det-name">${esc(prettyExe(p.exe))}<small>${esc(p.exe)} · ${agoTxt(p.at)}</small></span><button type="button" data-det-add="${i}">Add it!</button><button type="button" data-det-no="${i}">Not a game</button></li>`).join('');
+  }
+  document.addEventListener('click', async ev => {
+    const a = ev.target.closest('[data-det-add]'), n = ev.target.closest('[data-det-no]');
+    if (a) {
+      const p = detected[+a.dataset.detAdd]; if (!p) return;
+      $('#manual').hidden = false;
+      await loadCands();
+      const sel = $('#cands');
+      let opt = [...sel.options].find(o => o.value.toLowerCase() === p.exe.toLowerCase());
+      if (!opt) { [...sel.options].filter(o => o.disabled).forEach(o => o.remove()); opt = new Option(`${p.exe}  (${p.path})`, p.exe); opt.title = p.path; sel.prepend(opt); }
+      sel.value = opt.value;
+      $('#man-name').value = prettyExe(p.exe);
+      $('#manual').scrollIntoView({ block: 'nearest' });
+      $('#man-name').focus(); $('#man-name').select();
+    } else if (n) {
+      const p = detected[+n.dataset.detNo]; if (!p) return;
+      try { await FLB.trackAnswer(p.exe, false); } catch (e) { fail(e); }
+      renderDetected();
+    }
+  });
+
   async function loadCands() {
     try {
       const c = await FLB.candidates();
@@ -360,12 +392,12 @@
       const g = catalog && catalog.find(x => x.id === gsel);
       if (!g || !/^manual:/.test(g.id)) return;
       if (!confirm(`Remove ${g.name} from your games? Fraglink stops tracking it. Your hours are kept.`)) return;
-      try { await FLB.removeGame(g.id); gsel = null; catalog = null; await detect(); } catch (e) { fail(e); }
+      try { await FLB.removeGame(g.id); gsel = null; renderDetected(); catalog = null; await detect(); } catch (e) { fail(e); }
     },
     'man-add': async () => {
       const exe = $('#cands').value, name = $('#man-name').value.trim();
       if (!exe || !name) { alert('Pick a running program and type the game name.'); return; }
-      try { await FLB.tag(exe, name); $('#man-name').value = ''; $('#manual').hidden = true; catalog = null; await detect(); } catch (e) { fail(e); }
+      try { await FLB.tag(exe, name); $('#man-name').value = ''; $('#manual').hidden = true; renderDetected(); catalog = null; await detect(); } catch (e) { fail(e); }
     },
     'block-add': async () => { const h = (prompt('Fraglink username to block:') || '').trim(); if (!h) return; try { await FLB.friendBlock(h, true); renderBlocked(); } catch (e) { fail(e); } },
     'block-remove': async () => { const h = $('#blocked').value; if (!h) return; try { await FLB.friendBlock(h, false); renderBlocked(); } catch (e) { fail(e); } },

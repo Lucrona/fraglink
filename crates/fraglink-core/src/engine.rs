@@ -17,6 +17,20 @@ const STEAM_REFRESH_SECS: i64 = 600;
 pub const PROMPT_AFTER_SECS: i64 = 5 * 60;
 /// Settings key: JSON array of lower-case exe names answered "Not a game".
 pub const PROMPT_DISMISSED_KEY: &str = "prompt_dismissed";
+/// beta.6: programs the app asked about ("Playing X?") that weren't answered yet, kept for
+/// Options > Games > Detected, not added. JSON list of [`Prompted`], newest first.
+pub const PROMPTED_KEY: &str = "prompted_unanswered";
+/// Most entries kept in [`PROMPTED_KEY`].
+pub const PROMPTED_MAX: usize = 200;
+
+/// An unknown program the app asked about.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct Prompted {
+    pub exe: String,
+    pub path: String,
+    /// Unix seconds of the last ask.
+    pub at: i64,
+}
 
 /// Full-screen programs that are never offered as games (on top of the
 /// signature file's `non_game_exes`): browsers, the shell, video players,
@@ -546,6 +560,45 @@ impl Engine {
         self.tracker.tick(now, &dets, idle)
     }
 
+    fn prompted_raw(&self) -> Vec<Prompted> {
+        self.tracker
+            .store
+            .get_setting(PROMPTED_KEY)
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_str(&v).ok())
+            .unwrap_or_default()
+    }
+
+    /// Remember that the app asked about `c` (newest first, one entry per exe).
+    pub fn note_prompted(&mut self, c: &Candidate, now: i64) -> Result<()> {
+        let mut list = self.prompted_raw();
+        list.retain(|p| !p.exe.eq_ignore_ascii_case(&c.exe));
+        list.insert(
+            0,
+            Prompted {
+                exe: c.exe.clone(),
+                path: c.path.clone(),
+                at: now,
+            },
+        );
+        list.truncate(PROMPTED_MAX);
+        self.tracker
+            .store
+            .set_setting(PROMPTED_KEY, &serde_json::to_string(&list)?)
+    }
+
+    /// Asked about but not added and not marked "Not a game".
+    pub fn prompted(&self) -> Vec<Prompted> {
+        self.prompted_raw()
+            .into_iter()
+            .filter(|p| {
+                let e = p.exe.to_lowercase();
+                !self.dismissed.contains(&e) && !self.detector.tags.contains_key(&e)
+            })
+            .collect()
+    }
+
     pub fn candidates(&self) -> Vec<Candidate> {
         self.detector.candidates(&self.last_procs)
     }
@@ -830,6 +883,34 @@ mod tests {
             .unwrap()
             .unwrap()
             .contains("other.exe"));
+    }
+
+    #[test]
+    fn prompted_list_drops_added_and_dismissed() {
+        std::env::set_var("FRAGLINK_STEAM_DIR", "/nonexistent-steam-dir");
+        let clock = Arc::new(AtomicU64::new(0));
+        let c = clock.clone();
+        let env = SimEnv::new("cs2.exe:600", Arc::new(move || c.load(Ordering::SeqCst))).unwrap();
+        let mut e = Engine::new(
+            Store::open_in_memory().unwrap(),
+            Box::new(env),
+            fixed_offset_day_fn(0),
+        )
+        .unwrap();
+        let cand = |x: &str| Candidate {
+            exe: x.into(),
+            path: format!("C:\\G\\{x}"),
+        };
+        e.note_prompted(&cand("A.exe"), 1).unwrap();
+        e.note_prompted(&cand("B.exe"), 2).unwrap();
+        e.note_prompted(&cand("C.exe"), 3).unwrap();
+        e.note_prompted(&cand("a.EXE"), 4).unwrap();
+        let ex: Vec<_> = e.prompted().into_iter().map(|p| p.exe).collect();
+        assert_eq!(ex, ["a.EXE", "C.exe", "B.exe"]);
+        e.dismiss_prompt("B.exe").unwrap();
+        e.tag_exe("C.exe", "Cee", 5).unwrap();
+        let ex: Vec<_> = e.prompted().into_iter().map(|p| p.exe).collect();
+        assert_eq!(ex, ["a.EXE"]);
     }
 
     #[test]

@@ -73,6 +73,7 @@ type SessRow = (
     DateTime<Utc>,
     i64,
     i64,
+    Option<String>,
 );
 
 /// Friends' activity: who's playing now, then one line per friend per game per day with
@@ -110,12 +111,13 @@ pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<Activity
     let since = Utc::now() - Duration::days(ACTIVITY_DAYS);
     let rows: Vec<SessRow> = sqlx::query_as(
         "SELECT u.handle, u.display_name, s.game_id, (s.ended_at AT TIME ZONE $4)::date::text AS day,
-                max(s.ended_at), sum(s.duration_s)::bigint, count(*)
+                max(s.ended_at), sum(s.duration_s)::bigint, count(*),
+                (SELECT o.name FROM own_game_names o WHERE o.user_id = u.id AND o.game_id = s.game_id)
          FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.user_id = ANY($1) AND u.share_activity AND u.deleted_at IS NULL
            AND s.ended_at >= $2 AND s.duration_s >= 60
            AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
-         GROUP BY u.handle, u.display_name, s.game_id, day
+         GROUP BY u.id, u.handle, u.display_name, s.game_id, day
          ORDER BY max(s.ended_at) DESC LIMIT $3",
     )
     .bind(&ids)
@@ -126,8 +128,10 @@ pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<Activity
     .await?;
     let gids: Vec<String> = rows.iter().filter_map(|r| r.2.clone()).collect();
     let names = crate::names::public_names(st, &gids).await?;
-    for (handle, name, gid, day, ended, secs, n) in rows {
+    for (handle, name, gid, day, ended, secs, n, own) in rows {
         let (gid, gname) = match gid {
+            // beta.6: a program they added shows the name they gave it
+            Some(g) if !names.contains_key(&g) && own.is_some() => (Some(g), own),
             Some(g) => {
                 let (i, n) = crate::names::public_pair(&g, &names);
                 (Some(i), Some(n))
@@ -171,10 +175,9 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
         .fetch_one(&st.db)
         .await?;
     let presence = if p.id == me {
-        let mut v = presence::visible_presence(st, me)
+        let v = presence::visible_presence(st, me)
             .await?
             .unwrap_or_else(presence::PresenceView::offline);
-        presence::apply_own_name(st, me, &mut v).await?;
         v
     } else {
         presence::visible_presence_many(st, &[p.id])

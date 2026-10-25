@@ -70,6 +70,12 @@ pub fn tag_process(
     Ok(id)
 }
 
+/// beta.6: programs the app asked about that are still unanswered (Options > Games).
+#[tauri::command]
+pub fn get_prompted(state: State<'_, AppState>) -> Vec<fraglink_core::engine::Prompted> {
+    state.engine.lock_ok().prompted()
+}
+
 /// The pending "Track <exe> as a game?" question, if any.
 #[tauri::command]
 pub fn track_prompt(state: State<'_, AppState>) -> Option<Candidate> {
@@ -983,6 +989,7 @@ pub(crate) fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {
     let mut out = catalog::merge_dupes(out, &e.detector.overrides);
     // staff renames (override rules) win over the bundled signature names
     for g in out.iter_mut() {
+        g.verified |= e.detector.overrides.is_verified(&g.id);
         if let Some(n) = e.override_name(&g.id) {
             if g.source != "manual" && n != g.name {
                 g.name = n.to_string();

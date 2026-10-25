@@ -41,6 +41,10 @@ pub struct OverrideFile {
     /// tracked as another game (`112_operator`). Older apps ignore this field.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<Alias>,
+    /// beta.6: game ids staff confirmed detection for (the verified tick), on top of
+    /// `verified` in games.json. Room for an Admin toggle later. Older apps ignore it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verified: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -54,9 +58,15 @@ pub struct Overrides {
     pub version: String,
     rules: Vec<Rule>,
     aliases: std::collections::HashMap<String, String>,
+    verified: std::collections::HashSet<String>,
 }
 
 impl Overrides {
+    /// Staff confirmed detection works for this game id.
+    pub fn is_verified(&self, id: &str) -> bool {
+        self.verified.contains(&id.to_lowercase())
+    }
+
     pub fn builtin() -> Self {
         Self::from_json(BUILTIN_JSON).expect("bundled overrides.json must parse")
     }
@@ -86,10 +96,17 @@ impl Overrides {
             .map(|a| (a.from.trim().to_lowercase(), a.to.trim().to_string()))
             .filter(|(f, t)| !f.is_empty() && !t.is_empty() && !f.eq_ignore_ascii_case(t))
             .collect();
+        let verified = f
+            .verified
+            .iter()
+            .map(|v| v.trim().to_lowercase())
+            .filter(|v| !v.is_empty())
+            .collect();
         Ok(Overrides {
             version: f.version,
             rules,
             aliases,
+            verified,
         })
     }
 
@@ -226,5 +243,31 @@ mod tests {
                 .id,
             "a"
         );
+    }
+}
+
+#[cfg(test)]
+mod verified_tests {
+    use super::Overrides;
+
+    #[test]
+    fn verified_ticks_start_list() {
+        let o = Overrides::builtin();
+        assert!(o.is_verified("112_operator") && o.is_verified("STEAM:793460"));
+        assert!(!o.is_verified("cs2"));
+        let s = crate::signatures::SignatureDb::builtin();
+        let v: Vec<_> = s
+            .games()
+            .iter()
+            .filter(|g| g.verified)
+            .map(|g| g.id.as_str())
+            .collect();
+        for id in ["wow", "hearthstone", "marvel_rivals", "star_citizen"] {
+            assert!(v.contains(&id), "{id}");
+        }
+        assert_eq!(v.len(), 4);
+        // older server copies without the field still parse
+        let old = Overrides::from_json(r#"{"schema":1,"version":"t","rules":[]}"#).unwrap();
+        assert!(!old.is_verified("112_operator"));
     }
 }
