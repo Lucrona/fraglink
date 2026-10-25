@@ -1777,7 +1777,9 @@
    ],
    "path_exes": [],
    "path_hints": [],
-   "steam_appids": [],
+   "steam_appids": [
+    3932890
+   ],
    "platform": "bsg",
    "uncertain": false,
    "genre": "fps"
@@ -1974,7 +1976,9 @@
    ],
    "path_exes": [],
    "path_hints": [],
-   "steam_appids": [],
+   "steam_appids": [
+    1407200
+   ],
    "platform": "wargaming",
    "uncertain": false,
    "genre": "action"

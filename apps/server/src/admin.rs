@@ -40,6 +40,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/suggestions/reject", post(reject))
         .route("/api/v1/admin/suggestions/undo", post(undo_suggestion))
         .route("/api/v1/admin/games", get(games_search))
+        .route("/api/v1/admin/games-meta", get(games_meta))
         .route("/api/v1/admin/games/{id}", get(game_detail).post(game_save))
         .route("/api/v1/admin/games/{id}/delete", post(game_delete))
         .route(
@@ -272,7 +273,7 @@ fn clean(s: &str, max: usize) -> String {
         .collect()
 }
 
-fn like_pattern(q: &str) -> String {
+pub(crate) fn like_pattern(q: &str) -> String {
     format!(
         "%{}%",
         q.to_lowercase()
@@ -505,6 +506,18 @@ async fn game_info(st: &AppState, id: &str) -> ApiResult<Option<Value>> {
     } else {
         "unlisted"
     };
+    let (sources, steam_appids) =
+        game_sources(st, id, row.as_ref().and_then(|r| r.2), o.as_ref()).await?;
+    let updated_at: Option<DateTime<Utc>> = sqlx::query_scalar(
+        "SELECT max(t) FROM (
+           SELECT updated_at AS t FROM game_overrides WHERE game_id = $1
+           UNION ALL SELECT updated_at FROM game_status WHERE game_id = $1
+           UNION ALL SELECT retired_at FROM game_retirements WHERE game_id = $1 OR successor_id = $1
+           UNION ALL SELECT updated_at FROM detection_aliases WHERE game_id = $1) x",
+    )
+    .bind(id)
+    .fetch_one(&st.db)
+    .await?;
     let base_name = list
         .clone()
         .or_else(|| row.as_ref().map(|r| r.0.clone()))
@@ -537,9 +550,132 @@ async fn game_info(st: &AppState, id: &str) -> ApiResult<Option<Value>> {
         "name": base_name,
         "public_name": public,
         "source": source,
+        "sources": sources,
+        "steam_appids": steam_appids,
+        "updated_at": updated_at,
         "override": o,
         "icon": crate::icons::icon_path(id, 32),
         "icon64": crate::icons::icon_path(id, 64),
+    })))
+}
+
+/// Every place a game's detection comes from, for the Admin source chips:
+/// Steam app ids (DB row, built-in signatures, Admin picks, Detection aliases),
+/// the downloaded games list, the built-in signatures, folder rules and fix-ups.
+async fn game_sources(
+    st: &AppState,
+    id: &str,
+    row_appid: Option<i32>,
+    o: Option<&game_overrides::GameOverride>,
+) -> ApiResult<(Vec<&'static str>, Vec<u32>)> {
+    let mut appids: Vec<u32> = Vec::new();
+    let push = |a: u32, v: &mut Vec<u32>| {
+        if a > 0 && !v.contains(&a) {
+            v.push(a)
+        }
+    };
+    if let Some(a) = row_appid {
+        push(a as u32, &mut appids);
+    }
+    if let Some(g) = st.sigs.get(id) {
+        for a in &g.steam_appids {
+            push(*a, &mut appids);
+        }
+    }
+    if let Some(a) = o.and_then(|o| o.steam_appid) {
+        push(a as u32, &mut appids);
+    }
+    if let Some(n) = id.strip_prefix("steam:").and_then(|n| n.parse().ok()) {
+        push(n, &mut appids);
+    }
+    let kinds: Vec<(String, String)> =
+        sqlx::query_as("SELECT kind, pattern FROM detection_aliases WHERE game_id = $1")
+            .bind(id)
+            .fetch_all(&st.db)
+            .await?;
+    for (k, p) in &kinds {
+        if k == "steam" {
+            if let Ok(n) = p.parse() {
+                push(n, &mut appids);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if !appids.is_empty() {
+        out.push("steam");
+    }
+    if st.games.detectable_name(id).is_some() {
+        out.push("games list");
+    }
+    if st.sigs.get(id).is_some() {
+        out.push("built-in");
+    }
+    if st.games.override_name(&st.cfg.data_dir, id).is_some()
+        || kinds.iter().any(|(k, _)| k == "path")
+    {
+        out.push("folder rule");
+    }
+    if !kinds.is_empty() {
+        out.push("fix-up");
+    }
+    if o.is_some_and(|o| !o.extra_exes.is_empty()) {
+        out.push("extra exe");
+    }
+    if id.starts_with("exe:") {
+        out.push("approved");
+    }
+    if out.is_empty() {
+        out.push("unlisted");
+    }
+    Ok((out, appids))
+}
+
+/// Remember when a background job last ran (Admin "last updated").
+pub async fn record_job(st: &AppState, job: &str, detail: Option<&str>, ok: bool) {
+    let r = sqlx::query(
+        "INSERT INTO job_runs(job, last_run_at, last_ok_at, detail) VALUES($1, now(), CASE WHEN $2 THEN now() END, $3)
+         ON CONFLICT (job) DO UPDATE SET last_run_at = now(),
+           last_ok_at = CASE WHEN $2 THEN now() ELSE job_runs.last_ok_at END,
+           detail = COALESCE($3, job_runs.detail)",
+    )
+    .bind(job)
+    .bind(ok)
+    .bind(detail)
+    .execute(&st.db)
+    .await;
+    if let Err(e) = r {
+        tracing::warn!("job_runs {job}: {e}");
+    }
+}
+
+/// "Last updated" header for Admin > Games and Detection.
+async fn games_meta(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let job: Option<(DateTime<Utc>, Option<DateTime<Utc>>, Option<String>)> = sqlx::query_as(
+        "SELECT last_run_at, last_ok_at, detail FROM job_runs WHERE job = 'steam_sync'",
+    )
+    .fetch_optional(&st.db)
+    .await?;
+    let last_steam_account: Option<DateTime<Utc>> = sqlx::query_scalar(
+        "SELECT max(last_sync_at) FROM linked_accounts WHERE provider = 'steam'",
+    )
+    .fetch_one(&st.db)
+    .await?;
+    let game_edit: Option<DateTime<Utc>> =
+        sqlx::query_scalar("SELECT max(updated_at) FROM game_overrides")
+            .fetch_one(&st.db)
+            .await?;
+    let fixup: Option<DateTime<Utc>> =
+        sqlx::query_scalar("SELECT max(updated_at) FROM detection_aliases")
+            .fetch_one(&st.db)
+            .await?;
+    let list = st.games.current();
+    Ok(Json(json!({
+        "steam_sync": job.map(|(r, ok, d)| json!({ "last_run_at": r, "last_ok_at": ok, "detail": d })),
+        "steam_last_account_sync": last_steam_account,
+        "games_list": list.map(|b| json!({ "updated": b.updated, "games": b.games })),
+        "last_game_edit": game_edit,
+        "last_fixup_change": fixup,
     })))
 }
 
@@ -553,6 +689,7 @@ async fn games_search(
         Some("hours") => "total_min DESC, players DESC",
         Some("recent") => "last_played_at DESC NULLS LAST",
         Some("name") => "lower(coalesce(gm.name, t.game_id))",
+        Some("updated") => "(SELECT max(updated_at) FROM game_overrides go WHERE go.game_id = t.game_id) DESC NULLS LAST, players DESC",
         _ => "players DESC, total_min DESC",
     };
     let offset = q.offset.unwrap_or(0).max(0);
@@ -560,23 +697,31 @@ async fn games_search(
     let ov = game_overrides::current(&st).await?;
     let edited_only = q.show.as_deref() == Some("edited");
     let mut ids: Vec<String> = Vec::new();
+    // extra filter for the "every game with hours" list (server-side, so it pages)
+    let filt = match q.show.as_deref() {
+        Some("no_steam") => "AND gm.steam_appid IS NULL AND t.game_id NOT LIKE 'steam:%'",
+        Some("steam") => "AND (gm.steam_appid IS NOT NULL OR t.game_id LIKE 'steam:%')",
+        Some("unverified") => "AND NOT coalesce(gm.verified, false)",
+        _ => "",
+    };
     let (rows, total): (Vec<Totals>, i64) = if term.is_empty() && !edited_only {
         // every game with any hours, aggregated and paged in the database
         let rows: Vec<Totals> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "WITH t AS ({GAME_TOTALS} GROUP BY game_id)
              SELECT t.game_id, t.players, t.total_min, t.tracked_min, t.imported_min, t.last_played_at
              FROM t LEFT JOIN games gm ON gm.id = t.game_id
-             WHERE t.game_id NOT LIKE 'manual:%' AND (t.players > 0 OR t.total_min > 0)
+             WHERE t.game_id NOT LIKE 'manual:%' AND (t.players > 0 OR t.total_min > 0) {filt}
              ORDER BY {sort} LIMIT $1 OFFSET $2"
         )))
         .bind(ADMIN_PAGE)
         .bind(offset)
         .fetch_all(&st.db)
         .await?;
-        let total: i64 = sqlx::query_scalar(
-            "SELECT count(DISTINCT game_id) FROM user_game_stats WHERE game_id NOT LIKE 'manual:%'
-               AND (display_min > 0 OR minutes_7d > 0)",
-        )
+        let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "WITH t AS ({GAME_TOTALS} GROUP BY game_id)
+             SELECT count(*) FROM t LEFT JOIN games gm ON gm.id = t.game_id
+             WHERE t.game_id NOT LIKE 'manual:%' AND (t.players > 0 OR t.total_min > 0) {filt}"
+        )))
         .fetch_one(&st.db)
         .await?;
         ids = rows.iter().map(|r| r.0.clone()).collect();

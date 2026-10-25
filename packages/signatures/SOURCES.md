@@ -16,6 +16,8 @@ Steam copies are detected by install folder anyway. The exe names matter for cop
 | Old School RuneScape (1343370) | ✅ kept | Steam launch config `bin/win64/osclient.exe`; PCGamingWiki mentions RuneLite.exe. |
 | Albion Online (761890) | ✅ kept | `game\Albion-Online.exe` (Albion forum/community); Steam launch config is the launcher `AlbionLauncher.exe`. |
 | Path of Exile 2 (2694490) | ✅ kept | Steam launch config `PathOfExileSteam.exe`; GGG forum: standalone `PathOfExile.exe` (the `_x64` exe is a stub). Path-gated to `/path of exile 2/` because PoE1 uses the same names. |
+| Escape from Tarkov (3932890) | ✅ appid added | Steam store appdetails, 2025 Steam release. |
+| World of Tanks (1407200) | ✅ appid added | Steam store appdetails. |
 | Marvel Rivals (2767030) | ✅ kept + launcher | Official Marvel Rivals FAQ names `Marvel-Win64-Shipping.exe`; Steam launch config `MarvelRivals_Launcher.exe`. |
 | THE FINALS (2073850) | ✅ now path-gated | Steam launch config + PCGamingWiki `Discovery.exe`. It's a generic name, so it only counts under `/the finals/`. |
 | Hunt: Showdown 1896 (594650) | ✅ kept | `bin\win_x64\HuntGame.exe` (Steam discussions, Crytek post on r/HuntShowdown). Steam launches `hunt.exe` first. |

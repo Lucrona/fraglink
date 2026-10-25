@@ -134,7 +134,7 @@ g("zzz", "Zenless Zone Zero", ["ZenlessZoneZero.exe"], platform="hoyoverse")
 # ---- Shooters / multiplayer
 g("pubg", "PUBG: Battlegrounds", ["TslGame.exe"], [578080], "steam")
 g("r6siege", "Tom Clancy's Rainbow Six Siege", ["RainbowSix.exe", "RainbowSix_Vulkan.exe", "RainbowSix_DX11.exe"], [359550], "ubisoft")
-g("tarkov", "Escape from Tarkov", ["EscapeFromTarkov.exe"], platform="bsg")
+g("tarkov", "Escape from Tarkov", ["EscapeFromTarkov.exe"], [3932890], "bsg")  # verified: Steam store appdetails 3932890 (2025 Steam release)
 g("marvel_rivals", "Marvel Rivals", ["Marvel-Win64-Shipping.exe", "MarvelRivals_Launcher.exe"], [2767030], "steam")  # verified: official FAQ + Steam launch config
 g("thefinals", "THE FINALS", [], [2073850], "steam", path_exes=["Discovery.exe"], hints=["/the finals/"])  # verified: Steam launch config + PCGamingWiki; generic exe name so path-gated
 g("helldivers2", "Helldivers 2", ["helldivers2.exe"], [553850], "steam")
@@ -147,7 +147,7 @@ g("rust", "Rust", ["RustClient.exe"], [252490], "steam")
 g("dbd", "Dead by Daylight", ["DeadByDaylight-Win64-Shipping.exe"], [381210], "steam")
 g("chivalry2", "Chivalry 2", ["Chivalry2-Win64-Shipping.exe"], [1824220], "steam")
 g("warthunder", "War Thunder", ["aces.exe"], [236390], "gaijin")
-g("wot", "World of Tanks", ["WorldOfTanks.exe"], platform="wargaming")
+g("wot", "World of Tanks", ["WorldOfTanks.exe"], [1407200], "wargaming")  # verified: Steam store appdetails 1407200
 g("payday2", "PAYDAY 2", ["payday2_win32_release.exe"], [218620], "steam")
 g("ut2004", "Unreal Tournament 2004", ["UT2004.exe"], [13230], "steam")
 g("tekken8", "Tekken 8", ["Polaris-Win64-Shipping.exe", "TEKKEN 8.exe"], [1778820], "steam")  # verified: Steam launch config + UEVR profile name

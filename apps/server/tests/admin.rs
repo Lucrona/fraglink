@@ -659,3 +659,90 @@ async fn email_alert_settings(pool: PgPool) {
     assert_eq!(r.json()["test_sent"], false);
     assert_eq!(r.json()["recent"][0]["kind"], "test");
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn game_sources_meta_and_detection_paging(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let owner = signup(&app, "src@example.com", "srcboss").await;
+    set_role(&pool, "srcboss", Some("owner")).await;
+    sqlx::query("INSERT INTO games (id, name, steam_appid, verified) VALUES ('marvel_rivals', 'Marvel Rivals', 2767030, true) ON CONFLICT (id) DO UPDATE SET steam_appid = 2767030")
+        .execute(&pool).await.unwrap();
+    // a built-in game with a Steam app id shows both, not just "games list"
+    let g = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games/marvel_rivals",
+        Some(&owner),
+        None,
+    )
+    .await
+    .json();
+    let src: Vec<String> = serde_json::from_value(g["sources"].clone()).unwrap();
+    assert!(src.contains(&"steam".to_string()), "{src:?}");
+    assert!(src.contains(&"built-in".to_string()), "{src:?}");
+    assert_eq!(g["steam_appids"][0], 2767030);
+    // fix-ups: add, page/search, edit stamps updated_by
+    for i in 0..55 {
+        let r = api(
+            &app,
+            "POST",
+            "/api/v1/admin/detection",
+            Some(&owner),
+            Some(serde_json::json!({ "kind": "id", "pattern": format!("old_{i}"), "game_id": "marvel_rivals" })),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    }
+    let d = api(&app, "GET", "/api/v1/admin/detection", Some(&owner), None)
+        .await
+        .json();
+    assert_eq!(d["total"], 56); // + the 112 Operator seed
+    assert_eq!(d["rules"].as_array().unwrap().len(), 50);
+    let d = api(
+        &app,
+        "GET",
+        "/api/v1/admin/detection?q=old_5&kind=id",
+        Some(&owner),
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(d["total"], 6, "{d}");
+    let id = d["rules"][0]["id"].as_i64().unwrap();
+    let r = api(
+        &app,
+        "POST",
+        &format!("/api/v1/admin/detection/{id}"),
+        Some(&owner),
+        Some(serde_json::json!({ "game_id": "marvel_rivals", "note": "n" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let d = api(
+        &app,
+        "GET",
+        "/api/v1/admin/detection?sort=updated",
+        Some(&owner),
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(d["rules"][0]["updated_by"], "srcboss");
+    fraglink_server::admin::record_job(&st, "steam_sync", Some("2 account(s) refreshed"), true)
+        .await;
+    let m = api(&app, "GET", "/api/v1/admin/games-meta", Some(&owner), None)
+        .await
+        .json();
+    assert_eq!(m["steam_sync"]["detail"], "2 account(s) refreshed");
+    assert!(m["last_fixup_change"].is_string());
+    let f = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games?show=no_steam&sort=updated",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(f.status, StatusCode::OK, "{}", f.text);
+}

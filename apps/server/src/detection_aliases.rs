@@ -6,7 +6,7 @@
 use crate::admin::{audit, Role, Staff};
 use crate::error::{ApiResult, AppError};
 use crate::AppState;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use fraglink_core::overrides::{Alias, OverrideFile, Rule};
@@ -26,6 +26,7 @@ pub struct Row {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/admin/detection", get(list).post(add))
+        .route("/api/v1/admin/detection/{id}", post(edit))
         .route("/api/v1/admin/detection/{id}/delete", post(remove))
 }
 
@@ -140,12 +141,125 @@ pub async fn merged(st: &AppState) -> ApiResult<Vec<(String, String)>> {
     .await?)
 }
 
-async fn list(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
+#[derive(Deserialize)]
+struct ListQ {
+    #[serde(default)]
+    q: String,
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    sort: String,
+    #[serde(default)]
+    offset: i64,
+}
+
+const PAGE: i64 = 50;
+
+/// Paged, searchable list (pattern, game id, game name or note).
+async fn list(
+    State(st): State<AppState>,
+    s: Staff,
+    Query(q): Query<ListQ>,
+) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
-    let rows = load(&st).await?;
-    Ok(Json(json!({ "rules": rows.iter().map(|r| json!({
-        "id": r.id, "kind": r.kind, "pattern": r.pattern, "game_id": r.game_id, "note": r.note,
-    })).collect::<Vec<_>>() })))
+    let term = crate::admin::like_pattern(q.q.trim());
+    let kind = (!q.kind.is_empty()).then_some(q.kind.as_str());
+    let order = match q.sort.as_str() {
+        "updated" => "a.updated_at DESC, a.id DESC",
+        "game" => "lower(coalesce(g.name, a.game_id)), a.id",
+        _ => "a.kind, lower(a.pattern)",
+    };
+    let wh = "WHERE ($1::text IS NULL OR a.kind = $1)
+        AND (lower(a.pattern) LIKE $2 OR lower(a.game_id) LIKE $2 OR lower(coalesce(g.name, '')) LIKE $2 OR lower(coalesce(a.note, '')) LIKE $2)";
+    type R = (
+        i64,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        chrono::DateTime<chrono::Utc>,
+        Option<String>,
+    );
+    let rows: Vec<R> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT a.id, a.kind, a.pattern, a.game_id, a.note, g.name, a.updated_at, u.handle
+         FROM detection_aliases a LEFT JOIN games g ON g.id = a.game_id LEFT JOIN users u ON u.id = a.updated_by
+         {wh} ORDER BY {order} LIMIT $3 OFFSET $4"
+    )))
+    .bind(kind)
+    .bind(&term)
+    .bind(PAGE)
+    .bind(q.offset.max(0))
+    .fetch_all(&st.db)
+    .await?;
+    let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT count(*) FROM detection_aliases a LEFT JOIN games g ON g.id = a.game_id {wh}"
+    )))
+    .bind(kind)
+    .bind(&term)
+    .fetch_one(&st.db)
+    .await?;
+    Ok(Json(json!({
+        "rules": rows.iter().map(|(id, kind, pattern, game_id, note, name, at, by)| json!({
+            "id": id, "kind": kind, "pattern": pattern, "game_id": game_id, "note": note,
+            "game_name": name.clone().or_else(|| crate::names::list_name(&st, game_id)),
+            "updated_at": at, "updated_by": by,
+        })).collect::<Vec<_>>(),
+        "total": total, "offset": q.offset.max(0), "limit": PAGE,
+    })))
+}
+
+#[derive(Deserialize)]
+struct EditReq {
+    game_id: String,
+    note: Option<String>,
+}
+
+/// Point a fix-up at another game or change its note.
+async fn edit(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<i64>,
+    Json(r): Json<EditReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let game = r.game_id.trim();
+    let known: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM games WHERE id = $1)")
+        .bind(game)
+        .fetch_one(&st.db)
+        .await?;
+    if !known {
+        return Err(AppError::bad_request(
+            "unknown_game",
+            "No game with that id.",
+        ));
+    }
+    let note = r.note.as_deref().map(str::trim).filter(|n| !n.is_empty());
+    let before: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT game_id, note FROM detection_aliases WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&st.db)
+            .await?;
+    let (bg, bn) = before.ok_or_else(AppError::not_found)?;
+    sqlx::query(
+        "UPDATE detection_aliases SET game_id = $2, note = $3, updated_at = now(), updated_by = $4 WHERE id = $1",
+    )
+    .bind(id)
+    .bind(game)
+    .bind(note)
+    .bind(s.user.id)
+    .execute(&st.db)
+    .await?;
+    audit(
+        &st,
+        &s,
+        "detection.edit",
+        &format!("detection:{id}"),
+        json!({ "game_id": bg, "note": bn }),
+        json!({ "game_id": game, "note": note }),
+    )
+    .await?;
+    Ok(Json(json!({ "id": id })))
 }
 
 #[derive(Deserialize)]
@@ -198,13 +312,14 @@ async fn add(
     }
     let note = r.note.as_deref().map(str::trim).filter(|n| !n.is_empty());
     let id: Option<i64> = sqlx::query_scalar(
-        "INSERT INTO detection_aliases(kind, pattern, game_id, note) VALUES($1, $2, $3, $4)
+        "INSERT INTO detection_aliases(kind, pattern, game_id, note, updated_by) VALUES($1, $2, $3, $4, $5)
          ON CONFLICT DO NOTHING RETURNING id",
     )
     .bind(&r.kind)
     .bind(&pattern)
     .bind(game)
     .bind(note)
+    .bind(s.user.id)
     .fetch_optional(&st.db)
     .await?;
     let id =
