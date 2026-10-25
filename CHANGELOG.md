@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.4] - 2026-10-25
+
 ### Fixed
 - Desktop: a panic no longer freezes the app silently. It is written to the log and to crash-<time>.txt, the tracker recovers, and locks recover after a panic.
 - Desktop: the Steam/install scan and the game catalogue's disk walk no longer run while the tracker lock is held (likely cause of the freeze).
