@@ -76,25 +76,24 @@ const OPEN: &str = "m.status = 'new' AND NOT EXISTS (SELECT 1 FROM game_retireme
 async fn list(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
     s.need(Role::Moderator)?;
     refresh(&st).await?;
-    let rows: Vec<(String, String, DateTime<Utc>, Option<String>, Option<String>, i64, i64)> =
+    let rows: Vec<(String, String, DateTime<Utc>, i64, i64)> =
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT m.game_id, m.into_id, m.first_at,
-                    (SELECT coalesce(public_name, name) FROM games WHERE id = m.game_id),
-                    (SELECT coalesce(public_name, name) FROM games WHERE id = m.into_id),
                     (SELECT count(DISTINCT user_id) FROM sessions WHERE game_id = m.game_id),
                     (SELECT coalesce(sum(duration_s), 0)::bigint FROM sessions WHERE game_id = m.game_id)
              FROM merge_suggestions m WHERE {OPEN} ORDER BY m.first_at DESC LIMIT 300"
         )))
         .fetch_all(&st.db)
         .await?;
-    let items: Vec<Value> = rows
-        .into_iter()
-        .map(|(id, into, at, name, into_name, players, secs)| {
-            let into_name = into_name.or_else(|| crate::names::list_name(&st, &into));
+    let mut items = Vec::new();
+    for (id, into, at, players, secs) in rows {
+        let name = crate::names::public_name(&st, &id).await?;
+        let into_name = crate::names::public_name(&st, &into).await?;
+        items.push(
             json!({ "game_id": id, "exe": id.trim_start_matches("exe:"), "name": name, "into": into,
-                    "into_name": into_name, "players": players, "seconds": secs, "first_seen": at })
-        })
-        .collect();
+                "into_name": into_name, "players": players, "seconds": secs, "first_seen": at }),
+        );
+    }
     Ok(Json(json!({ "merges": items })))
 }
 
