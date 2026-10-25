@@ -90,7 +90,7 @@ fn offer_track(app: &AppHandle, c: fraglink_core::detector::Candidate) {
             app,
             ToastPayload {
                 kind: format!("track:{}", c.exe),
-                // the toast shows "Track <title> as a game?" with Yes / Not a game
+                // the toast shows "Playing <title>?" with Add it! / Not a game (beta.5)
                 title: commands::name_from_exe(&c.exe),
                 line: "as a game?".into(),
                 game_id: String::new(),
@@ -817,7 +817,10 @@ pub fn run() {
             });
             build_tray(&handle)?;
             let start_min = windows::flag(&handle, "start_minimized");
-            let show = !fl.minimized && !start_min;
+            // beta.6: "Start hidden in the tray when Windows starts". Windows autostart passes
+            // `--minimized`; only then (and only with the setting on) does the app stay hidden.
+            // Opening Fraglink yourself always shows the window.
+            let show = !(fl.minimized && start_min);
             if show && !fl.no_splash {
                 // Startup window: check for updates first, then open the client.
                 windows::show_splash(&handle);

@@ -158,3 +158,5 @@ body.dark .conn .soon.ok { color: #6fd27b; }
 .confirm-box p{margin:0 0 14px;line-height:1.4;font-size:12px}
 .confirm-actions{display:flex;gap:8px;justify-content:flex-end}
 .confirm-actions button{min-width:80px}
+.add-it { margin: 0 0 6px; font-weight: bold; }
+.add-it .hint-link { font-weight: bold; }

@@ -266,15 +266,53 @@ fn to_view(r: Row) -> PresenceView {
 
 /// beta.5: on the user's own views, an unapproved program they added shows their own
 /// name for it instead of "A game". Never call this for what friends see.
-pub fn apply_own_name(st: &AppState, user: Uuid, v: &mut PresenceView) {
+/// beta.6: the name is kept in `own_game_names`, so it survives a server restart.
+pub async fn apply_own_name(st: &AppState, user: Uuid, v: &mut PresenceView) -> ApiResult<()> {
     if v.game_id.as_deref() != Some(crate::names::UNLISTED_ID) {
-        return;
+        return Ok(());
     }
-    let own = st.own_names.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((id, n)) = own.get(&user) {
-        v.game_id = Some(id.clone());
-        v.game_name = Some(n.clone());
+    let cached = {
+        let own = st.own_names.lock().unwrap_or_else(|e| e.into_inner());
+        own.get(&user).cloned()
+    };
+    let found = match cached {
+        Some(p) => Some(p),
+        None => {
+            sqlx::query_as::<_, (String, String)>(
+                "SELECT o.game_id, o.name FROM presence p
+                 JOIN own_game_names o ON o.user_id = p.user_id AND o.game_id = p.game_id
+                 WHERE p.user_id = $1",
+            )
+            .bind(user)
+            .fetch_optional(&st.db)
+            .await?
+        }
+    };
+    if let Some((id, n)) = found {
+        v.game_id = Some(id);
+        v.game_name = Some(n);
     }
+    Ok(())
+}
+
+/// The player's own names for `ids` (programs they added), for their own views only.
+pub async fn own_names_for(
+    st: &AppState,
+    user: Uuid,
+    ids: &[String],
+) -> ApiResult<HashMap<String, String>> {
+    let ids: Vec<&String> = ids.iter().filter(|i| i.starts_with("exe:")).collect();
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT game_id, name FROM own_game_names WHERE user_id = $1 AND game_id = ANY($2)",
+    )
+    .bind(user)
+    .bind(ids)
+    .fetch_all(&st.db)
+    .await?;
+    Ok(rows.into_iter().collect())
 }
 
 /// What friends are allowed to see of `user` right now.
@@ -475,14 +513,33 @@ pub async fn set_from(
     };
     let new_id = game.as_ref().map(|g| g.0.clone());
     if !keep_game {
-        let mut own = st.own_names.lock().unwrap_or_else(|e| e.into_inner());
-        match (&new_id, own_name) {
-            (Some(id), Some(n)) if id.starts_with("exe:") => {
-                own.insert(user, (id.clone(), n));
+        let save = {
+            let mut own = st.own_names.lock().unwrap_or_else(|e| e.into_inner());
+            match (&new_id, own_name) {
+                (Some(id), Some(n)) if id.starts_with("exe:") => {
+                    let pair = (id.clone(), n);
+                    let changed = own.get(&user) != Some(&pair);
+                    own.insert(user, pair.clone());
+                    changed.then_some(pair)
+                }
+                _ => {
+                    own.remove(&user);
+                    None
+                }
             }
-            _ => {
-                own.remove(&user);
-            }
+        };
+        // Only when it changes (not every heartbeat); kept across restarts.
+        if let Some((id, n)) = save {
+            sqlx::query(
+                "INSERT INTO own_game_names(user_id, game_id, name) VALUES($1, $2, $3)
+                 ON CONFLICT (user_id, game_id) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
+                 WHERE own_game_names.name IS DISTINCT FROM EXCLUDED.name",
+            )
+            .bind(user)
+            .bind(&id)
+            .bind(&n)
+            .execute(&st.db)
+            .await?;
         }
     }
     let continuing = live && prev_game.is_some() && prev_game == new_id;

@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.6] - 2026-10-26
+
+### Changed
+- Options > Games lists only installed games (the game's exe is on this PC now), including games you added while their exe is there. The "Played before" section is gone.
+- Options > Games: "Add game manually…" moved out of the game details panel to a line at the top of the tab: "Not seeing your game? Add it!". The hint under the list points to Scan for games.
+- Options > General: clearer startup labels, "Start hidden in the tray when Windows starts" and "Minimise button sends Fraglink to the tray". The first now only applies when Windows starts Fraglink; opening it yourself always shows the window.
+- The main and Options windows never open larger than the screen (small screens, high display scaling, Large text).
+
+### Fixed
+- Your own name for a program you added is saved on the server, so your profile, recent games and now-playing keep it after a server restart instead of showing "A game".
+- "Playing X?" prompt: the question mark sits next to the game name instead of on its own line.
+
 ## [0.3.0-beta.5] - 2026-10-25
 
 ### Added

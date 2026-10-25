@@ -20,8 +20,8 @@
     <section data-page="general">
       <fieldset><legend>Startup</legend>
         <label><input type="checkbox" data-key="autostart" /> Launch Fraglink when Windows starts</label>
-        <label><input type="checkbox" data-key="start_minimized" /> Start minimised in the system tray</label>
-        <label><input type="checkbox" data-key="minimize_to_tray" /> Minimise to the system tray</label>
+        <label><input type="checkbox" data-key="start_minimized" /> Start hidden in the tray when Windows starts</label>
+        <label><input type="checkbox" data-key="minimize_to_tray" /> Minimise button sends Fraglink to the tray</label>
       </fieldset>
       <fieldset><legend>Friends list</legend>
         <label><input type="checkbox" data-key="show_offline" /> Show offline friends</label>
@@ -86,9 +86,10 @@
     </section>
 
     <section data-page="games" hidden>
+      <p class="add-it">Not seeing your game? <a data-do="add-manual" class="hint-link" role="button" tabindex="0">Add it!</a></p>
       <div class="detect"><div class="bar"><b id="det-bar"></b></div><span id="det-msg">Detecting games…</span><select id="g-sort" title="Sort games"><option value="az">A–Z</option><option value="most">Most played</option><option value="recent">Recently played</option></select><button type="button" data-do="detect">Detect Games</button><button type="button" data-do="scan" title="Look through your game folders for installed games (stays on this PC)">Scan for games</button></div>
       <div class="games-split">
-        <div class="tree-col"><div class="tree" id="tree" tabindex="0"></div><p class="hint tree-hint">Not seeing a game? Launch it once, or click <a data-do="scan" class="hint-link">Scan for games</a>.</p></div>
+        <div class="tree-col"><div class="tree" id="tree" tabindex="0"></div><p class="hint tree-hint">Still missing an installed game? Click <a data-do="scan" class="hint-link">Scan for games</a>.</p></div>
         <div class="gd-col">
           <fieldset id="gd" class="gd"><legend id="gd-name">Select Game</legend>
             <div class="gd-head"><i class="gd-icon" id="gd-icon"></i><div><b id="gd-title">Select a game on the left</b><small id="gd-src"></small></div></div>
@@ -100,7 +101,6 @@
             <label><input type="checkbox" id="gd-ex" /> Don't track this game</label>
             <div class="line" id="gd-rm-row" hidden><button type="button" data-do="remove-game">Remove game</button> <span class="hint">Your hours are kept.</span></div>
           </fieldset>
-          <div class="line"><button type="button" data-do="add-manual">Add game manually…</button></div>
         </div>
       </div>
       <fieldset id="manual" hidden><legend>Add game manually</legend>

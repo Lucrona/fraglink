@@ -118,23 +118,22 @@
   /* ---- Games tab ---- */
   const staged = (id, key, orig) => pending.has(key + id) ? pending.get(key + id) : orig;
   const isEx = g => staged(g.id, 'exclude:', g.excluded ? '1' : '0') === '1';
-  let open = { inst: true, played: true };
+  let open = { inst: true };
   // Sort: A–Z (default), most played, recently played; remembered on this PC.
   const SORTS = ['az', 'most', 'recent'];
   let sortBy = SORTS.includes(localStorage.getItem('fl_games_sort')) ? localStorage.getItem('fl_games_sort') : 'az';
   const byName = (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase());
   const sorted = arr => arr.slice().sort(sortBy === 'most' ? (a, b) => (b.total_seconds || 0) - (a.total_seconds || 0) || byName(a, b)
     : sortBy === 'recent' ? (a, b) => (b.last_played || 0) - (a.last_played || 0) || byName(a, b) : byName);
-  // Played or detected here before (stats or an exclusion), though not found installed now.
-  const played = g => !g.installed && ((g.total_seconds || 0) > 0 || !!g.last_played || g.excluded || g.source === 'tracked' || g.source === 'manual');
-  const shown = () => catalog ? catalog.filter(g => g.installed || played(g)) : [];
+  // Only games whose exe is on this PC now (added-by-you ones too, while their exe exists).
+  const shown = () => catalog ? catalog.filter(g => g.installed) : [];
   function renderTree() {
     const t = $('#tree');
     if (!catalog) { t.innerHTML = ''; return; }
-    const inst = sorted(catalog.filter(g => g.installed)), prev = sorted(catalog.filter(played));
+    const inst = sorted(shown());
     const leaf = g => `<div class="leaf ${g.id === gsel ? 'sel' : ''} ${isEx(g) ? 'ex' : ''}" data-g="${esc(g.id)}" title="${esc(SOURCES[g.source] ?? g.source)}">${iconHtml(g.id)}<span>${esc(g.name)}</span></div>`;
     const node = (k, label, arr) => `<div class="node" data-node="${k}"><span class="tw">${open[k] ? '−' : '+'}</span>${label} (${arr.length})</div>` + (open[k] ? arr.map(leaf).join('') : '');
-    t.innerHTML = node('inst', 'Installed games', inst) + (prev.length ? node('played', 'Played before', prev) : '');
+    t.innerHTML = node('inst', 'Installed games', inst);
   }
   // Same icon order as everywhere: server, Steam, exe, then the generic icon.
   const icons = {};
@@ -150,7 +149,7 @@
     const g = catalog && catalog.find(x => x.id === gsel);
     $('#gd-name').textContent = 'Select Game';
     $('#gd-title').textContent = g ? g.name : 'Select a game on the left';
-    $('#gd-src').textContent = g ? (g.installed ? 'Installed' : 'Played before') + (SOURCES[g.source] ? ' · ' + SOURCES[g.source] : '') : '';
+    $('#gd-src').textContent = g ? 'Installed' + (SOURCES[g.source] ? ' · ' + SOURCES[g.source] : '') : '';
     $('#gd-icon').innerHTML = g ? iconHtml(g.id) : '';
     $$('#gd input, #gd button').forEach(x => { x.disabled = !g; });
     $('#gd-path').value = g ? staged(g.id, 'game_path:', g.game_path || '') : '';
@@ -176,6 +175,7 @@
     $$('[data-do=detect], [data-do=scan]').forEach(b => { b.disabled = false; });
     const list = shown();
     if ((!gsel || !list.some(x => x.id === gsel)) && list.length) { const f = list.find(x => x.id === params.get('game')) || list.find(x => x.installed) || list[0]; gsel = f.id; }
+    if (gsel && !list.some(x => x.id === gsel)) gsel = null;
     renderTree(); renderDetail(); loadIcons();
   }
   async function loadCands() {
@@ -354,7 +354,7 @@
     detect: () => detect(),
     scan: () => detect(true),
     browse: async () => { if (!gsel) return; try { const p = await FLB.pickExe(); if (p) { $('#gd-path').value = p; pending.set('game_path:' + gsel, p); pending.set('detect_mode:' + gsel, 'manual'); $('#gd-manual').checked = true; $('#apply').disabled = false; } } catch (e) { fail(e); } },
-    'add-manual': () => { $('#manual').hidden = !$('#manual').hidden; if (!$('#manual').hidden) loadCands(); },
+    'add-manual': () => { $('#manual').hidden = !$('#manual').hidden; if (!$('#manual').hidden) { loadCands(); $('#manual').scrollIntoView({ block: 'nearest' }); } },
     'man-refresh': loadCands,
     'remove-game': async () => {
       const g = catalog && catalog.find(x => x.id === gsel);
