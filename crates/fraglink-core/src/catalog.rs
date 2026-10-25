@@ -65,6 +65,36 @@ fn found_exe(folder: Option<&str>, names: &[String]) -> Option<String> {
     crate::installs::find_exe(folder?, names)
 }
 
+/// True when `p` is inside one of the game's flavour folders (or it has none).
+fn hint_ok(hints: &[String], p: &str) -> bool {
+    if hints.is_empty() {
+        return true;
+    }
+    let n = crate::signatures::normalize_path(p);
+    hints.iter().any(|h| n.contains(h.as_str()))
+}
+
+/// beta.5: games sharing one install root (WoW retail / Forever / PTR all use
+/// `Wow.exe` under `World of Warcraft\`) look in their own flavour folder first and
+/// never take an exe from another flavour's folder.
+fn found_exe_hinted(folder: Option<&str>, names: &[String], hints: &[String]) -> Option<String> {
+    let folder = folder?;
+    for h in hints {
+        let sep = if folder.contains('\\') { "\\" } else { "/" };
+        let sub = format!(
+            "{}{sep}{}",
+            folder.trim_end_matches(['\\', '/']),
+            h.trim_matches('/')
+        );
+        if std::path::Path::new(&sub).is_dir() {
+            if let Some(x) = found_exe(Some(&sub), names) {
+                return Some(x);
+            }
+        }
+    }
+    found_exe(Some(folder), names).filter(|x| hint_ok(hints, x))
+}
+
 /// beta.5: the exe remembered from a run (`exe_path:` setting) is never forgotten, so
 /// an uninstalled game kept showing as installed. Check it is still there.
 fn exe_exists(p: &str) -> bool {
@@ -99,7 +129,9 @@ pub fn build(
         let lib = libs.games().iter().find(|l| {
             l.sig_id.as_deref() == Some(g.id.as_str()) || l.name.eq_ignore_ascii_case(&g.name)
         });
-        let exe = set(EXE_KEY, &g.id);
+        // a saved exe outside the game's flavour folder (e.g. WoW retail's
+        // `_retail_` vs Forever's `_forever_\Wow.exe`) belongs to another entry
+        let exe = set(EXE_KEY, &g.id).filter(|p| hint_ok(&g.path_hints, p));
         let (installed, source, path) = if let Some(a) = app {
             (true, "steam", Some(a.dir.clone()))
         } else if let Some(l) = lib {
@@ -133,7 +165,11 @@ pub fn build(
                 .filter(|_| source == "seen")
                 .or_else(|| {
                     let names: Vec<String> = g.exes.iter().chain(&g.path_exes).cloned().collect();
-                    found_exe(path.as_deref().filter(|_| source != "seen"), &names)
+                    found_exe_hinted(
+                        path.as_deref().filter(|_| source != "seen"),
+                        &names,
+                        &g.path_hints,
+                    )
                 })
                 .or(exe.clone())
                 .unwrap_or_default(),
@@ -428,6 +464,34 @@ pub fn launch_for(e: &Entry, libs: &LibraryIndex) -> Option<Launch> {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn wow_retail_detect_path_skips_forever_folder() {
+        let root = std::env::temp_dir().join(format!("fl-wowroot-{}", std::process::id()));
+        for (d, f) in [
+            ("_forever_", "Wow.exe"),
+            ("_retail_", "Wow.exe"),
+            ("_classic_", "WowClassic.exe"),
+        ] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+            std::fs::write(root.join(d).join(f), b"x").unwrap();
+        }
+        let hints = vec!["/_retail_/".to_string(), "/_ptr_/".to_string()];
+        let names = vec!["Wow.exe".to_string()];
+        let r = root.to_string_lossy().into_owned();
+        let got = found_exe_hinted(Some(&r), &names, &hints).unwrap();
+        assert!(got.replace('\\', "/").contains("/_retail_/"), "{got}");
+        // only a Forever install: retail finds nothing rather than Forever's exe
+        std::fs::remove_dir_all(root.join("_retail_")).unwrap();
+        assert_eq!(found_exe_hinted(Some(&r), &names, &hints), None);
+        // a saved retail exe pointing into _forever_ is ignored
+        let fe = root.join("_forever_").join("Wow.exe");
+        assert!(!hint_ok(&hints, &fe.to_string_lossy()));
+        // classic (no hints) still finds its own exe
+        let c = found_exe_hinted(Some(&r), &["WowClassic.exe".to_string()], &[]).unwrap();
+        assert!(c.contains("_classic_"));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn uninstalled_seen_exe_is_not_installed() {
         let tmp = std::env::temp_dir().join(format!("fl-seen-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
@@ -534,7 +598,9 @@ mod tests {
         let libs = LibraryIndex::default();
         let mut settings = BTreeMap::new();
         // the remembered exe has to exist on disk (beta.5)
-        let wow_exe = std::env::temp_dir().join(format!("fl-wow-{}.exe", std::process::id()));
+        let wow_dir = std::env::temp_dir().join(format!("fl-wow-{}/_retail_", std::process::id()));
+        std::fs::create_dir_all(&wow_dir).unwrap();
+        let wow_exe = wow_dir.join("Wow.exe");
         std::fs::write(&wow_exe, b"x").unwrap();
         let wow_exe = wow_exe.to_string_lossy().into_owned();
         settings.insert(format!("{EXE_KEY}wow"), wow_exe.clone());
