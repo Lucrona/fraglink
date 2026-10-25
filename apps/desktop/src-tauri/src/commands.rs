@@ -957,8 +957,9 @@ pub(crate) fn catalog_now(state: &AppState) -> Vec<catalog::Entry> {
             e.tracker.store.all_settings().unwrap_or_default(),
         )
     };
-    let mut out = catalog::build(&sigs, &steam, &libs, &games, &settings);
+    let out = catalog::build(&sigs, &steam, &libs, &games, &settings);
     let e = state.engine.lock_ok();
+    let mut out = catalog::merge_dupes(out, &e.detector.overrides);
     // staff renames (override rules) win over the bundled signature names
     for g in out.iter_mut() {
         if let Some(n) = e.override_name(&g.id) {

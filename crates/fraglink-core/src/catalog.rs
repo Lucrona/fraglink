@@ -65,6 +65,12 @@ fn found_exe(folder: Option<&str>, names: &[String]) -> Option<String> {
     crate::installs::find_exe(folder?, names)
 }
 
+/// beta.5: the exe remembered from a run (`exe_path:` setting) is never forgotten, so
+/// an uninstalled game kept showing as installed. Check it is still there.
+fn exe_exists(p: &str) -> bool {
+    std::path::Path::new(p).is_file()
+}
+
 /// How to start a game. Only built from catalog data, never from UI input.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Launch {
@@ -98,7 +104,8 @@ pub fn build(
             (true, "steam", Some(a.dir.clone()))
         } else if let Some(l) = lib {
             (true, l.store.as_str(), Some(l.install_dir.clone()))
-        } else if exe.is_some() {
+        } else if exe.as_deref().is_some_and(exe_exists) {
+            // beta.5: a remembered exe only counts while it is still on disk
             (true, "seen", exe.clone())
         } else {
             (false, "", None)
@@ -187,7 +194,7 @@ pub fn build(
             id: r.id.clone(),
             name: r.name.clone(),
             genre: None,
-            installed: steam_app.is_some() || exe.is_some(),
+            installed: steam_app.is_some() || exe.as_deref().is_some_and(exe_exists),
             source: if steam_app.is_some() {
                 "steam".into()
             } else if r.source == "manual" {
@@ -216,6 +223,102 @@ pub fn build(
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     out
+}
+
+/// Folder key for comparing install paths (case, slashes, trailing separator).
+fn folder_key(p: &str) -> Option<String> {
+    let p = p.trim();
+    if p.is_empty() || p.to_ascii_lowercase().ends_with(".exe") {
+        return None;
+    }
+    Some(p.replace('/', "\\").trim_end_matches('\\').to_lowercase())
+}
+
+/// Store-only ids (`steam:793460`, `epic:..`) that no signature claims.
+fn is_store_id(id: &str) -> bool {
+    id.contains(':')
+}
+
+/// Fold `from` into `into`: keep the richer install info, add up play time.
+fn absorb(into: &mut Entry, from: Entry) {
+    if !into.installed && from.installed {
+        into.installed = true;
+        into.source = from.source.clone();
+    }
+    if into.source == "tracked" && !from.source.is_empty() && from.source != "tracked" {
+        into.source = from.source.clone();
+    }
+    into.steam_appid = into.steam_appid.or(from.steam_appid);
+    if into.game_path.is_none() {
+        into.game_path = from.game_path;
+    }
+    if into.detect_path.is_empty() {
+        into.detect_path = from.detect_path;
+    }
+    if into.launch_args.is_empty() {
+        into.launch_args = from.launch_args;
+    }
+    if into.genre.is_none() {
+        into.genre = from.genre;
+    }
+    into.excluded |= from.excluded;
+    into.total_seconds += from.total_seconds;
+    into.last_played = into.last_played.max(from.last_played);
+}
+
+/// beta.5: one row per game in Options > Games. Applies the server's detection
+/// aliases (e.g. `steam:793460` -> `112_operator`) and folds a store-only entry
+/// into another entry installed in the same folder. Per-game settings saved under
+/// the old id (game path, launch args) carry over when the kept entry has none.
+pub fn merge_dupes(out: Vec<Entry>, ov: &crate::overrides::Overrides) -> Vec<Entry> {
+    let mut kept: Vec<Entry> = Vec::with_capacity(out.len());
+    let mut pending: Vec<Entry> = vec![];
+    for e in out {
+        if ov.resolve(&e.id) != e.id {
+            pending.push(e);
+        } else {
+            kept.push(e);
+        }
+    }
+    for mut e in pending {
+        let to = ov.resolve(&e.id).to_string();
+        if let Some(k) = kept.iter_mut().find(|k| k.id.eq_ignore_ascii_case(&to)) {
+            absorb(k, e);
+        } else {
+            e.id = to;
+            kept.push(e);
+        }
+    }
+    // same install folder: a store-only id folds into the signature / other entry
+    let mut i = 0;
+    while i < kept.len() {
+        let key = kept[i]
+            .game_path
+            .as_deref()
+            .filter(|_| kept[i].installed && is_store_id(&kept[i].id))
+            .and_then(folder_key);
+        let target = key.and_then(|key| {
+            kept.iter().enumerate().position(|(j, k)| {
+                j != i
+                    && k.installed
+                    && !(is_store_id(&k.id) && j > i)
+                    && k.game_path.as_deref().and_then(folder_key).as_deref() == Some(&key)
+            })
+        });
+        if let Some(j) = target {
+            let e = kept.remove(i);
+            let j = if j > i { j - 1 } else { j };
+            absorb(&mut kept[j], e);
+        } else {
+            i += 1;
+        }
+    }
+    kept.sort_by(|a, b| {
+        b.installed
+            .cmp(&a.installed)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    kept
 }
 
 fn split_args(s: &str) -> Vec<String> {
@@ -324,6 +427,103 @@ pub fn launch_for(e: &Entry, libs: &LibraryIndex) -> Option<Launch> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn uninstalled_seen_exe_is_not_installed() {
+        let tmp = std::env::temp_dir().join(format!("fl-seen-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let exe = tmp.join("WowB.exe");
+        std::fs::write(&exe, b"x").unwrap();
+        let row = GameRow {
+            id: "wow_forever".into(),
+            name: "World of Warcraft: Forever".into(),
+            source: "auto".into(),
+            steam_appid: None,
+            excluded: false,
+            total_seconds: 3600,
+            sessions: 1,
+            last_played: None,
+        };
+        let mut set = BTreeMap::new();
+        set.insert(
+            format!("{EXE_KEY}wow_forever"),
+            exe.to_string_lossy().into_owned(),
+        );
+        let sigs = SignatureDb::builtin();
+        let build1 = || {
+            build(
+                &sigs,
+                &SteamIndex::default(),
+                &LibraryIndex::default(),
+                std::slice::from_ref(&row),
+                &set,
+            )
+        };
+        assert!(build1()
+            .iter()
+            .any(|e| e.id == "wow_forever" && e.installed));
+        std::fs::remove_dir_all(&tmp).unwrap();
+        let e = build1()
+            .into_iter()
+            .find(|e| e.id == "wow_forever")
+            .unwrap();
+        assert!(!e.installed);
+        assert_eq!(e.total_seconds, 3600, "hours kept");
+    }
+
+    #[test]
+    fn merge_dupes_applies_aliases_and_folders() {
+        let mk = |id: &str, name: &str, path: Option<&str>, secs: i64| Entry {
+            id: id.into(),
+            name: name.into(),
+            genre: None,
+            installed: path.is_some(),
+            source: if path.is_some() {
+                "steam".into()
+            } else {
+                "tracked".into()
+            },
+            steam_appid: None,
+            game_path: path.map(Into::into),
+            detect_path: String::new(),
+            launch_args: String::new(),
+            excluded: false,
+            can_launch: false,
+            total_seconds: secs,
+            last_played: Some(secs),
+        };
+        let dir = r"E:\Steam\steamapps\common\112 Operator\";
+        let mut a = mk("steam:793460", "112 Operator", Some(dir), 100);
+        a.steam_appid = Some(793460);
+        a.launch_args = "-windowed".into();
+        let b = mk("112_operator", "112 Operator", None, 50);
+        let ov = crate::overrides::Overrides::from_json(
+            r#"{"schema":1,"version":"t","rules":[],"aliases":[{"from":"steam:793460","to":"112_operator"}]}"#,
+        )
+        .unwrap();
+        let out = merge_dupes(vec![a.clone(), b.clone()], &ov);
+        assert_eq!(out.len(), 1);
+        let e = &out[0];
+        assert_eq!(e.id, "112_operator");
+        assert!(e.installed);
+        assert_eq!(e.steam_appid, Some(793460));
+        assert_eq!(e.launch_args, "-windowed");
+        assert_eq!(e.total_seconds, 150);
+        assert_eq!(e.game_path.as_deref(), Some(dir));
+
+        // no alias: same folder still folds the store-only id into the signature
+        let mut b2 = b.clone();
+        b2.installed = true;
+        b2.game_path = Some(r"e:/steam/steamapps/common/112 operator".into());
+        let out = merge_dupes(vec![a.clone(), b2], &crate::overrides::Overrides::builtin());
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].id, "112_operator");
+
+        // different games in different folders stay apart
+        let c = mk("steam:1", "Other", Some(r"E:\x\"), 1);
+        let out = merge_dupes(vec![a, c], &crate::overrides::Overrides::builtin());
+        assert_eq!(out.len(), 2);
+    }
+
     use super::*;
 
     #[test]
@@ -333,10 +533,11 @@ mod tests {
         steam.insert("C:/Steam", 570, "Dota 2", "dota 2 beta");
         let libs = LibraryIndex::default();
         let mut settings = BTreeMap::new();
-        settings.insert(
-            format!("{EXE_KEY}wow"),
-            "C:\\Games\\WoW\\_retail_\\Wow.exe".to_string(),
-        );
+        // the remembered exe has to exist on disk (beta.5)
+        let wow_exe = std::env::temp_dir().join(format!("fl-wow-{}.exe", std::process::id()));
+        std::fs::write(&wow_exe, b"x").unwrap();
+        let wow_exe = wow_exe.to_string_lossy().into_owned();
+        settings.insert(format!("{EXE_KEY}wow"), wow_exe.clone());
         settings.insert(format!("{ARGS_KEY}wow"), "-console -windowed".to_string());
         let games = vec![GameRow {
             id: "manual:myindie".into(),
@@ -360,7 +561,7 @@ mod tests {
         assert_eq!(
             launch_for(wow, &libs),
             Some(Launch::Exe {
-                path: "C:\\Games\\WoW\\_retail_\\Wow.exe".into(),
+                path: wow_exe.clone(),
                 args: vec!["-console".into(), "-windowed".into()]
             })
         );
