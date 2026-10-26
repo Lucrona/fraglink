@@ -426,7 +426,7 @@ pages.home = async () => {
   }
   const winRows = u && fl ? fl.friends.filter(f => f.presence && f.presence.status !== "offline").slice(0, 4).map(f => ({ n: f, g: f.presence.game_name, away: f.presence.status === "away" }))
     : np.map(n => ({ n, g: n.game_name }));
-  $("#f2-win").innerHTML = `<div class="tb"><img src="/assets/mark.svg" alt="">Fraglink<span class="x">_ □ ×</span></div>
+  if ($("#f2-win")) $("#f2-win").innerHTML = `<div class="tb"><img src="/assets/mark.svg" alt="">Fraglink<span class="x">_ □ ×</span></div>
     ${u ? `<div class="me">${avatar((me() || {}).avatar, 22)}<div><b>${esc(u.display_name || u.handle)}</b><br><span class="on">Online</span></div></div>` : ""}
     <div class="g">${u ? "Friends online" : "Playing now"} (${winRows.length})</div>
     ${winRows.length ? winRows.map(r => `<div class="r"><span class="dot ${r.away ? "away" : "online"}"></span><b>${nm(r.n)}</b><small>${r.g ? esc(r.g) : r.away ? "Away" : "Online"}</small></div>`).join("") : `<div class="r"><small style="margin:0;color:var(--dim)">${u ? "No friends online right now." : "Nobody in a game right now."}</small></div>`}`;
@@ -1349,4 +1349,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   if (qs("deleted")) { const d = new Date(qs("deleted")); const el = document.createElement("div"); el.className = "verify-bar delete-bar"; el.innerHTML = `<div class="wrap">Your account is scheduled for deletion${isNaN(d) ? "" : " on " + fullDate.format(d)}. Sign in again before then to keep it.</div>`; ($(".preview-flag") || $(".top")).after(el); }
 });
+})();
+
+// Home screenshot carousel: auto-advance 5s, pause on hover/focus, arrows, dots, swipe.
+(function () {
+  const c = document.getElementById("f2-car"); if (!c) return;
+  const t = c.querySelector(".car-t"), n = t.children.length, d = c.querySelector(".car-d");
+  let i = 0, timer = 0, x0 = null;
+  d.innerHTML = Array.from({ length: n }, (_, k) => `<button type="button" aria-label="Screenshot ${k + 1}"></button>`).join("");
+  const go = k => { i = (k + n) % n; t.style.transform = `translateX(-${i * 100}%)`; d.querySelectorAll("button").forEach((b, j) => b.classList.toggle("on", j === i)); };
+  const play = () => { clearInterval(timer); if (!matchMedia("(prefers-reduced-motion: reduce)").matches) timer = setInterval(() => go(i + 1), 5000); };
+  const stop = () => clearInterval(timer);
+  c.querySelector(".p").onclick = () => { go(i - 1); play(); };
+  c.querySelector(".n").onclick = () => { go(i + 1); play(); };
+  d.onclick = e => { const b = e.target.closest("button"); if (b) { go([...d.children].indexOf(b)); play(); } };
+  c.addEventListener("mouseenter", stop); c.addEventListener("mouseleave", play);
+  c.addEventListener("focusin", stop); c.addEventListener("focusout", play);
+  c.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; stop(); }, { passive: true });
+  c.addEventListener("touchend", e => { if (x0 !== null) { const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1)); } x0 = null; play(); });
+  go(0); play();
 })();
