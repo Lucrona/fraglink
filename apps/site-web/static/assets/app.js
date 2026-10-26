@@ -503,14 +503,14 @@ const WOW = (() => {
     "Nightborne": "a:nightborne", "Highmountain Tauren": "a:highmountaintauren", "Mag'har Orc": "a:magharorc", "Zandalari Troll": "a:zandalaritroll",
     "Vulpera": "a:vulpera", "Kul Tiran": "x:ability_racial_childofthesea", "Dracthyr": "x:ability_racial_wingbuffet" };
   const url = n => `/api/v1/wow/icons/${n}.jpg`;
-  const key = c => String(c || "").toUpperCase();
+  const key = c => String(c || "").toUpperCase().replace(/[^A-Z]/g, "");
   return {
     url, specs: c => S[key(c)] || [],
     cls: c => NAMES[key(c)] || (c ? key(c).charAt(0) + key(c).slice(1).toLowerCase() : ""),
     clsIcon: c => key(c) ? url("classicon_" + key(c).toLowerCase()) : "",
     specIcon: (c, s) => { const x = (S[key(c)] || []).find(p => p[0] === s); return x ? url(x[1]) : ""; },
     raceIcon: (race, gender, c) => {
-      const r = RACE[race], g = gender === "female" ? "female" : "male";
+      const g = gender === "female" ? "female" : "male", r = race === "Pandaren" && g === "male" ? "x:pandarenracial_quiveringpain" : RACE[race];
       if (!r) return key(c) ? url("classicon_" + key(c).toLowerCase()) : "";
       const [t, n] = r.split(":");
       return url(t === "c" ? `achievement_character_${n}_${g}` : t === "r" ? `race_${n}_${g}` : t === "a" ? `achievement_alliedrace_${n}` : n);
@@ -558,7 +558,7 @@ pages.bnet = async () => {
     $("[data-ttl]", el).textContent = `Verified characters (${nf.format(d.total)})`;
     list.innerHTML = st.items.length ? st.items.map(row).join("")
       : `<p class="empty" style="padding:20px 12px">${d.total ? "No characters match." : s.linked ? "No verified characters yet. Verify your WoW characters, or upload /played if you haven't." : "Link Battle.net to verify your characters."}</p>`;
-    cnt.textContent = d.total ? `Showing ${nf.format(st.items.length)} of ${plural(d.matched, "character")}${d.matched === d.total ? "" : ` (${nf.format(d.total)} in all)`} · ${hours(d.total_min, { zero: true })} total` : "";
+    cnt.textContent = d.total && !d.matched ? `No characters match (${nf.format(d.total)} in all) · ${hours(d.total_min, { zero: true })} total` : d.total ? `Showing ${nf.format(st.items.length)} of ${plural(d.matched, "character")}${d.matched === d.total ? "" : ` (${nf.format(d.total)} in all)`} · ${hours(d.total_min, { zero: true })} total` : "";
     const left = d.matched - st.items.length;
     more.hidden = left <= 0; more.textContent = `Show ${nf.format(Math.min(25, left))} more`;
   };
