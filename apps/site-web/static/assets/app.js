@@ -16,7 +16,8 @@ const token = () => localStorage.getItem(TK);
 const WH = (() => {
   const ok = matchMedia("(hover: hover) and (pointer: fine)").matches;
   let st = 0; // 0 none, 1 loading, 2 ready
-  const has = () => document.querySelector('a[href^="https://www.wowhead.com/"],a[href^="https://wowhead.com/"]');
+  const seen = new WeakSet();
+  const has = () => { let n = false; document.querySelectorAll('a[href^="https://www.wowhead.com/"],a[href^="https://wowhead.com/"]').forEach(a => { if (!seen.has(a)) { seen.add(a); n = true; } }); return n; };
   const refresh = () => { try { window.$WowheadPower && window.$WowheadPower.refreshLinks(); } catch (e) {} };
   const scan = () => {
     if (!ok || !has()) return;
@@ -28,7 +29,8 @@ const WH = (() => {
     document.head.appendChild(s);
   };
   let t = 0; const later = () => { clearTimeout(t); t = setTimeout(scan, 300); };
-  if (ok) addEventListener("load", () => { later(); new MutationObserver(later).observe(document.body, { childList: true, subtree: true }); });
+  const mine = n => n.nodeType !== 1 || !!(n.closest && n.closest(".wowhead-tooltip,[class^=wowhead]"));
+  if (ok) addEventListener("load", () => { later(); new MutationObserver(ms => { if (ms.some(m => [...m.addedNodes].some(n => !mine(n)))) later(); }).observe(document.body, { childList: true, subtree: true }); });
   return { ok, scan };
 })();
 const me = () => { try { return JSON.parse(localStorage.getItem(UK)); } catch (e) { return null; } };
