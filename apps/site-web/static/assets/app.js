@@ -397,12 +397,10 @@ const pages = {};
 
 pages.home = async () => {
   fillDownload();
-  const u = me();
-  if (u) $$("[data-signedout]").forEach(e => e.hidden = true);
   let h;
   try { h = await api("/home"); } catch (e) { return; }
-  const live = $("#home-live");
-  const ids = [].concat(h.most_played.map(g => g.game_id), h.now_playing.map(n => n.game_id));
+  const u = token() ? me() : null;
+  const ids = h.most_played.map(g => g.game_id).concat(h.now_playing.map(n => n.game_id));
   let fl = null, act = null;
   if (u && token()) {
     [fl, act] = await Promise.all([api("/friends/page?show=online&limit=10").catch(() => null), api("/friends/activity?tz=" + encodeURIComponent(TZ)).catch(() => null)]);
@@ -410,50 +408,57 @@ pages.home = async () => {
     if (act) act.items.forEach(i => ids.push(i.game_id));
   }
   await loadIcons(ids);
-  const top = h.most_played[0];
-  // hero: art of this week's most played game (signed out); welcome strip (signed in)
+  const s = h.stats, prof = n => `/u/${encodeURIComponent(n.handle)}`, nm = n => esc(n.display_name || n.handle);
+  const panel = (title, body, more, cls) => `<section class="panel f2p${cls ? " " + cls : ""}"><h2>${title}${more || ""}</h2>${body}</section>`;
+  const dg = (n, c) => `<span class="d${c ? " " + c : ""}">${nf.format(n).split("").map(ch => /\d/.test(ch) ? `<i>${ch}</i>` : `<i class="c">${esc(ch)}</i>`).join("")}</span>`;
+  // ---- top: user counts (Admin > Site settings: C1 header counters, C2 panel, C4 bar, off)
+  const cs = h.counts_style || "c1";
+  let top = `<div class="crumb"><div class="wrap"><span>You are here: <a href="/">Home</a> » Welcome to Fraglink</span><span class="sp"></span>${cs === "c1" ? `<span class="odo"><span class="l">Registered<br>players</span>${dg(s.registered)}<span class="l">Online<br>now</span>${dg(s.online, "g")}</span>` : ""}</div></div>`;
+  if (cs === "c4") top = `<div class="hbar"><div class="wrap"><span>⚡ <b>${nf.format(s.registered)}</b> registered players</span><span class="on">● <b>${nf.format(s.online)}</b> online now</span><span>🎮 <b>${nf.format(s.in_game)}</b> in game</span><span>⏱ <b>${nf.format(Math.round(s.minutes_7d / 60))}</b> h tracked this week</span>${h.newest[0] ? `<span>Newest: <a href="${prof(h.newest[0])}">${nm(h.newest[0])}</a></span>` : ""}</div></div>` + top;
+  $("#f2-top").innerHTML = top;
+  // ---- featured: app window with real people playing (signed out) or your week (signed in)
+  const np = h.now_playing.slice(0, 4);
   if (u && h.me) {
-    $("#hero").outerHTML = `<section class="welcome-strip">${avatar((me() || {}).avatar, 64)}<div><h1>Welcome back, ${esc(u.display_name || u.handle)}</h1>
-      <div class="sub">${h.me.top_game ? `Most played this week: <b>${esc(h.me.top_game)}</b>` : `Nothing played this week yet. <a href="/download">Get the app</a> and it counts your hours.`}</div>
-      <div style="margin-top:6px"><a href="/u/${encodeURIComponent(u.handle)}">View my profile</a> · <a href="/friends">Friends</a> · <a href="/settings">Settings</a></div></div>
-      <div class="kpi"><div><b>${hrsShort(h.me.minutes_7d)}</b><span>Hours this week</span></div><div><b>${hrsShort(h.me.total_min)}</b><span>Total hours</span></div><div><b>${h.me.friends_online}/${h.me.friends}</b><span>Friends online</span></div></div></section>`;
-  } else if (top) {
-    $("#hero").style.background = artBg(top.game_id, top.name);
-    $("#hero .inr").insertAdjacentHTML("beforeend", `<p style="margin-top:14px;font-size:12px;color:#c8d4e0">Most played on Fraglink this week: <b style="color:#fff">${esc(top.name)}</b> · ${plural(top.players, "player")}</p>`);
+    $("#f2-feat .feat-l").innerHTML = `<div class="k">Welcome back</div><h1>${esc(u.display_name || u.handle)}</h1>
+      <p>${h.me.top_game ? `Most played this week: <b>${esc(h.me.top_game)}</b>` : `Nothing played this week yet. <a href="/download">Get the app</a> and it counts your hours.`}</p>
+      <div class="kpi"><div><b>${hrsShort(h.me.minutes_7d)}</b><span>Hours this week</span></div><div><b>${hrsShort(h.me.total_min)}</b><span>Total hours</span></div><div><b>${h.me.friends_online}/${h.me.friends}</b><span>Friends online</span></div></div>
+      <div class="fine"><a href="${prof(u)}">View my profile</a> · <a href="/friends">Friends</a> · <a href="/settings">Settings</a></div>`;
   }
-  const ticker = h.now_playing.length ? (() => {
-    const items = h.now_playing.map(n => `<span class="it">${avatar(n.avatar, 18)}<a href="/u/${encodeURIComponent(n.handle)}">${esc(n.display_name || n.handle)}</a> is playing ${icon(n.game_id, n.game_name)}<b>${esc(n.game_name)}</b></span>`).join("");
-    return `<div class="ticker"><span class="l">LIVE</span><div style="overflow:hidden;flex:1"><div class="run">${items}${items}</div></div></div>`;
-  })() : "";
-  const s = h.stats;
-  const stats = `<div class="stats"><div><b>${nf.format(s.registered)}</b><span>Players</span></div><div><b>${nf.format(s.online)}</b><span>Online now</span></div>
-    <div><b>${nf.format(s.in_game)}</b><span>In a game now</span></div><div><b>${hrsShort(s.minutes_7d)}</b><span>Hours played this week</span></div></div>`;
-  const panel = (title, body, more) => `<section class="panel"><h2>${title}${more || ""}</h2><div class="body">${body}</div></section>`;
-  const tiles = h.most_played.length ? panel("Most played this week", `<div class="tiles">${h.most_played.slice(0, 7).map((g, i) => `<div class="tile${i === 0 ? " big" : ""}">
-      ${gameArt(g.game_id, g.name)}
-      <span class="rk">#${i + 1}</span><div class="cap">${esc(g.name)}<br><b>${hrsShort(g.minutes)} h</b> <span class="pl">· ${plural(g.players, "player")}</span></div></div>`).join("")}</div>`) : "";
-  const feed = h.now_playing.length ? panel("Now playing", `<div class="feed2">${h.now_playing.map(n => `<div>${avatar(n.avatar, 24)}<span><a href="/u/${encodeURIComponent(n.handle)}">${esc(n.display_name || n.handle)}</a><br>${icon(n.game_id, n.game_name)} ${esc(n.game_name)}</span>${n.since ? `<small>${since(n.since)}</small>` : ""}</div>`).join("")}</div>`) : "";
-  const lb = h.top_players.length ? panel("Top players this week", `<div class="lb">${h.top_players.map((p, i) => `<div><span class="n">${i + 1}</span>${avatar(p.avatar, 24)}<span class="who"><a href="/u/${encodeURIComponent(p.handle)}">${esc(p.display_name || p.handle)}</a>${p.top_game ? `<small>${esc(p.top_game)}</small>` : ""}</span><span class="h">${hrsShort(p.minutes)} h</span></div>`).join("")}</div>`) : "";
-  const mem = h.newest.length ? panel("Newest members", `<div class="mem">${h.newest.map(m => `<div><a href="/u/${encodeURIComponent(m.handle)}">${avatar(m.avatar, 40)}${esc(m.display_name || m.handle)}</a></div>`).join("")}</div>`) : "";
-  const news = panel("News", h.news.length ? `<div class="nws">${h.news.map(n => `<a class="nw" href="${esc(n.url)}"><span class="ic">F</span><div><small>${fullDate.format(new Date(n.at))}${n.pinned ? ' · <span class="pin">Pinned</span>' : ""}</small><b>${esc(n.title)}</b>${n.summary ? `<p>${esc(n.summary.length > 110 ? n.summary.slice(0, 108).replace(/\s+\S*$/, "") + "…" : n.summary)}</p>` : ""}</div></a>`).join("")}</div>` : `<p class="empty" style="padding:6px 0">No news yet.</p>`, ` <a class="more" href="/news">All news ›</a>`);
-  let friendsBox = "", actBox = "";
-  if (fl) {
-    const on = fl.friends.filter(f => f.presence && f.presence.status !== "offline").sort((a, b) => rank(b.presence) - rank(a.presence));
-    friendsBox = panel(`Friends online (${fl.online})`, on.length ? `<div class="feed2">${on.slice(0, 10).map(f => `<div>${avatar(f.avatar, 24)}<span><a href="/u/${encodeURIComponent(f.handle)}">${esc(f.display_name || f.handle)}</a><br>${f.presence.game_name ? (isUnlisted(f.presence.game_id) ? "Playing a game" : `${icon(f.presence.game_id, f.presence.game_name)} ${esc(f.presence.game_name)}`) : `<span style="color:var(--online)">Online</span>`}</span></div>`).join("")}</div>` : `<span class="empty">${fl.all ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</span>`, ` <a class="more" href="/friends">All friends</a>`);
-  }
+  const winRows = u && fl ? fl.friends.filter(f => f.presence && f.presence.status !== "offline").slice(0, 4).map(f => ({ n: f, g: f.presence.game_name, away: f.presence.status === "away" }))
+    : np.map(n => ({ n, g: n.game_name }));
+  if ($("#f2-win")) $("#f2-win").innerHTML = `<div class="tb"><img src="/assets/mark.svg" alt="">Fraglink<span class="x">_ □ ×</span></div>
+    ${u ? `<div class="me">${avatar((me() || {}).avatar, 22)}<div><b>${esc(u.display_name || u.handle)}</b><br><span class="on">Online</span></div></div>` : ""}
+    <div class="g">${u ? "Friends online" : "Playing now"} (${winRows.length})</div>
+    ${winRows.length ? winRows.map(r => `<div class="r"><span class="dot ${r.away ? "away" : "online"}"></span><b>${nm(r.n)}</b><small>${r.g ? esc(r.g) : r.away ? "Away" : "Online"}</small></div>`).join("") : `<div class="r"><small style="margin:0;color:var(--dim)">${u ? "No friends online right now." : "Nobody in a game right now."}</small></div>`}`;
+  // ---- live ticker
+  const tick = h.now_playing.length ? (() => { const it = h.now_playing.map(n => `<span><a href="${prof(n)}"><b>${nm(n)}</b></a> is playing ${esc(n.game_name)}</span>`).join(""); return `<div class="tick"><span class="live">LIVE »</span><div class="run"><div class="t">${it}${it}</div></div></div>`; })() : "";
+  const trend = h.most_played.length ? panel("Trending games this week", `<div class="tr">${h.most_played.slice(0, 4).map((g, i) => `<div class="tile2"><div class="art">${gameArt(g.game_id, g.name)}<span class="rk">#${i + 1}</span><span class="nmx">${esc(g.name)}</span></div><div class="st"><b>${hrsShort(g.minutes)} h</b> this week<br>${plural(g.players, "player")}</div></div>`).join("")}</div>`) : "";
+  let actBody = "";
   if (act && act.items.length) {
-    let f = "", last = "";
-    act.items.slice(0, 12).forEach(i => { const d = actDay(i); if (d !== last) { f += `<div class="day">${d}</div>`; last = d; }
-      f += `<div class="act">${icon(i.game_id, i.game_name)}<span><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${actText(i)}</span></div>`; });
-    actBox = panel("Friends' activity", f);
+    let last = "";
+    act.items.slice(0, 10).forEach(i => { const d = actDay(i); if (d !== last) { actBody += `<div class="day">${d}</div>`; last = d; }
+      actBody += `<div class="act">${icon(i.game_id, i.game_name)}<span><a href="${prof(i)}">${nm(i)}</a> ${actText(i)}</span></div>`; });
+  } else if (h.now_playing.length) {
+    actBody = `<div class="day">Right now</div>` + h.now_playing.slice(0, 8).map(n => `<div class="act">${avatar(n.avatar, 22)}<span><a href="${prof(n)}">${nm(n)}</a> is playing ${icon(n.game_id, n.game_name)} ${esc(n.game_name)}</span>${n.since ? `<span class="w">${since(n.since)}</span>` : ""}</div>`).join("");
   }
-  const why = u ? "" : panel("Why Fraglink", `<p style="margin:0 0 8px"><b>Friends, live.</b> See who's online and what they're playing, with a quiet pop-up when a friend starts a game.</p><p style="margin:0 0 8px"><b>Hours that add up.</b> Play time is counted game by game while the app runs.</p><p style="margin:0"><b>Light and private.</b> Never reads game memory or keystrokes. Export or delete your data any time.</p>`);
-  const left = u ? friendsBox + lb : lb + mem;
-  const mid = tiles + actBox;
-  const right = feed + (u ? mem : "") + news + why;
-  const cols = [left, mid, right].filter(Boolean);
-  live.innerHTML = ticker + stats + (cols.length === 3 ? `<div class="g3"><div class="col">${left}</div><div class="col">${mid}</div><div class="col">${right}</div></div>`
-    : `<div class="g2v"><div class="col">${mid || left}</div><div class="col">${mid ? left + right : right}</div></div>`);
+  const actP = actBody ? panel(u && act && act.items.length ? "Friends' activity" : "Activity report", actBody) : "";
+  const news = panel("News", h.news.length ? h.news.map(n => `<div class="ni"><h4><a href="${esc(n.url)}">${esc(n.title)}</a></h4><div class="d">${fullDate.format(new Date(n.at))}${n.pinned ? " · Pinned" : ""}</div></div>`).join("") : `<div class="in empty">No news yet.</div>`, ` <a class="more" href="/news">More news »</a>`);
+  $("#f2-mid").innerHTML = tick + trend + actP + news;
+  // ---- right column
+  const c2 = cs === "c2" ? panel("Community stats", `<table class="t2"><tr><td>Registered players</td><td class="n">${nf.format(s.registered)}</td></tr><tr><td><span class="dot online"></span> Online now</td><td class="n">${nf.format(s.online)}</td></tr><tr><td>Playing a game now</td><td class="n">${nf.format(s.in_game)}</td></tr><tr><td>Hours tracked this week</td><td class="n">${nf.format(Math.round(s.minutes_7d / 60))}</td></tr></table>`) : "";
+  const friendsP = fl ? panel(`Friends online (${fl.online})`, (() => { const on = fl.friends.filter(f => f.presence && f.presence.status !== "offline").sort((a, b) => rank(b.presence) - rank(a.presence)).slice(0, 10);
+    return on.length ? `<table class="t2 f2np">${on.map(f => `<tr><td><span class="dot ${f.presence.status === "away" ? "away" : "online"}"></span> <a href="${prof(f)}">${nm(f)}</a><small>${f.presence.game_name ? (isUnlisted(f.presence.game_id) ? "Playing a game" : esc(f.presence.game_name)) : "Online"}</small></td></tr>`).join("")}</table>` : `<div class="in empty">${fl.all ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</div>`; })(), ` <a class="more" href="/friends">All »</a>`) : "";
+  const tops = h.top_players.length ? panel("Top players this week", `<table class="t2">${h.top_players.slice(0, 5).map((p, i) => `<tr><td class="rk">${i + 1}</td><td><a href="${prof(p)}">${nm(p)}</a></td><td class="n">${hrsShort(p.minutes)} h</td></tr>`).join("")}</table>`) : "";
+  const who = h.now_playing.length ? panel("Who's playing now", `<table class="t2 f2np">${h.now_playing.slice(0, 6).map(n => `<tr><td><span class="dot online"></span> <a href="${prof(n)}">${nm(n)}</a><small>${esc(n.game_name)}</small></td></tr>`).join("")}</table>`) : "";
+  const mem = h.newest.length ? panel("Newest members", `<div class="in mem4">${h.newest.slice(0, 8).map(m => `<a href="${prof(m)}">${avatar(m.avatar, 48)}<span>${nm(m)}</span></a>`).join("")}</div>`) : "";
+  const POLL = { q: "Best LAN snack?", o: ["Pizza", "Energy drinks", "Chips"], ex: [54, 31, 15] };
+  const voted = localStorage.getItem("fl_poll1");
+  const poll = panel("Quick poll", `<div class="in poll"><b>${POLL.q}</b>${POLL.o.map((o, i) => `<label><input type="radio" name="fp" value="${i}" ${voted == i ? "checked" : ""}> ${o}</label><div class="bar"><i style="width:${POLL.ex[i]}%"></i></div>`).join("")}<div style="margin-top:8px"><button class="glass" id="fp-vote">${voted != null ? "Voted ✔" : "Vote!"}</button> <span class="dimt">example results</span></div></div>`);
+  const comm = panel("Community", `<div class="in" style="line-height:2"><a href="https://discord.gg/QbaYRtvADj" rel="noopener">» Discord server</a><br><a href="/news">» News</a><br><a href="/download">» Download the app</a></div>`);
+  $("#f2-right").innerHTML = friendsP + c2 + tops + who + mem + poll + comm;
+  const vb = $("#fp-vote"); if (vb) vb.onclick = () => { const c = $("input[name=fp]:checked"); if (c) { localStorage.setItem("fl_poll1", c.value); vb.textContent = "Voted ✔"; } };
+  // ---- bottom stats strip (C3; Admin switch "Home page stats strip")
+  if (h.stats_strip !== false) $("#f2-strip").innerHTML = `<div class="fstat"><div class="wrap">Our members have tracked <b>${nf.format(Math.round((s.minutes_total || 0) / 60))}</b> hours · <b>${nf.format(s.registered)}</b> registered players · <b>${nf.format(s.online)}</b> online now (<b>${nf.format(s.in_game)}</b> in game)${h.newest[0] ? ` · Newest member: <a href="${prof(h.newest[0])}">${nm(h.newest[0])}</a>` : ""}</div></div>`;
 };
 pages.download = () => fillDownload();
 
@@ -1344,4 +1349,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   if (qs("deleted")) { const d = new Date(qs("deleted")); const el = document.createElement("div"); el.className = "verify-bar delete-bar"; el.innerHTML = `<div class="wrap">Your account is scheduled for deletion${isNaN(d) ? "" : " on " + fullDate.format(d)}. Sign in again before then to keep it.</div>`; ($(".preview-flag") || $(".top")).after(el); }
 });
+})();
+
+// Home screenshot carousel: auto-advance 5s, pause on hover/focus, arrows, dots, swipe.
+(function () {
+  const c = document.getElementById("f2-car"); if (!c) return;
+  const t = c.querySelector(".car-t"), n = t.children.length, d = c.querySelector(".car-d");
+  let i = 0, timer = 0, x0 = null;
+  d.innerHTML = Array.from({ length: n }, (_, k) => `<button type="button" aria-label="Screenshot ${k + 1}"></button>`).join("");
+  const go = k => { i = (k + n) % n; t.style.transform = `translateX(-${i * 100}%)`; d.querySelectorAll("button").forEach((b, j) => b.classList.toggle("on", j === i)); };
+  const play = () => { clearInterval(timer); if (!matchMedia("(prefers-reduced-motion: reduce)").matches) timer = setInterval(() => go(i + 1), 5000); };
+  const stop = () => clearInterval(timer);
+  c.querySelector(".p").onclick = () => { go(i - 1); play(); };
+  c.querySelector(".n").onclick = () => { go(i + 1); play(); };
+  d.onclick = e => { const b = e.target.closest("button"); if (b) { go([...d.children].indexOf(b)); play(); } };
+  c.addEventListener("mouseenter", stop); c.addEventListener("mouseleave", play);
+  c.addEventListener("focusin", stop); c.addEventListener("focusout", play);
+  c.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; stop(); }, { passive: true });
+  c.addEventListener("touchend", e => { if (x0 !== null) { const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1)); } x0 = null; play(); });
+  go(0); play();
 })();

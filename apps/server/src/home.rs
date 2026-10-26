@@ -249,9 +249,18 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
             "friends_online": fonline, "friends_in_game": fgame, "friends": friend_ids.len() });
     }
 
+    // ---- bottom stats strip: all-time hours (no test accounts)
+    let (total_s,): (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT coalesce(sum(s.duration_s), 0)::bigint FROM sessions s WHERE {NO_TEST_SESSIONS}"
+    )))
+    .fetch_one(&st.db)
+    .await?;
+
     Ok(json!({
         "signed_in": signed_in,
-        "stats": { "registered": registered, "online": online, "in_game": in_game, "minutes_7d": week_s / 60 },
+        "counts_style": crate::features::home_counts(st).await,
+        "stats_strip": crate::features::on(st, "home_stats").await,
+        "stats": { "registered": registered, "online": online, "in_game": in_game, "minutes_7d": week_s / 60, "minutes_total": total_s / 60 },
         "most_played": most,
         "now_playing": now_playing,
         "top_players": top_players,
