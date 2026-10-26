@@ -437,6 +437,20 @@ impl Client {
         self.call("DELETE", &format!("/api/v1/connect/{provider}"), None)
     }
 
+    /// WoW addon /played entries (`POST /api/v1/hours/wow_played`); only new or changed
+    /// characters are sent.
+    pub fn wow_played(
+        &self,
+        game_id: &str,
+        characters: serde_json::Value,
+    ) -> Result<serde_json::Value, SyncError> {
+        self.call(
+            "POST",
+            "/api/v1/hours/wow_played",
+            Some(serde_json::json!({ "game_id": game_id, "characters": characters })),
+        )
+    }
+
     /// Server-side per-game totals by trust tier (`GET /api/v1/stats`).
     pub fn stats(&self) -> Result<serde_json::Value, SyncError> {
         self.call("GET", "/api/v1/stats", None)

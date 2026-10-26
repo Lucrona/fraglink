@@ -286,11 +286,32 @@
         : l ? `<button type="button" data-unlink="${p}">Disconnect</button><span class="soon ok">linked</span>`
         : v.available ? `<button type="button" data-link="${p}">Connect</button><span class="soon"></span>`
         : '<button type="button" disabled>Connect</button><span class="soon">coming soon</span>';
-      return `<div class="conn"><i class="conn-ic" style="--c:${col}">${ic}</i><div class="conn-tx"><b>${name}</b>${who}</div>${right}</div>`;
+      const extra = p === 'bnet' && l ? (v.needs_reconnect
+        ? '<div class="conn-sub"><span class="warn">Reconnect Battle.net to verify characters.</span> <button type="button" data-link="bnet">Reconnect</button></div>'
+        : '<div class="conn-sub"><button type="button" data-web="connect/battlenet/verify">&#128274; Verify WoW characters</button></div>') : '';
+      return `<div class="conn"><i class="conn-ic" style="--c:${col}">${ic}</i><div class="conn-tx"><b>${name}</b>${who}</div>${right}</div>${extra}`;
     }).join('');
+    renderWow();
   }
+  /* ---- the bundled WoW /played addon ---- */
+  async function renderWow() {
+    const st = $('#wow-state'), btn = $('#wow-install');
+    if (!FLB.wowAddonStatus) return;
+    try {
+      const f = await FLB.wowAddonStatus();
+      if (!f.length) { st.textContent = 'No WoW install found yet. Start WoW once with Fraglink running.'; return; }
+      const old = f.filter(x => x.installed !== x.bundled);
+      st.textContent = f.map(x => `${x.game_id === 'wow_forever' ? 'WoW Forever' : 'WoW'}: ${x.installed ? 'v' + x.installed : 'not installed'}`).join(' · ');
+      btn.textContent = !old.length ? 'Reinstall' : f.some(x => x.installed) ? 'Update WoW addon' : 'Install WoW addon';
+    } catch (x) { st.textContent = String(x); }
+  }
+  $('#wow-install').addEventListener('click', async e => {
+    const b = e.currentTarget, m = $('#wow-msg'); b.disabled = true;
+    try { await FLB.wowAddonInstall(); m.textContent = 'Installed. Log in to each character once (or type /reload) and close WoW; Fraglink sends the /played data after that.'; renderWow(); }
+    catch (x) { m.textContent = String(x); } finally { b.disabled = false; }
+  });
   $('#conn-list').addEventListener('click', async e => {
-    const b = e.target.closest('button'); if (!b) return; const m = $('#conn-msg');
+    const b = e.target.closest('button'); if (!b || b.dataset.web) return; const m = $('#conn-msg');
     const p = b.dataset.link || b.dataset.unlink, name = (CONN.find(x => x[0] === p) || [])[1];
     try {
       if (b.dataset.link) { b.disabled = true; await FLB.connectStart(p); m.textContent = `Finish signing in to ${name} in your browser, then come back here.`; setTimeout(() => { b.disabled = false; }, 4000); }

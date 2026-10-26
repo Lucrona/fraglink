@@ -180,3 +180,6 @@ body.dark .conn .soon.ok { color: #6fd27b; }
   padding: 3px 6px; background: #ffffe1; color: #000; border: 1px solid #767676; box-shadow: 1px 1px 3px rgba(0,0,0,.35);
   font: 11px Tahoma, Verdana, sans-serif; line-height: 15px; pointer-events: none; white-space: pre-line; }
 .op-tip[hidden] { display: none; }
+
+.conn-sub{margin:-2px 0 8px 40px;display:flex;gap:8px;align-items:center}
+.conn-sub .warn{color:#e0a040}

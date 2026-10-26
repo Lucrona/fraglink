@@ -13,6 +13,7 @@ mod icons;
 mod sync;
 mod updater;
 mod windows;
+mod wowaddon;
 
 use fraglink_core::engine::{keys, Engine, DEFAULT_POLL_SECS};
 use fraglink_core::env::{Environment, SystemEnv};
@@ -256,6 +257,11 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
         if let (true, Some(t)) = (toasts_on, toast) {
             windows::show_toast(app, t);
         }
+    }
+    if evs.iter().any(|e| {
+        matches!(e, TrackerEvent::Stopped { game_id, .. } if fraglink_core::realm::is_wow(game_id))
+    }) {
+        wowaddon::after_session(app);
     }
     if evs
         .iter()
@@ -916,12 +922,22 @@ pub fn run() {
             gamelist::start(&handle);
             commands::start_first_folder_scan(&handle);
             start_tracker(handle.clone());
+            {
+                // catch up on WoW /played saved while the app wasn't running
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_secs(90));
+                    wowaddon::upload(&h);
+                });
+            }
             health::start_watchdog(handle);
             Ok(())
         })
         .on_window_event(windows::on_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::get_glance,
+            commands::wow_addon_status,
+            commands::wow_addon_install,
             commands::get_activity,
             commands::get_games,
             commands::get_candidates,

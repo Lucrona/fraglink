@@ -393,7 +393,59 @@ function startFriendsLive() {
 }
 
 /* ---------- pages ---------- */
+/* provider logos (Simple Icons paths): profile badges and the Battle.net verify page */
+const BRAND = { steam: ["Steam", "#66c0f4", "M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"], bnet: ["Battle.net", "#148eff", "M18.94 8.296C15.9 6.892 11.534 6 7.426 6.332c.206-1.36.714-2.308 1.548-2.508 1.148-.275 2.4.48 3.594 1.854.782.102 1.71.28 2.355.429C12.747 2.013 9.828-.282 7.607.565c-1.688.644-2.553 2.97-2.448 6.094-2.2.468-3.915 1.3-5.013 2.495-.056.065-.181.227-.137.305.034.058.146-.008.194-.04 1.274-.89 2.904-1.373 5.027-1.676.303 3.333 1.713 7.56 4.055 10.952-1.28.502-2.356.536-2.946-.087-.812-.856-.784-2.318-.19-4.04a26.764 26.764 0 0 1-.807-2.254c-2.459 3.934-2.986 7.61-1.143 9.11 1.402 1.14 3.847.725 6.502-.926 1.505 1.672 3.083 2.74 4.667 3.094.084.015.287.043.332-.034.034-.06-.08-.124-.131-.149-1.408-.657-2.64-1.828-3.964-3.515 2.735-1.929 5.691-5.263 7.457-8.988 1.076.86 1.64 1.773 1.398 2.595-.336 1.131-1.615 1.84-3.403 2.185a27.697 27.697 0 0 1-1.548 1.826c4.634.16 8.08-1.22 8.458-3.565.286-1.786-1.295-3.696-4.053-5.17.696-2.139.832-4.04.346-5.588-.029-.08-.106-.27-.196-.27-.068 0-.067.13-.063.187.135 1.547-.263 3.2-1.062 5.19zm-8.533 9.869c-1.96-3.145-3.09-6.849-3.082-10.594 3.702-.124 7.474.748 10.714 2.627-1.743 3.269-4.385 6.1-7.633 7.966h.001z"], discord: ["Discord", "#5865f2", "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"] };
 const pages = {};
+
+/* ---------- /connect/battlenet/verify: the real verification steps, shown as they run ---------- */
+pages.bnetverify = async () => {
+  const el = $("#bv");
+  if (!token()) { location.href = "/login?next=" + encodeURIComponent(location.pathname); return; }
+  const b = BRAND.bnet, logo = `<svg viewBox="0 0 24 24" width="34" height="34" fill="${b[1]}" aria-hidden="true"><path d="${b[2]}"/></svg>`;
+  const STEPS = [["connect", "Connecting to Battle.net"], ["fetch", "Fetching your characters"], ["match", "Matching /played data"], ["sig", "Checking signatures"]];
+  el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Verify WoW characters</h2>
+    <p class="sub">Fraglink asks Battle.net which characters are yours, then checks each one against the signed /played data from the Fraglink addon. Only verified characters count on leaderboards.</p></div></div>
+    <ol class="bv-steps">${STEPS.map(([k, t]) => `<li data-s="${k}"><span class="bv-ic"></span><b>${t}</b><small></small></li>`).join("")}</ol>
+    <div data-res></div><div data-act class="bv-act"></div>`;
+  const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
+  const act = $("[data-act]", el), res = $("[data-res]", el);
+  const fail = (k, x) => { step(k, "bad", x.message || String(x)); act.innerHTML = `<button class="btn blue" type="button" data-again>Try again</button> <a class="btn" href="/settings#connections">Back to Connections</a>`; };
+  const reconnect = (why) => {
+    step("connect", "bad", why);
+    act.innerHTML = `<button class="btn blue" type="button" data-go>${logo.replace(/34/g, "16")} Connect Battle.net</button><p class="sub">You'll sign in on Battle.net's own page and allow “World of Warcraft profile”. Fraglink never sees your password.</p>`;
+  };
+  act.onclick = async e => {
+    if (e.target.closest("[data-again]")) { location.href = location.pathname; return; }
+    const g = e.target.closest("[data-go]"); if (!g) return; g.disabled = true;
+    try { const r = await api("/connect/bnet/start", { method: "POST" }); location.href = r.url; } catch (x) { g.disabled = false; fail("connect", x); }
+  };
+  // 1. a fresh Battle.net sign-in (with wow.profile) leaves a short-lived token for this
+  step("connect", "run");
+  let f;
+  try { f = await api("/wow/verify/fetch", { method: "POST" }); } catch (x) { return fail("connect", x); }
+  if (f.need_connect) return reconnect(new URLSearchParams(location.search).get("connected") ? "Battle.net didn't grant access to your WoW characters." : "Sign in to Battle.net to start.");
+  history.replaceState(null, "", location.pathname);
+  step("connect", "ok", "Connected");
+  // 2. the character list came back with the fetch call
+  step("fetch", "ok", `${f.characters} character${f.characters === 1 ? "" : "s"} on your account`);
+  // 3. match against the uploaded /played entries
+  step("match", "run");
+  let m;
+  try { m = await api("/wow/verify/match", { method: "POST" }); } catch (x) { return fail("match", x); }
+  step("match", "ok", m.uploaded ? `${m.verified} of ${m.uploaded} uploaded characters matched` : "No /played data yet. Install the WoW addon from the desktop app (Options › Connections).");
+  // 4. signatures
+  step("sig", "run");
+  let s;
+  try { s = await api("/wow/verify/signatures"); } catch (x) { return fail("sig", x); }
+  step("sig", s.refused.length ? "warn" : "ok", `${s.signed_ok} signed entr${s.signed_ok === 1 ? "y" : "ies"} valid${s.refused.length ? ` · ${s.refused.length} refused` : ""}`);
+  const me_ = await api("/me/wow");
+  const R = { wow_checksum: "edited after the game wrote it", wow_battletag: "from a different Battle.net account", wow_old_addon: "addon too old" };
+  res.innerHTML = `<h3>Results</h3><ul class="bv-res">${me_.characters.map(c => `<li><span class="${c.verified ? "vbadge" : "srbadge"}">${c.verified ? "✓ Verified" : "◆ Self-reported"}</span>
+      <b>${esc(c.name)}</b> <span class="sub">${esc(c.realm)} · ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · ${Math.floor(c.played_min / 60)}h</span></li>`).join("") || `<li class="sub">No characters uploaded yet.</li>`}
+    ${s.refused.map(r => `<li><span class="badbadge">✕ Refused</span> <b>${esc(r.character)}</b> <span class="sub">${esc(R[r.reason] || r.reason)}</span></li>`).join("")}</ul>
+    <p class="sub">Self-reported characters show on your profile but don't count on leaderboards. A character verifies when Battle.net lists it on the same account as the BattleTag saved by the addon.</p>`;
+  act.innerHTML = `<a class="btn" href="/settings#connections">Done</a>`;
+};
 
 pages.home = async () => {
   fillDownload();
@@ -725,7 +777,6 @@ pages.profile = async () => {
   let sub = pres ? `<span class="status"><span class="dot ${esc(st)}"></span>${statusText(pres)}</span>` : "";
   if (p.member_since) sub += (sub ? " · " : "") + `member since ${fullDate.format(new Date(p.member_since))}`;
   if (p.location) sub += " · " + esc(p.location);
-  const BRAND = { steam: ["Steam", "#66c0f4", "M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"], bnet: ["Battle.net", "#148eff", "M18.94 8.296C15.9 6.892 11.534 6 7.426 6.332c.206-1.36.714-2.308 1.548-2.508 1.148-.275 2.4.48 3.594 1.854.782.102 1.71.28 2.355.429C12.747 2.013 9.828-.282 7.607.565c-1.688.644-2.553 2.97-2.448 6.094-2.2.468-3.915 1.3-5.013 2.495-.056.065-.181.227-.137.305.034.058.146-.008.194-.04 1.274-.89 2.904-1.373 5.027-1.676.303 3.333 1.713 7.56 4.055 10.952-1.28.502-2.356.536-2.946-.087-.812-.856-.784-2.318-.19-4.04a26.764 26.764 0 0 1-.807-2.254c-2.459 3.934-2.986 7.61-1.143 9.11 1.402 1.14 3.847.725 6.502-.926 1.505 1.672 3.083 2.74 4.667 3.094.084.015.287.043.332-.034.034-.06-.08-.124-.131-.149-1.408-.657-2.64-1.828-3.964-3.515 2.735-1.929 5.691-5.263 7.457-8.988 1.076.86 1.64 1.773 1.398 2.595-.336 1.131-1.615 1.84-3.403 2.185a27.697 27.697 0 0 1-1.548 1.826c4.634.16 8.08-1.22 8.458-3.565.286-1.786-1.295-3.696-4.053-5.17.696-2.139.832-4.04.346-5.588-.029-.08-.106-.27-.196-.27-.068 0-.067.13-.063.187.135 1.547-.263 3.2-1.062 5.19zm-8.533 9.869c-1.96-3.145-3.09-6.849-3.082-10.594 3.702-.124 7.474.748 10.714 2.627-1.743 3.269-4.385 6.1-7.633 7.966h.001z"], discord: ["Discord", "#5865f2", "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"] };
   const badges = (p.linked || []).filter(l => BRAND[l.provider]).length ? `<div class="lbadges">${p.linked.filter(l => BRAND[l.provider]).map(l => {
     const [nm, col, path] = BRAND[l.provider], tip = esc(nm + (l.display ? ": " + l.display : " (verified)"));
     const inner = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg><i class="vt" aria-hidden="true">✓</i>`;
@@ -784,6 +835,17 @@ pages.profile = async () => {
     gamesRow = row;
   }
 
+  // WoW characters from the Fraglink addon: Battle.net-verified ones count on leaderboards
+  let wowc = "";
+  const WC = p.wow_characters;
+  if (WC && WC.length) {
+    const card = c => `<div class="wc${c.hidden ? " wc-hid" : ""}"><div class="wc-top"><b>${esc(c.name)}</b><span class="${c.verified ? "vbadge" : "srbadge"}" title="${c.verified ? "Battle.net confirmed this character is on the linked account" : "From the addon only; not counted on leaderboards"}">${c.verified ? "✓ Battle.net" : "◆ Self-reported"}</span></div>
+      <div class="sub">Level ${c.level} ${esc(c.class)} · ${esc(c.realm)} (${esc(c.region.toUpperCase())})${c.game_id === "wow_forever" ? " · Forever" : ""}</div>
+      <div class="wc-h">${hours(c.played_min)}<small> /played</small></div>
+      ${self ? `<button class="btn sm" type="button" data-wchide="${c.id}" data-h="${c.hidden ? 1 : 0}">${c.hidden ? "Show on profile" : "Hide from profile"}</button>` : ""}</div>`;
+    wowc = sec("WoW characters", `<div class="wcs">${WC.map(card).join("")}</div>${self ? `<p class="sub" style="padding:0 14px 10px">Only you see hidden characters. <a href="/connect/battlenet/verify">Verify characters</a></p>` : ""}`);
+  }
+
   // Achievements
   let ach = "";
   const A = p.achievements;
@@ -829,7 +891,13 @@ pages.profile = async () => {
     : self ? sec("Gaming rig", `<div class="body empty">Show off your setup. <a href="/settings#rig">Add your gaming rig</a>.</div>`) : "";
   const discord = sec("Discord server", `<div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div>`);
 
-  root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${ach}${miniprofile}</div><aside class="col">${mini}${rig}${fr}${discord}</aside></div></div>`;
+  root.addEventListener("click", async e => {
+    const b = e.target.closest("[data-wchide]"); if (!b) return; b.disabled = true;
+    try { const r = await api("/me/wow/" + b.dataset.wchide, { method: "POST", body: { hidden: b.dataset.h !== "1" } });
+      b.dataset.h = r.hidden ? "1" : "0"; b.textContent = r.hidden ? "Show on profile" : "Hide from profile"; b.closest(".wc").classList.toggle("wc-hid", r.hidden); }
+    catch (x) { alert(x.message); } finally { b.disabled = false; }
+  });
+  root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${wowc}${ach}${miniprofile}</div><aside class="col">${mini}${rig}${fr}${discord}</aside></div></div>`;
   $$('a[href="#friends"]', root).forEach(a => a.addEventListener("click", e => { const f = $("#friends", root); if (!f) return; e.preventDefault(); f.scrollIntoView({ behavior: "smooth", block: "center" }); f.classList.add("flash"); setTimeout(() => f.classList.remove("flash"), 1200); }));
   const sm = $("[data-seemore]", root);
   if (sm) sm.addEventListener("click", e => { e.preventDefault(); $$(".olda", root).forEach(x => x.hidden = false); sm.parentNode.remove(); });
@@ -1079,6 +1147,7 @@ pages.settings = async () => {
       ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}${sw("name_history", "Previous nicknames (\"Previously known as\")")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
       ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location &amp; country")}${sw("gaming_style", "Gaming style")}${sw("real_name", "Real name")}${sw("gender", "Gender")}${sw("age", "Age")}`)}
       ${row("Achievements", `${sw("achievements", "Show my achievements")}`, "Needs Games &amp; hours shown.")}
+      ${row("WoW characters", `${sw("wow_characters", "Show my WoW characters and /played")}`, "Cards for each character from the Fraglink WoW addon. You can also hide single characters on your profile.")}
       ${row("Connected accounts", `${sw("connection_names", "Show connected account names")}`, "Off: visitors still see your Steam, Battle.net and Discord icons with the verified tick, but not your account names or links. You always see your own.")}
       ${row("In the app", `<span class="sub">Whether friends see the game you're in right now (and friends of friends) is set per PC in the desktop app: Options &gt; Privacy. The switches on this page show there too.</span>`)}
       ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
@@ -1114,6 +1183,7 @@ pages.settings = async () => {
       ${card("steam", "S", c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
       ${card("discord", "D", "Show your Discord name on your profile.")}
       ${card("bnet", "B", "Show your BattleTag on your profile.")}
+      ${c.bnet && c.bnet.linked ? `<div class="conn-sub">${c.bnet.needs_reconnect ? `<span class="sub warn">Reconnect Battle.net to verify characters.</span> ` : ""}<a class="btn sm blue" href="/connect/battlenet/verify">🔒 Verify WoW characters</a></div>` : ""}
       <p class="sub" style="padding:8px 0">Verified accounts show as badges on your profile. You're sent to the provider's own sign-in page; Fraglink never sees your password there.</p></div>`;
     if (q.get("connected")) { ok(box, `${NAMES[q.get("connected")] || "Account"} linked.`); history.replaceState(null, "", "/settings#connections"); }
     else if (q.get("connect_error")) { bad(box, new Error(q.get("connect_error") === "expired" ? "That link expired. Try again." : q.get("connect_error") === "cancelled" ? "Linking was cancelled." : q.get("connect_error"))); history.replaceState(null, "", "/settings#connections"); }
@@ -1370,7 +1440,7 @@ function applyFeatures() {
 const CRUMBS = { download: [["Download", "/download"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
   login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
   settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
-  verify: [["Confirm your email"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
+  verify: [["Confirm your email"]], bnetverify: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Verify WoW characters"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
 function setCrumb(parts) {
   const nav = document.getElementById("ycrumb"); if (!nav || !parts) return;
   const all = [["Home", "/"], ...parts];

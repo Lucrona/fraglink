@@ -289,7 +289,7 @@ async fn home(
         );
     }
     b += &format!(
-        r#"</table><p><b>{}</b> verified<br><small class="m"><span class="t-tracked">● Tracked</span> = Fraglink sessions or Steam's own playtime · <span class="t-imported">◆ Imported</span> = a game's own counter you entered (self-reported), never used for ranks.</small></p></div>"#,
+        r#"</table><p><b>{}</b> verified<br><small class="m"><span class="t-tracked">● Tracked</span> = Fraglink sessions or Steam's own playtime · <span class="t-imported">◆ Imported</span> = a game's own counter (self-reported, e.g. WoW /played from the Fraglink addon). Leaderboards count WoW /played only for characters verified through Battle.net.</small></p></div>"#,
         hrs(verified)
     );
     // steam

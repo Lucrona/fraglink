@@ -481,7 +481,9 @@ async function userDetail(id) {
 }
 
 /* ---------- 4. hours review ---------- */
-const FLAG = { day_over_20h: "Over 20 h in a day", session_over_18h: "Session over 18 h", overlapping_sessions: "Overlapping sessions", faster_than_real_time: "Faster than real time" };
+const FLAG = { day_over_20h: "Over 20 h in a day", session_over_18h: "Session over 18 h", overlapping_sessions: "Overlapping sessions", faster_than_real_time: "Faster than real time",
+  wow_checksum: "WoW: entry edited (bad checksum)", wow_battletag: "WoW: BattleTag doesn't match link", wow_decrease: "WoW: /played went down",
+  wow_impossible: "WoW: /played grew faster than real time", wow_bnet_mismatch: "WoW: level doesn't match Battle.net", wow_clock: "WoW: timestamp in the future", wow_old_addon: "WoW: retired addon version" };
 async function hoursReview(days) {
   days = Number(days) || 30;
   const d = await api("/admin/hours/flags?days=" + days);

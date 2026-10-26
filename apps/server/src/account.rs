@@ -946,8 +946,9 @@ pub async fn details_json(st: &AppState, uid: Uuid) -> ApiResult<Value> {
 // ------------------------------------------------------------------ per-feature privacy
 
 /// Per-feature visibility switches stored in `users.privacy` (missing key = shown).
-pub const PRIVACY_KEYS: [&str; 13] = [
+pub const PRIVACY_KEYS: [&str; 14] = [
     "now_playing",
+    "wow_characters",
     "games",
     "rig",
     "about",

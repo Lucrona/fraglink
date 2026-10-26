@@ -9,7 +9,8 @@
 //! - Steam: OpenID 2.0 ("Sign in through Steam"), no keys needed. Hours import needs
 //!   `STEAM_API_KEY`.
 //! - Discord: OAuth2 `identify`, needs `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET`.
-//! - Battle.net: OAuth2 `openid`, needs `BNET_CLIENT_ID` + `BNET_CLIENT_SECRET`.
+//! - Battle.net: OAuth2 `openid wow.profile` (the WoW characters on the account, see
+//!   `wow::sync_characters`), needs `BNET_CLIENT_ID` + `BNET_CLIENT_SECRET`.
 //!
 //! Redirect URL to register with Discord / Blizzard: `<FRAGLINK_SITE_URL>/api/v1/connect/<discord|bnet>/return`.
 
@@ -74,7 +75,8 @@ async fn status(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value
     let linked: Value = sqlx::query_scalar(
         "SELECT coalesce(jsonb_object_agg(provider, jsonb_build_object('uid', provider_uid, 'display', display,
                 'verified', verified, 'show_on_profile', show_on_profile, 'linked_at', linked_at,
-                'last_sync_at', last_sync_at, 'sync_status', sync_status)), '{}'::jsonb)
+                'last_sync_at', last_sync_at, 'sync_status', sync_status,
+                'needs_reconnect', provider = 'bnet' AND coalesce(scopes, '') NOT LIKE '%wow.profile%')), '{}'::jsonb)
          FROM linked_accounts WHERE user_id = $1",
     )
     .bind(a.user.id)
@@ -147,7 +149,7 @@ async fn start(
         _ => {
             let (id, _) = creds("bnet").unwrap();
             format!(
-                "https://oauth.battle.net/authorize?client_id={}&redirect_uri={}&response_type=code&scope=openid&state={state}",
+                "https://oauth.battle.net/authorize?client_id={}&redirect_uri={}&response_type=code&scope=openid%20wow.profile&state={state}",
                 enc(&id),
                 enc(&ret)
             )
@@ -191,20 +193,44 @@ async fn finish(
                 let code = q.get("code").ok_or_else(|| {
                     AppError::bad_request("no_code", "The sign-in didn't return a code.")
                 })?;
-                let (puid, display) = oauth_identity(&st, &provider, code).await?;
-                link_oauth(&st, uid, &provider, &puid, &display).await
+                let (puid, display, token, scopes) = oauth_identity(&st, &provider, code).await?;
+                link_oauth(&st, uid, &provider, &puid, &display).await?;
+                if provider == "bnet" {
+                    let _ = sqlx::query(
+                        "UPDATE linked_accounts SET scopes = $2 WHERE user_id = $1 AND provider = 'bnet'",
+                    )
+                    .bind(uid)
+                    .bind(&scopes)
+                    .execute(&st.db)
+                    .await;
+                    if scopes.split(' ').any(|x| x == "wow.profile") {
+                        // the verify page fetches the characters as its next shown step
+                        crate::wow::stash_token(uid, &token);
+                    }
+                }
+                Ok(())
             }
             _ => Err(AppError::not_found()),
         }
     }
     .await;
     match r {
+        Ok(()) if provider == "bnet" => Redirect::to(&format!(
+            "{}/connect/battlenet/verify?connected=1",
+            site(&st)
+        ))
+        .into_response(),
         Ok(()) => back(&st, &format!("connected={provider}")),
         Err(e) => back(&st, &format!("connect_error={}", enc(&e.message))),
     }
 }
 
-async fn oauth_identity(st: &AppState, provider: &str, code: &str) -> ApiResult<(String, String)> {
+/// (provider uid, display name, access token, granted scopes).
+async fn oauth_identity(
+    st: &AppState,
+    provider: &str,
+    code: &str,
+) -> ApiResult<(String, String, String, String)> {
     let (id, secret) = creds(provider)
         .ok_or_else(|| AppError::bad_request("not_configured", "Not configured."))?;
     let http = reqwest::Client::builder()
@@ -276,7 +302,8 @@ async fn oauth_identity(st: &AppState, provider: &str, code: &str) -> ApiResult<
         ),
     };
     let uid = uid.ok_or_else(bad)?;
-    Ok((uid.clone(), display.unwrap_or(uid)))
+    let scopes = tok["scope"].as_str().unwrap_or_default().to_string();
+    Ok((uid.clone(), display.unwrap_or(uid), at.to_string(), scopes))
 }
 
 async fn link_oauth(
@@ -331,5 +358,8 @@ async fn unlink(
         .bind(&provider)
         .execute(&st.db)
         .await?;
+    if provider == "bnet" {
+        crate::wow::on_unlink(&st, a.user.id).await;
+    }
     Ok(Json(json!({ "ok": true })))
 }

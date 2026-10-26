@@ -20,6 +20,10 @@ pub enum Tier {
 /// newest entry from before the 7 days, else the first entry inside them, so a first import never
 /// counts as this week's play. The growth is capped at the 7 days' real time. Steam only reports a
 /// two-week figure, so Steam counts in all-time totals (display_min) but not here.
+///
+/// WoW addon /played (source `wow_addon`) doesn't count through the imported entries: only
+/// characters verified on the player's Battle.net account count, each by how much its own
+/// /played grew (same baseline rule, per character), summed per game and capped at 7 days.
 pub const WEEK_CTE: &str = "wk AS NOT MATERIALIZED (
     SELECT user_id, game_id, max(m)::bigint AS m FROM (
         SELECT s.user_id, s.game_id, sum(s.duration_s) / 60 AS m FROM sessions s
@@ -32,7 +36,23 @@ pub const WEEK_CTE: &str = "wk AS NOT MATERIALIZED (
                                   AND b.created_at < now() - interval '7 days'
                                 ORDER BY b.created_at DESC, b.id DESC LIMIT 1),
                               (array_agg(e.minutes ORDER BY e.created_at, e.id))[1]), 0), 7 * 24 * 60)
-          FROM hours_entries e WHERE e.tier = 'imported' AND e.created_at >= now() - interval '7 days'
+          FROM hours_entries e WHERE e.tier = 'imported' AND e.source <> 'wow_addon'
+           AND e.created_at >= now() - interval '7 days'
+         GROUP BY 1, 2
+        UNION ALL
+        SELECT c.user_id, c.game_id, LEAST(sum(g.m), 7 * 24 * 60)
+          FROM wow_characters c
+          JOIN LATERAL (
+              SELECT GREATEST((array_agg(p.played_s ORDER BY p.at DESC))[1]
+                   - coalesce((SELECT b.played_s FROM wow_played_snaps b
+                                WHERE b.char_id = c.id AND b.at < now() - interval '7 days'
+                                ORDER BY b.at DESC LIMIT 1),
+                              (array_agg(p.played_s ORDER BY p.at))[1]), 0) / 60 AS m
+                FROM wow_played_snaps p
+               WHERE p.char_id = c.id AND p.at >= now() - interval '7 days'
+               HAVING count(*) > 0
+          ) g ON true
+         WHERE c.verified
          GROUP BY 1, 2
     ) x GROUP BY 1, 2 HAVING max(m) > 0)";
 

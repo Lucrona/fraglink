@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added (0.3.0-beta.8, not released)
+- World of Warcraft /played: the Fraglink /played addon is bundled in the app (Options › Connections › Install WoW addon) for Retail and WoW Forever. The app reads the addon's file after WoW closes and sends only characters whose /played changed.
+- Entries are signed by the addon and carry the BattleTag; edited entries and entries from another Battle.net account are refused and flagged in Admin › Hours review.
+- Verify WoW characters (/connect/battlenet/verify): Battle.net (wow.profile) confirms which characters are yours. Only verified characters count on leaderboards; others show as self-reported.
+- Profile: WoW character cards with a privacy switch and per-character hiding. Exports include WoW characters and their /played history.
+
 ## [0.3.0-beta.7] - 2026-10-26
 
 ### Fixed

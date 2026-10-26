@@ -2072,6 +2072,9 @@ async fn hours_flags(
                            "detail": "more hours than time passed since the first session" }),
         );
     }
+    // WoW addon entries that failed their checks (edited, decreasing, impossible growth,
+    // wrong BattleTag, level Battle.net disagrees with)
+    flags.extend(crate::wow::admin_flags(&st, days).await?);
     Ok(Json(json!({ "days": days, "flags": flags })))
 }
 
