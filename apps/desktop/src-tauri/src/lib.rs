@@ -258,11 +258,6 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
             windows::show_toast(app, t);
         }
     }
-    if evs.iter().any(|e| {
-        matches!(e, TrackerEvent::Stopped { game_id, .. } if fraglink_core::realm::is_wow(game_id))
-    }) {
-        wowaddon::after_session(app);
-    }
     if evs
         .iter()
         .any(|e| matches!(e, TrackerEvent::Stopped { kept: true, .. }))
@@ -922,14 +917,6 @@ pub fn run() {
             gamelist::start(&handle);
             commands::start_first_folder_scan(&handle);
             start_tracker(handle.clone());
-            {
-                // catch up on WoW /played saved while the app wasn't running
-                let h = handle.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_secs(90));
-                    wowaddon::upload(&h);
-                });
-            }
             health::start_watchdog(handle);
             Ok(())
         })

@@ -405,7 +405,7 @@ pages.wowupload = async () => {
   const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
   const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
   el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
-    <p class="sub">The Fraglink app sends this for you after you close WoW. If you play on another PC or the app isn't running, upload the file here. It goes through the same checks.</p></div></div>
+    <p class="sub">Upload once to bring in your past WoW playtime. After that, Fraglink tracks your hours while it's running. Upload again any time to catch up on time played while Fraglink was closed.</p></div></div>
     <form class="wu-form" data-form>
       <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
       <div class="wu-row"><span class="wu-l">File</span><input type="file" name="f" accept=".lua" required> <button class="btn blue" type="submit">Upload and check</button></div>
@@ -464,7 +464,7 @@ pages.wowupload = async () => {
     step("send", "ok", "Received");
     const rej = u.rejected.length, unch = u.unchanged.length;
     const gained = (u.changes || []).reduce((a, c) => a + (c.delta_s || 0), 0);
-    step("check", rej ? "warn" : "ok", [plural(u.found, "character") + " in the file", u.accepted ? `${nf.format(u.accepted)} updated` : "", gained > 0 ? `+${(gained / 3600).toFixed(1)} hours since last upload` : u.changes && u.changes.length && !u.changes.some(c => c.first) ? "no new hours since last upload" : "", unch ? `${nf.format(unch)} already up to date` : "", rej ? `${nf.format(rej)} rejected` : ""].filter(Boolean).join(" · "));
+    step("check", rej ? "warn" : "ok", [plural(u.found, "character") + " in the file", u.accepted ? `${nf.format(u.accepted)} updated` : "", gained > 0 ? `+${(gained / 3600).toFixed(1)} hours since last upload` : u.accepted && u.changes && u.changes.length && !u.changes.some(c => c.first) ? "no new hours since last upload" : "", unch ? `${nf.format(unch)} already up to date` : "", rej ? `${nf.format(rej)} rejected` : ""].filter(Boolean).join(" · "));
     step("match", "run");
     let m;
     try { m = await api("/me/wow"); } catch (x) { return fail("match", x); }

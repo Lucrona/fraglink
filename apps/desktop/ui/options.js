@@ -301,11 +301,12 @@
     try {
       const f = await FLB.wowAddonStatus();
       const found = f.some(x => x.installed);
-      btn.hidden = found;
-      if (!f.length) { st.textContent = 'Not found. No WoW install seen yet: start WoW once with Fraglink running.'; btn.hidden = false; return; }
+      if (!f.length) { st.textContent = 'Not found. No WoW install seen yet: start WoW once with Fraglink running.'; return; }
       st.textContent = f.map(x => `${x.game_id === 'wow_forever' ? 'WoW Forever' : 'WoW'}: ${x.installed ? 'Detected (v' + x.installed + ')' : 'Not found'}`).join(' · ');
     } catch (x) { st.textContent = String(x); }
   }
+  const WOW_UPLOAD_URL = 'https://playfraglink.com/connect/wow';
+  $('#wow-up').addEventListener('click', () => { FLB.openUrl ? FLB.openUrl(WOW_UPLOAD_URL) : window.open(WOW_UPLOAD_URL); });
   $('#wow-get').addEventListener('click', () => { FLB.openUrl ? FLB.openUrl(WOW_ADDON_URL) : window.open(WOW_ADDON_URL); });
   $('#conn-list').addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b || b.dataset.web) return; const m = $('#conn-msg');
