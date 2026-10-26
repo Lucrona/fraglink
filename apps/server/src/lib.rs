@@ -33,6 +33,7 @@ pub mod mfa;
 pub mod names;
 pub mod news;
 pub mod paging;
+pub mod polls;
 pub mod presence;
 pub mod profile;
 pub mod realms;
@@ -155,6 +156,7 @@ pub fn router(state: AppState) -> Router {
         .merge(detection_aliases::routes())
         .merge(merge_suggest::routes())
         .merge(news::routes())
+        .merge(polls::routes())
         .merge(mfa::routes())
         .merge(account::routes())
         .merge(avatars::routes())
