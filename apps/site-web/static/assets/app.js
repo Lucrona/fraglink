@@ -665,6 +665,7 @@ pages.profile = async () => {
   const ids = [].concat((p.games || []).map(g => g.game_id), (p.recent || []).map(r => r.game_id), pres && pres.game_id ? [pres.game_id] : []);
   await loadIcons(ids);
   document.title = (p.display_name || p.handle) + " · Fraglink";
+  window.flCrumb([[p.display_name || p.handle]]);
   const self = p.relation === "self";
   const live = pres && pres.status !== "offline" && pres.game_name;
   const listedGames = (p.games || []).filter(g => g.listed !== false);
@@ -928,7 +929,7 @@ pages.settings = async () => {
   const ok = (el, t) => showOk($("[data-msg]", el), t), bad = (el, e) => showErr($("[data-msg]", el), e);
 
   function accountTab() {
-    const verified = u.email ? (u.email_verified ? `<span style="color:var(--online)">✓ confirmed</span>` : `<span style="color:var(--away)">not confirmed</span> · <a href="#" data-resend>${u.mail_live ? "Send the link again" : "Confirmation emails are coming soon"}</a>`) : `<span class="empty">none</span>`;
+    const verified = u.email ? (u.email_verified ? `<span style="color:var(--online)">✓ confirmed</span>` : `<span style="color:var(--away)">not confirmed</span> · ${u.mail_live ? `<a href="#" data-resend>Send the link again</a>` : `<span class="dimt">confirmation emails aren't switched on yet</span>`}`) : `<span class="empty">none</span>`;
     const canUp = u.avatar_upload_allowed;
     return `<h3>Profile picture</h3>${msg}<div class="frm">
       ${row("Current", `<div class="avsizes"><div>${avatar(u.avatar, 184)}<small>184 profile</small></div><div>${avatar(u.avatar, 64)}<small>64 panels</small></div><div>${avatar(u.avatar, 32)}<small>32 lists</small></div></div>`)}
@@ -1061,6 +1062,7 @@ pages.settings = async () => {
     try { c = await api("/connect"); } catch (x) { return bad(box, x); }
     const card = (p, logo, blurb) => {
       const v = c[p] || {}, l = v.linked;
+      if (!l && !v.off && !v.available) return ""; // not built yet: hide rather than show a "Coming soon" stub
       const right = l
         ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
         : v.off ? `<span class="btn sm" aria-disabled="true">Turned off for now</span>` : v.available ? `<button class="btn sm blue" type="button" data-link="${p}">${p === "steam" ? "Sign in through Steam" : "Link " + NAMES[p]}</button>` : `<span class="btn sm" aria-disabled="true">Coming soon</span>`;
@@ -1268,6 +1270,7 @@ pages.news = async () => {
     try {
       const d = await api("/news/" + encodeURIComponent(slug)), p = d.post;
       document.title = p.title + " · Fraglink";
+      window.flCrumb([[p.title]]);
       if (p.slug !== slug) history.replaceState(null, "", p.url);
       root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><article class="panel post"><div class="body">
         <h1>${esc(p.title)}</h1><div class="sub">${fullDate.format(new Date(p.at))}${p.pinned ? ' · <span class="pin">Pinned</span>' : ""}</div>
@@ -1321,6 +1324,20 @@ function applyFeatures() {
   return true;
 }
 
+/* ---------- shared "You are here" breadcrumb (every page except home, which has its own bar) ---------- */
+const CRUMBS = { download: [["Download", "/download"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
+  login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
+  settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
+  verify: [["Confirm your email"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
+function setCrumb(parts) {
+  const nav = document.getElementById("ycrumb"); if (!nav || !parts) return;
+  const all = [["Home", "/"], ...parts];
+  nav.firstElementChild.innerHTML = `<span class="yl">You are here:</span> <ol>${all.map((p, i) => { const last = i === all.length - 1;
+    return `<li${last ? ' aria-current="page"' : ""}>${p[1] && !last ? `<a href="${esc(p[1])}" title="${esc(p[0])}">${esc(p[0])}</a>` : `<span title="${esc(p[0])}">${esc(p[0])}</span>`}</li>`; }).join("")}</ol>`;
+  nav.hidden = false;
+}
+window.flCrumb = extra => setCrumb([...(CRUMBS[document.body.dataset.page] || []), ...extra]);
+
 /* ---------- boot ---------- */
 document.addEventListener("DOMContentLoaded", async () => {
   await featuresReady;
@@ -1328,6 +1345,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (!applyFeatures()) return;
   const y = $("#year"); if (y) y.textContent = new Date().getFullYear();
   banner();
+  setCrumb(CRUMBS[document.body.dataset.page]);
   const f = pages[document.body.dataset.page];
   // Submit buttons in the page HTML start disabled (data-wait) until the page's handlers exist.
   const ready = () => $$("button[data-wait]").forEach(b => { b.disabled = false; b.removeAttribute("data-wait"); });

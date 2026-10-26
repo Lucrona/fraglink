@@ -654,3 +654,15 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .car-t img{max-width:100%;height:auto;max-height:200px;width:auto}
 .car-t figcaption{max-width:100%;overflow-wrap:anywhere}
 .fstat .fun{margin-top:4px;font-size:12px;color:#f0b060}.fstat .fun small{display:block;font-size:10px;color:#8a9bb0;margin-top:2px}
+/* shared breadcrumb */
+.ycrumb{background:#101317;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted)}
+.ycrumb .wrap{display:flex;align-items:center;gap:6px;padding:5px 16px;min-width:0}
+.ycrumb .yl{flex:none}
+.ycrumb ol{display:flex;list-style:none;margin:0;padding:0;min-width:0;overflow:hidden}
+.ycrumb li{display:flex;min-width:0;white-space:nowrap}
+.ycrumb li>*{overflow:hidden;text-overflow:ellipsis;max-width:32ch}
+.ycrumb li:not(:first-child)::before{content:"»";padding:0 6px;flex:none}
+.ycrumb li:not(:last-child){flex:none}
+.ycrumb li:last-child>*{max-width:none}
+.ycrumb [aria-current] span{color:#c8d2dc}
+@media(max-width:600px){.ycrumb .yl{display:none}.ycrumb li>*{max-width:14ch}}
