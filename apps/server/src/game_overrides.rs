@@ -21,6 +21,10 @@ pub struct GameOverride {
     pub icon_pref: Option<String>,
     pub art_pref: Option<String>,
     pub steam_appid: Option<i32>,
+    /// Other names staff added (Admin search).
+    pub aliases: Vec<String>,
+    /// Folder fragments: the game's programs count as it only inside these folders.
+    pub path_hints: Vec<String>,
 }
 
 pub type Map = Arc<HashMap<String, GameOverride>>;
@@ -42,7 +46,7 @@ impl OverrideCache {
 /// Re-read every override from the database.
 pub async fn reload(st: &AppState) -> ApiResult<Map> {
     let rows: Vec<GameOverride> =
-        sqlx::query_as("SELECT game_id, name, hidden, extra_exes, has_icon, icon_pref, art_pref, steam_appid FROM game_overrides")
+        sqlx::query_as("SELECT game_id, name, hidden, extra_exes, has_icon, icon_pref, art_pref, steam_appid, aliases, path_hints FROM game_overrides")
             .fetch_all(&st.db)
             .await?;
     let m: Map = Arc::new(rows.into_iter().map(|o| (o.game_id.clone(), o)).collect());
