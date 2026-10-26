@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.7] - 2026-10-26
+
 ### Fixed
 
 - Tooltips no longer get cut off at the window edges (e.g. the header buttons right of Game Info). With Large/Larger text the tip was placed in unscaled pixels and grew past the edge; placement now measures the real text scale, flips left/above when there is no room and clamps on every edge, also in narrow windows. Options now uses the same in-window tip instead of native titles, so its hints are kept inside the window too.
