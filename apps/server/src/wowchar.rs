@@ -618,6 +618,11 @@ pub fn summarise(p: &Parts) -> Value {
                 .map(String::from)
         })
     });
+    let ids = |v: &Value, f: fn(&Value) -> Option<i64>| -> Vec<i64> {
+        v.as_array()
+            .map(|a| a.iter().filter_map(f).collect())
+            .unwrap_or_default()
+    };
     let gear: Vec<Value> = p.equip["equipped_items"]
         .as_array()
         .map(|items| {
@@ -629,6 +634,11 @@ pub fn summarise(p: &Parts) -> Value {
                         "name": s(&i["name"]), "quality": s(&i["quality"]["type"]),
                         "ilvl": i["level"]["value"].as_i64(),
                         "icon": i["media"]["id"].as_i64().and_then(|m| p.icons.get(&m).cloned()),
+                        "id": i["item"]["id"].as_i64(),
+                        "bonus": ids(&i["bonus_list"], |x| x.as_i64()),
+                        "ench": i["enchantments"].as_array().and_then(|a| a.iter().find(|e| e["enchantment_slot"]["id"].as_i64().unwrap_or(0) == 0).or(a.first())).and_then(|e| e["enchantment_id"].as_i64()),
+                        "gems": ids(&i["sockets"], |x| x["item"]["id"].as_i64()),
+                        "pcs": ids(&i["set"]["items"], |x| if x["is_equipped"].as_bool() == Some(true) { x["item"]["id"].as_i64() } else { None }),
                     })
                 })
                 .collect()
@@ -779,7 +789,9 @@ mod tests {
             "equipped_item_level": 78, "achievement_points": 15440, "guild": { "name": "Seraphim" } });
         let media = json!({ "assets": [{ "key": "main-raw", "value": "https://render.worldofwarcraft.com/us/character/x/1-main-raw.png" }] });
         let equip = json!({ "equipped_items": [{ "slot": { "type": "HEAD", "name": "Head" }, "name": "Helm", "quality": { "type": "EPIC" },
-            "level": { "value": 83 }, "media": { "id": 5 } }] });
+            "level": { "value": 83 }, "media": { "id": 5 }, "item": { "id": 19019 }, "bonus_list": [6652, 1498],
+            "enchantments": [{ "enchantment_id": 7001, "enchantment_slot": { "id": 0 } }], "sockets": [{ "item": { "id": 213743 } }, {}],
+            "set": { "items": [{ "item": { "id": 1 }, "is_equipped": true }, { "item": { "id": 2 }, "is_equipped": false }] } }] });
         let raids = json!({ "expansions": [
             { "expansion": { "id": 68, "name": "Legion" }, "instances": [] },
             { "expansion": { "id": 124, "name": "Warlords of Draenor" }, "instances": [{ "instance": { "id": 477, "name": "Highmaul" },
@@ -811,6 +823,11 @@ mod tests {
         assert_eq!(v["armory"], "https://worldofwarcraft.blizzard.com/en-us/worldsoul/us/armory/character/frostmourne/lucrona");
         assert_eq!(v["gear"][0]["icon"], "132963");
         assert_eq!(v["gear"][0]["ilvl"], 83);
+        assert_eq!(v["gear"][0]["id"], 19019);
+        assert_eq!(v["gear"][0]["bonus"], json!([6652, 1498]));
+        assert_eq!(v["gear"][0]["ench"], 7001);
+        assert_eq!(v["gear"][0]["gems"], json!([213743]));
+        assert_eq!(v["gear"][0]["pcs"], json!([1]));
         assert!(v["raids"]["current"].is_null());
         assert_eq!(v["raids"]["recent"]["expansion"], "Warlords of Draenor");
         assert_eq!(v["professions"][0]["tier"], "Shadowlands Inscription");

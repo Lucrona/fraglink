@@ -12,6 +12,25 @@ const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const token = () => localStorage.getItem(TK);
+// Wowhead tooltips: hover-capable devices only; script loaded the first time a wowhead.com link is on the page.
+const WH = (() => {
+  const ok = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  let st = 0; // 0 none, 1 loading, 2 ready
+  const has = () => document.querySelector('a[href^="https://www.wowhead.com/"],a[href^="https://wowhead.com/"]');
+  const refresh = () => { try { window.$WowheadPower && window.$WowheadPower.refreshLinks(); } catch (e) {} };
+  const scan = () => {
+    if (!ok || !has()) return;
+    if (st === 2) return refresh();
+    if (st) return; st = 1;
+    window.whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false };
+    const s = document.createElement("script"); s.src = "https://wow.zamimg.com/js/tooltips.js"; s.async = true;
+    s.onload = () => { st = 2; refresh(); }; s.onerror = () => { st = 0; };
+    document.head.appendChild(s);
+  };
+  let t = 0; const later = () => { clearTimeout(t); t = setTimeout(scan, 300); };
+  if (ok) addEventListener("load", () => { later(); new MutationObserver(later).observe(document.body, { childList: true, subtree: true }); });
+  return { ok, scan };
+})();
 const me = () => { try { return JSON.parse(localStorage.getItem(UK)); } catch (e) { return null; } };
 function setSession(t, u) { localStorage.setItem(TK, t); localStorage.setItem(UK, JSON.stringify(u)); }
 function clearSession() { localStorage.removeItem(TK); localStorage.removeItem(UK); }
@@ -1725,7 +1744,8 @@ const WOWPOP = (() => {
   };
   const key = e => { if (e.key === "Escape") close(); };
   addEventListener("popstate", () => { if (box) close(true); });
-  const slot = (g, k) => { const it = g[k]; return it ? `<div class="cp-slot q-${esc((it.quality || "common").toLowerCase())}" title="${esc(it.name)}">${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></div>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
+  const whp = it => [it.ilvl && "ilvl=" + it.ilvl, it.bonus && it.bonus.length && "bonus=" + it.bonus.join(":"), it.ench && "ench=" + it.ench, it.gems && it.gems.length && "gems=" + it.gems.join(":"), it.pcs && it.pcs.length && "pcs=" + it.pcs.join(":")].filter(Boolean).join("&");
+  const slot = (g, k) => { const it = g[k]; const lk = it && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
   const raid = r => r.instances.map(i => `<div class="cp-raid"><b>${esc(i.name)}</b><div class="cp-modes">${[...i.modes].sort((a, b) => DO.indexOf(a.difficulty) - DO.indexOf(b.difficulty)).map(m => `<span class="${m.done >= m.total ? "full" : ""}">${esc(m.label)} <b>${m.done}/${m.total}</b></span>`).join("")}</div></div>`).join("");
   const body = (d, c) => {
     if (d.status === "missing") return `<div class="cp-hd"><div><h2>${esc(c.name)}</h2><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}</div></div></div><p class="empty cp-pad">Profile private or not found on Blizzard.</p>`;
@@ -1756,7 +1776,7 @@ const WOWPOP = (() => {
     document.addEventListener("keydown", key); history.pushState({ wowpop: 1 }, ""); pushed = true;
     $(".cp-x", box).focus();
     const me = box;
-    try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box !== me) return; $(".cp-in", box).innerHTML = body(d, { ...c, handle });
+    try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box !== me) return; $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WH.scan();
       const im = $(".cp-rd", box);
       if (im) { const t = localStorage.getItem(TK), r = await fetch(`${API}/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}/render.png`, { headers: t ? { authorization: "Bearer " + t } : {} });
         if (r.ok && box === me) { im.src = URL.createObjectURL(await r.blob()); im.onload = () => URL.revokeObjectURL(im.src); im.hidden = false; } } }
