@@ -28,6 +28,7 @@ const TABS = [
   ["server", "Server", can.server],
   ["announcements", "Announcements", can.announcements],
   ["news", "News", can.news],
+  ["polls", "Polls", can.news],
   ["settings", "Site settings", can.settings],
   ["staff", "Staff", can.staff],
 ].filter(t => t[2]);
@@ -45,7 +46,7 @@ function route() {
   const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
   const t = tab === "user" ? "users" : tab;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
-  const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, settings: siteSettings, staff, user: userDetail }[tab];
+  const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, settings: siteSettings, staff, user: userDetail }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -745,3 +746,30 @@ async function renderMedia(id, g) {
 route();
 if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] })), api("/admin/merge_suggestions").catch(() => ({ merges: [] }))]).then(([d, u, m]) => badge("approvals", d.suggestions.length + u.unknown.length + m.merges.length)).catch(() => {});
 };
+
+/* ---------- polls (home page Quick poll) ---------- */
+async function polls() {
+  const d = await api("/admin/polls");
+  const bars = p => p.options.map(o => `<div style="margin:3px 0"><b>${esc(o.label)}</b> · ${o.votes} (${o.pct}%)<div class="bar" style="height:6px;background:#1c2a3a"><i style="display:block;height:6px;width:${o.pct}%;background:#e08a20"></i></div></div>`).join("");
+  const st = p => p.active ? (p.closed ? `<span class="role">Active · closed</span>` : `<span class="role">Active</span>`) : (p.closed ? "Closed" : "Not shown");
+  view.innerHTML = `<section class="panel"><h2>New poll</h2><div class="body"><form id="pn">
+    <p class="note">The active poll shows in the <b>Quick poll</b> box on the home page. One vote per account (players can change it); test accounts aren't counted. Closing keeps it on the home page with final results; making another poll active replaces it. Past polls are kept.</p>
+    <p><input name="q" maxlength="140" placeholder="Question" style="width:100%" required></p>
+    ${[1,2,3,4,5,6].map(i => `<p style="margin:4px 0"><input name="o" maxlength="60" placeholder="Answer ${i}${i > 2 ? " (optional)" : ""}" ${i <= 2 ? "required" : ""} style="width:60%"></p>`).join("")}
+    <label><input type="checkbox" name="act" checked> Make it the active poll now</label>
+    <p><button class="btn dl">Create poll</button></p></form></div></section>
+    <section class="panel"><h2>All polls (${d.polls.length})</h2><div class="body">${d.polls.length ? d.polls.map(p => `<div class="fr" style="display:block;padding:10px 0;border-bottom:1px solid #202c3a" data-id="${p.id}">
+      <div><b>${esc(p.question)}</b> · ${st(p)} · ${p.total} vote${p.total === 1 ? "" : "s"} · <span class="dimt">${new Date(p.created_at).toLocaleDateString()}</span></div>${bars(p)}
+      <div style="margin-top:6px">${p.active && !p.closed ? "" : `<button class="btn sm" data-act="activate">${p.active ? "Reopen" : "Make active"}</button> `}${p.closed ? "" : `<button class="btn sm" data-act="close">Close voting</button>`}</div></div>`).join("") : `<div class="empty">No polls yet.</div>`}</div></section>`;
+  $("#pn").onsubmit = async e => {
+    e.preventDefault(); const f = e.target;
+    try { await api("/admin/polls", { method: "POST", body: { question: f.q.value, options: [...f.querySelectorAll("[name=o]")].map(i => i.value), activate: f.act.checked } }); polls(); }
+    catch (x) { alert(x.message); }
+  };
+  view.onclick = async e => {
+    const b = e.target.closest("button[data-act]"); if (!b) return;
+    const id = b.closest("[data-id]").dataset.id, act = b.dataset.act;
+    if (act === "close" && !confirm("Close voting on this poll? Results stay visible.")) return;
+    try { await api(`/admin/polls/${id}/${act}`, { method: "POST" }); polls(); } catch (x) { alert(x.message); }
+  };
+}

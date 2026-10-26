@@ -1525,9 +1525,10 @@ async fn friends_page(
         f.presence.status.as_str(),
         f.presence.game_name.is_some(),
     ) {
-        ("online", true) => 0,
+        // in a game first (online or away), then online, then away
+        ("online" | "away", true) => 0,
         ("online", false) => 1,
-        ("away", _) => 2,
+        ("away", false) => 2,
         _ => 3,
     };
     let mut fr: Vec<&friends::FriendView> = fl.friends.iter().collect();
