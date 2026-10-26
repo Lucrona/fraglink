@@ -124,9 +124,9 @@ async fn list(
         AND ($5 = '' OR upper(class) = upper($5))
         AND ($6 = 0 OR ($6 = 1 AND NOT (hidden OR $4)) OR ($6 = 2 AND (hidden OR $4)))";
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, bool, Option<String>, Option<String>, Option<String>, Option<String>)> =
+    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, bool, Option<String>, Option<String>, Option<String>, Option<String>, bool)> =
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "SELECT id, game_id, region, realm, name, class, level, played_s, hidden, race, gender, spec, bnet_spec
+            "SELECT id, game_id, region, realm, name, class, level, played_s, hidden, race, gender, spec, bnet_spec, show_guild
              FROM wow_characters WHERE {filter} ORDER BY {order} LIMIT $7 OFFSET $8"
         )))
         .bind(uid)
@@ -161,12 +161,12 @@ async fn list(
     let items: Vec<Value> = rows
         .into_iter()
         .map(
-            |(id, g, r, realm, name, class, level, s, h, race, gender, spec, bspec)| {
+            |(id, g, r, realm, name, class, level, s, h, race, gender, spec, bspec, sg)| {
                 json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
                     "class": class, "level": level, "played_min": s / 60,
                     "hidden": h || ha, "own_hidden": h, "race": race, "gender": gender,
                     "spec": spec.clone().or(bspec.clone()), "spec_picked": spec.is_some(),
-                    "active_spec": bspec })
+                    "active_spec": bspec, "show_guild": sg })
             },
         )
         .collect();

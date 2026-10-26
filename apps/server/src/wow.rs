@@ -806,11 +806,13 @@ pub async fn characters(
     verified_only: bool,
 ) -> ApiResult<Vec<Value>> {
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, DateTime<Utc>, bool, bool, Option<String>, Option<String>, Option<String>)> =
+    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, DateTime<Utc>, bool, bool, Option<String>, Option<String>, Option<String>, bool, Option<String>)> =
         sqlx::query_as(
             "SELECT id, game_id, region, realm, name, class, level, played_s, played_at, verified,
                     hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false),
-                    race, gender, coalesce(spec, bnet_spec)
+                    race, gender, coalesce(spec, bnet_spec), show_guild,
+                    CASE WHEN show_guild THEN (SELECT d.data->'guild'->>'name' FROM wow_char_details d
+                         WHERE d.char_id = wow_characters.id AND d.status = 'ok') END
              FROM wow_characters WHERE user_id = $1
                AND ($2 OR NOT (hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false)))
                AND (NOT $3 OR verified)
@@ -824,10 +826,11 @@ pub async fn characters(
     Ok(rows
         .into_iter()
         .map(
-            |(id, g, r, realm, name, class, level, s, at, v, h, race, gender, spec)| {
+            |(id, g, r, realm, name, class, level, s, at, v, h, race, gender, spec, sg, guild)| {
                 json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
                     "class": class, "level": level, "played_min": s / 60, "played_at": at,
-                    "verified": v, "hidden": h, "race": race, "gender": gender, "spec": spec })
+                    "verified": v, "hidden": h, "race": race, "gender": gender, "spec": spec,
+                    "show_guild": sg, "guild": guild })
             },
         )
         .collect())

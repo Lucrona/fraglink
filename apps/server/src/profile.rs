@@ -475,6 +475,13 @@ async fn profile(
         && crate::features::on(&st, "wow_characters").await
     {
         let mut c = crate::wow::characters(&st, p.id, is_self, true).await?;
+        crate::wowchar::warm_guilds(
+            &st,
+            c.iter()
+                .filter(|x| x["show_guild"] == true && x["guild"].is_null() && x["hidden"] == false)
+                .filter_map(|x| x["id"].as_str().and_then(|i| i.parse().ok()))
+                .collect(),
+        );
         c.retain(|x| {
             !x["game_id"]
                 .as_str()
