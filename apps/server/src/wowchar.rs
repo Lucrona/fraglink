@@ -753,7 +753,7 @@ pub fn summarise(p: &Parts) -> Value {
         "level": r["level"].as_i64(), "race": name_of(&r["race"]), "class": name_of(&r["character_class"]),
         "class_id": r["character_class"]["id"].as_i64(),
         "spec": name_of(&r["active_spec"]), "faction": name_of(&r["faction"]),
-        "title": r["active_title"]["display_string"].as_str(),
+        "title": r["active_title"]["display_string"].as_str().map(|t| t.replace("{name}", name)),
         "ilvl": r["equipped_item_level"].as_i64(), "achievement_points": r["achievement_points"].as_i64(),
         "last_login": r["last_login_timestamp"].as_i64(),
         "guild": guild, "render": render_src.is_some(), "render_src": render_src,
@@ -807,6 +807,7 @@ mod tests {
             icons: &icons,
             rank: Some(2),
         });
+        assert_eq!(v["title"], "Lucrona the Kingslayer");
         assert_eq!(v["armory"], "https://worldofwarcraft.blizzard.com/en-us/worldsoul/us/armory/character/frostmourne/lucrona");
         assert_eq!(v["gear"][0]["icon"], "132963");
         assert_eq!(v["gear"][0]["ilvl"], 83);

@@ -1710,28 +1710,6 @@ async function loadPoll(d) {
   };
 }
 
-})();
-
-// Home screenshot carousel: auto-advance 5s, pause on hover/focus, arrows, dots, swipe.
-(function () {
-  const c = document.getElementById("f2-car"); if (!c) return;
-  const t = c.querySelector(".car-t"), n = t.children.length, d = c.querySelector(".car-d");
-  let i = 0, timer = 0, x0 = null;
-  d.innerHTML = Array.from({ length: n }, (_, k) => `<button type="button" aria-label="Screenshot ${k + 1}"></button>`).join("");
-  const go = k => { i = (k + n) % n; t.style.transform = `translateX(-${i * 100}%)`; d.querySelectorAll("button").forEach((b, j) => b.classList.toggle("on", j === i)); };
-  const play = () => { clearInterval(timer); if (!matchMedia("(prefers-reduced-motion: reduce)").matches) timer = setInterval(() => go(i + 1), 5000); };
-  const stop = () => clearInterval(timer);
-  c.querySelector(".p").onclick = () => { go(i - 1); play(); };
-  c.querySelector(".n").onclick = () => { go(i + 1); play(); };
-  d.onclick = e => { const b = e.target.closest("button"); if (b) { go([...d.children].indexOf(b)); play(); } };
-  c.addEventListener("mouseenter", stop); c.addEventListener("mouseleave", play);
-  c.addEventListener("focusin", stop); c.addEventListener("focusout", play);
-  c.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; stop(); }, { passive: true });
-  c.addEventListener("touchend", e => { if (x0 !== null) { const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1)); } x0 = null; play(); });
-  go(0); play();
-})();
-
-
 
 // WoW character popup (public profile)
 const WOWPOP = (() => {
@@ -1756,7 +1734,7 @@ const WOWPOP = (() => {
     const stat = (l, v) => `<div class="cp-st"><small>${l}</small><b>${v}</b></div>`;
     const rr = rd.current && rd.current.instances.length ? { t: rd.current.expansion, r: rd.current } : rd.recent && rd.recent.instances.length ? { t: "Most recent progress · " + rd.recent.expansion, r: rd.recent } : null;
     return `<div class="cp-hd" style="--cc:${col}">${d.render ? `<img class="cp-rd" src="/api/v1/users/${encodeURIComponent(c.handle)}/wow/${encodeURIComponent(c.id)}/render.png" alt="" ${imgOk}>` : ""}<div class="cp-who">
-      ${d.title ? `<div class="cp-ti">${esc(d.title)}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
+      ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
       <div class="sub">Level ${d.level} ${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
       <div class="sub">${esc(d.realm)} ${esc(d.region.toUpperCase())}${d.faction ? ` · <span class="cp-f ${esc(d.faction.toLowerCase())}">${esc(d.faction)}</span>` : ""}</div>
       ${d.guild ? `<div class="cp-gu">&lt;${esc(d.guild.name)}&gt;${d.guild.rank != null ? ` · ${d.guild.rank === 0 ? "Guild Master" : "Rank " + d.guild.rank}` : ""}</div>` : ""}
@@ -1782,4 +1760,25 @@ const WOWPOP = (() => {
     catch (x) { if (box === me) $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load character details right now. Try again in a minute.</p>`; }
   };
   return { open, close };
+})();
+
+})();
+
+// Home screenshot carousel: auto-advance 5s, pause on hover/focus, arrows, dots, swipe.
+(function () {
+  const c = document.getElementById("f2-car"); if (!c) return;
+  const t = c.querySelector(".car-t"), n = t.children.length, d = c.querySelector(".car-d");
+  let i = 0, timer = 0, x0 = null;
+  d.innerHTML = Array.from({ length: n }, (_, k) => `<button type="button" aria-label="Screenshot ${k + 1}"></button>`).join("");
+  const go = k => { i = (k + n) % n; t.style.transform = `translateX(-${i * 100}%)`; d.querySelectorAll("button").forEach((b, j) => b.classList.toggle("on", j === i)); };
+  const play = () => { clearInterval(timer); if (!matchMedia("(prefers-reduced-motion: reduce)").matches) timer = setInterval(() => go(i + 1), 5000); };
+  const stop = () => clearInterval(timer);
+  c.querySelector(".p").onclick = () => { go(i - 1); play(); };
+  c.querySelector(".n").onclick = () => { go(i + 1); play(); };
+  d.onclick = e => { const b = e.target.closest("button"); if (b) { go([...d.children].indexOf(b)); play(); } };
+  c.addEventListener("mouseenter", stop); c.addEventListener("mouseleave", play);
+  c.addEventListener("focusin", stop); c.addEventListener("focusout", play);
+  c.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; stop(); }, { passive: true });
+  c.addEventListener("touchend", e => { if (x0 !== null) { const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1)); } x0 = null; play(); });
+  go(0); play();
 })();

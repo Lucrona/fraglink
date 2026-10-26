@@ -806,7 +806,7 @@ body.cp-lock{overflow:hidden}
 .cp-bd{padding:6px 18px 10px}
 .cp-bd section{margin:12px 0}
 .cp-bd h3{font-size:13px;margin:0 0 8px;color:var(--label);text-transform:uppercase;letter-spacing:.05em}
-.cp-gear{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}.cp-gear>div{display:flex;flex-direction:column;gap:4px}.cp-w{margin-top:4px}
+.cp-gear{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}.cp-gear>div:not(.cp-slot){display:flex;flex-direction:column;gap:4px}.cp-w{margin-top:4px}
 .cp-slot{display:flex;gap:8px;align-items:center;min-width:0;padding:3px;border-radius:3px;background:var(--row)}
 .cp-slot img,.cp-noi{width:32px;height:32px;flex:none;border:1px solid var(--q,#555);border-radius:3px;background:#0a0c0f}
 .cp-slot div{min-width:0}.cp-slot b{display:block;color:var(--q,#ddd);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cp-slot small{color:var(--muted)}
