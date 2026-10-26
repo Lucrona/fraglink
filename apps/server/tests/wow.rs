@@ -309,7 +309,28 @@ async fn only_verified_characters_count(pool: PgPool) {
     api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
     assert_eq!(wow_total(&pool).await, Some(6_000));
 
-    // the profile lists only the verified character
+    // character details are off by default (Admin > Site settings): no cards on the profile
+    let get_profile = || async {
+        serde_json::from_str::<Value>(
+            &api(
+                &app,
+                "GET",
+                "/api/v1/users/onlyverified/profile",
+                Some(&t),
+                None,
+            )
+            .await
+            .text,
+        )
+        .unwrap()
+    };
+    assert!(get_profile().await["wow_characters"].is_null());
+    sqlx::query("INSERT INTO site_settings(key, enabled) VALUES('wow_characters', true)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    fraglink_server::features::forget();
+    // switched on, the profile lists only the verified character
     let p: Value = serde_json::from_str(
         &api(
             &app,

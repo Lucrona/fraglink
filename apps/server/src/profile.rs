@@ -470,7 +470,10 @@ async fn profile(
         Value::Null
     };
     // WoW characters from the addon: only Battle.net-verified ones are shown and counted
-    let wow_characters = if can_see_games && show("wow_characters") {
+    let wow_characters = if can_see_games
+        && show("wow_characters")
+        && crate::features::on(&st, "wow_characters").await
+    {
         let mut c = crate::wow::characters(&st, p.id, is_self, true).await?;
         c.retain(|x| {
             !x["game_id"]

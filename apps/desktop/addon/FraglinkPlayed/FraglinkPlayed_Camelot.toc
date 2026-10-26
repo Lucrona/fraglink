@@ -6,6 +6,6 @@
 ## X-Website: https://playfraglink.com
 ## X-Curse-Project-ID: 1766775
 ## SavedVariables: FraglinkPlayedDB
-## IconTexture: Interface\Icons\INV_Misc_PocketWatch_01
+## IconTexture: Interface\AddOns\FraglinkPlayed\icon
 
 FraglinkPlayed.lua

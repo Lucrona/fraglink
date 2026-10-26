@@ -435,7 +435,7 @@ pages.wowupload = async () => {
       ${rows.length ? `<div class="wu-scroll"><table class="wu-t"><thead><tr>${th("name", "Character")}${th("realm", "Realm")}${th("level", "Class / level")}${th("played", "Hours played")}${th("status", "Status")}</tr></thead><tbody>
       ${shown.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.realm)} <span class="sub">${esc(r.region.toUpperCase())}${r.game_id === "wow_forever" ? " · Forever" : ""}</span></td>
         <td>${esc([cls(r.class), r.level ? "level " + r.level : ""].filter(Boolean).join(" · ")) || `<span class="sub">–</span>`}</td>
-        <td class="num">${hours(r.played_min)}</td><td><span class="${STATUS[r.st][1]}">${STATUS[r.st][2]}</span>${r.why ? `<br><small class="sub">${esc(r.why)}</small>` : r.st === "s" ? `<br><small class="sub"><a href="/connect/battlenet/verify">Verify WoW characters</a></small>` : ""}</td></tr>`).join("")}</tbody></table></div>
+        <td class="num">${hours(r.played_min)}${r.chg ? `<br><small class="sub">${esc(r.chg)}</small>` : ""}</td><td><span class="${STATUS[r.st][1]}">${STATUS[r.st][2]}</span>${r.why ? `<br><small class="sub">${esc(r.why)}</small>` : r.st === "s" ? `<br><small class="sub"><a href="/connect/battlenet/verify">Verify WoW characters</a></small>` : ""}</td></tr>`).join("")}</tbody></table></div>
       ${list.length > CAP ? `<p><button class="btn sm" type="button" data-more>${showAll ? "Show fewer" : `Show all ${plural(list.length, "character")}`}</button></p>` : ""}` : `<p class="sub">No characters uploaded yet.</p>`}
       <p class="sub">Only characters Battle.net confirms are on your account count toward your hours. Unverified ones are kept and start counting once they verify: Battle.net has to list the character on your linked account, and the file has to be saved under that account's BattleTag.</p>
       <p><a class="btn" href="/connect/battlenet/verify">🔒 Verify WoW characters</a> <a class="btn" href="/settings#connections">Back to Connections</a></p>`;
@@ -463,14 +463,17 @@ pages.wowupload = async () => {
     catch (x) { return fail(x.code === "no_characters" || x.code === "too_big" ? "read" : "send", x); }
     step("send", "ok", "Received");
     const rej = u.rejected.length, unch = u.unchanged.length;
-    step("check", rej ? "warn" : "ok", [plural(u.found, "character") + " in the file", u.accepted ? `${nf.format(u.accepted)} updated` : "", unch ? `${nf.format(unch)} already up to date` : "", rej ? `${nf.format(rej)} rejected` : ""].filter(Boolean).join(" · "));
+    const gained = (u.changes || []).reduce((a, c) => a + (c.delta_s || 0), 0);
+    step("check", rej ? "warn" : "ok", [plural(u.found, "character") + " in the file", u.accepted ? `${nf.format(u.accepted)} updated` : "", gained > 0 ? `+${(gained / 3600).toFixed(1)} hours since last upload` : u.changes && u.changes.length && !u.changes.some(c => c.first) ? "no new hours since last upload" : "", unch ? `${nf.format(unch)} already up to date` : "", rej ? `${nf.format(rej)} rejected` : ""].filter(Boolean).join(" · "));
     step("match", "run");
     let m;
     try { m = await api("/me/wow"); } catch (x) { return fail("match", x); }
     const game = form.game.value, mine = m.characters.filter(c => c.game_id === game);
     const nv = mine.filter(c => c.verified).length;
     step("match", m.bnet === "linked" ? "ok" : "warn", m.bnet === "none" ? "Battle.net isn't linked, so these aren't counted yet" : m.bnet === "reconnect" ? "Reconnect Battle.net to verify characters" : `${nf.format(nv)} of ${plural(mine.length, "character")} verified`);
-    rows = mine.map(c => ({ ...c, st: c.verified ? "v" : "s" }))
+    const ck = c => [c.region, c.realm, c.name].join("|").toLowerCase();
+    const chg = new Map((u.changes || []).map(c => [ck(c), c.first ? "First upload" : c.delta_s > 0 ? `+${(c.delta_s / 3600).toFixed(1)} hours since last upload` : "No change since last upload"]));
+    rows = mine.map(c => ({ ...c, st: c.verified ? "v" : "s", chg: chg.get(ck(c)) }))
       .concat(u.rejected.map(r => ({ ...r, game_id: game, st: "r", why: R[r.reason] || r.detail })));
     totals = { verified: mine.filter(c => c.verified).reduce((a, c) => a + c.played_min, 0), unverified: mine.filter(c => !c.verified).reduce((a, c) => a + c.played_min, 0) };
     showAll = false; draw(); btn.disabled = false; form.reset(); form.game.value = game;
@@ -904,7 +907,7 @@ pages.profile = async () => {
   } else if (!p.games || !p.games.length) {
     games = sec("Games", `<div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div>`);
   } else {
-    const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
+    const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" && g.tier !== "imported" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
       <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const many = (p.games_total || p.games.length) > GPAGE;
     games = sec("Games", `
@@ -1227,7 +1230,7 @@ pages.settings = async () => {
       ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}${sw("name_history", "Previous nicknames (\"Previously known as\")")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
       ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location &amp; country")}${sw("gaming_style", "Gaming style")}${sw("real_name", "Real name")}${sw("gender", "Gender")}${sw("age", "Age")}`)}
       ${row("Achievements", `${sw("achievements", "Show my achievements")}`, "Needs Games &amp; hours shown.")}
-      ${row("WoW characters", `${sw("wow_characters", "Show my WoW characters and /played")}`, "Cards for each character from the Fraglink WoW addon. You can also hide single characters on your profile.")}
+      ${FEATURES.wow_characters ? row("WoW characters", `${sw("wow_characters", "Show my WoW characters and /played")}`, "Cards for each character from the Fraglink WoW addon. You can also hide single characters on your profile.") : ""}
       ${row("Connected accounts", `${sw("connection_names", "Show connected account names")}`, "Off: visitors still see your Steam, Battle.net and Discord icons with the verified tick, but not your account names or links. You always see your own.")}
       ${row("In the app", `<span class="sub">Whether friends see the game you're in right now (and friends of friends) is set per PC in the desktop app: Options &gt; Privacy. The switches on this page show there too.</span>`)}
       ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
@@ -1499,7 +1502,7 @@ pages.admin = async () => {
 };
 
 /* ---------- feature switches (Admin > Site settings; the server enforces them too) ---------- */
-const FEATURES = { signups: true, announcement: true, connect_steam: true, connect_bnet: true, connect_discord: true, friend_requests: true, public_profiles: true, maintenance: false };
+const FEATURES = { signups: true, announcement: true, connect_steam: true, connect_bnet: true, connect_discord: true, friend_requests: true, public_profiles: true, wow_characters: false, maintenance: false };
 const featuresReady = fetch(API + "/features", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => { if (d && d.features) Object.assign(FEATURES, d.features); }).catch(() => {});
 function applyFeatures() {
   document.body.classList.toggle("ff-no-friendreq", !FEATURES.friend_requests);

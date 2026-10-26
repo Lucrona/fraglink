@@ -363,6 +363,8 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
     let mut accepted = 0;
     let mut rejected = Vec::new();
     let mut unchanged = Vec::new();
+    // per character: /played gained since its last upload (None for a first upload)
+    let mut changes = Vec::new();
     for e in chars {
         let who = label(e);
         let slug = realm_slug(&e.realm);
@@ -395,6 +397,10 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
                 continue;
             }
             Ok(false) => {
+                changes.push(
+                    json!({ "name": e.name, "realm": e.realm, "region": e.region,
+                    "delta_s": prev.map(|p| e.played - p.1).unwrap_or(0).max(0), "first": false }),
+                );
                 unchanged.push(json!({ "character": who }));
                 continue;
             }
@@ -431,6 +437,10 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
             .bind(at)
             .execute(&st.db)
             .await?;
+        changes.push(
+            json!({ "name": e.name, "realm": e.realm, "region": e.region,
+            "delta_s": prev.map(|p| (e.played - p.1).max(0)), "first": prev.is_none() }),
+        );
         reverify_one(st, id).await;
         check_bnet_level(st, uid, gid, id, e).await;
         accepted += 1;
@@ -450,7 +460,7 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
     };
     Ok(
         json!({ "accepted": accepted, "rejected": rejected, "unchanged": unchanged,
-               "total_min": total_min, "verified": verified, "bnet": bnet }),
+               "changes": changes, "total_min": total_min, "verified": verified, "bnet": bnet }),
     )
 }
 

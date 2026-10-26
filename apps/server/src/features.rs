@@ -14,6 +14,7 @@
 //! | `friend_requests` | on      | new friend requests refused (answering old ones still works)|
 //! | `public_profiles` | on      | profiles only for yourself/friends; player search off        |
 //! | `maintenance`     | off     | everything but staff gets 503 maintenance (see `gate`)      |
+//! | `wow_characters`| off     | WoW character cards hidden on profiles (hours still count)  |
 //! | `home_stats`      | on      | the stats strip at the bottom of the home page is hidden    |
 //!
 //! One choice setting, kept in `site_settings.value`: `home_counts` (`c1` odometer in the
@@ -32,7 +33,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// (key, default, label, help) in display order.
-pub const SWITCHES: [(&str, bool, &str, &str); 9] = [
+pub const SWITCHES: [(&str, bool, &str, &str); 10] = [
     ("signups", true, "Sign-ups open", "New accounts can be created on the website and in the app."),
     ("announcement", true, "Announcement banner", "Show the staff announcement on the website and in the app."),
     ("connect_steam", true, "Steam connect", "Players can link Steam and import their Steam hours."),
@@ -41,6 +42,7 @@ pub const SWITCHES: [(&str, bool, &str, &str); 9] = [
     ("friend_requests", true, "Friend requests", "Players can send new friend requests. Answering ones already sent still works."),
     ("public_profiles", true, "Public profiles and search", "Profiles can be seen by anyone allowed by the player's privacy settings, and players can be searched. Off: only yourself and friends see a profile, and search is off."),
     ("home_stats", true, "Home page stats strip", "The strip of community numbers at the bottom of the home page (hours tracked, players, online, newest member)."),
+    ("wow_characters", false, "Show WoW character details", "WoW character cards (name, class, level, realm) on profiles and the matching privacy switch. Off: only the WoW hours total shows; owners still see per-character results on the upload and verify pages."),
     ("maintenance", false, "Maintenance mode", "Everyone except staff sees a maintenance page and the app can't sync. Staff can still sign in and use everything."),
 ];
 
