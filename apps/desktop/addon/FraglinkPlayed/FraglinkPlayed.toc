@@ -4,6 +4,7 @@
 ## Author: Fraglink
 ## Version: 1.0.0
 ## X-Website: https://playfraglink.com
+## X-Curse-Project-ID: 1766775
 ## SavedVariables: FraglinkPlayedDB
 ## IconTexture: Interface\Icons\INV_Misc_PocketWatch_01
 

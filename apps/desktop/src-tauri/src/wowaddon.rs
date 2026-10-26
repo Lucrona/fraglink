@@ -1,5 +1,6 @@
-//! The bundled WoW addon (`fraglink_core::wow_played`): install it into each WoW
-//! flavour (`_retail_`, `_forever_`) and, after WoW closes, send the characters whose
+//! The Fraglink /played WoW addon (`fraglink_core::wow_played`), installed and updated
+//! from CurseForge: show whether each WoW flavour (`_retail_`, `_forever_`) has it and,
+//! after WoW closes, send the characters whose
 //! /played changed. The first upload is the full import; later ones are small deltas
 //! (Fraglink's own tracking does the rest; /played catches up on play while the app was
 //! off, and the profile keeps the largest of the two). Account folder names never leave
@@ -62,7 +63,6 @@ pub struct FlavourView {
     game_id: String,
     path: String,
     installed: Option<String>,
-    bundled: String,
 }
 
 pub fn status(app: &AppHandle) -> Vec<FlavourView> {
@@ -72,25 +72,8 @@ pub fn status(app: &AppHandle) -> Vec<FlavourView> {
             installed: wp::installed_version(&d),
             path: d.display().to_string(),
             game_id: g,
-            bundled: wp::ADDON_VERSION.into(),
         })
         .collect()
-}
-
-pub fn install(app: &AppHandle) -> Result<Vec<FlavourView>, String> {
-    let f = flavours(app);
-    if f.is_empty() {
-        return Err("No World of Warcraft install found yet. Start WoW once with Fraglink running, then try again.".into());
-    }
-    for (_, d) in &f {
-        wp::install(d).map_err(|e| format!("Couldn't write to {}: {e}", d.display()))?;
-        log::info!(
-            "wow addon {} installed in {}",
-            wp::ADDON_VERSION,
-            d.display()
-        );
-    }
-    Ok(status(app))
 }
 
 fn key(game: &str, e: &wp::CharEntry) -> String {

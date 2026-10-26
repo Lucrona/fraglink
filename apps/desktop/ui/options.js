@@ -293,23 +293,20 @@
     }).join('');
     renderWow();
   }
-  /* ---- the bundled WoW /played addon ---- */
+  /* ---- the WoW /played addon (installed from CurseForge) ---- */
+  const WOW_ADDON_URL = 'https://www.curseforge.com/projects/1766775';
   async function renderWow() {
-    const st = $('#wow-state'), btn = $('#wow-install');
+    const st = $('#wow-state'), btn = $('#wow-get');
     if (!FLB.wowAddonStatus) return;
     try {
       const f = await FLB.wowAddonStatus();
-      if (!f.length) { st.textContent = 'No WoW install found yet. Start WoW once with Fraglink running.'; return; }
-      const old = f.filter(x => x.installed !== x.bundled);
-      st.textContent = f.map(x => `${x.game_id === 'wow_forever' ? 'WoW Forever' : 'WoW'}: ${x.installed ? 'v' + x.installed : 'not installed'}`).join(' · ');
-      btn.textContent = !old.length ? 'Reinstall' : f.some(x => x.installed) ? 'Update WoW addon' : 'Install WoW addon';
+      const found = f.some(x => x.installed);
+      btn.hidden = found;
+      if (!f.length) { st.textContent = 'Not found. No WoW install seen yet: start WoW once with Fraglink running.'; btn.hidden = false; return; }
+      st.textContent = f.map(x => `${x.game_id === 'wow_forever' ? 'WoW Forever' : 'WoW'}: ${x.installed ? 'Detected (v' + x.installed + ')' : 'Not found'}`).join(' · ');
     } catch (x) { st.textContent = String(x); }
   }
-  $('#wow-install').addEventListener('click', async e => {
-    const b = e.currentTarget, m = $('#wow-msg'); b.disabled = true;
-    try { await FLB.wowAddonInstall(); m.textContent = 'Installed. Log in to each character once (or type /reload) and close WoW; Fraglink sends the /played data after that.'; renderWow(); }
-    catch (x) { m.textContent = String(x); } finally { b.disabled = false; }
-  });
+  $('#wow-get').addEventListener('click', () => { FLB.openUrl ? FLB.openUrl(WOW_ADDON_URL) : window.open(WOW_ADDON_URL); });
   $('#conn-list').addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b || b.dataset.web) return; const m = $('#conn-msg');
     const p = b.dataset.link || b.dataset.unlink, name = (CONN.find(x => x[0] === p) || [])[1];

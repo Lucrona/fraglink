@@ -422,7 +422,7 @@ pages.wowupload = async () => {
     wow_decrease: "/played went down", wow_impossible: "/played grew faster than real time", wow_clock: "Saved with a wrong clock" };
   let rows = [], sortBy = "played", dir = -1, showAll = false, totals = null;
   const CAP = 25;
-  const STATUS = { v: [0, "vbadge", "✓ Verified via Battle.net"], s: [1, "srbadge", "◆ Self-reported"], r: [2, "badbadge", "✕ Rejected"] };
+  const STATUS = { v: [0, "vbadge", "✓ Verified via Battle.net"], s: [1, "srbadge", "◆ Not verified, not counted"], r: [2, "badbadge", "✕ Rejected"] };
   const draw = () => {
     if (!totals) return;
     const key = { name: r => r.name.toLowerCase(), realm: r => r.realm.toLowerCase(), level: r => r.level || 0, played: r => r.played_min, status: r => STATUS[r.st][0] }[sortBy];
@@ -431,14 +431,14 @@ pages.wowupload = async () => {
     const th = (k, t) => `<th><button type="button" data-sort="${k}" class="wu-sort${sortBy === k ? " on" : ""}">${t}${sortBy === k ? (dir < 0 ? " ▾" : " ▴") : ""}</button></th>`;
     const cls = c => c ? c.charAt(0) + c.slice(1).toLowerCase().replace(/knight$/, " Knight").replace(/hunter$/, " Hunter") : "";
     res.innerHTML = `<h3>Results</h3>
-      <div class="wu-tot"><div><b>${hours(totals.verified, { zero: true })}</b><small>Verified via Battle.net (counts on leaderboards)</small></div><div><b>${hours(totals.all, { zero: true })}</b><small>All characters (shown on your profile)</small></div></div>
+      <div class="wu-tot"><div><b>${hours(totals.verified, { zero: true })}</b><small>Counted: verified via Battle.net</small></div>${totals.unverified ? `<div class="wu-nc"><b>${hours(totals.unverified)}</b><small>Not counted until verified</small></div>` : ""}</div>
       ${rows.length ? `<div class="wu-scroll"><table class="wu-t"><thead><tr>${th("name", "Character")}${th("realm", "Realm")}${th("level", "Class / level")}${th("played", "Hours played")}${th("status", "Status")}</tr></thead><tbody>
       ${shown.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.realm)} <span class="sub">${esc(r.region.toUpperCase())}${r.game_id === "wow_forever" ? " · Forever" : ""}</span></td>
         <td>${esc([cls(r.class), r.level ? "level " + r.level : ""].filter(Boolean).join(" · ")) || `<span class="sub">–</span>`}</td>
-        <td class="num">${hours(r.played_min)}</td><td><span class="${STATUS[r.st][1]}">${STATUS[r.st][2]}</span>${r.why ? `<br><small class="sub">${esc(r.why)}</small>` : ""}</td></tr>`).join("")}</tbody></table></div>
+        <td class="num">${hours(r.played_min)}</td><td><span class="${STATUS[r.st][1]}">${STATUS[r.st][2]}</span>${r.why ? `<br><small class="sub">${esc(r.why)}</small>` : r.st === "s" ? `<br><small class="sub"><a href="/connect/battlenet/verify">Verify WoW characters</a></small>` : ""}</td></tr>`).join("")}</tbody></table></div>
       ${list.length > CAP ? `<p><button class="btn sm" type="button" data-more>${showAll ? "Show fewer" : `Show all ${plural(list.length, "character")}`}</button></p>` : ""}` : `<p class="sub">No characters uploaded yet.</p>`}
-      <p class="sub">Self-reported characters show on your profile but don't count on leaderboards. A character verifies when Battle.net lists it on your linked account and the file was saved under that account's BattleTag.</p>
-      <p><a class="btn" href="/connect/battlenet/verify">🔒 Verify with Battle.net</a> <a class="btn" href="/settings#connections">Back to Connections</a></p>`;
+      <p class="sub">Only characters Battle.net confirms are on your account count toward your hours. Unverified ones are kept and start counting once they verify: Battle.net has to list the character on your linked account, and the file has to be saved under that account's BattleTag.</p>
+      <p><a class="btn" href="/connect/battlenet/verify">🔒 Verify WoW characters</a> <a class="btn" href="/settings#connections">Back to Connections</a></p>`;
   };
   res.addEventListener("click", e => {
     const s = e.target.closest("[data-sort]");
@@ -469,10 +469,10 @@ pages.wowupload = async () => {
     try { m = await api("/me/wow"); } catch (x) { return fail("match", x); }
     const game = form.game.value, mine = m.characters.filter(c => c.game_id === game);
     const nv = mine.filter(c => c.verified).length;
-    step("match", m.bnet === "linked" ? "ok" : "warn", m.bnet === "none" ? "Battle.net isn't linked, so these stay self-reported" : m.bnet === "reconnect" ? "Reconnect Battle.net to verify characters" : `${nf.format(nv)} of ${plural(mine.length, "character")} verified`);
+    step("match", m.bnet === "linked" ? "ok" : "warn", m.bnet === "none" ? "Battle.net isn't linked, so these aren't counted yet" : m.bnet === "reconnect" ? "Reconnect Battle.net to verify characters" : `${nf.format(nv)} of ${plural(mine.length, "character")} verified`);
     rows = mine.map(c => ({ ...c, st: c.verified ? "v" : "s" }))
       .concat(u.rejected.map(r => ({ ...r, game_id: game, st: "r", why: R[r.reason] || r.detail })));
-    totals = { verified: mine.filter(c => c.verified).reduce((a, c) => a + c.played_min, 0), all: mine.reduce((a, c) => a + c.played_min, 0) };
+    totals = { verified: mine.filter(c => c.verified).reduce((a, c) => a + c.played_min, 0), unverified: mine.filter(c => !c.verified).reduce((a, c) => a + c.played_min, 0) };
     showAll = false; draw(); btn.disabled = false; form.reset(); form.game.value = game;
   });
 };
@@ -512,7 +512,7 @@ pages.bnetverify = async () => {
   step("match", "run");
   let m;
   try { m = await api("/wow/verify/match", { method: "POST" }); } catch (x) { return fail("match", x); }
-  step("match", "ok", m.uploaded ? `${m.verified} of ${m.uploaded} uploaded characters matched` : "No /played data yet. Install the WoW addon from the desktop app (Options › Connections).");
+  step("match", "ok", m.uploaded ? `${m.verified} of ${m.uploaded} uploaded characters matched` : "No /played data yet. Install the Fraglink /played addon from CurseForge (curseforge.com/projects/1766775).");
   // 4. signatures
   step("sig", "run");
   let s;
@@ -520,10 +520,10 @@ pages.bnetverify = async () => {
   step("sig", s.refused.length ? "warn" : "ok", `${s.signed_ok} signed entr${s.signed_ok === 1 ? "y" : "ies"} valid${s.refused.length ? ` · ${s.refused.length} refused` : ""}`);
   const me_ = await api("/me/wow");
   const R = { wow_checksum: "edited after the game wrote it", wow_battletag: "from a different Battle.net account", wow_old_addon: "addon too old" };
-  res.innerHTML = `<h3>Results</h3><ul class="bv-res">${me_.characters.map(c => `<li><span class="${c.verified ? "vbadge" : "srbadge"}">${c.verified ? "✓ Verified" : "◆ Self-reported"}</span>
+  res.innerHTML = `<h3>Results</h3><ul class="bv-res">${me_.characters.map(c => `<li><span class="${c.verified ? "vbadge" : "srbadge"}">${c.verified ? "✓ Verified" : "◆ Not verified, not counted"}</span>
       <b>${esc(c.name)}</b> <span class="sub">${esc(c.realm)} · ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · ${Math.floor(c.played_min / 60)}h</span></li>`).join("") || `<li class="sub">No characters uploaded yet.</li>`}
     ${s.refused.map(r => `<li><span class="badbadge">✕ Refused</span> <b>${esc(r.character)}</b> <span class="sub">${esc(R[r.reason] || r.reason)}</span></li>`).join("")}</ul>
-    <p class="sub">Self-reported characters show on your profile but don't count on leaderboards. A character verifies when Battle.net lists it on the same account as the BattleTag saved by the addon.</p>`;
+    <p class="sub">Only characters Battle.net confirms are on your account count toward your hours. A character verifies when Battle.net lists it on the same account as the BattleTag saved by the addon.</p>`;
   act.innerHTML = `<a class="btn" href="/settings#connections">Done</a>`;
 };
 
@@ -915,12 +915,12 @@ pages.profile = async () => {
     gamesRow = row;
   }
 
-  // WoW characters from the Fraglink addon: Battle.net-verified ones count on leaderboards
+  // WoW characters from the Fraglink addon: the server sends only Battle.net-verified ones
   let wowc = "";
   const WC = p.wow_characters;
   if (WC && WC.length) {
-    const card = c => `<div class="wc${c.hidden ? " wc-hid" : ""}"><div class="wc-top"><b>${esc(c.name)}</b><span class="${c.verified ? "vbadge" : "srbadge"}" title="${c.verified ? "Battle.net confirmed this character is on the linked account" : "From the addon only; not counted on leaderboards"}">${c.verified ? "✓ Battle.net" : "◆ Self-reported"}</span></div>
-      <div class="sub">Level ${c.level} ${esc(c.class)} · ${esc(c.realm)} (${esc(c.region.toUpperCase())})${c.game_id === "wow_forever" ? " · Forever" : ""}</div>
+    const card = c => `<div class="wc${c.hidden ? " wc-hid" : ""}"><div class="wc-top"><b>${esc(c.name)}</b><span class="vbadge" title="Battle.net confirmed this character is on the linked account">✓ Battle.net</span></div>
+      <div class="sub">Level ${c.level} ${esc(c.class ? c.class.charAt(0) + c.class.slice(1).toLowerCase().replace(/knight$/, " Knight").replace(/hunter$/, " Hunter") : "")} · ${esc(c.realm)} (${esc(c.region.toUpperCase())})${c.game_id === "wow_forever" ? " · Forever" : ""}</div>
       <div class="wc-h">${hours(c.played_min)}<small> /played</small></div>
       ${self ? `<button class="btn sm" type="button" data-wchide="${c.id}" data-h="${c.hidden ? 1 : 0}">${c.hidden ? "Show on profile" : "Hide from profile"}</button>` : ""}</div>`;
     wowc = sec("WoW characters", `<div class="wcs">${WC.map(card).join("")}</div>${self ? `<p class="sub" style="padding:0 14px 10px">Only you see hidden characters. <a href="/connect/battlenet/verify">Verify characters</a></p>` : ""}`);

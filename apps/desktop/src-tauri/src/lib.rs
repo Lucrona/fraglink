@@ -937,7 +937,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_glance,
             commands::wow_addon_status,
-            commands::wow_addon_install,
             commands::get_activity,
             commands::get_games,
             commands::get_candidates,

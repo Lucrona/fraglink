@@ -454,10 +454,12 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
     )
 }
 
-/// Store the game's total (sum of all its characters) when it changed.
+/// Store the game's total when it changed. Only Battle.net-verified characters count;
+/// unverified ones are kept and start counting once they verify.
 async fn record_total(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<i64> {
     let (sum, n, v): (i64, i64, i64) = sqlx::query_as(
-        "SELECT coalesce(sum(played_s), 0)::bigint / 60, count(*), count(*) FILTER (WHERE verified)
+        "SELECT coalesce(sum(played_s) FILTER (WHERE verified), 0)::bigint / 60, count(*),
+                count(*) FILTER (WHERE verified)
          FROM wow_characters WHERE user_id = $1 AND game_id = $2",
     )
     .bind(uid)
@@ -465,9 +467,6 @@ async fn record_total(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<i64> {
     .fetch_one(&st.db)
     .await?;
     let sum = sum.min(i32::MAX as i64);
-    if sum == 0 {
-        return Ok(0);
-    }
     let last: Option<i32> = sqlx::query_scalar(
         "SELECT minutes FROM hours_entries WHERE user_id = $1 AND game_id = $2 AND source = 'wow_addon'
          ORDER BY created_at DESC, id DESC LIMIT 1",
@@ -476,7 +475,8 @@ async fn record_total(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<i64> {
     .bind(gid)
     .fetch_optional(&st.db)
     .await?;
-    if last.map(i64::from) != Some(sum) {
+    // Nothing stored yet and nothing verified: no entry (a 0 would only add noise).
+    if last.map(i64::from) != Some(sum) && !(last.is_none() && sum == 0) {
         sqlx::query(
             "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, inputs, note)
              VALUES($1, $2, $3, 'imported', 'wow_addon', $4, $5, 'WoW /played (Fraglink addon)')",
@@ -627,6 +627,22 @@ async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>) {
     .bind(uid)
     .execute(&st.db)
     .await;
+    // Verification decides what counts, so refresh the stored totals.
+    let owner = match (uid, id) {
+        (Some(u), _) => Some(u),
+        (None, Some(id)) => sqlx::query_scalar("SELECT user_id FROM wow_characters WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&st.db)
+            .await
+            .ok()
+            .flatten(),
+        _ => None,
+    };
+    if let Some(u) = owner {
+        for (gid, _) in GAMES {
+            let _ = record_total(st, u, gid).await;
+        }
+    }
 }
 
 /// Recompute `verified` for all of a user's characters (after link / unlink). A
@@ -739,15 +755,23 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
 // ------------------------------------------------------------------ profile
 
 /// Characters for a profile page. `all`: the owner's own view (hidden ones too).
-pub async fn characters(st: &AppState, uid: Uuid, all: bool) -> ApiResult<Vec<Value>> {
+/// Profile cards list only Battle.net-verified characters (`verified_only`); the owner's
+/// /connect/wow page lists all of them so unverified ones can be verified.
+pub async fn characters(
+    st: &AppState,
+    uid: Uuid,
+    all: bool,
+    verified_only: bool,
+) -> ApiResult<Vec<Value>> {
     let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, DateTime<Utc>, bool, bool)> =
         sqlx::query_as(
             "SELECT id, game_id, region, realm, name, class, level, played_s, played_at, verified, hidden
-             FROM wow_characters WHERE user_id = $1 AND ($2 OR NOT hidden)
+             FROM wow_characters WHERE user_id = $1 AND ($2 OR NOT hidden) AND (NOT $3 OR verified)
              ORDER BY game_id, played_s DESC LIMIT 200",
         )
         .bind(uid)
         .bind(all)
+        .bind(verified_only)
         .fetch_all(&st.db)
         .await?;
     Ok(rows
@@ -762,7 +786,7 @@ pub async fn characters(st: &AppState, uid: Uuid, all: bool) -> ApiResult<Vec<Va
 
 async fn mine(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
     let link = bnet_link(&st, a.user.id).await?;
-    let chars = characters(&st, a.user.id, true).await?;
+    let chars = characters(&st, a.user.id, true, false).await?;
     let bnet = match &link {
         None => "none",
         Some((_, false)) => "reconnect",

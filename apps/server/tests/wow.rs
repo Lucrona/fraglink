@@ -267,3 +267,93 @@ async fn several_accounts_on_one_pc(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
 }
+
+async fn wow_total(pool: &PgPool) -> Option<i32> {
+    sqlx::query_scalar(
+        "SELECT minutes FROM hours_entries WHERE source = 'wow_addon' ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await
+    .unwrap()
+}
+
+/// Only Battle.net-verified characters count toward hours and show on the profile.
+/// Unverified ones are stored and start counting once they verify.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn only_verified_characters_count(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "v@example.com", "onlyverified").await;
+    let now = chrono::Utc::now().timestamp() - 60;
+
+    // nothing linked: stored, but no hours at all
+    let r = up(
+        &app,
+        &t,
+        &[
+            entry("Thrall", 360_000, now - 7200, "Thrall#1234"),
+            entry("Alt", 36_000, now - 7200, "Thrall#1234"),
+        ],
+    )
+    .await;
+    assert_eq!(r["accepted"], 2, "{r}");
+    assert_eq!(r["total_min"], 0, "{r}");
+    assert_eq!(wow_total(&pool).await, None);
+
+    // link Battle.net with only Thrall on it: Thrall counts, Alt doesn't
+    sqlx::query("INSERT INTO linked_accounts(user_id, provider, provider_uid, display, verified, scopes)
+                 SELECT id, 'bnet', '42', 'Thrall#1234', true, 'openid wow.profile' FROM users WHERE handle = 'onlyverified'")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, name)
+                 SELECT id, 'wow', 'us', 'area-52', 'Thrall' FROM users WHERE handle = 'onlyverified'")
+        .execute(&pool).await.unwrap();
+    api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
+    assert_eq!(wow_total(&pool).await, Some(6_000));
+
+    // the profile lists only the verified character
+    let p: Value = serde_json::from_str(
+        &api(
+            &app,
+            "GET",
+            "/api/v1/users/onlyverified/profile",
+            Some(&t),
+            None,
+        )
+        .await
+        .text,
+    )
+    .unwrap();
+    let names: Vec<&str> = p["wow_characters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["Thrall"], "{p}");
+    // /connect/wow still lists both, so Alt can be verified
+    let me: Value = serde_json::from_str(
+        &api(&app, "GET", "/api/v1/me/wow", Some(&t), None)
+            .await
+            .text,
+    )
+    .unwrap();
+    assert_eq!(me["characters"].as_array().unwrap().len(), 2);
+
+    // Alt verifies later: it counts from then on
+    sqlx::query(
+        "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, name)
+                 SELECT id, 'wow', 'us', 'area-52', 'Alt' FROM users WHERE handle = 'onlyverified'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
+    assert_eq!(wow_total(&pool).await, Some(6_600));
+
+    // unlinking drops the counted hours back to 0
+    sqlx::query("DELETE FROM bnet_characters")
+        .execute(&pool)
+        .await
+        .unwrap();
+    api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
+    assert_eq!(wow_total(&pool).await, Some(0));
+}

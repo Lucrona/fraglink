@@ -46,13 +46,13 @@ handlers(nil, "TIME_PLAYED_MSG", 1234600, 1000)
 handlers(nil, "PLAYER_ENTERING_WORLD", false, true)
 handlers(nil, "TIME_PLAYED_MSG", 1234700, 1000)
 assert(#lines == 1, "one line per login")
--- /fraglink quiet hides it on the next login, and toggles back
-SlashCmdList.FRAGLINK("quiet")
+-- /fragq hides it on the next login, and toggles back
+SlashCmdList.FRAGQ("")
 assert(FraglinkPlayedDB.quiet == true)
 handlers(nil, "PLAYER_ENTERING_WORLD", true, false)
 handlers(nil, "TIME_PLAYED_MSG", 1234800, 1000)
 assert(#lines == 2, "quiet: only the toggle reply")
-SlashCmdList.FRAGLINK(" QUIET ")
+SlashCmdList.FRAGQ("")
 assert(FraglinkPlayedDB.quiet == false)
 timers = {}
 -- the fixture keeps the first answer

@@ -1153,7 +1153,7 @@ pub async fn join_game(address: String) -> CmdResult<()> {
     tauri_plugin_opener::open_url(format!("steam://connect/{address}"), None::<&str>).map_err(err)
 }
 
-/// Options > Connections: WoW folders found and the addon version in each.
+/// Options > Connections: WoW folders found and whether the CurseForge addon is in each.
 #[tauri::command]
 pub async fn wow_addon_status(app: AppHandle) -> CmdResult<serde_json::Value> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -1162,17 +1162,4 @@ pub async fn wow_addon_status(app: AppHandle) -> CmdResult<serde_json::Value> {
     .await
     .map_err(err)?
     .map_err(err)
-}
-
-/// Options > Connections > Install WoW addon: copy it into every WoW flavour found.
-#[tauri::command]
-pub async fn wow_addon_install(app: AppHandle) -> CmdResult<serde_json::Value> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let v = crate::wowaddon::install(&app)?;
-        // a first import may already be waiting in the saved files
-        crate::wowaddon::upload(&app);
-        serde_json::to_value(v).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(err)?
 }

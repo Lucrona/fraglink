@@ -730,6 +730,7 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .wu-l{width:48px;color:var(--dim)}.wu-help{margin:8px 0;font-size:13px}.wu-help code{word-break:break-all}
 .wu-tot{display:flex;gap:12px;margin:8px 0 12px}.wu-tot div{flex:1;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:10px;background:rgba(0,0,0,.15)}
 .wu-tot b{display:block;font-size:20px}.wu-tot small{color:var(--dim)}
+.wu-nc b{color:var(--dim)}
 .wu-t{width:100%;border-collapse:collapse;font-size:13px}.wu-t th,.wu-t td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.07);vertical-align:top}
 .wu-t td.num{white-space:nowrap}.wu-sort{background:none;border:0;color:inherit;font:inherit;font-weight:600;cursor:pointer;padding:0}.wu-sort.on{color:#148eff}
 .wu-scroll{overflow-x:auto}.wu-scroll .wu-t{min-width:620px}

@@ -93,7 +93,7 @@ local function save(total)
   return true, name .. "-" .. realm
 end
 
--- No in-game UI: one system-style chat line per login, unless /fraglink quiet is on.
+-- No in-game UI: one system-style chat line per login, unless /fragq turned it off.
 local announced = true
 local function announce(who)
   if announced or FraglinkPlayedDB.quiet then return end
@@ -101,15 +101,11 @@ local function announce(who)
   DEFAULT_CHAT_FRAME:AddMessage("|cffd4a017Fraglink|r: /played recorded for " .. who .. ".")
 end
 
-SLASH_FRAGLINK1 = "/fraglink"
-SlashCmdList.FRAGLINK = function(msg)
-  msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-  if msg == "quiet" then
-    FraglinkPlayedDB.quiet = not FraglinkPlayedDB.quiet
-    DEFAULT_CHAT_FRAME:AddMessage("|cffd4a017Fraglink|r: login message " .. (FraglinkPlayedDB.quiet and "hidden." or "shown."))
-  else
-    DEFAULT_CHAT_FRAME:AddMessage("|cffd4a017Fraglink|r: /fraglink quiet - hide or show the login message.")
-  end
+-- /fragq toggles the login line.
+SLASH_FRAGQ1 = "/fragq"
+SlashCmdList.FRAGQ = function()
+  FraglinkPlayedDB.quiet = not FraglinkPlayedDB.quiet
+  DEFAULT_CHAT_FRAME:AddMessage("|cffd4a017Fraglink|r: login message " .. (FraglinkPlayedDB.quiet and "hidden. Type /fragq to show it again." or "shown."))
 end
 
 local f = CreateFrame("Frame")

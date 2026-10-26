@@ -15,29 +15,13 @@ use std::path::{Path, PathBuf};
 
 /// Addon folder name (also the SavedVariables file stem).
 pub const ADDON: &str = "FraglinkPlayed";
-/// Version in the bundled TOC.
+/// Current addon release (CurseForge project 1766775). The app no longer installs it.
 pub const ADDON_VERSION: &str = "1.0.0";
 
 /// Checksum keys by signature version. Every addon release that bumps
 /// `SIG_VERSION` adds its key here; the server accepts only listed versions, so an
 /// old key is retired by deleting its row.
 pub const SIG_KEYS: &[(i64, &str)] = &[(1, "OlApFDIsED1aJE04makEnBj7W6DZwvYG")];
-
-/// The bundled addon files (name, contents).
-pub const ADDON_FILES: &[(&str, &str)] = &[
-    (
-        "FraglinkPlayed.toc",
-        include_str!("../../../apps/desktop/addon/FraglinkPlayed/FraglinkPlayed.toc"),
-    ),
-    (
-        "FraglinkPlayed_Camelot.toc",
-        include_str!("../../../apps/desktop/addon/FraglinkPlayed/FraglinkPlayed_Camelot.toc"),
-    ),
-    (
-        "FraglinkPlayed.lua",
-        include_str!("../../../apps/desktop/addon/FraglinkPlayed/FraglinkPlayed.lua"),
-    ),
-];
 
 /// WoW flavour folder -> Fraglink game id. Only these two count.
 pub const FLAVOURS: &[(&str, &str)] = &[("_retail_", "wow"), ("_forever_", "wow_forever")];
@@ -458,19 +442,6 @@ pub fn installed_version(flavour: &Path) -> Option<String> {
         .map(|v| v.trim().to_string())
 }
 
-/// Copy the bundled addon into a flavour's `Interface\AddOns` (overwrites ours only).
-pub fn install(flavour: &Path) -> std::io::Result<PathBuf> {
-    let dir = flavour.join("Interface").join("AddOns").join(ADDON);
-    std::fs::create_dir_all(&dir)?;
-    for (n, body) in ADDON_FILES {
-        std::fs::write(
-            dir.join(n),
-            body.replace("\r\n", "\n").replace('\n', "\r\n"),
-        )?;
-    }
-    Ok(dir)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,21 +468,22 @@ mod tests {
         assert_eq!(hash(b"").len(), 16);
     }
 
+    const ADDON_LUA: &str =
+        include_str!("../../../apps/desktop/addon/FraglinkPlayed/FraglinkPlayed.lua");
+    const ADDON_TOC: &str =
+        include_str!("../../../apps/desktop/addon/FraglinkPlayed/FraglinkPlayed.toc");
+
     #[test]
     fn key_matches_the_addon() {
-        let lua = ADDON_FILES
-            .iter()
-            .find(|(n, _)| n.ends_with(".lua"))
-            .unwrap()
-            .1;
+        let lua = ADDON_LUA;
         let (v, k) = SIG_KEYS.last().unwrap();
         assert!(
             lua.contains(&format!("local SIG_VERSION = {v} ")),
             "addon SIG_VERSION"
         );
         assert!(lua.contains(&format!("local KEY = \"{k}\"")), "addon KEY");
-        let toc = ADDON_FILES[0].1;
-        assert!(toc.contains(&format!("## Version: {ADDON_VERSION}")));
+        assert!(ADDON_TOC.contains(&format!("## Version: {ADDON_VERSION}")));
+        assert!(ADDON_TOC.contains("## X-Curse-Project-ID: 1766775"));
     }
 
     /// The fixture is what the real addon wrote under Lua 5.1 (see
@@ -574,8 +546,11 @@ mod tests {
         assert_eq!(got[0], ("wow".to_string(), retail.clone()));
         assert_eq!(got.len(), 2, "{got:?}");
         assert_eq!(got[1].0, "wow_forever");
-        let dir = install(&retail).unwrap();
-        assert!(dir.join("FraglinkPlayed.lua").is_file());
+        assert_eq!(installed_version(&retail), None);
+        // installed from CurseForge: detected by its TOC
+        let dir = retail.join("Interface/AddOns/FraglinkPlayed");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("FraglinkPlayed.toc"), ADDON_TOC).unwrap();
         assert_eq!(installed_version(&retail).as_deref(), Some(ADDON_VERSION));
         let sv = retail.join("WTF/Account/ABC/SavedVariables");
         std::fs::create_dir_all(&sv).unwrap();
