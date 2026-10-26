@@ -736,17 +736,13 @@ async function renderMedia(id, g) {
     }).catch(x => msg(out, x.message)));
     $("[data-up]", p).addEventListener("click", e => act(e.target, async () => {
       const file = $("[data-file]", p).files[0]; if (!file) throw new Error("Pick an image first.");
-      const r = await fetch(FL.API + gid + (k === "icon" ? "/icon" : "/art"), { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream" }, body: file });
+      const r = await fetch(window.FL.API + gid + (k === "icon" ? "/icon" : "/art"), { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream" }, body: file });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.message || "Upload failed (HTTP " + r.status + ").");
       await pick();
     }).catch(x => msg(out, x.message)));
   });
 }
-
-route();
-if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] })), api("/admin/merge_suggestions").catch(() => ({ merges: [] }))]).then(([d, u, m]) => badge("approvals", d.suggestions.length + u.unknown.length + m.merges.length)).catch(() => {});
-};
 
 /* ---------- polls (home page Quick poll) ---------- */
 async function polls() {
@@ -774,3 +770,8 @@ async function polls() {
     try { await api(`/admin/polls/${id}/${act}`, { method: "POST" }); polls(); } catch (x) { alert(x.message); }
   };
 }
+
+route();
+if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] })), api("/admin/merge_suggestions").catch(() => ({ merges: [] }))]).then(([d, u, m]) => badge("approvals", d.suggestions.length + u.unknown.length + m.merges.length)).catch(() => {});
+};
+
