@@ -741,3 +741,46 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .ni .nimg{flex:none}.ni .nimg img{display:block;width:160px;height:90px;object-fit:cover;border-radius:3px;background:#0d141c}
 .post .post-img{display:block;width:100%;max-height:420px;object-fit:cover;border-radius:4px 4px 0 0}
 @media (max-width:640px){.nlist a.nrow.has-img,.ni.has-img{flex-direction:column}.nlist a.nrow.has-img>img,.ni .nimg,.ni .nimg img{width:100%;height:auto;aspect-ratio:16/9}}
+
+/* Battle.net page (/connect/battlenet) */
+.bn .bn-box{margin:14px 0 16px}
+.bn-box>h2{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.bn-acct{display:flex;align-items:center;gap:12px;padding:12px 14px;flex-wrap:wrap}
+.bn-av{width:40px;height:40px;border-radius:4px;background:#22374d;display:grid;place-items:center;flex:none}
+.bn-nm{font-weight:600;color:#eef2f6;overflow-wrap:anywhere}
+.bn-acts{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.bn-note{padding:0 14px 12px;margin:0}
+.bn-tools{display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap;align-items:center}
+.bn-tools input,.bn-tools select{background:#0f1216;border:1px solid var(--line2);color:var(--text);border-radius:3px;padding:5px 8px;font:inherit;min-width:0}
+.bn-tools input{flex:1 1 200px}
+.bn-sw{display:inline-flex;align-items:center;gap:6px;color:var(--muted);white-space:nowrap;cursor:pointer;font-size:12px;font-weight:400}
+.bn-sw.bn-hd{color:var(--hd-text)}
+.bn-sw input{position:absolute;opacity:0;width:1px;height:1px}
+.bn-tg{width:30px;height:16px;border-radius:8px;background:#303844;position:relative;display:inline-block;flex:none}
+.bn-tg::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#8a939e;transition:left .12s}
+.bn-sw input:checked+.bn-tg{background:#2f5a2a}.bn-sw input:checked+.bn-tg::after{left:16px;background:#8fdc79}
+.bn-sw input:focus-visible+.bn-tg{outline:2px solid var(--link);outline-offset:2px}
+.bn-sw input:disabled+.bn-tg{opacity:.5;cursor:not-allowed}
+.bn-ch{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto 86px;gap:14px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.bn-ch:nth-child(even){background:var(--row-alt)}
+.bn-port{position:relative;width:44px;height:44px;flex:none}
+.bn-port img.r{width:44px;height:44px;border-radius:4px;border:1px solid #000;background:#111}
+.bn-port img.c{position:absolute;right:-5px;bottom:-5px;width:20px;height:20px;border-radius:50%;border:1px solid #000}
+.bn-who{min-width:0}.bn-who .sub{overflow-wrap:anywhere}
+.bn-specs{display:flex;gap:4px}
+.bn-specs button{padding:0;border:2px solid transparent;border-radius:4px;background:none;cursor:pointer;opacity:.4;line-height:0}
+.bn-specs button:hover,.bn-specs button:focus-visible{opacity:.8}
+.bn-specs button.sel{border-color:#f0b429;opacity:1}
+.bn-specs img{width:24px;height:24px;border-radius:2px}
+.bn-hrs{text-align:right;font-variant-numeric:tabular-nums;color:#eef2f6;white-space:nowrap}.bn-hrs small{display:block;color:var(--dim);font-weight:400}
+.bn-ch.hid .bn-nm,.bn-ch.hid .bn-port{opacity:.45}
+.bn-ch .bn-sw{justify-content:flex-end}
+.bn-more{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+@media(max-width:640px){.bn-ch{grid-template-columns:auto minmax(0,1fr) auto;row-gap:8px}.bn-ch .bn-specs{grid-column:1/3}.bn-ch .bn-sw{grid-column:3}.bn-acts{margin-left:0;width:100%}.bn-tools select{flex:1 1 40%}}
+/* profile WoW cards with portraits */
+.wc{display:flex;gap:10px;align-items:center}
+.wc-p{position:relative;width:48px;height:48px;flex:none}.wc-p .r{width:48px;height:48px;border-radius:4px;border:1px solid #000;background:#111}
+.wc-ic{position:absolute;right:-6px;bottom:-6px;display:flex}.wc-ic img{width:20px;height:20px;border-radius:50%;border:1px solid #000;margin-left:-4px}
+.wc-t{min-width:0}.wc-t .sub{overflow-wrap:anywhere}
+.wc .wc-h{font-size:12px;font-weight:400;margin:2px 0 0;color:var(--label)}
+.bn-sw.bn-hd{text-transform:none;letter-spacing:0;font-weight:600}.btn.bn-unlink{color:var(--bad)}

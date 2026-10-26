@@ -278,7 +278,7 @@ async fn flag(st: &AppState, uid: Uuid, game: &str, who: &str, r: &Reject, playe
 }
 
 /// The linked Battle.net account: (BattleTag, has the `wow.profile` scope).
-async fn bnet_link(st: &AppState, uid: Uuid) -> ApiResult<Option<(String, bool)>> {
+pub(crate) async fn bnet_link(st: &AppState, uid: Uuid) -> ApiResult<Option<(String, bool)>> {
     let r: Option<(String, Option<String>)> = sqlx::query_as(
         "SELECT display, scopes FROM linked_accounts WHERE user_id = $1 AND provider = 'bnet' AND verified",
     )
@@ -513,7 +513,7 @@ fn bnet_creds() -> Option<(String, String)> {
     Some((g("BNET_CLIENT_ID")?, g("BNET_CLIENT_SECRET")?))
 }
 
-fn http() -> Option<reqwest::Client> {
+pub(crate) fn http() -> Option<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
         .build()
@@ -522,7 +522,7 @@ fn http() -> Option<reqwest::Client> {
 
 /// Profile namespace of a game in a region. Forever's isn't known before launch:
 /// `BNET_FOREVER_NAMESPACE` (e.g. `profile-forever-{region}`) turns it on.
-fn namespace(game: &str, region: &str) -> Option<String> {
+pub(crate) fn namespace(game: &str, region: &str) -> Option<String> {
     match game {
         "wow" => Some(format!("profile-{region}")),
         _ => std::env::var("BNET_FOREVER_NAMESPACE")
@@ -541,7 +541,16 @@ pub async fn sync_characters(
     token: &str,
 ) -> Option<Vec<(String, String)>> {
     let http = http()?;
-    let mut rows: Vec<(String, String, String, String, String, Option<i32>)> = Vec::new();
+    #[allow(clippy::type_complexity)]
+    let mut rows: Vec<(
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<i32>,
+        [Option<String>; 3],
+    )> = Vec::new();
     let mut any_ok = false;
     for (game, _) in GAMES {
         for r in REGIONS {
@@ -579,6 +588,11 @@ pub async fn sync_characters(
                         c["realm"]["name"].as_str().unwrap_or_default().to_string(),
                         name.to_string(),
                         c["level"].as_i64().map(|l| l as i32),
+                        [
+                            name_of(&c["playable_race"]),
+                            c["gender"]["type"].as_str().map(|g| g.to_lowercase()),
+                            name_of(&c["playable_class"]),
+                        ],
                     ));
                 }
             }
@@ -592,10 +606,11 @@ pub async fn sync_characters(
         .bind(uid)
         .execute(&st.db)
         .await;
-    for (g, r, slug, rn, name, lvl) in &rows {
+    for (g, r, slug, rn, name, lvl, [race, gender, class]) in &rows {
         let _ = sqlx::query(
-            "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, realm_name, name, level)
-             VALUES($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
+            "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, realm_name, name, level,
+                                         race, gender, class_name)
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING",
         )
         .bind(uid)
         .bind(g)
@@ -604,11 +619,15 @@ pub async fn sync_characters(
         .bind(rn)
         .bind(name)
         .bind(lvl)
+        .bind(race)
+        .bind(gender)
+        .bind(class)
         .execute(&st.db)
         .await;
     }
     tracing::info!("bnet characters: {} for {uid}", rows.len());
     reverify(st, uid).await;
+    crate::wowpage::after_sync(st, uid).await;
     Some(rows.into_iter().map(|r| (r.0, r.1)).collect())
 }
 
@@ -671,7 +690,7 @@ pub async fn on_unlink(st: &AppState, uid: Uuid) {
     reverify(st, uid).await;
 }
 
-async fn app_token() -> Option<String> {
+pub(crate) async fn app_token() -> Option<String> {
     static T: std::sync::OnceLock<tokio::sync::Mutex<Option<(String, std::time::Instant)>>> =
         std::sync::OnceLock::new();
     let m = T.get_or_init(|| tokio::sync::Mutex::new(None));
@@ -740,11 +759,16 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
         .as_i64()
         .and_then(|ms| Utc.timestamp_millis_opt(ms).single());
     let _ = sqlx::query(
-        "UPDATE wow_characters SET bnet_level = $2, bnet_last_login = $3, bnet_checked_at = now() WHERE id = $1",
+        "UPDATE wow_characters SET bnet_level = $2, bnet_last_login = $3, bnet_checked_at = now(),
+                bnet_spec = coalesce($4, bnet_spec), race = coalesce($5, race), gender = coalesce($6, gender)
+         WHERE id = $1",
     )
     .bind(id)
     .bind(level.map(|l| l as i32))
     .bind(last)
+    .bind(name_of(&v["active_spec"]))
+    .bind(name_of(&v["race"]))
+    .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
     .execute(&st.db)
     .await;
     if let (Some(l), Some(t)) = (level, last) {
@@ -762,6 +786,14 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
     }
 }
 
+/// A Blizzard `{ "name": "..." }` object (or a plain string with `locale` set).
+pub(crate) fn name_of(v: &Value) -> Option<String> {
+    v["name"]
+        .as_str()
+        .or_else(|| v["name"]["en_US"].as_str())
+        .map(|s| s.chars().take(40).collect())
+}
+
 // ------------------------------------------------------------------ profile
 
 /// Characters for a profile page. `all`: the owner's own view (hidden ones too).
@@ -773,10 +805,15 @@ pub async fn characters(
     all: bool,
     verified_only: bool,
 ) -> ApiResult<Vec<Value>> {
-    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, DateTime<Utc>, bool, bool)> =
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, DateTime<Utc>, bool, bool, Option<String>, Option<String>, Option<String>)> =
         sqlx::query_as(
-            "SELECT id, game_id, region, realm, name, class, level, played_s, played_at, verified, hidden
-             FROM wow_characters WHERE user_id = $1 AND ($2 OR NOT hidden) AND (NOT $3 OR verified)
+            "SELECT id, game_id, region, realm, name, class, level, played_s, played_at, verified,
+                    hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false),
+                    race, gender, coalesce(spec, bnet_spec)
+             FROM wow_characters WHERE user_id = $1
+               AND ($2 OR NOT (hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false)))
+               AND (NOT $3 OR verified)
              ORDER BY game_id, played_s DESC LIMIT 200",
         )
         .bind(uid)
@@ -786,11 +823,13 @@ pub async fn characters(
         .await?;
     Ok(rows
         .into_iter()
-        .map(|(id, g, r, realm, name, class, level, s, at, v, h)| {
-            json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
+        .map(
+            |(id, g, r, realm, name, class, level, s, at, v, h, race, gender, spec)| {
+                json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
                     "class": class, "level": level, "played_min": s / 60, "played_at": at,
-                    "verified": v, "hidden": h })
-        })
+                    "verified": v, "hidden": h, "race": race, "gender": gender, "spec": spec })
+            },
+        )
         .collect())
 }
 
