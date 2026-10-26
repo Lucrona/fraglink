@@ -453,3 +453,4 @@
     }
   })();
 })();
+window.flInstallTips && window.flInstallTips(document.getElementById('optip'));

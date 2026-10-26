@@ -175,3 +175,8 @@ body.dark .conn .soon.ok { color: #6fd27b; }
 /* beta.6: verified tick */
 .vtick { display: inline-block; vertical-align: -1px; margin-left: 4px; line-height: 0; font-style: normal; }
 .vtick svg { width: 1em; height: 1em; }
+/* Hover hints: one in-window tip instead of native titles, kept inside the window by tip.js. */
+.op-tip { position: fixed; z-index: 1000; box-sizing: border-box; overflow-wrap: anywhere; max-width: 260px;
+  padding: 3px 6px; background: #ffffe1; color: #000; border: 1px solid #767676; box-shadow: 1px 1px 3px rgba(0,0,0,.35);
+  font: 11px Tahoma, Verdana, sans-serif; line-height: 15px; pointer-events: none; white-space: pre-line; }
+.op-tip[hidden] { display: none; }
