@@ -3430,7 +3430,10 @@ async fn settings_get(State(st): State<AppState>, _s: Staff) -> ApiResult<Json<V
 #[derive(serde::Deserialize)]
 struct SettingReq {
     key: String,
+    #[serde(default)]
     enabled: bool,
+    /// only for `home_counts`
+    value: Option<String>,
 }
 
 /// `POST /api/v1/admin/settings` `{key, enabled}`: admins and the owner only; audited.
@@ -3440,6 +3443,22 @@ async fn settings_set(
     Json(r): Json<SettingReq>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
+    if r.key == crate::features::HOME_COUNTS_KEY {
+        let v = r.value.as_deref().unwrap_or("");
+        let before = crate::features::home_counts(&st).await;
+        crate::features::set_home_counts(&st, v, s.user.id).await?;
+        *st.home_public.lock().unwrap() = None;
+        audit(
+            &st,
+            &s,
+            "site_setting",
+            &r.key,
+            json!({ "value": before }),
+            json!({ "value": v }),
+        )
+        .await?;
+        return Ok(Json(crate::features::admin_list(&st).await?));
+    }
     if !crate::features::is_key(&r.key) {
         return Err(AppError::bad_request("unknown_setting", "No such setting."));
     }

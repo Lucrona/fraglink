@@ -14,6 +14,10 @@
 //! | `friend_requests` | on      | new friend requests refused (answering old ones still works)|
 //! | `public_profiles` | on      | profiles only for yourself/friends; player search off        |
 //! | `maintenance`     | off     | everything but staff gets 503 maintenance (see `gate`)      |
+//! | `home_stats`      | on      | the stats strip at the bottom of the home page is hidden    |
+//!
+//! One choice setting, kept in `site_settings.value`: `home_counts` (`c1` odometer in the
+//! header, `c2` Community stats panel, `c4` stats bar under the tabs, `off`), default `c1`.
 
 use crate::error::{ApiResult, AppError};
 use crate::AppState;
@@ -28,7 +32,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// (key, default, label, help) in display order.
-pub const SWITCHES: [(&str, bool, &str, &str); 8] = [
+pub const SWITCHES: [(&str, bool, &str, &str); 9] = [
     ("signups", true, "Sign-ups open", "New accounts can be created on the website and in the app."),
     ("announcement", true, "Announcement banner", "Show the staff announcement on the website and in the app."),
     ("connect_steam", true, "Steam connect", "Players can link Steam and import their Steam hours."),
@@ -36,6 +40,7 @@ pub const SWITCHES: [(&str, bool, &str, &str); 8] = [
     ("connect_discord", true, "Discord connect", "Players can link their Discord account."),
     ("friend_requests", true, "Friend requests", "Players can send new friend requests. Answering ones already sent still works."),
     ("public_profiles", true, "Public profiles and search", "Profiles can be seen by anyone allowed by the player's privacy settings, and players can be searched. Off: only yourself and friends see a profile, and search is off."),
+    ("home_stats", true, "Home page stats strip", "The strip of community numbers at the bottom of the home page (hours tracked, players, online, newest member)."),
     ("maintenance", false, "Maintenance mode", "Everyone except staff sees a maintenance page and the app can't sync. Staff can still sign in and use everything."),
 ];
 
@@ -123,7 +128,10 @@ pub async fn admin_list(st: &AppState) -> ApiResult<Value> {
                     "updated_at": r.map(|r| r.1), "updated_by": r.and_then(|r| r.2.clone()) })
         })
         .collect();
-    Ok(json!({ "settings": items }))
+    Ok(
+        json!({ "settings": items, "home_counts": home_counts(st).await,
+               "home_counts_options": HOME_COUNTS.iter().map(|(k, l)| json!({ "key": k, "label": l })).collect::<Vec<_>>() }),
+    )
 }
 
 pub async fn set(st: &AppState, key: &str, enabled: bool, by: uuid::Uuid) -> ApiResult<()> {
@@ -137,6 +145,54 @@ pub async fn set(st: &AppState, key: &str, enabled: bool, by: uuid::Uuid) -> Api
     .execute(&st.db)
     .await?;
     forget();
+    Ok(())
+}
+
+pub const HOME_COUNTS_KEY: &str = "home_counts";
+pub const HOME_COUNTS: [(&str, &str); 4] = [
+    (
+        "c1",
+        "Header counters (registered players and online now, top right)",
+    ),
+    ("c2", "Community stats panel (right column)"),
+    ("c4", "Stats bar under the menu tabs"),
+    ("off", "Off (no user counts at the top)"),
+];
+
+pub fn valid_home_counts(v: &str) -> bool {
+    HOME_COUNTS.iter().any(|c| c.0 == v)
+}
+
+/// The home page user-count style (`c1`, `c2`, `c4` or `off`). Errors or bad values give `c1`.
+pub async fn home_counts(st: &AppState) -> String {
+    let v: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT value FROM site_settings WHERE key = $1")
+            .bind(HOME_COUNTS_KEY)
+            .fetch_optional(&st.db)
+            .await
+            .unwrap_or(None);
+    match v.and_then(|r| r.0) {
+        Some(s) if valid_home_counts(&s) => s,
+        _ => "c1".into(),
+    }
+}
+
+pub async fn set_home_counts(st: &AppState, v: &str, by: uuid::Uuid) -> ApiResult<()> {
+    if !valid_home_counts(v) {
+        return Err(AppError::bad_request(
+            "bad_value",
+            "Pick c1, c2, c4 or off.",
+        ));
+    }
+    sqlx::query(
+        "INSERT INTO site_settings(key, enabled, value, updated_by) VALUES($1, true, $2, $3)
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_by = $3, updated_at = now()",
+    )
+    .bind(HOME_COUNTS_KEY)
+    .bind(v)
+    .bind(by)
+    .execute(&st.db)
+    .await?;
     Ok(())
 }
 
@@ -198,5 +254,10 @@ mod tests {
         assert!(!super::open_in_maintenance("/api/v1/ws"));
         assert!(!super::open_in_maintenance("/api/v1/sessions/upload"));
         assert!(super::is_key("maintenance") && !super::is_key("nope"));
+        assert!(super::is_key("home_stats"));
+        for v in ["c1", "c2", "c4", "off"] {
+            assert!(super::valid_home_counts(v));
+        }
+        assert!(!super::valid_home_counts("c3") && !super::valid_home_counts(""));
     }
 }

@@ -493,13 +493,21 @@ async function siteSettings() {
     </div></section>` : "";
   view.innerHTML = `<section class="panel"><h2>Site settings</h2><div class="body">
     <p class="note">Switches apply to the website and the desktop app within about 30 seconds, and the server enforces them (hiding a button is not the only effect). Every change is written to the audit log.${edit ? "" : " Only admins can change them."}</p>
-    <table class="settings"><tbody>${d.settings.map(s => row(s, "key")).join("")}</tbody></table></div></section>${alerts}`;
+    <table class="settings"><tbody>${d.settings.map(s => row(s, "key")).join("")}</tbody></table></div></section>
+    <section class="panel" id="hc"><h2>Home page user counts</h2><div class="body"><p class="note">How the registered and online player counts show at the top of the home page.</p>
+    ${(d.home_counts_options || []).map(o => `<label style="display:block;margin:4px 0"><input type="radio" name="home_counts" value="${esc(o.key)}" ${o.key === d.home_counts ? "checked" : ""} ${edit ? "" : "disabled"}> <b>${esc(o.key.toUpperCase())}</b> · ${esc(o.label)}</label>`).join("")}</div></section>${alerts}`;
   view.onchange = async e => {
     const a = e.target.closest("input[data-alert]");
     if (a) {
       const on = a.checked; a.disabled = true;
       try { await api("/admin/alerts", { method: "POST", body: { key: a.dataset.alert, enabled: on } }); siteSettings(); }
       catch (x) { a.checked = !on; a.disabled = false; alert(x.message); }
+      return;
+    }
+    const hc = e.target.closest("input[name=home_counts]");
+    if (hc) {
+      try { await api("/admin/settings", { method: "POST", body: { key: "home_counts", value: hc.value } }); siteSettings(); }
+      catch (x) { alert(x.message); siteSettings(); }
       return;
     }
     const c = e.target.closest("input[data-key]"); if (!c) return;
