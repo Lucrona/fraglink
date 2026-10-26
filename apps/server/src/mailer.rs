@@ -22,6 +22,8 @@ pub struct Mail {
     pub body: String,
     /// HTML version (sent alongside the plain text), if any
     pub html: Option<String>,
+    /// Reply-To override (the contact form sets the sender's address); default: support.
+    pub reply_to: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -95,11 +97,28 @@ pub async fn send_now(st: &AppState, to: &str, e: &crate::emails::Email) -> anyh
         subject: e.subject.clone(),
         body: e.text.clone(),
         html: Some(e.html.clone()),
+        reply_to: None,
     };
     deliver(&p, &m).await
 }
 
 fn deliver_mail(st: &AppState, to: &str, subject: &str, body: &str, html: Option<String>) {
+    deliver_mail_with(st, to, subject, body, html, None)
+}
+
+/// Plain-text mail with its own Reply-To (the website contact form).
+pub fn send_reply_to(st: &AppState, to: &str, subject: &str, body: &str, reply_to: &str) {
+    deliver_mail_with(st, to, subject, body, None, Some(reply_to.to_string()))
+}
+
+fn deliver_mail_with(
+    st: &AppState,
+    to: &str,
+    subject: &str,
+    body: &str,
+    html: Option<String>,
+    reply_to: Option<String>,
+) {
     if to.trim().is_empty() {
         return;
     }
@@ -108,6 +127,7 @@ fn deliver_mail(st: &AppState, to: &str, subject: &str, body: &str, html: Option
         subject: subject.to_string(),
         body: body.to_string(),
         html,
+        reply_to,
     };
     {
         let mut o = outbox().lock().unwrap();
@@ -148,7 +168,7 @@ async fn deliver(p: &Provider, m: &Mail) -> anyhow::Result<()> {
     let req = match p {
         Provider::Resend { key } => {
             let mut b = serde_json::json!({
-                "from": s.from, "to": [m.to], "reply_to": s.reply_to,
+                "from": s.from, "to": [m.to], "reply_to": m.reply_to.as_ref().unwrap_or(&s.reply_to),
                 "subject": m.subject, "text": m.body,
             });
             if let Some(h) = &m.html {
@@ -160,7 +180,7 @@ async fn deliver(p: &Provider, m: &Mail) -> anyhow::Result<()> {
         }
         Provider::Cloudflare { token, account } => {
             let mut b = serde_json::json!({
-                "from": cf_address(&s.from), "to": m.to, "reply_to": s.reply_to,
+                "from": cf_address(&s.from), "to": m.to, "reply_to": m.reply_to.as_ref().unwrap_or(&s.reply_to),
                 "subject": m.subject, "text": m.body,
             });
             if let Some(h) = &m.html {

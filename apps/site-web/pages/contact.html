@@ -1,0 +1,20 @@
+<!-- title: Contact · Fraglink | page: contact | desc: Get in touch with the Fraglink team. -->
+<div class="mid wrap stack">
+<section class="panel"><h2>Contact us</h2><div class="body">
+  <p><b>Help, accounts and bugs:</b> <a href="mailto:support@playfraglink.com">support@playfraglink.com</a><br>
+  <b>Everything else</b> (press, partners, saying hi): <a href="mailto:hello@playfraglink.com">hello@playfraglink.com</a></p>
+  <p class="hint">Quick questions might already be in the <a href="/faq">FAQ</a>. You can also find us on <a href="https://discord.gg/QbaYRtvADj" rel="noopener">Discord</a>.</p>
+</div></section>
+<section class="panel"><h2>Send us a message</h2><div class="body">
+  <form class="f" id="contact" method="post" action="/api/v1/form-fallback" autocomplete="on">
+    <div id="err" class="alert err" hidden></div>
+    <label>Your name<input type="text" name="name" required maxlength="60" autocomplete="name"></label>
+    <label>Your email<input type="email" name="email" required maxlength="200" autocomplete="email"></label>
+    <label>Topic<select name="topic" required><option value="">Choose…</option><option>Help with the app</option><option>Account</option><option>Bug report</option><option>Privacy</option><option>Other</option></select></label>
+    <label>Message<textarea name="message" required minlength="10" maxlength="4000" rows="7"></textarea></label>
+    <div class="cf-turnstile" data-sitekey="__SITEKEY__" data-theme="dark"></div>
+    <div class="row"><button class="btn dl" disabled data-wait>Send</button></div>
+    <p class="hint" style="margin:0">It goes to support@playfraglink.com and we reply to the email above.</p>
+  </form>
+</div></section>
+</div>

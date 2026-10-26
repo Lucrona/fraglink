@@ -18,7 +18,18 @@ use axum::Router;
 /// Profiles per sitemap file (the protocol allows 50,000).
 pub const PROFILES_PER_FILE: i64 = 5000;
 /// The public pages in the sitemap (path on the canonical site).
-pub const PAGES: &[&str] = &["/", "/download", "/news", "/privacy", "/terms"];
+pub const PAGES: &[&str] = &[
+    "/",
+    "/download",
+    "/news",
+    "/privacy",
+    "/terms",
+    "/faq",
+    "/changelog",
+    "/contact",
+    "/status",
+    "/media",
+];
 /// SQL condition (on `users u`) for a profile search engines may index (a macro so the
 /// queries stay `&'static str`).
 macro_rules! indexable {

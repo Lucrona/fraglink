@@ -17,7 +17,7 @@ SITEKEY = os.environ.get("FRAGLINK_TURNSTILE_SITEKEY", "0x4AAAAAAFUF0sKGuaUYzQ8H
 CANON = "https://playfraglink.com"
 DESC = "Fraglink: a lightweight Windows tray app that tracks your gaming hours and shows what your friends are playing."
 # pages search engines may index -> their one canonical address (also in the server's sitemap)
-INDEXABLE = {"home": "/", "download": "/download", "news": None, "privacy": "/privacy", "terms": "/terms"}
+INDEXABLE = {"home": "/", "download": "/download", "news": None, "privacy": "/privacy", "terms": "/terms", "faq": "/faq", "changelog": "/changelog", "contact": "/contact", "status": "/status", "media": "/media"}
 OG_IMG = CANON + "/assets/og-card.png"
 def seo_tags(page, title, desc):
     og = (f'<meta property="og:type" content="website">\n<meta property="og:site_name" content="Fraglink">\n'

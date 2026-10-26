@@ -1,0 +1,47 @@
+<!-- title: FAQ · Fraglink | page: faq | desc: Answers about Fraglink: getting started, how hours are tracked, privacy, linking Steam, Battle.net and Discord, and fixing common problems. -->
+<div class="mid wrap stack faq">
+<section class="panel"><h2>Getting started</h2><div class="body">
+<details><summary>What is Fraglink?</summary><p>A small Windows tray app that shows what your friends are playing and counts your hours in every game, whatever launcher you use. It's free.</p></details>
+<details><summary>What can I do with it?</summary><ul>
+<li>See which friends are online and what they're playing, with a pop-up when someone comes online or starts a game.</li>
+<li>Build a profile with your games, hours, recent activity and gaming rig.</li>
+<li>Climb the leaderboards: top players and most played this week, plus a board for each game.</li>
+<li>Share your stats with a signature image or a miniprofile card (public profiles).</li></ul></details>
+<details><summary>How do I install it?</summary><p>Grab the installer from <a href="/download">Download</a> and run it. Fraglink isn't code-signed yet, so Windows may show a SmartScreen notice: choose <b>More info → Run anyway</b>. It then sits in your tray, next to the clock. Sign in or create an account from there.</p></details>
+<details><summary>Does it update itself?</summary><p>Yes. Installed betas update automatically.</p></details>
+<details><summary>How old do I need to be?</summary><p>13 or older. Profiles of under-18s start private, and they can switch to public after a confirm.</p></details>
+</div></section>
+
+<section class="panel"><h2>Tracking &amp; hours</h2><div class="body">
+<details><summary>How does it count hours?</summary><p>While the app is signed in and connected, our server records each session as it happens, for every running game it recognises. Idle and away time count, like Steam. Sessions under 30 seconds aren't kept.</p></details>
+<details><summary>Do I get hours if I play offline?</summary><p>No. Hours only count while the app is connected. Play without a connection isn't uploaded later.</p></details>
+<details><summary>How does it know what I'm playing?</summary><p>Every few seconds it checks which programs are running and matches them against a games list, using the exe name and its folder. It also reads which game Steam says is running. Admin fixes to the list reach everyone without an app update.</p></details>
+<details><summary>Does it touch my games?</summary><p>No. No overlay, no injection, and it never reads game memory. It only looks at the list of running programs.</p></details>
+<details><summary>My game isn't detected. What now?</summary><p>If an unknown program runs full screen for 5 minutes, Fraglink asks <b>"Playing X? Add it!"</b>. Choose <b>Add it!</b> or <b>Not a game</b>. Missed it? Open <b>Options › Games</b>: unanswered ones wait under <b>Detected, not added</b>, and <b>Not seeing your game? Add it!</b> lets you pick the exe yourself. <b>Scan for games</b> searches your game folders. Anything you add is sent to us for review. Until then, the name you gave it is what friends and your profile show.</p></details>
+<details><summary>Can I bring my existing hours?</summary><p>Yes, from Steam. Link Steam in <a href="/settings#connections">Settings › Connections</a> or in the app under <b>Options › Connections</b>. Your playtime is imported and refreshed daily. Your Steam game details need to be public.</p></details>
+<details><summary>What do Tracked and Imported mean?</summary><p><b>Tracked</b> is time Fraglink recorded, plus Steam playtime. <b>Imported</b> is a game's own counter. For each game your total is the largest of these, never added together, so the same play isn't counted twice.</p></details>
+<details><summary>Can I add hours by hand?</summary><p>No. Manual hour imports are turned off. You can still hide a game or reset its hours in <a href="/settings#games">Settings › Played games</a>.</p></details>
+</div></section>
+
+<section class="panel"><h2>Privacy</h2><div class="body">
+<details><summary>What can other people see?</summary><p>With a public profile, anyone with the link sees your nickname, @username, picture and the parts of your profile you leave switched on: games and hours, now playing, rig, about me, location, gaming style, real name, gender, age, achievements, name history, leaderboard spots and linked account names. Public profiles can also appear on the home page and in search engines.</p></details>
+<details><summary>Can I keep things private?</summary><p>Yes. Each of those has its own switch in <a href="/settings#privacy">Settings › Privacy</a> (the same switches are in the app under <b>Options › Privacy</b>). Turn off the public profile to make it friends-only. Age is hidden by default.</p></details>
+<details><summary>What does Fraglink collect from my PC?</summary><p>The game you're playing and when. Scan for games looks through your folders on your PC and stays there. Details are in the <a href="/privacy">Privacy Policy</a>.</p></details>
+<details><summary>How do I get my data or delete my account?</summary><p>In <a href="/settings#account">Settings › Account &amp; profile</a>. <b>Download my data</b> gives you a zip (JSON and CSV), once an hour. <b>Delete my account</b> signs you out everywhere and deletes everything after 7 days. Signing in during those 7 days cancels it.</p></details>
+</div></section>
+
+<section class="panel"><h2>Accounts &amp; linking</h2><div class="body">
+<details><summary>Nickname or username?</summary><p>Your nickname is what everyone sees, and you can change it any time. Your @username is your sign-in name and profile address.</p></details>
+<details><summary>What does linking Battle.net or Discord do?</summary><p>It proves the account is yours: your profile shows its icon with a verified tick and its name. Hide the names with <b>Show connected account names</b>. Linking opens the service's own sign-in page, so Fraglink never sees your password there.</p></details>
+<details><summary>Can I turn on two-step sign-in?</summary><p>Yes, in <a href="/settings#security">Settings › Security</a>, with an authenticator app and backup codes.</p></details>
+<details><summary>Found a problem player?</summary><p>Use Report on their profile, or <a href="/contact">contact us</a>.</p></details>
+</div></section>
+
+<section class="panel"><h2>Troubleshooting</h2><div class="body">
+<details><summary>Windows says "Windows protected your PC".</summary><p>That's SmartScreen, because the installer isn't code-signed yet. Choose <b>More info → Run anyway</b>.</p></details>
+<details><summary>My hours aren't showing up.</summary><p>Make sure the app is signed in and connected while you play, and that the game is detected (it shows as your status). For Steam hours, check your Steam game details are public, then sync again.</p></details>
+<details><summary>I forgot my password.</summary><p>Use <a href="/forgot">Forgot password</a> to get a reset link by email.</p></details>
+<details><summary>I lost my authenticator and backup codes.</summary><p>Email <a href="mailto:support@playfraglink.com">support@playfraglink.com</a> from your account's email address.</p></details>
+<details><summary>Where do I report a bug?</summary><p>On our <a href="https://discord.gg/QbaYRtvADj" rel="noopener">Discord</a>, or with the <a href="/contact">contact form</a>. If the app crashed, it leaves a <code>crash-&lt;time&gt;.txt</code> in its log folder that helps us find it.</p></details>
+</div></section>
+</div>
