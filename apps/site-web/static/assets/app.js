@@ -1043,8 +1043,9 @@ pages.profile = async () => {
   const WC = p.wow_characters;
   if (WC && WC.length) {
     const card = c => `<div class="wc${c.hidden ? " wc-hid" : ""}"><div class="wc-p"><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}><span class="wc-ic">${c.class ? `<img src="${WOW.clsIcon(c.class)}" alt="" title="${esc(WOW.cls(c.class))}" loading="lazy" ${imgOk}>` : ""}${c.spec && WOW.specIcon(c.class, c.spec) ? `<img src="${WOW.specIcon(c.class, c.spec)}" alt="" title="${esc(c.spec)}" loading="lazy" ${imgOk}>` : ""}</span></div>
-      <div class="wc-t"><b>${esc(c.name)}</b><div class="sub">${c.level} ${esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" "))} · ${esc(c.realm)} ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""}</div><div class="wc-h">${hours(c.played_min, { zero: true })}</div></div></div>`;
-    wowc = sec("WoW characters", `<div class="wcs">${WC.map(card).join("")}</div>${self ? `<p class="sub" style="padding:0 14px 10px">Only you see hidden characters. <a href="/connect/battlenet">Manage on your Battle.net page</a></p>` : ""}`);
+      <div class="wc-t"><b>${esc(c.name)}</b><div class="sub">${c.level} ${esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" "))} · ${esc(c.realm)} ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""}</div></div></div>`;
+    const WS = [...WC].sort((a, b) => (b.played_min || 0) - (a.played_min || 0)), WMAX = 6;
+    wowc = sec("WoW characters", `<div class="wcs">${WS.slice(0, WMAX).map(card).join("")}</div>${WS.length > WMAX ? `<div class="wcs" data-wmore hidden>${WS.slice(WMAX).map(card).join("")}</div><p style="padding:0 14px 10px"><a href="#" data-wall onclick="this.closest('section,div').parentNode.querySelector('[data-wmore]').hidden=false;this.parentNode.remove();return false">Show all ${WS.length} characters</a></p>` : ""}${self ? `<p class="sub" style="padding:0 14px 10px">Only you see hidden characters. <a href="/connect/battlenet">Manage on your Battle.net page</a></p>` : ""}`);
   }
 
   // Achievements
@@ -1368,7 +1369,7 @@ pages.settings = async () => {
       const v = c[p] || {}, l = v.linked;
       if (!l && !v.off && !v.available) return ""; // not built yet: hide rather than show a "Coming soon" stub
       const right = l
-        ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
+        ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}${p === "bnet" ? `<a class="btn sm" href="/connect/battlenet">Manage WoW</a> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
         : v.off ? `<span class="btn sm" aria-disabled="true">Turned off for now</span>` : v.available ? `<button class="btn sm blue" type="button" data-link="${p}">${p === "steam" ? "Sign in through Steam" : "Link " + NAMES[p]}</button>` : `<span class="btn sm" aria-disabled="true">Coming soon</span>`;
       const who = l ? `${p === "steam" ? `<a href="https://steamcommunity.com/profiles/${esc(l.uid)}" rel="noopener">${esc(l.display || l.uid)}</a>` : `<b>${esc(l.display || l.uid)}</b>`} ${l.verified ? `<span class="vbadge">✓ Verified</span>` : `<span class="sub">(not verified)</span>`}${l.last_sync_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(l.last_sync_at))}${l.sync_status && l.sync_status !== "ok" ? " · " + esc(l.sync_status) : ""}</div>` : ""}`
         : `<span class="sub">${blurb}</span>`;
@@ -1378,7 +1379,7 @@ pages.settings = async () => {
       ${card("steam", "S", c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
       ${card("discord", "D", "Show your Discord name on your profile.")}
       ${card("bnet", "B", "Show your BattleTag on your profile.")}
-      <div class="conn-sub"><a class="btn sm${c.bnet && c.bnet.linked ? " blue" : ""}" href="/connect/battlenet">WoW characters ›</a>${c.bnet && c.bnet.needs_reconnect ? ` <span class="sub warn">Reconnect Battle.net to verify characters.</span>` : ""}</div>
+      ${c.bnet && c.bnet.needs_reconnect ? `<div class="conn-sub"><span class="sub warn">Reconnect Battle.net to verify characters.</span> <a href="/connect/battlenet">Manage WoW</a></div>` : ""}
       <p class="sub" style="padding:8px 0">Verified accounts show as badges on your profile. You're sent to the provider's own sign-in page; Fraglink never sees your password there.</p></div>`;
     if (q.get("connected")) { ok(box, `${NAMES[q.get("connected")] || "Account"} linked.`); history.replaceState(null, "", "/settings#connections"); }
     else if (q.get("connect_error")) { bad(box, new Error(q.get("connect_error") === "expired" ? "That link expired. Try again." : q.get("connect_error") === "cancelled" ? "Linking was cancelled." : q.get("connect_error"))); history.replaceState(null, "", "/settings#connections"); }

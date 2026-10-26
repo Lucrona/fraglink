@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 /// Addon folder name (also the SavedVariables file stem).
 pub const ADDON: &str = "FraglinkPlayed";
 /// Current addon release (CurseForge project 1766775). The app no longer installs it.
-pub const ADDON_VERSION: &str = "1.0.0";
+pub const ADDON_VERSION: &str = "1.0.1";
 
 /// Checksum keys by signature version. Every addon release that bumps
 /// `SIG_VERSION` adds its key here; the server accepts only listed versions, so an

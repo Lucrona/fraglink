@@ -92,6 +92,9 @@ async fn list(
     Query(p): Query<ListQ>,
 ) -> ApiResult<Json<Value>> {
     let uid = a.user.id;
+    if p.offset.unwrap_or(0) == 0 {
+        backfill(&st, uid);
+    }
     let ha = hide_all_on(&st, uid).await?;
     let q = p.q.unwrap_or_default().trim().to_lowercase();
     let q = q.chars().take(64).collect::<String>();
@@ -272,6 +275,28 @@ pub async fn after_sync(st: &AppState, uid: Uuid) {
     tokio::spawn(async move { fill_specs(&st, uid).await });
 }
 
+/// Characters verified before race/gender/spec were stored (or whose fetch failed) get
+/// them filled in the background when the page opens; at most once per user per 10 minutes.
+fn backfill(st: &AppState, uid: Uuid) {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Instant;
+    static SEEN: OnceLock<Mutex<HashMap<Uuid, Instant>>> = OnceLock::new();
+    {
+        let mut m = SEEN
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        m.retain(|_, t| t.elapsed() < Duration::from_secs(600));
+        if m.contains_key(&uid) {
+            return;
+        }
+        m.insert(uid, Instant::now());
+    }
+    let st = st.clone();
+    tokio::spawn(async move { fill_specs(&st, uid).await });
+}
+
 async fn fill_specs(st: &AppState, uid: Uuid) {
     let rows: Vec<(Uuid, String, String, String, String)> = sqlx::query_as(
         "SELECT id, game_id, region, realm_slug, name FROM wow_characters
@@ -286,8 +311,11 @@ async fn fill_specs(st: &AppState, uid: Uuid) {
         return;
     }
     let (Some(tok), Some(http)) = (app_token().await, http()) else {
+        tracing::warn!("wow backfill: no Battle.net app token");
         return;
     };
+    let mut ok = 0usize;
+    let total = rows.len();
     for (id, g, region, slug, name) in rows {
         let Some(ns) = namespace(&g, &region) else {
             continue;
@@ -308,6 +336,7 @@ async fn fill_specs(st: &AppState, uid: Uuid) {
         let Ok(v) = resp.json::<Value>().await else {
             continue;
         };
+        ok += 1;
         let _ = sqlx::query(
             "UPDATE wow_characters SET bnet_spec = coalesce($2, bnet_spec), race = coalesce($3, race),
                     gender = coalesce($4, gender) WHERE id = $1",
@@ -320,6 +349,7 @@ async fn fill_specs(st: &AppState, uid: Uuid) {
         .await;
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
+    tracing::info!("wow backfill: {ok}/{total} characters for {uid}");
 }
 
 /// `classicon_*`, `achievement_character_*`, spec spell icons: only `[a-z0-9_]` names.
