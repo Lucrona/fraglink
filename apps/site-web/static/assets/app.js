@@ -258,7 +258,7 @@ function renderHeader() {
   if (nav) {
     const items = [["home", "/", "Home"]];
     if (u) items.push(["profile", "/u/" + encodeURIComponent(u.handle), "Profile"], ["friends", "/friends", "Friends"]);
-    items.push(["download", "/download", "Download"]);
+    items.push(["download", "/download", "Download"], ["faq", "/faq", "FAQ"]);
     const mine = page === "profile" && u && location.pathname.toLowerCase() === "/u/" + u.handle.toLowerCase();
     nav.innerHTML = items.map(([k, href, label]) => {
       const on = (k === page && (k !== "profile" || mine)) ? "on" : "";
@@ -543,6 +543,46 @@ pages.forgot = () => {
     } catch (x) { showErr(err, x); turnstileReset(); }
     b.disabled = false;
   });
+};
+
+pages.contact = () => {
+  loadTurnstile();
+  const f = $("#contact"), err = $("#err");
+  f.addEventListener("submit", async e => {
+    e.preventDefault(); err.hidden = true; const b = $("button", f); b.disabled = true;
+    try {
+      await api("/contact", { method: "POST", body: { name: f.name.value.trim(), email: f.email.value.trim(), topic: f.topic.value, message: f.message.value.trim(), turnstile: turnstileToken(f) } });
+      f.reset(); showOk(err, "Thanks, your message is on its way. We'll reply to your email.");
+    } catch (x) { showErr(err, x); }
+    turnstileReset(); b.disabled = false;
+  });
+};
+
+pages.status = () => {
+  const set = (k, ok, text) => { const li = $(`#st-list [data-k="${k}"]`); li.className = ok ? "up" : "down"; $(".st-v", li).textContent = text; };
+  const SEV = { minor: "Minor", major: "Major", maintenance: "Maintenance" };
+  const when = t => new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const run = async () => {
+    let site = false, api_ = false, live = false;
+    try { const r = await fetch("/", { cache: "no-store", method: "HEAD" }); site = r.ok; } catch (e) { /* down */ }
+    set("site", site, site ? "Up" : "Down");
+    const t0 = performance.now();
+    try {
+      const r = await fetch("/api/v1/status", { cache: "no-store" });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json(), ms = Math.round(performance.now() - t0);
+      api_ = d.api && d.database && d.database.ok; live = d.live && d.live.ok;
+      set("api", api_, api_ ? `Up · ${ms} ms` : "Down");
+      set("live", live, d.maintenance ? "Maintenance" : live ? "Up" : "Down");
+      const inc = d.incidents || [];
+      $("#st-inc").innerHTML = inc.length ? inc.map(i => `<article class="inc ${esc(i.severity)}"><h3>${esc(i.title)} <span class="tag">${SEV[i.severity] || ""}</span>${i.resolved_at ? ` <span class="tag ok">Resolved</span>` : ` <span class="tag bad">Ongoing</span>`}</h3><div class="hint">${when(i.started_at)}${i.resolved_at ? ` – ${when(i.resolved_at)}` : ""}</div>${i.body ? `<p>${esc(i.body)}</p>` : ""}</article>`).join("") : `<div class="empty">No incidents reported.</div>`;
+    } catch (e) { set("api", false, "Down"); set("live", false, "Unknown"); $("#st-inc").innerHTML = `<div class="empty">Couldn't load incidents.</div>`; }
+    const all = site && api_ && live;
+    $("#st-summary").className = "st-sum " + (all ? "up" : "down");
+    $("#st-summary").textContent = all ? "All systems working" : "Some things aren't working right now";
+    $("#st-when").textContent = `Checked ${new Date().toLocaleTimeString()} from your browser. Rechecks every 60 seconds.`;
+  };
+  run(); setInterval(run, 60000);
 };
 
 pages.reset = () => {
@@ -1328,7 +1368,7 @@ function applyFeatures() {
 const CRUMBS = { download: [["Download", "/download"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
   login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
   settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
-  verify: [["Confirm your email"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
+  verify: [["Confirm your email"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
 function setCrumb(parts) {
   const nav = document.getElementById("ycrumb"); if (!nav || !parts) return;
   const all = [["Home", "/"], ...parts];

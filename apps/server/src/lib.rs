@@ -15,6 +15,7 @@ pub mod auth;
 pub mod avatars;
 pub mod config;
 pub mod connect;
+pub mod contact;
 pub mod detection_aliases;
 pub mod emails;
 pub mod error;
@@ -40,6 +41,7 @@ pub mod realms;
 pub mod retire;
 pub mod seo;
 pub mod sig;
+pub mod status;
 pub mod steam;
 pub mod turnstile;
 pub mod web;
@@ -157,6 +159,8 @@ pub fn router(state: AppState) -> Router {
         .merge(merge_suggest::routes())
         .merge(news::routes())
         .merge(polls::routes())
+        .merge(status::routes())
+        .merge(contact::routes())
         .merge(mfa::routes())
         .merge(account::routes())
         .merge(avatars::routes())

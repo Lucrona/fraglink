@@ -1,0 +1,19 @@
+Fraglink press kit
+==================
+
+Fraglink is a small Windows tray app that shows what your friends are playing and
+counts your hours in every game, whatever launcher you use. Profiles, friends and
+leaderboards live at https://playfraglink.com. It's free, with no ads.
+Fraglink is in open beta (0.3.0).
+
+Contents
+- logos/: the Fraglink mark and logo (white and chrome), SVG and PNG, on transparent
+  backgrounds. They're designed for dark backgrounds.
+- screenshots/: the app's friends list, games list and a friend pop-up.
+- wallpapers/: a 1920x1080 wallpaper (more sizes at https://playfraglink.com/media).
+
+Using the logo
+- Please don't recolour, stretch or add effects to the logo.
+- Leave some space around it.
+
+Contact: hello@playfraglink.com

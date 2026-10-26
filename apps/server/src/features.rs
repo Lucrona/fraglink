@@ -203,6 +203,7 @@ fn open_in_maintenance(path: &str) -> bool {
     matches!(
         path,
         "/api/v1/health"
+            | "/api/v1/status"
             | "/api/v1/features"
             | "/api/v1/announcement"
             | "/api/v1/auth/login"

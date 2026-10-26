@@ -29,6 +29,7 @@ const TABS = [
   ["announcements", "Announcements", can.announcements],
   ["news", "News", can.news],
   ["polls", "Polls", can.news],
+  ["incidents", "Status incidents", can.server],
   ["settings", "Site settings", can.settings],
   ["staff", "Staff", can.staff],
 ].filter(t => t[2]);
@@ -47,7 +48,7 @@ function route() {
   const t = tab === "user" ? "users" : tab;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
   { const tb = TABS.find(x => x[0] === t); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
-  const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, settings: siteSettings, staff, user: userDetail }[tab];
+  const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -768,6 +769,32 @@ async function polls() {
     const id = b.closest("[data-id]").dataset.id, act = b.dataset.act;
     if (act === "close" && !confirm("Close voting on this poll? Results stay visible.")) return;
     try { await api(`/admin/polls/${id}/${act}`, { method: "POST" }); polls(); } catch (x) { alert(x.message); }
+  };
+}
+
+async function incidents() {
+  const d = await api("/admin/incidents");
+  const when = t => new Date(t).toLocaleString();
+  view.innerHTML = `<section class="panel"><h2>New incident</h2><div class="body"><form id="inn">
+    <p class="note">Shows under <b>Past incidents</b> on the public <a href="/status">Status</a> page. Write it for players: what broke and what they should do.</p>
+    <p><input name="t" maxlength="140" placeholder="Title, e.g. Sign-in failing for some players" style="width:100%" required></p>
+    <p><textarea name="b" maxlength="2000" rows="3" placeholder="Details (optional)" style="width:100%"></textarea></p>
+    <p><select name="s"><option value="minor">Minor</option><option value="major">Major</option><option value="maintenance">Maintenance</option></select>
+    <label><input type="checkbox" name="r"> Already resolved</label></p>
+    <p><button class="btn dl">Add incident</button></p></form></div></section>
+    <section class="panel"><h2>Incidents (${d.incidents.length})</h2><div class="body">${d.incidents.length ? d.incidents.map(i => `<div class="fr" style="display:block;padding:8px 0;border-bottom:1px solid #202c3a" data-id="${i.id}">
+      <b>${esc(i.title)}</b> · ${esc(i.severity)} · <span class="dimt">${when(i.started_at)}${i.resolved_at ? " – " + when(i.resolved_at) : " · ongoing"}</span>${i.body ? `<div>${esc(i.body)}</div>` : ""}
+      <div style="margin-top:5px">${i.resolved_at ? "" : `<button class="btn sm" data-act="resolve">Mark resolved</button> `}<button class="btn sm red" data-act="delete">Delete</button></div></div>`).join("") : `<div class="empty">No incidents yet.</div>`}</div></section>`;
+  $("#inn").onsubmit = async e => {
+    e.preventDefault(); const f = e.target, now = new Date().toISOString();
+    try { await api("/admin/incidents", { method: "POST", body: { title: f.t.value, body: f.b.value, severity: f.s.value, started_at: now, resolved_at: f.r.checked ? now : null } }); incidents(); }
+    catch (x) { alert(x.message); }
+  };
+  view.onclick = async e => {
+    const b = e.target.closest("button[data-act]"); if (!b) return;
+    const id = b.closest("[data-id]").dataset.id, act = b.dataset.act;
+    if (act === "delete" && !confirm("Delete this incident from the Status page?")) return;
+    try { await api(`/admin/incidents/${id}/${act}`, { method: "POST" }); incidents(); } catch (x) { alert(x.message); }
   };
 }
 
