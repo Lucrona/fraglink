@@ -589,7 +589,13 @@ async function announcements() {
     <form method="post" action="/api/v1/form-fallback" class="f" id="af"><label>Message<input type="text" name="message" maxlength="300" required placeholder="Servers restart at 10 pm AEDT for an update."></label>
       <div class="row"><label>Style<select class="in" name="style"><option value="info">Info (blue)</option><option value="warning">Warning (amber)</option></select></label>
       <label>Ends (optional)<input class="in" type="datetime-local" name="ends"></label></div>
-      <label>Link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+      <label>Cover image (optional)<input type="text" name="image" placeholder="https://… or upload below"></label>
+      <div class="row" style="align-items:center"><input type="file" id="nf-file" accept="image/jpeg,image/png,image/webp,image/gif"><button type="button" class="btn sm" id="nf-up">Upload</button><button type="button" class="btn sm danger" id="nf-rm" hidden>Remove image</button></div>
+      <p class="dimt">JPG, PNG, WebP or GIF up to 5 MB. Shows beside the post in lists and full width at the top of the post.</p>
+      <img id="nf-prev" alt="" hidden style="max-width:100%;max-height:180px;border-radius:4px;object-fit:contain;align-self:flex-start">
+      <div class="row"><label>Button link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+        <label>Button label<input type="text" name="link_label" maxlength="40" placeholder="Read more"></label></div>
+      <p class="dimt">Adds a button under the post. Links typed in the post itself are already clickable.</p>
       <div class="row"><button class="btn dl">Publish</button><span class="dimt">Replaces the current announcement.</span></div>
       <div class="alert" id="anmsg" hidden></div></form></div></section>
     <section class="panel"><h2>Recent</h2>${d.recent.length ? d.recent.map(r => `<div class="fr"><div class="who"><div class="nm"><span>${esc(r.message)}</span></div><div class="gm"><span class="pill ${r.style === "warning" ? "warn" : ""}">${esc(r.style)}</span> ${when(r.created_at)}${r.cleared_at ? " · cleared " + when(r.cleared_at) : r.ends_at ? " · ends " + when(r.ends_at) : ""}</div></div></div>`).join("") : `<div class="body empty">None yet.</div>`}</section></div>`;
@@ -614,7 +620,13 @@ async function news(arg) {
     <form method="post" action="/api/v1/form-fallback" class="f" id="nf"><input type="hidden" name="id">
       <label>Title<input type="text" name="title" maxlength="140" required placeholder="Fraglink 0.3.0 beta 1 is out"></label>
       <label>Post<textarea class="in" name="body" rows="10" maxlength="20000" placeholder="Blank line = new paragraph. https:// links become clickable."></textarea></label>
-      <label>Link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+      <label>Cover image (optional)<input type="text" name="image" placeholder="https://… or upload below"></label>
+      <div class="row" style="align-items:center"><input type="file" id="nf-file" accept="image/jpeg,image/png,image/webp,image/gif"><button type="button" class="btn sm" id="nf-up">Upload</button><button type="button" class="btn sm danger" id="nf-rm" hidden>Remove image</button></div>
+      <p class="dimt">JPG, PNG, WebP or GIF up to 5 MB. Shows beside the post in lists and full width at the top of the post.</p>
+      <img id="nf-prev" alt="" hidden style="max-width:100%;max-height:180px;border-radius:4px;object-fit:contain;align-self:flex-start">
+      <div class="row"><label>Button link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+        <label>Button label<input type="text" name="link_label" maxlength="40" placeholder="Read more"></label></div>
+      <p class="dimt">Adds a button under the post. Links typed in the post itself are already clickable.</p>
       <div class="row"><label>Date<input class="in" type="datetime-local" name="at"></label>
         <label style="display:flex;flex-direction:row;align-items:center;gap:6px;align-self:flex-end;padding-bottom:8px"><input type="checkbox" name="pinned"> Pin to top</label>
         <label style="display:flex;flex-direction:row;align-items:center;gap:6px;align-self:flex-end;padding-bottom:8px" id="nf-ban"><input type="checkbox" name="banner"> Also show as banner</label></div>
@@ -624,11 +636,23 @@ async function news(arg) {
     <section class="panel"><h2>Posts <span class="dimt" id="n-count"></span></h2><div class="body" style="padding-bottom:4px"><input class="in" type="search" id="n-q" placeholder="Search posts" style="width:100%"></div><div id="n-list"></div></section></div>`;
   const f = $("#nf"), local = iso => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
   let items = [];
-  const reset = () => { f.reset(); f.id.value = ""; $("#nf-h").textContent = "New post"; $("#nf-go").textContent = "Publish"; $("#nf-cancel").hidden = true; $("#nf-ban").hidden = false; };
+  const reset = () => { f.reset(); f.id.value = ""; $("#nf-h").textContent = "New post"; $("#nf-go").textContent = "Publish"; $("#nf-cancel").hidden = true; $("#nf-ban").hidden = false; prev(); };
   const fill = p => {
-    f.id.value = p.id; f.title.value = p.title; f.body.value = p.body || ""; f.link.value = p.link || ""; f.at.value = local(p.at); f.pinned.checked = p.pinned;
+    f.id.value = p.id; f.title.value = p.title; f.body.value = p.body || ""; f.link.value = p.link || ""; f.link_label.value = p.link_label || ""; f.image.value = p.image || ""; prev(); f.at.value = local(p.at); f.pinned.checked = p.pinned;
     $("#nf-h").textContent = "Edit post"; $("#nf-go").textContent = "Save changes"; $("#nf-cancel").hidden = false; $("#nf-ban").hidden = true; f.title.focus(); window.scrollTo(0, 0);
   };
+  function prev() { const u = f.image.value.trim(), im = $("#nf-prev"); im.hidden = !u; $("#nf-rm").hidden = !u; if (u) im.src = u; else im.removeAttribute("src"); }
+  f.image.addEventListener("input", prev);
+  $("#nf-prev").addEventListener("error", () => { if (f.image.value.trim()) msg($("#nfmsg"), "That image couldn't be loaded."); });
+  $("#nf-rm").addEventListener("click", () => { f.image.value = ""; $("#nf-file").value = ""; prev(); });
+  $("#nf-up").addEventListener("click", e => act(e.target, async () => {
+    const file = $("#nf-file").files[0]; if (!file) throw new Error("Pick an image first.");
+    if (file.size > 5 * 1024 * 1024) throw new Error("That image is over 5 MB.");
+    const r = await fetch(window.FL.API + "/admin/news-image", { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream" }, body: file });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || "Upload failed (HTTP " + r.status + ").");
+    f.image.value = j.url; prev();
+  }).catch(x => msg($("#nfmsg"), x.message)));
   const load = async () => {
     const d = await api(`/admin/news?page=${pg}&per=${PER}${q ? "&q=" + encodeURIComponent(q) : ""}`);
     items = d.items; $("#n-count").textContent = d.total ? `(${d.total.toLocaleString("en")})` : "";
@@ -650,7 +674,7 @@ async function news(arg) {
   });
   f.addEventListener("submit", async e => {
     e.preventDefault();
-    const body = { title: f.title.value.trim(), body: f.body.value, link: f.link.value.trim(), pinned: f.pinned.checked };
+    const body = { title: f.title.value.trim(), body: f.body.value, link: f.link.value.trim(), link_label: f.link_label.value.trim(), image: f.image.value.trim(), pinned: f.pinned.checked };
     if (f.at.value) body.published_at = new Date(f.at.value).toISOString();
     try {
       const r = f.id.value ? await api(`/admin/news/${f.id.value}`, { method: "POST", body }) : await api("/admin/news", { method: "POST", body });

@@ -26,6 +26,123 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/news/{key}", get(one_public))
         .route("/api/v1/admin/news", get(admin_list).post(create))
         .route("/api/v1/admin/news/{id}", post(update).delete(remove))
+        .route(
+            "/api/v1/admin/news-image",
+            post(upload_image).layer(axum::extract::DefaultBodyLimit::max(IMG_MAX + 1024)),
+        )
+        .route("/api/v1/news-img/{name}", get(serve_image))
+}
+
+const IMG_MAX: usize = 5 * 1024 * 1024;
+
+fn img_dir(st: &AppState) -> std::path::PathBuf {
+    st.cfg.data_dir.join("news-img")
+}
+
+/// jpg/png/webp/gif by magic bytes.
+fn sniff(b: &[u8]) -> Option<(&'static str, &'static str)> {
+    if b.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some(("jpg", "image/jpeg"))
+    } else if b.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(("png", "image/png"))
+    } else if b.starts_with(b"GIF87a") || b.starts_with(b"GIF89a") {
+        Some(("gif", "image/gif"))
+    } else if b.len() > 12 && &b[0..4] == b"RIFF" && &b[8..12] == b"WEBP" {
+        Some(("webp", "image/webp"))
+    } else {
+        None
+    }
+}
+
+async fn upload_image(
+    State(st): State<AppState>,
+    s: Staff,
+    body: axum::body::Bytes,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    if body.is_empty() || body.len() > IMG_MAX {
+        return Err(bad(
+            "invalid_image",
+            "Upload a JPG, PNG, WebP or GIF up to 5 MB.",
+        ));
+    }
+    let (ext, _) = sniff(&body).ok_or_else(|| {
+        bad(
+            "invalid_image",
+            "That file isn't a JPG, PNG, WebP or GIF image.",
+        )
+    })?;
+    use sha2::Digest;
+    let h = sha2::Sha256::digest(&body);
+    let name = format!(
+        "{}.{ext}",
+        h.iter()
+            .take(12)
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    );
+    let dir = img_dir(&st);
+    std::fs::create_dir_all(&dir).map_err(AppError::internal)?;
+    let tmp = dir.join(format!("{name}.tmp"));
+    std::fs::write(&tmp, &body).map_err(AppError::internal)?;
+    std::fs::rename(&tmp, dir.join(&name)).map_err(AppError::internal)?;
+    Ok(Json(json!({ "url": format!("/api/v1/news-img/{name}") })))
+}
+
+async fn serve_image(
+    State(st): State<AppState>,
+    Path(name): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let ok = name.len() <= 40
+        && name
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == '.' || c.is_ascii_lowercase())
+        && name.matches('.').count() == 1;
+    if !ok {
+        return Err(AppError::not_found());
+    }
+    let b = tokio::fs::read(img_dir(&st).join(&name))
+        .await
+        .map_err(|_| AppError::not_found())?;
+    let (_, ct) = sniff(&b).ok_or_else(AppError::not_found)?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, ct),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
+        b,
+    ))
+}
+
+fn clean_image(l: &str) -> ApiResult<Option<String>> {
+    let l = l.trim();
+    if l.is_empty() {
+        return Ok(None);
+    }
+    let ok = (l.starts_with("https://") || l.starts_with("/api/v1/news-img/"))
+        && l.len() <= 500
+        && !l
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || "\"'<>".contains(c));
+    if !ok {
+        return Err(bad("invalid_image", "Image links start with https://."));
+    }
+    Ok(Some(l.to_string()))
+}
+
+fn clean_label(l: &str) -> ApiResult<Option<String>> {
+    let l = l.trim();
+    if l.is_empty() {
+        return Ok(None);
+    }
+    if l.chars().count() > 40 || l.chars().any(|c| c.is_control()) {
+        return Err(bad(
+            "invalid_label",
+            "Button labels can be up to 40 characters.",
+        ));
+    }
+    Ok(Some(l.to_string()))
 }
 
 type Row = (
@@ -37,8 +154,11 @@ type Row = (
     bool,
     DateTime<Utc>,
     DateTime<Utc>,
+    Option<String>,
+    Option<String>,
 );
-const COLS: &str = "id, slug, title, body, link, pinned, published_at, updated_at";
+const COLS: &str =
+    "id, slug, title, body, link, pinned, published_at, updated_at, image, link_label";
 
 fn excerpt(body: &str, max: usize) -> String {
     let flat = body.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -54,10 +174,10 @@ fn excerpt(body: &str, max: usize) -> String {
 }
 
 fn to_json(r: Row, full: bool) -> Value {
-    let (id, slug, title, body, link, pinned, at, upd) = r;
+    let (id, slug, title, body, link, pinned, at, upd, image, link_label) = r;
     let mut v = json!({
         "id": id, "slug": slug, "title": title, "summary": excerpt(&body, 220),
-        "link": link, "pinned": pinned, "at": at, "updated_at": upd, "url": format!("/news/{slug}"),
+        "link": link, "link_label": link_label, "image": image, "pinned": pinned, "at": at, "updated_at": upd, "url": format!("/news/{slug}"),
     });
     if full {
         v["body"] = json!(body);
@@ -206,6 +326,9 @@ struct PostReq {
     body: Option<String>,
     /// "" clears it.
     link: Option<String>,
+    link_label: Option<String>,
+    /// "" clears it.
+    image: Option<String>,
     pinned: Option<bool>,
     published_at: Option<DateTime<Utc>>,
 }
@@ -296,6 +419,8 @@ async fn create(
     let title = clean_title(r.title.as_deref().unwrap_or(""))?;
     let body = clean_body(r.body.as_deref().unwrap_or(""))?;
     let link = clean_link(r.link.as_deref().unwrap_or(""))?;
+    let image = clean_image(r.image.as_deref().unwrap_or(""))?;
+    let label = clean_label(r.link_label.as_deref().unwrap_or(""))?;
     let base = slugify(&title);
     let mut slug = base.clone();
     let mut n = 2;
@@ -308,8 +433,8 @@ async fn create(
         n += 1;
     }
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO news_posts(slug, title, body, link, pinned, published_at, created_by)
-         VALUES($1, $2, $3, $4, $5, coalesce($6, now()), $7) RETURNING id",
+        "INSERT INTO news_posts(slug, title, body, link, pinned, published_at, created_by, image, link_label)
+         VALUES($1, $2, $3, $4, $5, coalesce($6, now()), $7, $8, $9) RETURNING id",
     )
     .bind(&slug)
     .bind(&title)
@@ -318,6 +443,8 @@ async fn create(
     .bind(r.pinned.unwrap_or(false))
     .bind(r.published_at)
     .bind(s.user.id)
+    .bind(&image)
+    .bind(&label)
     .fetch_one(&st.db)
     .await?;
     let after = get_row(&st, id)
@@ -356,12 +483,20 @@ async fn update(
         Some(l) => clean_link(l)?,
         None => before.4.clone(),
     };
+    let image = match &r.image {
+        Some(l) => clean_image(l)?,
+        None => before.8.clone(),
+    };
+    let label = match &r.link_label {
+        Some(l) => clean_label(l)?,
+        None => before.9.clone(),
+    };
     let pinned = r.pinned.unwrap_or(before.5);
     let at = r.published_at.unwrap_or(before.6);
     // The slug stays put so shared links keep working.
     sqlx::query(
-        "UPDATE news_posts SET title = $2, body = $3, link = $4, pinned = $5, published_at = $6, updated_at = now()
-         WHERE id = $1",
+        "UPDATE news_posts SET title = $2, body = $3, link = $4, pinned = $5, published_at = $6, image = $7, link_label = $8,
+         updated_at = now() WHERE id = $1",
     )
     .bind(id)
     .bind(&title)
@@ -369,6 +504,8 @@ async fn update(
     .bind(&link)
     .bind(pinned)
     .bind(at)
+    .bind(&image)
+    .bind(&label)
     .execute(&st.db)
     .await?;
     let after = get_row(&st, id)
@@ -378,6 +515,8 @@ async fn update(
     let action = if r.title.is_none()
         && r.body.is_none()
         && r.link.is_none()
+        && r.image.is_none()
+        && r.link_label.is_none()
         && r.published_at.is_none()
         && r.pinned.is_some()
     {
@@ -435,5 +574,9 @@ mod tests {
         assert_eq!(super::slugify("!!!"), "post");
         let e = super::excerpt(&"word ".repeat(100), 30);
         assert!(e.ends_with('…') && e.chars().count() <= 31);
+        assert_eq!(super::sniff(b"GIF89a..").map(|x| x.0), Some("gif"));
+        assert!(super::sniff(b"<svg>").is_none());
+        assert!(super::clean_image("javascript:x").is_err());
+        assert!(super::clean_image("https://a.b/c.png\"x").is_err());
     }
 }

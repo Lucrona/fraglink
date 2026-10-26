@@ -578,7 +578,7 @@ pages.home = async () => {
     actBody = `<div class="day">Right now</div>` + h.now_playing.slice(0, 8).map(n => `<div class="act">${avatar(n.avatar, 22)}<span><a href="${prof(n)}">${nm(n)}</a> is playing ${icon(n.game_id, n.game_name)} ${esc(n.game_name)}</span>${n.since ? `<span class="w">${since(n.since)}</span>` : ""}</div>`).join("");
   }
   const actP = actBody ? panel(u && act && act.items.length ? "Friends' activity" : "Activity report", actBody) : "";
-  const news = panel("News", h.news.length ? h.news.map(n => `<div class="ni"><h4><a href="${esc(n.url)}">${esc(n.title)}</a></h4><div class="d">${fullDate.format(new Date(n.at))}${n.pinned ? " · Pinned" : ""}</div></div>`).join("") : `<div class="in empty">No news yet.</div>`, ` <a class="more" href="/news">More news »</a>`);
+  const news = panel("News", h.news.length ? h.news.map(n => `<div class="ni${n.image ? " has-img" : ""}">${n.image ? `<a class="nimg" href="${esc(n.url)}" tabindex="-1"><img src="${esc(n.image)}" alt="" loading="lazy"></a>` : ""}<div><h4><a href="${esc(n.url)}">${esc(n.title)}</a></h4><div class="d">${fullDate.format(new Date(n.at))}${n.pinned ? " · Pinned" : ""}</div></div></div>`).join("") : `<div class="in empty">No news yet.</div>`, ` <a class="more" href="/news">More news »</a>`);
   $("#f2-mid").innerHTML = tick + trend + actP + news;
   // ---- right column
   const c2 = cs === "c2" ? panel("Community stats", `<table class="t2"><tr><td>Registered players</td><td class="n">${nf.format(s.registered)}</td></tr><tr><td><span class="dot online"></span> Online now</td><td class="n">${nf.format(s.online)}</td></tr><tr><td>Playing a game now</td><td class="n">${nf.format(s.in_game)}</td></tr><tr><td>Hours tracked this week</td><td class="n">${nf.format(Math.round(s.minutes_7d / 60))}</td></tr></table>`) : "";
@@ -1467,10 +1467,10 @@ pages.news = async () => {
       document.title = p.title + " · Fraglink";
       window.flCrumb([[p.title]]);
       if (p.slug !== slug) history.replaceState(null, "", p.url);
-      root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><article class="panel post"><div class="body">
+      root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><article class="panel post">${p.image ? `<img class="post-img" src="${esc(p.image)}" alt="">` : ""}<div class="body">
         <h1>${esc(p.title)}</h1><div class="sub">${fullDate.format(new Date(p.at))}${p.pinned ? ' · <span class="pin">Pinned</span>' : ""}</div>
         <div class="txt">${newsBody(p.body) || `<p class="muted">${esc(p.summary)}</p>`}</div>
-        ${p.link ? `<p><a class="btn blue" href="${esc(p.link)}"${p.link.startsWith("http") ? ' rel="noopener"' : ""}>Read more</a></p>` : ""}</div></article>
+        ${p.link ? `<p><a class="btn blue" href="${esc(p.link)}"${p.link.startsWith("http") ? ' rel="noopener"' : ""}>${esc(p.link_label || "Read more")}</a></p>` : ""}</div></article>
         <div class="post-nav">${d.newer ? `<a href="${esc(d.newer.url)}">‹ Newer: ${esc(d.newer.title)}</a>` : "<span></span>"}${d.older ? `<a href="${esc(d.older.url)}">Older: ${esc(d.older.title)} ›</a>` : ""}</div>`;
     } catch (x) {
       root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><div class="panel"><div class="body empty">${x.status === 404 ? "That post doesn't exist or was removed." : esc(x.message)}</div></div>`;
@@ -1481,7 +1481,7 @@ pages.news = async () => {
   const load = async pg => {
     const d = await api(`/news?page=${pg}&per=${PER}`);
     root.innerHTML = `<section class="head"><div><h1>News</h1><div class="sub">Updates from the Fraglink team.</div></div></section>
-      <div class="panel"><div class="body nlist">${d.items.length ? d.items.map(n => `<a class="nrow" href="${esc(n.url)}"><small>${fullDate.format(new Date(n.at))}${n.pinned ? ' · <span class="pin">Pinned</span>' : ""}</small><b>${esc(n.title)}</b>${n.summary ? `<p>${esc(n.summary)}</p>` : ""}</a>`).join("") : `<p class="empty">No news yet.</p>`}</div></div>
+      <div class="panel"><div class="body nlist">${d.items.length ? d.items.map(n => `<a class="nrow${n.image ? " has-img" : ""}" href="${esc(n.url)}">${n.image ? `<img src="${esc(n.image)}" alt="" loading="lazy">` : ""}<div><small>${fullDate.format(new Date(n.at))}${n.pinned ? ' · <span class="pin">Pinned</span>' : ""}</small><b>${esc(n.title)}</b>${n.summary ? `<p>${esc(n.summary)}</p>` : ""}</div></a>`).join("") : `<p class="empty">No news yet.</p>`}</div></div>
       ${d.total > PER ? pagerHtml((d.page - 1) * PER, PER, d.total) : ""}`;
     $$(".pager [data-off]", root).forEach(b => b.addEventListener("click", () => { const p = Number(b.dataset.off) / PER + 1; history.replaceState(null, "", p > 1 ? "?page=" + p : "/news"); load(p); window.scrollTo(0, 0); }));
   };

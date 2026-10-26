@@ -734,3 +734,10 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .wu-t{width:100%;border-collapse:collapse;font-size:13px}.wu-t th,.wu-t td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.07);vertical-align:top}
 .wu-t td.num{white-space:nowrap}.wu-sort{background:none;border:0;color:inherit;font:inherit;font-weight:600;cursor:pointer;padding:0}.wu-sort.on{color:#148eff}
 .wu-scroll{overflow-x:auto}.wu-scroll .wu-t{min-width:620px}
+/* news cover images: thumbnail beside the post in lists, full width on the post page */
+.nlist a.nrow.has-img{display:flex;gap:14px;align-items:flex-start}.nlist a.nrow.has-img>div{min-width:0;flex:1}
+.nlist a.nrow.has-img>img{width:180px;height:110px;object-fit:cover;border-radius:4px;flex:none;background:#0d141c}
+.ni.has-img{display:flex;gap:10px;align-items:flex-start}.ni.has-img>div{min-width:0;flex:1}
+.ni .nimg{flex:none}.ni .nimg img{display:block;width:160px;height:90px;object-fit:cover;border-radius:3px;background:#0d141c}
+.post .post-img{display:block;width:100%;max-height:420px;object-fit:cover;border-radius:4px 4px 0 0}
+@media (max-width:640px){.nlist a.nrow.has-img,.ni.has-img{flex-direction:column}.nlist a.nrow.has-img>img,.ni .nimg,.ni .nimg img{width:100%;height:auto;aspect-ratio:16/9}}
