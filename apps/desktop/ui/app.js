@@ -1327,12 +1327,7 @@
   function hideTip() { clearTimeout(tipTimer); tipRow = null; tip.hidden = true; }
   /* Measure at the top-left (a fixed box near the right edge shrinks to the space left
      there, which wrapped tips into a thin column), then keep the whole tip in the window. */
-  function placeTip(el, x, below, above) {
-    el.style.left = '0px'; el.style.top = '0px';
-    const tw = el.offsetWidth, th = el.offsetHeight;
-    el.style.left = Math.max(2, Math.min(x, innerWidth - tw - 2)) + 'px';
-    el.style.top = Math.max(2, Math.min(below + th <= innerHeight ? below : above - th, innerHeight - th - 2)) + 'px';
-  }
+  function placeTip(el, x, below, above) { window.flPlaceTip(el, x, below, above); }
   list.addEventListener('mouseover', e => {
     const r = e.target.closest('.xf-row[data-friend]');
     if (r === tipRow) return;

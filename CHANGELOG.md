@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Tooltips no longer get cut off at the window edges (e.g. the header buttons right of Game Info). With Large/Larger text the tip was placed in unscaled pixels and grew past the edge; placement now measures the real text scale, flips left/above when there is no room and clamps on every edge, also in narrow windows. Options now uses the same in-window tip instead of native titles, so its hints are kept inside the window too.
+
+### Changed
+
+- Bolder tray icon: heavier F and swoosh that fill the 16/20/24/32 px canvas like other tray icons, dark and light variants.
+
 ## [0.3.0-beta.6] - 2026-10-26
 
 - Options > Games: new **Detected, not added** list (collapsed at the top of the tab). Programs Fraglink asked "Playing …?" about that were never answered stay there across restarts, each with **Add it!** (opens Add game manually, prefilled) and **Not a game**. Up to 200 are kept; a program drops off once it is added or marked not a game.
