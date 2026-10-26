@@ -46,6 +46,7 @@ function route() {
   const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
   const t = tab === "user" ? "users" : tab;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
+  { const tb = TABS.find(x => x[0] === t); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
   const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, settings: siteSettings, staff, user: userDetail }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
