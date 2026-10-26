@@ -194,7 +194,19 @@ async fn finish(
                     AppError::bad_request("no_code", "The sign-in didn't return a code.")
                 })?;
                 let (puid, display, token, scopes) = oauth_identity(&st, &provider, code).await?;
+                let before: Option<String> = sqlx::query_scalar(
+                    "SELECT provider_uid FROM linked_accounts WHERE user_id = $1 AND provider = $2",
+                )
+                .bind(uid)
+                .bind(&provider)
+                .fetch_optional(&st.db)
+                .await?;
                 link_oauth(&st, uid, &provider, &puid, &display).await?;
+                if provider == "bnet" && before.is_some_and(|b| b != puid) {
+                    // a different Battle.net account: the old one's characters stop counting
+                    // until the new account's list is fetched
+                    crate::wow::on_unlink(&st, uid).await;
+                }
                 if provider == "bnet" {
                     let _ = sqlx::query(
                         "UPDATE linked_accounts SET scopes = $2 WHERE user_id = $1 AND provider = 'bnet'",

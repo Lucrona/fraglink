@@ -41,6 +41,7 @@ const MAX_PLAYED_S: i64 = crate::api::IMPORT_MAX_MIN * 60;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/hours/wow_played", post(upload))
+        .route("/api/v1/hours/wow_played/file", post(upload_file))
         .route("/api/v1/me/wow", get(mine))
         .route("/api/v1/me/wow/{id}", post(set_hidden))
         .route("/api/v1/wow/verify/fetch", post(verify_fetch))
@@ -264,7 +265,7 @@ async fn flag(st: &AppState, uid: Uuid, game: &str, who: &str, r: &Reject, playe
         "INSERT INTO wow_flags(user_id, game_id, char_label, kind, played_s, detail)
          SELECT $1, $2, $3, $4, $5, $6
          WHERE NOT EXISTS (SELECT 1 FROM wow_flags WHERE user_id = $1 AND char_label = $3
-                             AND kind = $4 AND played_s = $5)",
+                             AND kind = $4 AND (played_s = $5 OR kind = 'wow_battletag'))",
     )
     .bind(uid)
     .bind(game)
@@ -299,23 +300,61 @@ async fn upload(
     Json(r): Json<UploadReq>,
 ) -> ApiResult<Json<Value>> {
     api::check_origin(&a, &headers, &st)?;
-    let Some((gid, gname)) = GAMES.iter().find(|(g, _)| *g == r.game_id) else {
+    ingest(&st, a.user.id, &r.game_id, &r.characters)
+        .await
+        .map(Json)
+}
+
+#[derive(Deserialize)]
+struct FileReq {
+    game_id: String,
+    /// The text of a `FraglinkPlayed.lua` SavedVariables file.
+    text: String,
+}
+
+/// Biggest `FraglinkPlayed.lua` the website takes (200 characters is about 60 KB).
+pub const MAX_FILE_BYTES: usize = 1024 * 1024;
+
+/// The website's manual upload: the same file the app reads, through the same checks.
+async fn upload_file(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<FileReq>,
+) -> ApiResult<Json<Value>> {
+    api::check_origin(&a, &headers, &st)?;
+    if r.text.len() > MAX_FILE_BYTES {
+        return Err(AppError::bad_request(
+            "too_big",
+            "That file is over 1 MB. Pick FraglinkPlayed.lua from SavedVariables.",
+        ));
+    }
+    let chars = fraglink_core::wow_played::entries_from_saved(&r.text);
+    if chars.is_empty() {
+        return Err(AppError::bad_request(
+            "no_characters",
+            "No Fraglink /played entries in that file. Pick FraglinkPlayed.lua, and log out of WoW (or /reload) first so the game saves it.",
+        ));
+    }
+    let mut v = ingest(&st, a.user.id, &r.game_id, &chars).await?;
+    v["found"] = chars.len().into();
+    Ok(Json(v))
+}
+
+/// Check and store one batch of entries (the app's upload and the website's file upload).
+async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) -> ApiResult<Value> {
+    let Some((gid, gname)) = GAMES.iter().find(|(g, _)| *g == game_id) else {
         return Err(AppError::bad_request(
             "invalid_game",
             "game_id is wow or wow_forever",
         ));
     };
-    if r.characters.len() > 200 {
+    if chars.len() > 200 {
         return Err(AppError::bad_request("too_many", "At most 200 characters."));
     }
-    st.rate_limit(
-        format!("wow_played:{}", a.user.id),
-        30,
-        Duration::from_secs(3600),
-    )?;
-    let uid = a.user.id;
+    st.rate_limit(format!("wow_played:{uid}"), 30, Duration::from_secs(3600))?;
     let now = Utc::now().timestamp();
-    let link = bnet_link(&st, uid).await?;
+    let link = bnet_link(st, uid).await?;
     sqlx::query("INSERT INTO games(id, name) VALUES($1, $2) ON CONFLICT (id) DO NOTHING")
         .bind(gid)
         .bind(gname)
@@ -323,7 +362,8 @@ async fn upload(
         .await?;
     let mut accepted = 0;
     let mut rejected = Vec::new();
-    for e in &r.characters {
+    let mut unchanged = Vec::new();
+    for e in chars {
         let who = label(e);
         let slug = realm_slug(&e.realm);
         let prev: Option<(Uuid, i64, DateTime<Utc>)> = sqlx::query_as(
@@ -347,22 +387,28 @@ async fn upload(
         match checked {
             Err(x) => {
                 if x.flag {
-                    flag(&st, uid, gid, &who, &x, e.played).await;
+                    flag(st, uid, gid, &who, &x, e.played).await;
                 }
-                rejected.push(json!({ "character": who, "reason": x.kind, "detail": x.detail }));
+                rejected.push(json!({ "character": who, "name": e.name, "realm": e.realm,
+                    "region": e.region, "class": e.class, "level": e.level,
+                    "played_min": e.played / 60, "reason": x.kind, "detail": x.detail }));
                 continue;
             }
-            Ok(false) => continue,
+            Ok(false) => {
+                unchanged.push(json!({ "character": who }));
+                continue;
+            }
             Ok(true) => {}
         }
         let at = Utc.timestamp_opt(e.at, 0).single().unwrap_or_else(Utc::now);
         let id: Uuid = sqlx::query_scalar(
             "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class,
-                                        level, played_s, played_at)
-             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                                        level, played_s, played_at, battletag)
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              ON CONFLICT (user_id, game_id, region, lower(realm), lower(name)) DO UPDATE
                SET class = excluded.class, level = excluded.level, played_s = excluded.played_s,
-                   played_at = excluded.played_at, uploaded_at = now(), realm_slug = excluded.realm_slug
+                   played_at = excluded.played_at, uploaded_at = now(), realm_slug = excluded.realm_slug,
+                   battletag = excluded.battletag
              RETURNING id",
         )
         .bind(Uuid::new_v4())
@@ -376,6 +422,7 @@ async fn upload(
         .bind(e.level as i32)
         .bind(e.played)
         .bind(at)
+        .bind(e.battletag.chars().take(64).collect::<String>())
         .fetch_one(&st.db)
         .await?;
         sqlx::query("INSERT INTO wow_played_snaps(char_id, played_s, at) VALUES($1, $2, $3) ON CONFLICT DO NOTHING")
@@ -384,24 +431,11 @@ async fn upload(
             .bind(at)
             .execute(&st.db)
             .await?;
-        // verified: on the linked account, and the addon saw that account's BattleTag
-        let tag_ok = link
-            .as_ref()
-            .is_some_and(|l| e.battletag.eq_ignore_ascii_case(&l.0));
-        sqlx::query(
-            "UPDATE wow_characters c SET verified = $2 AND EXISTS (
-                 SELECT 1 FROM bnet_characters b WHERE b.user_id = c.user_id AND b.game_id = c.game_id
-                    AND b.region = c.region AND b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name))
-             WHERE c.id = $1",
-        )
-        .bind(id)
-        .bind(tag_ok)
-        .execute(&st.db)
-        .await?;
-        check_bnet_level(&st, uid, gid, id, e).await;
+        reverify_one(st, id).await;
+        check_bnet_level(st, uid, gid, id, e).await;
         accepted += 1;
     }
-    let total_min = record_total(&st, uid, gid).await?;
+    let total_min = record_total(st, uid, gid).await?;
     let verified: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM wow_characters WHERE user_id = $1 AND game_id = $2 AND verified",
     )
@@ -414,10 +448,10 @@ async fn upload(
         Some((_, false)) => "reconnect",
         Some((_, true)) => "linked",
     };
-    Ok(Json(
-        json!({ "accepted": accepted, "rejected": rejected, "total_min": total_min,
-                    "verified": verified, "bnet": bnet }),
-    ))
+    Ok(
+        json!({ "accepted": accepted, "rejected": rejected, "unchanged": unchanged,
+               "total_min": total_min, "verified": verified, "bnet": bnet }),
+    )
 }
 
 /// Store the game's total (sum of all its characters) when it changed.
@@ -568,21 +602,38 @@ pub async fn sync_characters(
     Some(rows.into_iter().map(|r| (r.0, r.1)).collect())
 }
 
-/// Recompute `verified` for all of a user's characters (after link / unlink). A
-/// character stays verified only while it is on the linked account; the BattleTag
-/// check was made when its entry was accepted.
-pub async fn reverify(st: &AppState, uid: Uuid) {
+/// A character is verified while it is on the linked Battle.net account (`wow.profile`
+/// list) and its latest accepted entry was saved under that account's BattleTag. Several
+/// WoW licences on one Battle.net (WoW1, WoW2) share the BattleTag, so all of them count.
+async fn reverify_one(st: &AppState, id: Uuid) {
+    set_verified(st, Some(id), None).await;
+}
+
+/// A character is verified while it is on the linked Battle.net account (its `wow.profile`
+/// list) and its latest accepted entry was saved under that account's BattleTag. Several
+/// WoW licences on one Battle.net (WoW1, WoW2) share the BattleTag, so all of them count.
+async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>) {
     let _ = sqlx::query(
         "UPDATE wow_characters c SET verified = EXISTS (
              SELECT 1 FROM bnet_characters b WHERE b.user_id = c.user_id AND b.game_id = c.game_id
                 AND b.region = c.region AND b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name))
             AND EXISTS (SELECT 1 FROM linked_accounts l WHERE l.user_id = c.user_id
-                           AND l.provider = 'bnet' AND l.verified)
-         WHERE c.user_id = $1",
+                           AND l.provider = 'bnet' AND l.verified AND c.battletag <> ''
+                           AND lower(l.display) = lower(c.battletag))
+         WHERE ($1::uuid IS NULL OR c.id = $1) AND ($2::uuid IS NULL OR c.user_id = $2)
+           AND ($1::uuid IS NOT NULL OR $2::uuid IS NOT NULL)",
     )
+    .bind(id)
     .bind(uid)
     .execute(&st.db)
     .await;
+}
+
+/// Recompute `verified` for all of a user's characters (after link / unlink). A
+/// character stays verified only while it is on the linked account; the BattleTag
+/// check was made when its entry was accepted.
+pub async fn reverify(st: &AppState, uid: Uuid) {
+    set_verified(st, None, Some(uid)).await;
 }
 
 /// Battle.net unlinked: forget its characters; nothing counts on leaderboards any more.

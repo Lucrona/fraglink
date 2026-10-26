@@ -397,6 +397,86 @@ function startFriendsLive() {
 const BRAND = { steam: ["Steam", "#66c0f4", "M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"], bnet: ["Battle.net", "#148eff", "M18.94 8.296C15.9 6.892 11.534 6 7.426 6.332c.206-1.36.714-2.308 1.548-2.508 1.148-.275 2.4.48 3.594 1.854.782.102 1.71.28 2.355.429C12.747 2.013 9.828-.282 7.607.565c-1.688.644-2.553 2.97-2.448 6.094-2.2.468-3.915 1.3-5.013 2.495-.056.065-.181.227-.137.305.034.058.146-.008.194-.04 1.274-.89 2.904-1.373 5.027-1.676.303 3.333 1.713 7.56 4.055 10.952-1.28.502-2.356.536-2.946-.087-.812-.856-.784-2.318-.19-4.04a26.764 26.764 0 0 1-.807-2.254c-2.459 3.934-2.986 7.61-1.143 9.11 1.402 1.14 3.847.725 6.502-.926 1.505 1.672 3.083 2.74 4.667 3.094.084.015.287.043.332-.034.034-.06-.08-.124-.131-.149-1.408-.657-2.64-1.828-3.964-3.515 2.735-1.929 5.691-5.263 7.457-8.988 1.076.86 1.64 1.773 1.398 2.595-.336 1.131-1.615 1.84-3.403 2.185a27.697 27.697 0 0 1-1.548 1.826c4.634.16 8.08-1.22 8.458-3.565.286-1.786-1.295-3.696-4.053-5.17.696-2.139.832-4.04.346-5.588-.029-.08-.106-.27-.196-.27-.068 0-.067.13-.063.187.135 1.547-.263 3.2-1.062 5.19zm-8.533 9.869c-1.96-3.145-3.09-6.849-3.082-10.594 3.702-.124 7.474.748 10.714 2.627-1.743 3.269-4.385 6.1-7.633 7.966h.001z"], discord: ["Discord", "#5865f2", "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"] };
 const pages = {};
 
+/* ---------- /connect/wow: upload FraglinkPlayed.lua by hand, same checks as the app ---------- */
+pages.wowupload = async () => {
+  const el = $("#wu");
+  if (!token()) { location.href = "/login?next=" + encodeURIComponent(location.pathname); return; }
+  const b = BRAND.bnet, logo = `<svg viewBox="0 0 24 24" width="34" height="34" fill="${b[1]}" aria-hidden="true"><path d="${b[2]}"/></svg>`;
+  const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
+  const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
+  el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
+    <p class="sub">The Fraglink app sends this for you after you close WoW. If you play on another PC or the app isn't running, upload the file here. It goes through the same checks.</p></div></div>
+    <form class="wu-form" data-form>
+      <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
+      <div class="wu-row"><span class="wu-l">File</span><input type="file" name="f" accept=".lua" required> <button class="btn blue" type="submit">Upload and check</button></div>
+      <details class="wu-help"><summary>Where is FraglinkPlayed.lua?</summary>
+        <p>Log out of WoW (or type <code>/reload</code>) first so the game saves it, then open:</p>
+        <p><code>World of Warcraft\\_retail_\\WTF\\Account\\&lt;ACCOUNT&gt;\\SavedVariables\\FraglinkPlayed.lua</code></p>
+        <p class="sub">For Forever use the <code>_forever_</code> folder instead of <code>_retail_</code>. If you have several WoW accounts there (WoW1, WoW2, or a family member's), upload each account's file. Characters from a Battle.net account other than the one you linked are refused.</p></details>
+    </form>
+    <ol class="bv-steps" data-steps hidden>${STEPS.map(([k, t]) => `<li data-s="${k}"><span class="bv-ic"></span><b>${t}</b><small></small></li>`).join("")}</ol>
+    <div data-res></div>`;
+  const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
+  const res = $("[data-res]", el), form = $("[data-form]", el), steps = $("[data-steps]", el);
+  const R = { wow_checksum: "Edited after the game saved it", wow_battletag: "From a different Battle.net account", wow_old_addon: "Addon too old, update it",
+    wow_decrease: "/played went down", wow_impossible: "/played grew faster than real time", wow_clock: "Saved with a wrong clock" };
+  let rows = [], sortBy = "played", dir = -1, showAll = false, totals = null;
+  const CAP = 25;
+  const STATUS = { v: [0, "vbadge", "✓ Verified via Battle.net"], s: [1, "srbadge", "◆ Self-reported"], r: [2, "badbadge", "✕ Rejected"] };
+  const draw = () => {
+    if (!totals) return;
+    const key = { name: r => r.name.toLowerCase(), realm: r => r.realm.toLowerCase(), level: r => r.level || 0, played: r => r.played_min, status: r => STATUS[r.st][0] }[sortBy];
+    const list = rows.slice().sort((a, c) => { const x = key(a), y = key(c); return (x < y ? -1 : x > y ? 1 : 0) * dir || c.played_min - a.played_min; });
+    const shown = showAll ? list : list.slice(0, CAP);
+    const th = (k, t) => `<th><button type="button" data-sort="${k}" class="wu-sort${sortBy === k ? " on" : ""}">${t}${sortBy === k ? (dir < 0 ? " ▾" : " ▴") : ""}</button></th>`;
+    const cls = c => c ? c.charAt(0) + c.slice(1).toLowerCase().replace(/knight$/, " Knight").replace(/hunter$/, " Hunter") : "";
+    res.innerHTML = `<h3>Results</h3>
+      <div class="wu-tot"><div><b>${hours(totals.verified, { zero: true })}</b><small>Verified via Battle.net (counts on leaderboards)</small></div><div><b>${hours(totals.all, { zero: true })}</b><small>All characters (shown on your profile)</small></div></div>
+      ${rows.length ? `<div class="wu-scroll"><table class="wu-t"><thead><tr>${th("name", "Character")}${th("realm", "Realm")}${th("level", "Class / level")}${th("played", "Hours played")}${th("status", "Status")}</tr></thead><tbody>
+      ${shown.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.realm)} <span class="sub">${esc(r.region.toUpperCase())}${r.game_id === "wow_forever" ? " · Forever" : ""}</span></td>
+        <td>${esc([cls(r.class), r.level ? "level " + r.level : ""].filter(Boolean).join(" · ")) || `<span class="sub">–</span>`}</td>
+        <td class="num">${hours(r.played_min)}</td><td><span class="${STATUS[r.st][1]}">${STATUS[r.st][2]}</span>${r.why ? `<br><small class="sub">${esc(r.why)}</small>` : ""}</td></tr>`).join("")}</tbody></table></div>
+      ${list.length > CAP ? `<p><button class="btn sm" type="button" data-more>${showAll ? "Show fewer" : `Show all ${plural(list.length, "character")}`}</button></p>` : ""}` : `<p class="sub">No characters uploaded yet.</p>`}
+      <p class="sub">Self-reported characters show on your profile but don't count on leaderboards. A character verifies when Battle.net lists it on your linked account and the file was saved under that account's BattleTag.</p>
+      <p><a class="btn" href="/connect/battlenet/verify">🔒 Verify with Battle.net</a> <a class="btn" href="/settings#connections">Back to Connections</a></p>`;
+  };
+  res.addEventListener("click", e => {
+    const s = e.target.closest("[data-sort]");
+    if (s) { const k = s.dataset.sort; dir = sortBy === k ? -dir : (k === "played" || k === "level" ? -1 : 1); sortBy = k; draw(); return; }
+    if (e.target.closest("[data-more]")) { showAll = !showAll; draw(); }
+  });
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = form.f.files[0]; if (!f) return;
+    const btn = $("button[type=submit]", form); btn.disabled = true;
+    steps.hidden = false; res.innerHTML = ""; STEPS.forEach(([k]) => step(k, "", ""));
+    const fail = (k, x) => { step(k, "bad", x.message || String(x)); btn.disabled = false; };
+    step("read", "run");
+    if (f.size > 1024 * 1024) return fail("read", new Error("That file is over 1 MB. Pick FraglinkPlayed.lua from SavedVariables."));
+    let text;
+    try { text = await f.text(); } catch (x) { return fail("read", new Error("Couldn't read that file.")); }
+    if (!/FraglinkPlayedDB/.test(text)) return fail("read", new Error("That isn't a FraglinkPlayed.lua file."));
+    step("read", "ok", `${f.name} · ${nf.format(Math.ceil(f.size / 1024))} KB`);
+    step("send", "run");
+    let u;
+    try { u = await api("/hours/wow_played/file", { method: "POST", body: { game_id: form.game.value, text } }); }
+    catch (x) { return fail(x.code === "no_characters" || x.code === "too_big" ? "read" : "send", x); }
+    step("send", "ok", "Received");
+    const rej = u.rejected.length, unch = u.unchanged.length;
+    step("check", rej ? "warn" : "ok", [plural(u.found, "character") + " in the file", u.accepted ? `${nf.format(u.accepted)} updated` : "", unch ? `${nf.format(unch)} already up to date` : "", rej ? `${nf.format(rej)} rejected` : ""].filter(Boolean).join(" · "));
+    step("match", "run");
+    let m;
+    try { m = await api("/me/wow"); } catch (x) { return fail("match", x); }
+    const game = form.game.value, mine = m.characters.filter(c => c.game_id === game);
+    const nv = mine.filter(c => c.verified).length;
+    step("match", m.bnet === "linked" ? "ok" : "warn", m.bnet === "none" ? "Battle.net isn't linked, so these stay self-reported" : m.bnet === "reconnect" ? "Reconnect Battle.net to verify characters" : `${nf.format(nv)} of ${plural(mine.length, "character")} verified`);
+    rows = mine.map(c => ({ ...c, st: c.verified ? "v" : "s" }))
+      .concat(u.rejected.map(r => ({ ...r, game_id: game, st: "r", why: R[r.reason] || r.detail })));
+    totals = { verified: mine.filter(c => c.verified).reduce((a, c) => a + c.played_min, 0), all: mine.reduce((a, c) => a + c.played_min, 0) };
+    showAll = false; draw(); btn.disabled = false; form.reset(); form.game.value = game;
+  });
+};
+
 /* ---------- /connect/battlenet/verify: the real verification steps, shown as they run ---------- */
 pages.bnetverify = async () => {
   const el = $("#bv");
@@ -1183,7 +1263,7 @@ pages.settings = async () => {
       ${card("steam", "S", c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
       ${card("discord", "D", "Show your Discord name on your profile.")}
       ${card("bnet", "B", "Show your BattleTag on your profile.")}
-      ${c.bnet && c.bnet.linked ? `<div class="conn-sub">${c.bnet.needs_reconnect ? `<span class="sub warn">Reconnect Battle.net to verify characters.</span> ` : ""}<a class="btn sm blue" href="/connect/battlenet/verify">🔒 Verify WoW characters</a></div>` : ""}
+      ${c.bnet && c.bnet.linked ? `<div class="conn-sub">${c.bnet.needs_reconnect ? `<span class="sub warn">Reconnect Battle.net to verify characters.</span> ` : ""}<a class="btn sm blue" href="/connect/battlenet/verify">🔒 Verify WoW characters</a> <a class="btn sm" href="/connect/wow">Upload /played</a></div>` : `<div class="conn-sub"><a class="btn sm" href="/connect/wow">Upload WoW /played</a></div>`}
       <p class="sub" style="padding:8px 0">Verified accounts show as badges on your profile. You're sent to the provider's own sign-in page; Fraglink never sees your password there.</p></div>`;
     if (q.get("connected")) { ok(box, `${NAMES[q.get("connected")] || "Account"} linked.`); history.replaceState(null, "", "/settings#connections"); }
     else if (q.get("connect_error")) { bad(box, new Error(q.get("connect_error") === "expired" ? "That link expired. Try again." : q.get("connect_error") === "cancelled" ? "Linking was cancelled." : q.get("connect_error"))); history.replaceState(null, "", "/settings#connections"); }
@@ -1440,7 +1520,7 @@ function applyFeatures() {
 const CRUMBS = { download: [["Download", "/download"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
   login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
   settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
-  verify: [["Confirm your email"]], bnetverify: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Verify WoW characters"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
+  verify: [["Confirm your email"]], wowupload: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Upload WoW /played"]], bnetverify: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Verify WoW characters"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
 function setCrumb(parts) {
   const nav = document.getElementById("ycrumb"); if (!nav || !parts) return;
   const all = [["Home", "/"], ...parts];
