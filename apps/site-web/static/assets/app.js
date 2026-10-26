@@ -1268,7 +1268,9 @@ pages.settings = async () => {
 
 /* ---------- unconfirmed email banner (doesn't block anything) ---------- */
 function verifyBar() {
-  const u = me(); if (!u || !u.email || u.email_verified || $(".verify-bar") || sessionStorage.getItem("fl_vb_closed")) return;
+  const u = me();
+  if (u && u.email_verified) { const old = $(".verify-bar"); if (old) old.remove(); }
+  if (!u || !u.email || u.email_verified || $(".verify-bar") || sessionStorage.getItem("fl_vb_closed")) return;
   const d = document.createElement("div"); d.className = "verify-bar";
   d.innerHTML = `<div class="wrap"><span>Please confirm your email address (${esc(u.email)}).${u.mail_live ? "" : " Confirmation emails are switched on soon; you can keep using Fraglink meanwhile."}</span>${u.mail_live ? `<button type="button" data-vb-send>Send the link again</button>` : ""}<button type="button" data-vb-x style="margin-left:auto">Hide</button></div>`;
   d.addEventListener("click", async e => {
