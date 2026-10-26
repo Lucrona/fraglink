@@ -1733,7 +1733,7 @@ const WOWPOP = (() => {
     const col = CC[d.class_id] || "#eef2f6", mp = d.mplus || {}, pv = d.pvp || {}, rd = d.raids || {}, co = d.collections || {}, pr = d.professions || [];
     const stat = (l, v) => `<div class="cp-st"><small>${l}</small><b>${v}</b></div>`;
     const rr = rd.current && rd.current.instances.length ? { t: rd.current.expansion, r: rd.current } : rd.recent && rd.recent.instances.length ? { t: "Most recent progress · " + rd.recent.expansion, r: rd.recent } : null;
-    return `<div class="cp-hd" style="--cc:${col}">${d.render ? `<img class="cp-rd" src="/api/v1/users/${encodeURIComponent(c.handle)}/wow/${encodeURIComponent(c.id)}/render.png" alt="" ${imgOk}>` : ""}<div class="cp-who">
+    return `<div class="cp-hd" style="--cc:${col}">${d.render ? `<img class="cp-rd" alt="" hidden>` : ""}<div class="cp-who">
       ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
       <div class="sub">Level ${d.level} ${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
       <div class="sub">${esc(d.realm)} ${esc(d.region.toUpperCase())}${d.faction ? ` · <span class="cp-f ${esc(d.faction.toLowerCase())}">${esc(d.faction)}</span>` : ""}</div>
@@ -1756,7 +1756,10 @@ const WOWPOP = (() => {
     document.addEventListener("keydown", key); history.pushState({ wowpop: 1 }, ""); pushed = true;
     $(".cp-x", box).focus();
     const me = box;
-    try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box === me) $(".cp-in", box).innerHTML = body(d, { ...c, handle }); }
+    try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box !== me) return; $(".cp-in", box).innerHTML = body(d, { ...c, handle });
+      const im = $(".cp-rd", box);
+      if (im) { const t = localStorage.getItem(TK), r = await fetch(`${API}/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}/render.png`, { headers: t ? { authorization: "Bearer " + t } : {} });
+        if (r.ok && box === me) { im.src = URL.createObjectURL(await r.blob()); im.onload = () => URL.revokeObjectURL(im.src); im.hidden = false; } } }
     catch (x) { if (box === me) $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load character details right now. Try again in a minute.</p>`; }
   };
   return { open, close };
