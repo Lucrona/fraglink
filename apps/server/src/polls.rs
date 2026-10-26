@@ -26,6 +26,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/polls", get(admin_list).post(create))
         .route("/api/v1/admin/polls/{id}/activate", post(activate))
         .route("/api/v1/admin/polls/{id}/close", post(close))
+        .route("/api/v1/admin/polls/{id}/delete", post(delete))
 }
 
 const COUNTED: &str =
@@ -318,6 +319,33 @@ async fn close(
         &format!("poll:{id}"),
         Value::Null,
         json!({"closed": true}),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// Delete a poll with its options and votes (the audit log keeps the question).
+async fn delete(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<i64>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let q: Option<String> =
+        sqlx::query_scalar("DELETE FROM polls WHERE id = $1 RETURNING question")
+            .bind(id)
+            .fetch_optional(&st.db)
+            .await?;
+    let Some(q) = q else {
+        return Err(AppError::not_found());
+    };
+    audit(
+        &st,
+        &s,
+        "poll.delete",
+        &format!("poll:{id}"),
+        json!({ "question": q }),
+        Value::Null,
     )
     .await?;
     Ok(Json(json!({ "ok": true })))

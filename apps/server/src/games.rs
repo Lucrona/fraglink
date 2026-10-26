@@ -440,6 +440,8 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         .filter(|o| !o.hidden)
         .filter_map(|o| o.name.as_ref().map(|n| (&o.game_id, n)))
         .collect();
+    let hinted: Vec<&crate::game_overrides::GameOverride> =
+        ov.values().filter(|o| !o.path_hints.is_empty()).collect();
     let detached = crate::retire::detached_exes(st).await?;
     let merged = crate::detection_aliases::merged(st).await?;
     let fixups = crate::detection_aliases::load(st).await?;
@@ -449,6 +451,7 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         && detached.is_empty()
         && merged.is_empty()
         && fixups.is_empty()
+        && hinted.is_empty()
     {
         return Ok(s);
     }
@@ -503,6 +506,36 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
             channel: None,
             note: Some("extra exe names".into()),
         });
+    }
+    // Admin folder hints: the game's programs count as it only inside these folders
+    // (first, so they win over a plain exe rule another game shares)
+    let mut hinted = hinted;
+    hinted.sort_by(|a, b| b.game_id.cmp(&a.game_id));
+    for o in hinted {
+        let exes: Vec<String> = crate::retire::all_exes(st, &o.game_id)
+            .await?
+            .into_iter()
+            .filter(|e| valid_exe(e))
+            .collect();
+        if exes.is_empty() {
+            continue;
+        }
+        let name = o
+            .name
+            .clone()
+            .or_else(|| crate::names::list_name(st, &o.game_id))
+            .unwrap_or_else(|| o.game_id.clone());
+        f.rules.insert(
+            0,
+            overrides::Rule {
+                id: o.game_id.clone(),
+                name,
+                exes,
+                paths: o.path_hints.clone(),
+                channel: None,
+                note: Some("folder hints by staff".into()),
+            },
+        );
     }
     // partly retired games: the detached programs get rules of their own (new entries)
     for (game, exe) in &detached {

@@ -122,6 +122,14 @@ pub fn routes() -> Router<AppState> {
             post(avatar_remove),
         )
         .route("/api/v1/admin/users/{id}/mfa/reset", post(mfa_reset))
+        .route(
+            "/api/v1/admin/users/{id}/verify/resend",
+            post(verify_resend),
+        )
+        .route("/api/v1/admin/users/{id}/verify/set", post(verify_set))
+        .route("/api/v1/admin/users/{id}/test", post(set_test))
+        .route("/api/v1/admin/users/{id}/reset_link", post(reset_link))
+        .route("/api/v1/admin/games/{id}/steam_check", get(steam_check))
 }
 
 static STARTED: OnceLock<std::time::Instant> = OnceLock::new();
@@ -763,6 +771,7 @@ async fn games_search(
                     .as_deref()
                     .is_some_and(|n| n.to_lowercase().contains(&term))
                     || o.extra_exes.iter().any(|e| e.contains(&term))
+                    || o.aliases.iter().any(|a| a.to_lowercase().contains(&term))
                 {
                     ids.push(id.clone());
                 }
@@ -821,6 +830,7 @@ async fn game_detail(
     v["sessions"] = json!(sessions);
     v["deletable"] = json!(deletable(&v));
     v["art_source"] = json!(crate::art::source_of(&st, &id).await);
+    v["detection"] = detection_of(&st, &id).await?;
     Ok(Json(v))
 }
 
@@ -832,6 +842,46 @@ struct GameSave {
     hidden: bool,
     #[serde(default)]
     extra_exes: Vec<String>,
+    /// None = keep the stored list
+    #[serde(default)]
+    aliases: Option<Vec<String>>,
+    #[serde(default)]
+    path_hints: Option<Vec<String>>,
+}
+
+/// Clean a staff-typed list: trimmed, no blanks or duplicates, capped.
+fn clean_list(v: &[String], max_len: usize, max_n: usize, what: &str) -> ApiResult<Vec<String>> {
+    let mut out: Vec<String> = Vec::new();
+    for x in v {
+        let x = clean(x, max_len + 1);
+        if x.is_empty() {
+            continue;
+        }
+        if x.chars().count() > max_len {
+            return Err(bad(
+                "too_long",
+                &format!("{what} are up to {max_len} characters."),
+            ));
+        }
+        if !out.iter().any(|o| o.eq_ignore_ascii_case(&x)) {
+            out.push(x);
+        }
+    }
+    if out.len() > max_n {
+        return Err(bad("too_many", &format!("Up to {max_n} {what}.")));
+    }
+    Ok(out)
+}
+
+/// `World of Warcraft\_retail_` / `/wow/` -> `/world of warcraft/_retail_/` (the form the
+/// app compares against lowercased, slash-normalised full paths).
+fn norm_hint(h: &str) -> Option<String> {
+    let t = h.trim().replace('\\', "/").to_lowercase();
+    let t = t.trim_matches('/');
+    if t.is_empty() || t.contains(':') || t.contains("..") || t.chars().any(char::is_control) {
+        return None;
+    }
+    Some(format!("/{t}/"))
 }
 
 async fn game_save(
@@ -868,24 +918,56 @@ async fn game_save(
         return Err(bad("too_many", "Up to 20 extra exe names."));
     }
     let before = game_overrides::current(&st).await?.get(&id).cloned();
+    let aliases = match &r.aliases {
+        Some(a) => clean_list(a, 80, 20, "other names")?,
+        None => before
+            .as_ref()
+            .map(|b| b.aliases.clone())
+            .unwrap_or_default(),
+    };
+    let hints = match &r.path_hints {
+        Some(h) => {
+            let mut out = Vec::new();
+            for x in clean_list(h, 120, 10, "folder hints")? {
+                let n = norm_hint(&x).ok_or_else(|| {
+                    bad(
+                        "invalid_hint",
+                        &format!("{x:?} isn't a folder name like World of Warcraft/_retail_."),
+                    )
+                })?;
+                if !out.contains(&n) {
+                    out.push(n);
+                }
+            }
+            out
+        }
+        None => before
+            .as_ref()
+            .map(|b| b.path_hints.clone())
+            .unwrap_or_default(),
+    };
     sqlx::query(
-        "INSERT INTO game_overrides(game_id, name, hidden, extra_exes, updated_by)
-         VALUES($1, $2, $3, $4, $5)
+        "INSERT INTO game_overrides(game_id, name, hidden, extra_exes, updated_by, aliases, path_hints)
+         VALUES($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (game_id) DO UPDATE SET name = excluded.name, hidden = excluded.hidden,
-           extra_exes = excluded.extra_exes, updated_at = now(), updated_by = excluded.updated_by",
+           extra_exes = excluded.extra_exes, aliases = excluded.aliases, path_hints = excluded.path_hints,
+           updated_at = now(), updated_by = excluded.updated_by",
     )
     .bind(&id)
     .bind(&name)
     .bind(r.hidden)
     .bind(&exes)
     .bind(s.user.id)
+    .bind(&aliases)
+    .bind(&hints)
     .execute(&st.db)
     .await?;
     // nothing left to keep: drop the row
     sqlx::query(
         "DELETE FROM game_overrides WHERE game_id = $1 AND name IS NULL AND NOT hidden
            AND extra_exes = '{}' AND NOT has_icon
-           AND icon_pref IS NULL AND art_pref IS NULL AND steam_appid IS NULL",
+           AND icon_pref IS NULL AND art_pref IS NULL AND steam_appid IS NULL
+           AND aliases = '{}' AND path_hints = '{}'",
     )
     .bind(&id)
     .execute(&st.db)
@@ -1228,7 +1310,8 @@ async fn game_icon_delete(
     sqlx::query(
         "DELETE FROM game_overrides WHERE game_id = $1 AND name IS NULL AND NOT hidden
            AND extra_exes = '{}' AND NOT has_icon
-           AND icon_pref IS NULL AND art_pref IS NULL AND steam_appid IS NULL",
+           AND icon_pref IS NULL AND art_pref IS NULL AND steam_appid IS NULL
+           AND aliases = '{}' AND path_hints = '{}'",
     )
     .bind(&id)
     .execute(&st.db)
@@ -1430,6 +1513,8 @@ async fn user_detail(
         "is_minor": minor, "minor_set_at": minor_set_at, "age_review_at": age_review_at,
         "birth_date": birth_date,
         "hours_flag_at": hours_flag_at, "hours_flag_reason": hours_flag_reason,
+        "is_test": is_test(&st, id).await?,
+        "mail_live": crate::mailer::live(&st),
         "linked": linked.into_iter().map(|(p, d, v)| json!({"provider": p, "display": d, "verified": v})).collect::<Vec<_>>(),
     })))
 }
@@ -2547,6 +2632,18 @@ mod tests {
     }
 
     #[test]
+    fn folder_hints() {
+        assert_eq!(
+            norm_hint("World of Warcraft\\_retail_").as_deref(),
+            Some("/world of warcraft/_retail_/")
+        );
+        assert_eq!(norm_hint("/wow/").as_deref(), Some("/wow/"));
+        assert_eq!(norm_hint("C:/x"), None);
+        assert_eq!(norm_hint("../x"), None);
+        assert_eq!(norm_hint(" / "), None);
+    }
+
+    #[test]
     fn temp_passwords() {
         let p = temp_password();
         assert_eq!(p.len(), 17);
@@ -3560,4 +3657,260 @@ async fn alerts_test(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Val
     let mut v = crate::alerts::admin_view(&st).await?;
     v["test_sent"] = json!(ok);
     Ok(Json(v))
+}
+
+// ------------------------------------------------------------------ admin batch 1
+
+pub(crate) async fn is_test(st: &AppState, id: Uuid) -> ApiResult<bool> {
+    Ok(
+        sqlx::query_scalar("SELECT is_test FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_one(&st.db)
+            .await?,
+    )
+}
+
+/// Where a game's detection comes from, rule by rule, with who changed what and when.
+async fn detection_of(st: &AppState, id: &str) -> ApiResult<Value> {
+    type RuleRow = (
+        i64,
+        String,
+        String,
+        Option<String>,
+        DateTime<Utc>,
+        Option<String>,
+    );
+    let rules: Vec<RuleRow> = sqlx::query_as(
+        "SELECT d.id, d.kind, d.pattern, d.note, d.updated_at, u.handle FROM detection_aliases d
+         LEFT JOIN users u ON u.id = d.updated_by WHERE d.game_id = $1 ORDER BY d.kind, d.pattern",
+    )
+    .bind(id)
+    .fetch_all(&st.db)
+    .await?;
+    let edited: Option<(DateTime<Utc>, Option<String>)> = sqlx::query_as(
+        "SELECT o.updated_at, u.handle FROM game_overrides o LEFT JOIN users u ON u.id = o.updated_by WHERE o.game_id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let jobs: Vec<(String, DateTime<Utc>, Option<DateTime<Utc>>)> =
+        sqlx::query_as("SELECT job, last_run_at, last_ok_at FROM job_runs ORDER BY job")
+            .fetch_all(&st.db)
+            .await?;
+    let sig = st.sigs.get(id).map(|g| {
+        json!({ "exes": g.exes, "path_exes": g.path_exes, "path_hints": g.path_hints, "steam_appids": g.steam_appids })
+    });
+    let patterns: Vec<Value> = crate::games::rename_patterns(st, id)
+        .into_iter()
+        .map(|(e, p)| json!({ "exes": e, "paths": p }))
+        .collect();
+    Ok(json!({
+        "fixups": rules.into_iter().map(|(i, k, p, n, at, by)| json!({ "id": i, "kind": k, "pattern": p, "note": n, "updated_at": at, "updated_by": by })).collect::<Vec<_>>(),
+        "edited": edited.map(|(at, by)| json!({ "at": at, "by": by })),
+        "jobs": jobs.into_iter().map(|(j, r, o)| json!({ "job": j, "last_run_at": r, "last_ok_at": o })).collect::<Vec<_>>(),
+        "builtin": sig,
+        "list_patterns": patterns,
+        "in_games_list": st.games.detectable_name(id).is_some(),
+    }))
+}
+
+/// Check each Steam app id linked to a game against the Steam store.
+async fn steam_check(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let g = game_info(&st, &id).await?.ok_or_else(AppError::not_found)?;
+    let ids: Vec<u64> = g["steam_appids"]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_u64).take(5).collect())
+        .unwrap_or_default();
+    let base = std::env::var("FRAGLINK_STEAM_STORE")
+        .unwrap_or_else(|_| "https://store.steampowered.com".into());
+    let http = reqwest::Client::new();
+    let mut out = Vec::new();
+    for a in ids {
+        let r = http
+            .get(format!("{base}/api/appdetails"))
+            .query(&[
+                ("appids", a.to_string()),
+                ("filters", "basic".into()),
+                ("cc", "US".into()),
+            ])
+            .timeout(std::time::Duration::from_secs(8))
+            .send()
+            .await;
+        let v: Option<Value> = match r {
+            Ok(r) if r.status().is_success() => r.json().await.ok(),
+            _ => None,
+        };
+        let d = v.as_ref().map(|v| &v[a.to_string()]);
+        let ok = d.and_then(|d| d["success"].as_bool());
+        out.push(json!({
+            "appid": a,
+            "reachable": v.is_some(),
+            "found": ok.unwrap_or(false),
+            "name": d.and_then(|d| d["data"]["name"].as_str()),
+            "type": d.and_then(|d| d["data"]["type"].as_str()),
+            "url": format!("https://store.steampowered.com/app/{a}/"),
+        }));
+    }
+    Ok(Json(
+        json!({ "id": id, "name": g["public_name"], "checks": out, "checked_at": Utc::now() }),
+    ))
+}
+
+async fn user_row(st: &AppState, id: Uuid) -> ApiResult<(crate::auth::User, bool)> {
+    let r: Option<(Uuid, String, String, String, bool)> = sqlx::query_as(
+        "SELECT id, email, handle, display_name, email_verified FROM users WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let (id, email, handle, display_name, v) = r.ok_or_else(AppError::not_found)?;
+    Ok((
+        crate::auth::User {
+            id,
+            email,
+            handle,
+            display_name,
+        },
+        v,
+    ))
+}
+
+fn need_mail(st: &AppState, u: &crate::auth::User) -> ApiResult<()> {
+    if !crate::mailer::live(st) {
+        return Err(bad("mail_off", "Email isn't switched on on this server."));
+    }
+    if u.email.trim().is_empty() {
+        return Err(bad("no_email", "This account has no email address."));
+    }
+    Ok(())
+}
+
+/// Send the "confirm your email" message again.
+async fn verify_resend(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let (h, role, _) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    let (u, verified) = user_row(&st, id).await?;
+    if verified {
+        return Err(bad("already_verified", "This email is already confirmed."));
+    }
+    need_mail(&st, &u)?;
+    st.rate_limit(
+        format!("admin-verify:{id}"),
+        3,
+        std::time::Duration::from_secs(3600),
+    )?;
+    crate::account::send_verification(&st, &u).await?;
+    audit(
+        &st,
+        &s,
+        "user.verify_resend",
+        &format!("user:{h}"),
+        Value::Null,
+        json!({ "sent": true }),
+    )
+    .await?;
+    Ok(Json(json!({ "sent": true })))
+}
+
+#[derive(Deserialize)]
+struct FlagReq {
+    value: bool,
+}
+
+/// Mark the email confirmed (or not) by hand.
+async fn verify_set(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+    Json(r): Json<FlagReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let (h, role, _) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    let (_, before) = user_row(&st, id).await?;
+    sqlx::query("UPDATE users SET email_verified = $2 WHERE id = $1")
+        .bind(id)
+        .bind(r.value)
+        .execute(&st.db)
+        .await?;
+    audit(
+        &st,
+        &s,
+        "user.email_verified",
+        &format!("user:{h}"),
+        json!({ "email_verified": before }),
+        json!({ "email_verified": r.value }),
+    )
+    .await?;
+    Ok(Json(json!({ "email_verified": r.value })))
+}
+
+/// Hidden test account on/off (hidden from search, profiles, lists and totals).
+async fn set_test(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+    Json(r): Json<FlagReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let (h, role, _) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    let before = is_test(&st, id).await?;
+    sqlx::query("UPDATE users SET is_test = $2 WHERE id = $1")
+        .bind(id)
+        .bind(r.value)
+        .execute(&st.db)
+        .await?;
+    audit(
+        &st,
+        &s,
+        "user.test_account",
+        &format!("user:{h}"),
+        json!({ "is_test": before }),
+        json!({ "is_test": r.value }),
+    )
+    .await?;
+    Ok(Json(json!({ "is_test": r.value })))
+}
+
+/// Email the user a password reset link (nothing changes until they use it).
+async fn reset_link(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let (h, role, banned) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    if banned {
+        return Err(bad("banned", "Unban the account first."));
+    }
+    let (u, _) = user_row(&st, id).await?;
+    need_mail(&st, &u)?;
+    st.rate_limit(
+        format!("admin-reset:{id}"),
+        3,
+        std::time::Duration::from_secs(3600),
+    )?;
+    crate::account::send_reset(&st, &u).await?;
+    audit(
+        &st,
+        &s,
+        "user.reset_link",
+        &format!("user:{h}"),
+        Value::Null,
+        json!({ "sent": true }),
+    )
+    .await?;
+    Ok(Json(json!({ "sent": true })))
 }

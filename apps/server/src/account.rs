@@ -214,6 +214,29 @@ async fn resend(
 
 // ------------------------------------------------------------------ forgot password
 
+/// Email a one-hour password reset link (also used by Admin > Users).
+pub async fn send_reset(st: &AppState, u: &User) -> ApiResult<()> {
+    let (token, hash) = auth::new_token();
+    sqlx::query(
+        "INSERT INTO email_tokens(token_hash, user_id, purpose, email, expires_at)
+         VALUES($1, $2, 'reset', $3, now() + interval '1 hour')",
+    )
+    .bind(hash)
+    .bind(u.id)
+    .bind(&u.email)
+    .execute(&st.db)
+    .await?;
+    mailer::send_email(
+        st,
+        &u.email,
+        &crate::emails::reset(
+            &u.display_name,
+            &format!("{}/reset?token={token}", st.cfg.site_url),
+        ),
+    );
+    Ok(())
+}
+
 #[derive(Deserialize)]
 struct ForgotReq {
     email: String,
@@ -240,24 +263,7 @@ async fn forgot(
     .fetch_optional(&st.db)
     .await?;
     if let Some(u) = user {
-        let (token, hash) = auth::new_token();
-        sqlx::query(
-            "INSERT INTO email_tokens(token_hash, user_id, purpose, email, expires_at)
-             VALUES($1, $2, 'reset', $3, now() + interval '1 hour')",
-        )
-        .bind(hash)
-        .bind(u.id)
-        .bind(&u.email)
-        .execute(&st.db)
-        .await?;
-        mailer::send_email(
-            &st,
-            &u.email,
-            &crate::emails::reset(
-                &u.display_name,
-                &format!("{}/reset?token={token}", st.cfg.site_url),
-            ),
-        );
+        send_reset(&st, &u).await?;
     }
     Ok(Json(json!({ "ok": true, "mail_live": mailer::live(&st) })))
 }

@@ -98,7 +98,11 @@ async function approvals() {
     const mt2 = e.target.closest("tr[data-mrg]");
     if (mt2) {
       const id = mt2.dataset.mrg, into = mt2.dataset.into, b = e.target.closest("button"); if (!b) return;
-      if (b.matches("[data-merge]")) { if (!confirm(`Merge ${id} into ${into}? Its sessions and hours move there. This can't be undone.`)) return; await act(b, async () => { await api(`/admin/games/${encodeURIComponent(id)}/merge`, { method: "POST", body: { into, confirm: id } }); mt2.remove(); }); }
+      if (b.matches("[data-merge]")) {
+        const p = await api(`/admin/games/${encodeURIComponent(id)}/merge?into=${encodeURIComponent(into)}`).catch(x => { alert(x.message); return null; }); if (!p) return;
+        const typed = prompt(`Merge "${p.from.name || id}" into "${p.into.name || into}"?\n${p.from.totals.players} players, ${p.from.totals.sessions} sessions move there. This can't be undone.\n\nType the id of the game being merged to confirm:\n${id}`);
+        if (typed === null) return; if (typed.trim() !== id) return alert("The id didn't match; nothing was merged.");
+        await act(b, async () => { await api(`/admin/games/${encodeURIComponent(id)}/merge`, { method: "POST", body: { into, confirm: typed.trim() } }); mt2.remove(); }); }
       else if (b.matches("[data-dismiss]")) await act(b, async () => { await api(`/admin/merge_suggestions/${encodeURIComponent(id)}/dismiss`, { method: "POST" }); mt2.remove(); });
       return;
     }
@@ -276,10 +280,25 @@ function retireHtml(g) {
   if (r) return `<div class="f"><label>Retired</label><div>${r.partial ? `Detached ${r.exes.map(e => `<span class="mono">${esc(e)}</span>`).join(", ")} on ${day(r.at)}; the game stays live.` : `Retired ${day(r.at)}. New play goes to <a href="#" data-goto="${esc(r.successor)}" class="mono">${esc(r.successor)}</a>.`}</div>
     <div class="row"><button class="btn" id="gunret" type="button">Undo retire</button><small>Only while the new entry has no hours.</small></div><div class="alert" id="rmsg" hidden></div></div>`;
   return `<div class="f"><label>Retire</label>${mf}${g.retired_from ? `<div class="dimt">New entry for retired <a href="#" data-goto="${esc(g.retired_from)}" class="mono">${esc(g.retired_from)}</a>.</div>` : ""}
-    ${exes.length ? `<div>Programs to detach:</div>${exes.map(e => `<label class="check"><input type="checkbox" name="rx" value="${esc(e)}" checked> <span class="mono">${esc(e)}</span></label>`).join("")}` : `<div class="dimt">No known program names; add an extra exe first.</div>`}
+    ${exes.length ? `<div>Programs to detach:</div>${exes.map(e => `<div class="row"><label class="check" style="margin:0"><input type="checkbox" name="rx" value="${esc(e)}" checked> <span class="mono">${esc(e)}</span></label>${exes.length > 1 ? `<button class="btn sm" type="button" data-rone="${esc(e)}">Retire only this exe…</button>` : ""}</div>`).join("")}` : `<div class="dimt">No known program names; add an extra exe first.</div>`}
     <div class="row"><button class="btn danger" id="gret" type="button"${exes.length ? "" : " disabled"}>Retire…</button></div>
     <small>All programs: the entry is frozen (name, icon and hours stay) and new play starts a fresh entry in Game approvals. Some programs: only those move to fresh entries; the game stays live.</small>
     <div class="alert" id="rmsg" hidden></div></div>`;
+}
+function detHtml(g) {
+  const d = g.detection || {}, fx = d.fixups || [], b = d.builtin, o = g.override || {};
+  const KIND = { steam: "Steam app id", id: "Game id", path: "Folder + exe" };
+  const rows = [];
+  if (b) rows.push(`<tr><td>Built-in signature</td><td class="mono">${esc([...(b.exes || []), ...(b.path_exes || [])].join(", "))}${(b.path_hints || []).length ? ` <span class="dimt">in ${esc(b.path_hints.join(", "))}</span>` : ""}</td><td class="dimt">ships with the app</td></tr>`);
+  if (d.in_games_list) rows.push(`<tr><td>Games list</td><td class="mono">${esc((d.list_patterns || []).map(p => p.exes.join(", ") + (p.paths.length ? " in " + p.paths.join(", ") : "")).join("; "))}</td><td class="dimt">${(() => { const j = (d.jobs || []).find(j => /list/.test(j.job)); return j ? "list refreshed " + when(j.last_ok_at || j.last_run_at) : "downloaded list"; })()}</td></tr>`);
+  (g.steam_appids || []).forEach(a => rows.push(`<tr><td>Steam</td><td class="mono">${a}</td><td class="dimt">${(() => { const j = (d.jobs || []).find(j => /steam/.test(j.job)); return j ? "Steam sync " + when(j.last_ok_at || j.last_run_at) : ""; })()}</td></tr>`));
+  if ((o.extra_exes || []).length) rows.push(`<tr><td>Staff: extra exes</td><td class="mono">${esc(o.extra_exes.join(", "))}</td><td class="dimt">${d.edited ? when(d.edited.at) + (d.edited.by ? " by " + esc(d.edited.by) : "") : ""}</td></tr>`);
+  if ((o.path_hints || []).length) rows.push(`<tr><td>Staff: folder hints</td><td class="mono">${esc(o.path_hints.join(", "))}</td><td class="dimt">${d.edited ? when(d.edited.at) + (d.edited.by ? " by " + esc(d.edited.by) : "") : ""}</td></tr>`);
+  fx.forEach(x => rows.push(`<tr><td>Fix-up: ${esc(KIND[x.kind] || x.kind)}</td><td class="mono">${esc(x.pattern)}${x.note ? ` <span class="dimt">${esc(x.note)}</span>` : ""}</td><td class="dimt">${when(x.updated_at)}${x.updated_by ? " by " + esc(x.updated_by) : ""}</td></tr>`));
+  (g.merged_from || []).forEach(m => rows.push(`<tr><td>Merged in</td><td class="mono">${esc(m)}</td><td></td></tr>`));
+  return `<div class="f"><label>Where detection comes from</label>
+    ${rows.length ? `<table class="tbl"><thead><tr><th>Source</th><th>Rule</th><th>Last updated</th></tr></thead><tbody>${rows.join("")}</tbody></table>` : `<div class="dimt">No rules: only reported by the app as unlisted.</div>`}
+    <div class="row"><button class="btn sm" type="button" id="steamchk">Check Steam link</button><a href="#detection" class="dimt">Detection fix-ups ›</a></div><div id="steamout"></div><div class="alert" id="steammsg" hidden></div></div>`;
 }
 async function editGame(id) {
   const box = $("#gedit");
@@ -291,8 +310,11 @@ async function editGame(id) {
     <label>Display name override<input type="text" name="name" maxlength="80" value="${esc(o.name || "")}" placeholder="${esc(g.name)}"><small>Leave empty to use the list name.</small></label>
     <label class="check"><input type="checkbox" name="hidden" ${o.hidden ? "checked" : ""}> Hide from public (shown as "Playing a game")</label>
     <label>Extra exe names (one per line)<textarea class="in" name="exes" placeholder="GameClient-Win64.exe">${esc((o.extra_exes || []).join("\n"))}</textarea><small>Apps detect these as this game (picked up within a day or on restart).</small></label>
+    <label>Other names / aliases (one per line)<textarea class="in" name="aliases" placeholder="WoW">${esc((o.aliases || []).join("\n"))}</textarea><small>Found by Admin search. For detection fixes use extra exe names, folder hints or Detection fix-ups.</small></label>
+    <label>Folder hints (one per line)<textarea class="in" name="hints" placeholder="World of Warcraft/_retail_">${esc((o.path_hints || []).map(h => h.replace(/^\/|\/$/g, "")).join("\n"))}</textarea><small>This game's programs (${esc((g.exes || []).join(", ") || "none known")}) only count as this game inside a folder containing one of these. Use it when two games share an exe name. Empty = anywhere.</small></label>
     <div class="row"><button class="btn dl">Save</button><span class="dimt">Edits stay in place when the games list refreshes.</span></div>
     <div class="alert" id="gmsg" hidden></div></form>
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${detHtml(g)}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     <div id="media"><div class="dimt">Loading pictures…</div></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
@@ -325,12 +347,22 @@ async function editGame(id) {
   $("#gf").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
     try {
-      await api("/admin/games/" + encodeURIComponent(id), { method: "POST", body: { name: f.name.value.trim() || null, hidden: f.hidden.checked, extra_exes: f.exes.value.split(/\n|,/).map(s => s.trim()).filter(Boolean) } });
-      msg($("#gmsg"), "Saved.", true); listGames($("#gs").q.value.trim());
+      await api("/admin/games/" + encodeURIComponent(id), { method: "POST", body: { name: f.name.value.trim() || null, hidden: f.hidden.checked, extra_exes: f.exes.value.split(/\n|,/).map(s => s.trim()).filter(Boolean), aliases: f.aliases.value.split("\n").map(s => s.trim()).filter(Boolean), path_hints: f.hints.value.split("\n").map(s => s.trim()).filter(Boolean) } });
+      listGames($("#gs").q.value.trim()); await editGame(id); msg($("#gmsg"), "Saved.", true);
     } catch (x) { msg($("#gmsg"), x.message); }
   });
   renderMedia(id, g);
   wireMerge(id);
+  box.querySelectorAll("[data-rone]").forEach(b => b.addEventListener("click", () => {
+    const e = b.dataset.rone;
+    if (!confirm(`Detach only ${e} from ${g.public_name || g.name || id}?\n\nIt gets a new entry (in Game approvals); the game stays live with its other programs.`)) return;
+    act(b, async () => { await api(gid + "/retire", { method: "POST", body: { exes: [e] } }); editGame(id); }).catch(x => msg($("#rmsg"), x.message));
+  }));
+  const sc = $("#steamchk");
+  if (sc) sc.addEventListener("click", () => act(sc, async () => {
+    const r = await api(gid + "/steam_check");
+    $("#steamout").innerHTML = r.checks.length ? `<table class="tbl"><tbody>${r.checks.map(c => `<tr><td class="mono"><a href="${esc(c.url)}" target="_blank" rel="noopener">${c.appid}</a></td><td>${!c.reachable ? `<span class="pill">Steam didn't answer</span>` : c.found ? `<span class="pill ok">OK</span> ${esc(c.name || "")} <span class="dimt">${esc(c.type || "")}</span>${c.name && (g.public_name || g.name) && c.name.toLowerCase() !== (g.public_name || g.name).toLowerCase() ? ` <span class="pill bad">name differs</span>` : ""}` : `<span class="pill bad">not on the Steam store</span>`}</td></tr>`).join("")}</tbody></table><div class="dimt">Checked ${when(r.checked_at)}</div>` : `<div class="dimt">No Steam app id linked. Set one under Pictures or add a Steam fix-up in Detection.</div>`;
+  }).catch(x => msg($("#steammsg"), x.message)));
   const gd = $("#gdelete");
   if (gd) gd.addEventListener("click", () => {
     const typed = prompt(`Delete "${g.public_name || g.name || id}"${g.sessions ? ` and ${g.sessions} session(s) from ${g.players} player(s)` : ""}? This can't be undone.\n\nType the game id to confirm:\n${id}`);
@@ -384,10 +416,15 @@ async function userDetail(id) {
       ${u.sessions.map(s => `<tr data-sid="${esc(s.id)}"><td>${esc(s.name)}</td><td>${when(s.started_at)}</td><td class="num">${hrs(s.duration_s / 60)}${s.duration_s > 18 * 3600 ? `<span class="pill bad">long</span>` : ""}</td><td class="muted">${esc(s.source)}</td><td class="num"><button class="btn sm danger" data-delsess>Delete</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No sessions.</div>`}</section>
   </div><div class="col">
     <section class="panel"><h2>Actions</h2><div class="body f">
+      <div><b>Email</b> ${u.email ? (u.email_verified ? `<span class="pill ok">confirmed</span>` : `<span class="pill bad">not confirmed</span>`) : `<span class="dimt">none</span>`}</div>
+      ${u.email ? `<div class="row">${u.email_verified ? "" : `<button class="btn sm" id="vresend"${u.mail_live ? "" : " disabled"}>Resend confirmation email</button>`}${can.reset_password ? `<button class="btn sm" id="vset" data-v="${u.email_verified ? "0" : "1"}">${u.email_verified ? "Mark not confirmed" : "Mark confirmed"}</button>` : ""}</div>` : ""}
+      ${can.reset_password && u.email ? `<div class="row"><button class="btn sm" id="resetlink"${u.mail_live ? "" : " disabled"}>Email a password reset link</button></div><small>Sends a 1-hour link to their address. Nothing changes until they use it.${u.mail_live ? "" : " Email is off on this server."}</small>` : ""}
+      ${can.reset_password ? `<label class="check"><input type="checkbox" id="istest" ${u.is_test ? "checked" : ""}> Hidden test account</label><small>Hidden from search, profiles, lists, polls and totals. The account still works.</small>` : ""}
+      <div class="alert" id="acctmsg" hidden></div><hr style="border:0;border-top:1px solid var(--line);margin:6px 0">
       ${u.hours_flag_at ? `<div class="row"><button class="btn" id="hoursclear">Clear hours flag</button></div><small>Only removes the flag. To fix hours, use the session tools.</small><hr style="border:0;border-top:1px solid var(--line);margin:6px 0">` : ""}
       ${u.age_review_at ? `<div class="row"><button class="btn" id="ageclear">Clear age check</button></div><small>Lets them sign in again. If they really are under 13, ban or delete the account instead. Nothing is deleted automatically.</small><hr style="border:0;border-top:1px solid var(--line);margin:6px 0">` : ""}
       ${u.banned_at ? `<button class="btn" id="unban">Unban</button>` : `<label>Ban reason (optional, kept in the audit log)<input type="text" id="reason" maxlength="200"></label><div class="row"><button class="btn danger" id="ban">Ban account</button></div><small>Banned accounts are signed out everywhere, can't sign in, and their profile is hidden.</small>`}
-      ${can.reset_password ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="resetpw">Reset password</button></div><small>Makes a temporary password (shown once) and signs the account out everywhere. Send it to the user yourself; email isn't set up yet.</small><div id="pwout"></div>` : ""}
+      ${can.reset_password ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="resetpw">Reset password</button></div><small>Makes a temporary password (shown once) and signs the account out everywhere. Send it to the user yourself. Prefer the reset link above.</small><div id="pwout"></div>` : ""}
       ${can.reset_password ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><label>Date of birth (YYYY-MM-DD)<input type="date" id="newdob" min="1900-01-01" max="2099-12-31" value="${esc(u.birth_date || "")}"></label><div class="row"><button class="btn" id="chdob">Save date of birth</button></div><small>Only staff can change this. Under 13 is refused and not stored. 13–17 forces a private profile; turning 18 clears the under-18 flag but leaves the profile private.</small>` : ""}
       ${can.change_handle ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><label>Username<input type="text" id="newhandle" maxlength="20" value="${esc(u.handle)}"></label><div class="row"><button class="btn" id="chhandle">Change username</button></div><small>Users can't change their username themselves. The old one keeps redirecting to them and can't be taken by anyone else. Logged in the audit log.</small>` : ""}
       <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="rmav">Remove picture</button>${can.mfa_reset ? ` <button class="btn" id="mfareset">Reset two-step sign-in</button>` : ""}</div><small>Removing a picture resets it to the default and blocks that exact image. Resetting two-step sign-in lets them sign in with just their password (check it's really them first).</small>
@@ -405,6 +442,11 @@ async function userDetail(id) {
     if (!confirm(`Set date of birth for ${u.handle} to ${d}?`)) return;
     act(chdob, async () => { await api(`/admin/users/${id}/birth_date`, { method: "POST", body: { birth_date: d } }); userDetail(id); }).catch(x => msg(amsg, x.message));
   });
+  const am = $("#acctmsg"), uid = `/admin/users/${encodeURIComponent(u.id)}`;
+  const vr = $("#vresend"); if (vr) vr.addEventListener("click", () => act(vr, async () => { await api(uid + "/verify/resend", { method: "POST" }); msg(am, "Confirmation email sent to " + u.email + ".", true); }).catch(x => msg(am, x.message)));
+  const vs = $("#vset"); if (vs) vs.addEventListener("click", () => { const v = vs.dataset.v === "1"; if (confirm(`${v ? "Mark" : "Unmark"} ${u.handle}'s email as confirmed?`)) act(vs, async () => { await api(uid + "/verify/set", { method: "POST", body: { value: v } }); userDetail(u.id); }).catch(x => msg(am, x.message)); });
+  const rl = $("#resetlink"); if (rl) rl.addEventListener("click", () => { if (confirm(`Email a password reset link to ${u.email}?`)) act(rl, async () => { await api(uid + "/reset_link", { method: "POST" }); msg(am, "Reset link sent to " + u.email + ".", true); }).catch(x => msg(am, x.message)); });
+  const it = $("#istest"); if (it) it.addEventListener("change", async () => { const v = it.checked; if (!confirm(`${v ? "Hide" : "Unhide"} ${u.handle} as a test account?`)) { it.checked = !v; return; } try { await api(uid + "/test", { method: "POST", body: { value: v } }); msg(am, v ? "Hidden as a test account." : "No longer a test account.", true); } catch (x) { it.checked = !v; msg(am, x.message); } });
   if (ban) ban.addEventListener("click", () => { if (confirm("Ban " + u.handle + "?")) act(ban, async () => { await api(`/admin/users/${id}/ban`, { method: "POST", body: { reason: $("#reason").value } }); userDetail(id); }).catch(x => msg(amsg, x.message)); });
   const hcl = $("#hoursclear");
   if (hcl) hcl.addEventListener("click", () => act(hcl, async () => { await api(`/admin/users/${id}/hours_flag/clear`, { method: "POST" }); userDetail(id); }).catch(x => msg(amsg, x.message)));
@@ -758,7 +800,7 @@ async function polls() {
     <p><button class="btn dl">Create poll</button></p></form></div></section>
     <section class="panel"><h2>All polls (${d.polls.length})</h2><div class="body">${d.polls.length ? d.polls.map(p => `<div class="fr" style="display:block;padding:10px 0;border-bottom:1px solid #202c3a" data-id="${p.id}">
       <div><b>${esc(p.question)}</b> · ${st(p)} · ${p.total} vote${p.total === 1 ? "" : "s"} · <span class="dimt">${new Date(p.created_at).toLocaleDateString()}</span></div>${bars(p)}
-      <div style="margin-top:6px">${p.active && !p.closed ? "" : `<button class="btn sm" data-act="activate">${p.active ? "Reopen" : "Make active"}</button> `}${p.closed ? "" : `<button class="btn sm" data-act="close">Close voting</button>`}</div></div>`).join("") : `<div class="empty">No polls yet.</div>`}</div></section>`;
+      <div style="margin-top:6px">${p.active && !p.closed ? "" : `<button class="btn sm" data-act="activate">${p.active ? "Reopen" : "Make active"}</button> `}${p.closed ? "" : `<button class="btn sm" data-act="close">Close voting</button>`} <button class="btn sm danger" data-act="delete">Delete</button></div></div>`).join("") : `<div class="empty">No polls yet.</div>`}</div></section>`;
   $("#pn").onsubmit = async e => {
     e.preventDefault(); const f = e.target;
     try { await api("/admin/polls", { method: "POST", body: { question: f.q.value, options: [...f.querySelectorAll("[name=o]")].map(i => i.value), activate: f.act.checked } }); polls(); }
@@ -768,6 +810,7 @@ async function polls() {
     const b = e.target.closest("button[data-act]"); if (!b) return;
     const id = b.closest("[data-id]").dataset.id, act = b.dataset.act;
     if (act === "close" && !confirm("Close voting on this poll? Results stay visible.")) return;
+    if (act === "delete" && !confirm("Delete this poll and all its votes? This can't be undone.")) return;
     try { await api(`/admin/polls/${id}/${act}`, { method: "POST" }); polls(); } catch (x) { alert(x.message); }
   };
 }
