@@ -81,6 +81,7 @@ pub fn routes() -> Router<AppState> {
             post(reset_password),
         )
         .route("/api/v1/admin/users/{id}/ban", post(ban))
+        .route("/api/v1/admin/users/{id}/wow_recount", post(wow_recount))
         .route("/api/v1/admin/users/{id}/unban", post(unban))
         .route(
             "/api/v1/admin/users/{id}/age_review/clear",
@@ -1612,6 +1613,36 @@ async fn ban(
     )
     .await?;
     Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct WowRecountReq {
+    game_id: String,
+}
+
+/// Recount someone's WoW hours from their characters, even if that lowers them (WoW
+/// imports otherwise keep the higher total).
+async fn wow_recount(
+    State(st): State<AppState>,
+    s: Staff,
+    Path(id): Path<Uuid>,
+    Json(r): Json<WowRecountReq>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let (handle, role, _) = target(&st, id).await?;
+    outranks(&s, id, role)?;
+    let before = crate::wow::imported_floor(&st, id, &r.game_id).await?;
+    let total = crate::wow::recount(&st, id, &r.game_id).await?;
+    audit(
+        &st,
+        &s,
+        "user.wow_recount",
+        &format!("user:{handle}"),
+        json!({ "game_id": r.game_id, "minutes": before }),
+        json!({ "game_id": r.game_id, "minutes": total }),
+    )
+    .await?;
+    Ok(Json(json!({ "ok": true, "total_min": total })))
 }
 
 #[derive(Deserialize)]

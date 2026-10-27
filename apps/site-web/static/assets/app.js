@@ -458,6 +458,8 @@ pages.wowupload = async () => {
     <p class="sub">Upload once to bring in your past WoW playtime. After that, Fraglink tracks your hours while it's running. Upload again any time to catch up on time played while Fraglink was closed.</p></div></div>
     <form class="wu-form" data-form>
       <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
+      <div class="alert info"><b>Before you upload: log in to every character.</b> The addon only saves a character's /played when you log in to it (then log out or <code>/reload</code>). Characters you skip keep the hours from their last upload, and Fraglink always keeps your higher total, so a partial upload never lowers your hours.</div>
+      <label class="check wu-row"><input type="checkbox" name="all" required> I've logged in to each of my characters with the addon on since my last upload</label>
       <div class="wu-row"><span class="wu-l">File</span><input type="file" name="f" accept=".lua" required> <button class="btn blue" type="submit">Upload and check</button></div>
       <details class="wu-help"><summary>Where is FraglinkPlayed.lua?</summary>
         <p>Log out of WoW (or type <code>/reload</code>) first so the game saves it, then open:</p>
@@ -526,7 +528,17 @@ pages.wowupload = async () => {
     rows = mine.map(c => ({ ...c, st: c.verified ? "v" : "s", chg: chg.get(ck(c)) }))
       .concat(u.rejected.map(r => ({ ...r, game_id: game, st: "r", why: R[r.reason] || r.detail })));
     totals = { verified: mine.filter(c => c.verified).reduce((a, c) => a + c.played_min, 0), unverified: mine.filter(c => !c.verified).reduce((a, c) => a + c.played_min, 0) };
-    showAll = false; draw(); btn.disabled = false; form.reset(); form.game.value = game;
+    showAll = false; draw();
+    if (u.kept_min) {
+      res.insertAdjacentHTML("afterbegin", `<div class="alert info">These characters add up to ${hours(u.total_min, { zero: true })}, less than your current ${hours(u.kept_min)} (your last upload plus hours Fraglink tracked since). We kept the higher total. If the lower number is right, for example after deleting characters, you can <button class="btn sm" type="button" data-recount>use ${hours(u.total_min, { zero: true })} instead</button></div>`);
+      const rb = $("[data-recount]", res);
+      rb.addEventListener("click", async () => {
+        if (!confirm(`Lower your ${game === "wow_forever" ? "WoW Forever" : "WoW"} hours to ${hours(u.total_min, { zero: true })}? This can't be undone, but a later upload with more hours counts again.`)) return;
+        rb.disabled = true;
+        try { await api("/hours/wow_played/recount", { method: "POST", body: { game_id: game } }); rb.closest(".alert").textContent = "Done: your hours now use this upload's total."; }
+        catch (x) { rb.disabled = false; alert(x.message || String(x)); }
+      });
+    } btn.disabled = false; form.reset(); form.game.value = game;
   });
 };
 

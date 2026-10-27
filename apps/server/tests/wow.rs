@@ -370,11 +370,128 @@ async fn only_verified_characters_count(pool: PgPool) {
     api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
     assert_eq!(wow_total(&pool).await, Some(6_600));
 
-    // unlinking drops the counted hours back to 0
-    sqlx::query("DELETE FROM bnet_characters")
+    // a character gone from Battle.net (deleted or moved) stops verifying, but the
+    // higher total is kept: those hours were played
+    sqlx::query("DELETE FROM bnet_characters WHERE name = 'Alt'")
         .execute(&pool)
         .await
         .unwrap();
     api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
+    assert_eq!(wow_total(&pool).await, Some(6_600));
+
+    // unlinking Battle.net drops the counted hours back to 0
+    let r = api(&app, "DELETE", "/api/v1/connect/bnet", Some(&t), None).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     assert_eq!(wow_total(&pool).await, Some(0));
+}
+
+async fn shown(pool: &PgPool, handle: &str) -> (i64, i64) {
+    sqlx::query_as(
+        "SELECT display_min, board_min FROM user_game_stats s JOIN users u ON u.id = s.user_id
+         WHERE u.handle = $1 AND s.game_id = 'wow'",
+    )
+    .bind(handle)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// A lower WoW upload never lowers the shown total or the board; the user or staff can
+/// recount on purpose.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "k@example.com", "keephigher").await;
+    sqlx::query("INSERT INTO linked_accounts(user_id, provider, provider_uid, display, verified, scopes)
+                 SELECT id, 'bnet', '42', 'Thrall#1234', true, 'openid wow.profile' FROM users WHERE handle = 'keephigher'")
+        .execute(&pool).await.unwrap();
+    for n in ["Thrall", "Alt"] {
+        sqlx::query(
+            "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, name)
+                     SELECT id, 'wow', 'us', 'area-52', $1 FROM users WHERE handle = 'keephigher'",
+        )
+        .bind(n)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    let now = chrono::Utc::now().timestamp() - 60;
+    // first upload: 100 h + 10 h
+    let r = up(
+        &app,
+        &t,
+        &[
+            entry("Thrall", 360_000, now - 4 * 3600, "Thrall#1234"),
+            entry("Alt", 36_000, now - 4 * 3600, "Thrall#1234"),
+        ],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_600, "{r}");
+    assert_eq!(shown(&pool, "keephigher").await, (6_600, 6_600));
+    // backdate the import so tracked play can land after it, then track 2 h
+    sqlx::query("UPDATE hours_entries SET captured_at = now() - interval '3 hours'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source)
+                 SELECT gen_random_uuid(), id, 'wow', now() - interval '150 minutes', now() - interval '30 minutes', 7200, 'live'
+                 FROM users WHERE handle = 'keephigher'")
+        .execute(&pool).await.unwrap();
+    assert_eq!(shown(&pool, "keephigher").await, (6_720, 6_720));
+
+    // partial upload (only Thrall, +1 h): Alt keeps its hours; the sum 6 660 is below the
+    // shown 6 720, so the higher total is kept and nothing is stored
+    let r = up(
+        &app,
+        &t,
+        &[entry("Thrall", 363_600, now - 1800, "Thrall#1234")],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_660, "{r}");
+    assert_eq!(r["kept_min"], 6_720, "{r}");
+    assert_eq!(wow_total(&pool).await, Some(6_600));
+    assert_eq!(shown(&pool, "keephigher").await, (6_720, 6_720));
+
+    // a /played that goes down is refused per character; the total stays
+    let r = up(&app, &t, &[entry("Alt", 30_000, now, "Thrall#1234")]).await;
+    assert_eq!(r["rejected"][0]["reason"], "wow_decrease", "{r}");
+    assert_eq!(shown(&pool, "keephigher").await, (6_720, 6_720));
+
+    // a higher upload replaces it; tracked play before it isn't counted twice
+    let r = up(
+        &app,
+        &t,
+        &[entry("Alt", 36_000 + 3 * 3600, now, "Thrall#1234")],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_840, "{r}");
+    assert!(r["kept_min"].is_null(), "{r}");
+    assert_eq!(shown(&pool, "keephigher").await, (6_840, 6_840));
+
+    // the user can lower it on purpose (after deleting a character, say)
+    sqlx::query("DELETE FROM bnet_characters WHERE name = 'Alt'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
+    assert_eq!(shown(&pool, "keephigher").await, (6_840, 6_840));
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/wow_played/recount",
+        Some(&t),
+        Some(json!({ "game_id": "wow" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(shown(&pool, "keephigher").await, (6_060, 6_060));
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/wow_played/recount",
+        Some(&t),
+        Some(json!({ "game_id": "nope" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
 }

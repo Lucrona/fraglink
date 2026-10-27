@@ -42,6 +42,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/hours/wow_played", post(upload))
         .route("/api/v1/hours/wow_played/file", post(upload_file))
+        .route("/api/v1/hours/wow_played/recount", post(recount_mine))
         .route("/api/v1/me/wow", get(mine))
         .route("/api/v1/me/wow/{id}", post(set_hidden))
         .route("/api/v1/wow/verify/fetch", post(verify_fetch))
@@ -445,7 +446,7 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
         check_bnet_level(st, uid, gid, id, e).await;
         accepted += 1;
     }
-    let total_min = record_total(st, uid, gid).await?;
+    let (total_min, kept_min) = record_total(st, uid, gid, Recount::KeepHigher).await?;
     let verified: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM wow_characters WHERE user_id = $1 AND game_id = $2 AND verified",
     )
@@ -460,13 +461,52 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
     };
     Ok(
         json!({ "accepted": accepted, "rejected": rejected, "unchanged": unchanged,
-               "changes": changes, "total_min": total_min, "verified": verified, "bnet": bnet }),
+               "changes": changes, "total_min": total_min, "kept_min": kept_min,
+               "verified": verified, "bnet": bnet }),
     )
 }
 
+/// How a new character sum is stored.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Recount {
+    /// Normal path (uploads, Battle.net sync): keep the higher total. A sum at or below the
+    /// shown imported total (latest import + tracked play after it) is not stored, so a
+    /// partial upload, a deleted or transferred character, or tracked time /played didn't
+    /// count never lowers the profile or the board.
+    KeepHigher,
+    /// Battle.net unlinked: store the exact sum (unverified characters must stop counting).
+    Exact,
+    /// Asked for by the user or staff: store the exact sum now, even if it is lower.
+    Reset,
+}
+
+/// The shown imported total for a game: latest imported entry + tracked play after it
+/// (the same rule as `user_game_stats`). None without any imported entry.
+pub(crate) async fn imported_floor(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<Option<i64>> {
+    Ok(sqlx::query_scalar(
+        "WITH i AS (SELECT minutes, captured_at FROM hours_entries
+                    WHERE user_id = $1 AND game_id = $2 AND tier = 'imported'
+                    ORDER BY captured_at DESC, created_at DESC LIMIT 1)
+         SELECT (i.minutes + coalesce((SELECT (sum(LEAST(x.duration_s::numeric,
+                    extract(epoch FROM x.ended_at - GREATEST(x.started_at, i.captured_at)))) / 60)::bigint
+                  FROM sessions x WHERE x.user_id = $1 AND x.game_id = $2 AND x.ended_at > i.captured_at), 0))::bigint
+         FROM i",
+    )
+    .bind(uid)
+    .bind(gid)
+    .fetch_optional(&st.db)
+    .await?)
+}
+
 /// Store the game's total when it changed. Only Battle.net-verified characters count;
-/// unverified ones are kept and start counting once they verify.
-async fn record_total(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<i64> {
+/// unverified ones are kept and start counting once they verify. Returns the characters'
+/// sum and, when a lower sum was not stored, the higher total that was kept.
+async fn record_total(
+    st: &AppState,
+    uid: Uuid,
+    gid: &str,
+    mode: Recount,
+) -> ApiResult<(i64, Option<i64>)> {
     let (sum, n, v): (i64, i64, i64) = sqlx::query_as(
         "SELECT coalesce(sum(played_s) FILTER (WHERE verified), 0)::bigint / 60, count(*),
                 count(*) FILTER (WHERE verified)
@@ -485,21 +525,76 @@ async fn record_total(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<i64> {
     .bind(gid)
     .fetch_optional(&st.db)
     .await?;
-    // Nothing stored yet and nothing verified: no entry (a 0 would only add noise).
-    if last.map(i64::from) != Some(sum) && !(last.is_none() && sum == 0) {
+    let mut kept = None;
+    let store = match mode {
+        Recount::Reset => last.is_some() || sum > 0,
+        Recount::Exact => last.map(i64::from) != Some(sum) && !(last.is_none() && sum == 0),
+        Recount::KeepHigher => {
+            let floor = imported_floor(st, uid, gid).await?;
+            match floor {
+                Some(f) if sum <= f => {
+                    if sum < f {
+                        kept = Some(f);
+                    }
+                    false
+                }
+                _ => sum > 0 && last.map(i64::from) != Some(sum),
+            }
+        }
+    };
+    if store {
+        let note = if mode == Recount::Reset {
+            "WoW /played (Fraglink addon), recounted"
+        } else {
+            "WoW /played (Fraglink addon)"
+        };
         sqlx::query(
             "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, inputs, note)
-             VALUES($1, $2, $3, 'imported', 'wow_addon', $4, $5, 'WoW /played (Fraglink addon)')",
+             VALUES($1, $2, $3, 'imported', 'wow_addon', $4, $5, $6)",
         )
         .bind(Uuid::new_v4())
         .bind(uid)
         .bind(gid)
         .bind(sum as i32)
-        .bind(json!({ "characters": n, "verified": v }))
+        .bind(json!({ "characters": n, "verified": v, "reset": mode == Recount::Reset }))
+        .bind(note)
         .execute(&st.db)
         .await?;
     }
-    Ok(sum)
+    Ok((sum, kept))
+}
+
+/// Recount a user's WoW total from their characters now, even if lower. For the user
+/// (`/api/v1/hours/wow_played/recount`) and staff (admin user tools).
+pub async fn recount(st: &AppState, uid: Uuid, game_id: &str) -> ApiResult<i64> {
+    let Some((gid, _)) = GAMES.iter().find(|(g, _)| *g == game_id) else {
+        return Err(AppError::bad_request(
+            "invalid_game",
+            "game_id is wow or wow_forever",
+        ));
+    };
+    Ok(record_total(st, uid, gid, Recount::Reset).await?.0)
+}
+
+#[derive(Deserialize)]
+struct RecountReq {
+    game_id: String,
+}
+
+async fn recount_mine(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<RecountReq>,
+) -> ApiResult<Json<Value>> {
+    api::check_origin(&a, &headers, &st)?;
+    st.rate_limit(
+        format!("wow_recount:{}", a.user.id),
+        10,
+        Duration::from_secs(3600),
+    )?;
+    let total = recount(&st, a.user.id, &r.game_id).await?;
+    Ok(Json(json!({ "total_min": total })))
 }
 
 // ------------------------------------------------------------------ Battle.net
@@ -635,13 +730,13 @@ pub async fn sync_characters(
 /// list) and its latest accepted entry was saved under that account's BattleTag. Several
 /// WoW licences on one Battle.net (WoW1, WoW2) share the BattleTag, so all of them count.
 async fn reverify_one(st: &AppState, id: Uuid) {
-    set_verified(st, Some(id), None).await;
+    set_verified(st, Some(id), None, Recount::KeepHigher).await;
 }
 
 /// A character is verified while it is on the linked Battle.net account (its `wow.profile`
 /// list) and its latest accepted entry was saved under that account's BattleTag. Several
 /// WoW licences on one Battle.net (WoW1, WoW2) share the BattleTag, so all of them count.
-async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>) {
+async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>, mode: Recount) {
     let _ = sqlx::query(
         "UPDATE wow_characters c SET verified = EXISTS (
              SELECT 1 FROM bnet_characters b WHERE b.user_id = c.user_id AND b.game_id = c.game_id
@@ -669,7 +764,7 @@ async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>) {
     };
     if let Some(u) = owner {
         for (gid, _) in GAMES {
-            let _ = record_total(st, u, gid).await;
+            let _ = record_total(st, u, gid, mode).await;
         }
     }
 }
@@ -678,7 +773,7 @@ async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>) {
 /// character stays verified only while it is on the linked account; the BattleTag
 /// check was made when its entry was accepted.
 pub async fn reverify(st: &AppState, uid: Uuid) {
-    set_verified(st, None, Some(uid)).await;
+    set_verified(st, None, Some(uid), Recount::KeepHigher).await;
 }
 
 /// Battle.net unlinked: forget its characters; nothing counts on leaderboards any more.
@@ -687,7 +782,8 @@ pub async fn on_unlink(st: &AppState, uid: Uuid) {
         .bind(uid)
         .execute(&st.db)
         .await;
-    reverify(st, uid).await;
+    // Unverified characters must stop counting, so store the exact (lower) sum here.
+    set_verified(st, None, Some(uid), Recount::Exact).await;
 }
 
 pub(crate) async fn app_token() -> Option<String> {
