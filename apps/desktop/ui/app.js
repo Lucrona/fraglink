@@ -607,6 +607,13 @@
 
   /* ---------------- side panel ---------------- */
   function renderSide() {
+    renderSideInner();
+    // Flat themes: a copy of the friend's avatar sits outside the scroller, half above the panel's top edge
+    // (the copy inside the scroller keeps its space but is hidden there). Cobalt hides .side-float.
+    const av = SS.vp.querySelector('.sf-head .sf-av'), fl = $('#side-float');
+    if (fl) fl.innerHTML = av ? av.outerHTML : '';
+  }
+  function renderSideInner() {
     const el = SS.vp; requestAnimationFrame(SS.update);
     if (signedOut() && !state.detectRun) { el.innerHTML = offlineSide(); return; }
     // A selected group heading (not Friends Online): its name and a short description (classic style).

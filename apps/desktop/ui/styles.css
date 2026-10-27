@@ -650,3 +650,6 @@ body.col-dragging, body.col-dragging * { cursor: col-resize !important; user-sel
 .xf-row.pending:not(.sel) { background: linear-gradient(90deg, rgba(216,35,42,.22), rgba(216,35,42,.05)); }
 .xf-row.pending { box-shadow: inset 3px 0 0 #d8232a; }
 .xf-row.pending .nm { font-weight: bold; }
+
+/* flat themes float the side-panel avatar here (themes-flat.css); hidden elsewhere */
+.side-float { display: none; }
