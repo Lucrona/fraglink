@@ -737,6 +737,15 @@ html[class*=theme-flat] body.skin-dark .side-scroll .sf-foot .dk-btn { height: a
 html[class*=theme-flat] body.skin-dark .side-scroll .sf-foot .sf-small { align-self: stretch; margin: 0; padding: 8px; border-radius: 3px; background: var(--f3); color: var(--ftx); font: 600 13px/17px var(--flat-font); text-align: center; text-decoration: none; }
 html[class*=theme-flat] body.skin-dark .side-scroll .sf-foot .sf-small:hover { color: #fff; background: var(--fhov); }
 html[class*=theme-flat] body.skin-dark .side-grip { background: none; }
+/* beta.9: no Cobalt leftovers in any side-panel view (own, friend, group): no solid blue cover strip,
+   section headers are muted labels on a flat fill instead of solid blue bars, offline/away status text muted. */
+html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp::before { height: 44px; background: none; }
+html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp:not(:has(.sf-head))::before { height: 12px; }
+html[class*=theme-flat] body.skin-dark .side-scroll .side-sec, html[class*=theme-flat] body.skin-dark .side-scroll * + .side-sec, html[class*=theme-flat] body.skin-dark .side-scroll .sf-head + .side-sec { background: var(--f0) padding-box; color: var(--fmut); }
+html[class*=theme-flat] body.skin-dark .side-scroll .side-sec h4 { font: 700 11px/15px var(--flat-font); color: var(--fmut); text-transform: uppercase; letter-spacing: .6px; }
+html[class*=theme-flat] body.skin-dark .side-scroll .side-sec .side-more, html[class*=theme-flat] body.skin-dark .side-scroll .side-sec .side-detect { color: var(--facc2); text-decoration: none; }
+html[class*=theme-flat] body.skin-dark .side-scroll .sf-st:has(.sf-dot.off) { color: var(--fmut); }
+html[class*=theme-flat] body.skin-dark .side-scroll .sf-st:has(.sf-dot.away) { color: var(--faway); }
 
 /* generic dark buttons, inputs, dialogs, notices, login (main window) */
 html[class*=theme-flat] body.skin-dark .dk-btn { border: 0; border-radius: 3px; background: var(--f3); color: var(--ftx); box-shadow: none; font-family: var(--flat-font); }
