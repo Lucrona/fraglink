@@ -7,23 +7,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.3.0-beta.8] - 2026-10-27
 
-### Added
-- New themes: Flat Navy and Flat Grey. Crimson, Emerald and Graphite are removed; anyone using one moves to Cobalt.
-- Steam-style pop-ups: friend request pop-ups have Accept and Ignore, and an Update ready pop-up appears when a new version is downloaded.
-- Tray icon shows one corner mark: your status, a red dot for waiting friend requests, or a green arrow when an update is ready. The tooltip shows "N friend requests".
-- Friend side panel: a "This session" row (the old "Playing for" clock is gone).
-- Connections: real Steam, Discord and Battle.net logos, "Hours imported" dates for Steam and Battle.net, and a note when Steam game details were private.
-- Connections: "Get the Fraglink addon" button (CurseForge) and a reminder to log in to each WoW character once. WoW /played is uploaded on the website.
-- What's New notice after an update. Help menu with FAQ, Changelog and Contact Us.
+### Look and themes
+- Two new themes: Flat Navy and Flat Grey
+- Crimson, Emerald and Graphite are removed; anyone using one moves to Cobalt
+- The title bar is gone from every tab, in all themes
+- Flat themes have visible column dividers between Name and Status that turn blue on hover, so you can drag them
+- Text sizes are now Small, Normal, Large and Larger
+  - Normal is the old Large, and saved settings carry over
 
-### Changed
-- The title bar above each tab is removed in all themes; flat themes show draggable column dividers.
-- Text sizes are now Small, Normal, Large and Larger (Normal is the old Large; saved settings carry over).
-- Red Friends badge and highlighted waiting friend requests.
-- The app no longer installs or detects the WoW addon.
+### Pop-ups
+- New pop-up design in Fraglink navy
+- Friend request pop-ups have Accept and Ignore
+- An Update ready pop-up when a new version is downloaded
 
-### Fixed
-- Unticking Save Password or Auto-Login is respected; turning on Auto-Login also turns on Save Password.
+### Tray icon
+- One corner mark shows your status
+  - Green: online or Looking to Play. Yellow: away. Hollow ring: invisible. Greyed out: offline
+- A red dot while friend requests are waiting
+- A green download arrow when an update is ready (it wins over the others)
+- The tooltip shows "N friend requests"
+
+### Friends
+- The side panel has a "This session" row; the old "Playing for" clock is gone
+- Red Friends badge with white text, and waiting requests are highlighted
+
+### Connections and WoW
+- Real Steam, Discord and Battle.net logos
+- Battle.net shows when your /played was last imported, and Steam shows its line too
+- A note when your Steam game details were private
+- A "Get the Fraglink addon" button (CurseForge)
+- A reminder to log in to each WoW character once so the addon saves its /played
+- /played is uploaded on the website
+
+### Other
+- A What's New notice after updating
+- Unticking Save Password or Auto-Login is respected, and turning on Auto-Login also turns on Save Password
+- Help menu with FAQ, Changelog and Contact Us
 
 ## [0.3.0-beta.7] - 2026-10-26
 
