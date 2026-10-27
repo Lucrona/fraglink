@@ -144,7 +144,6 @@ html.theme-flat-navy body.skin-dark .xf-banner-ad{background:rgba(255,255,255,.0
 html.theme-flat-navy body.skin-dark .xf-status-arrow{background:#0f1c33}
 html.theme-flat-navy .dk-vtabs button:hover{background:#142543}
 html.theme-flat-navy .dk-vtabs button.active{background:#1f4f9e;border-color:#152849;box-shadow:none}
-html.theme-flat-navy body.skin-dark .dk-sechead{background:#1f4f9e}
 html.theme-flat-navy body.skin-dark .xf-head{background:#0e1b31}
 html.theme-flat-navy body.skin-dark .xf-head span + span{border-left:1px solid #1d3763}
 html.theme-flat-navy body.skin-dark .xf-row:hover{background:#152848}
@@ -439,7 +438,6 @@ html.theme-flat-grey body.skin-dark .xf-banner-ad{background:rgba(255,255,255,.0
 html.theme-flat-grey body.skin-dark .xf-status-arrow{background:#2a2b2e}
 html.theme-flat-grey .dk-vtabs button:hover{background:#353639}
 html.theme-flat-grey .dk-vtabs button.active{background:#1f4f9e;border-color:#393a3d;box-shadow:none}
-html.theme-flat-grey body.skin-dark .dk-sechead{background:#1f4f9e}
 html.theme-flat-grey body.skin-dark .xf-head{background:#292a2d}
 html.theme-flat-grey body.skin-dark .xf-head span + span{border-left:1px solid #4b4c4f}
 html.theme-flat-grey body.skin-dark .xf-row:hover{background:#38393c}
@@ -656,17 +654,11 @@ html[class*=theme-flat] body.skin-dark .dk-vtabs button:hover { background: var(
 html[class*=theme-flat] body.skin-dark .dk-vtabs button.active { background: var(--facc); color: #fff; }
 html[class*=theme-flat] body.skin-dark .dk-vtabs button svg { width: 20px; height: 20px; }
 
-/* list card: muted section label (Stats, Activity, Detect Games, Login) + list share one bordered card */
-html[class*=theme-flat] body.skin-dark .dk-sechead { left: 56px; right: 10px; top: 133px; height: 31px; padding: 8px 12px 0; box-sizing: border-box; background: var(--f1) !important; border: 1px solid var(--f3); border-bottom: 0; border-radius: 4px 4px 0 0; color: var(--fmut) !important; font: 700 12px/14px var(--flat-font); letter-spacing: .04em; text-transform: uppercase; box-shadow: none !important; }
-html[class*=theme-flat] body.skin-dark .dk-sechead::after { content: ''; position: absolute; left: 6px; right: 6px; bottom: 0; border-bottom: 1px solid var(--f3); }
-html[class*=theme-flat] body.skin-dark .xf-list { left: 56px; right: 10px; top: 164px; bottom: 52px; padding: 6px 0 8px; box-sizing: border-box; background: var(--f1); border: 1px solid var(--f3); border-top: 0; border-radius: 0 0 4px 4px; }
-/* Friends tab: no label; the column headers sit at the top of the card */
-html[class*=theme-flat] body.skin-dark.fl-nobar .dk-sechead { display: none !important; }
-html[class*=theme-flat] body.skin-dark.fl-nobar .xf-list { top: 133px; padding-top: 0; border-top: 1px solid var(--f3); border-radius: 4px; }
-html[class*=theme-flat] body.skin-dark.fl-nobar.has-news .xf-list { top: 157px; }
+/* list card: no Friends header bar; the column headers sit at the top of the card */
+html[class*=theme-flat] body.skin-dark .dk-sechead { display: none !important; }
+html[class*=theme-flat] body.skin-dark .xf-list { left: 56px; right: 10px; top: 133px; bottom: 52px; padding: 0 0 8px; box-sizing: border-box; background: var(--f1); border: 1px solid var(--f3); border-radius: 4px; }
 html[class*=theme-flat] body.skin-dark.has-news .dk-vtabs { top: 157px; }
-html[class*=theme-flat] body.skin-dark.has-news .dk-sechead { top: 157px; }
-html[class*=theme-flat] body.skin-dark.has-news .xf-list { top: 188px; }
+html[class*=theme-flat] body.skin-dark.has-news .xf-list { top: 157px; }
 html[class*=theme-flat] body.skin-dark.has-news .xf-identity { top: 99px; }
 html[class*=theme-flat] body.skin-dark.has-news .xf-status { top: 122px; }
 html[class*=theme-flat] body.skin-dark .xf-grid { padding: 0 6px; box-sizing: border-box; font-size: 13px; }

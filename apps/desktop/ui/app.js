@@ -599,7 +599,6 @@
     paintFriendsBadge();
     $('#sechead').textContent = state.tab === 'friends' && state.detectRun ? 'Detect Games' : state.tab === 'friends' && signedOut() ? 'Login' : ({ friends: 'Friends', stats: 'Stats', activity: 'Activity' })[state.tab] || '';
     $('#list').classList.toggle('nohbar', state.tab !== 'friends');
-    document.body.classList.toggle('fl-nobar', state.tab === 'friends' && !state.detectRun && !signedOut()); // Friends list: no title bar
     const sl = list.scrollLeft, st = list.scrollTop;
     if (state.tab === 'stats') renderStats(); else if (state.tab === 'activity') renderActivity(); else renderFriends();
     list.scrollLeft = sl; list.scrollTop = st; LS.update();
