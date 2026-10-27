@@ -1409,12 +1409,12 @@ pages.settings = async () => {
         : v.off ? `<span class="btn sm" aria-disabled="true">Turned off for now</span>` : v.available ? `<button class="btn sm blue" type="button" data-link="${p}">${p === "steam" ? "Sign in through Steam" : "Link " + NAMES[p]}</button>` : `<span class="btn sm" aria-disabled="true">Coming soon</span>`;
       const who = l ? `${p === "steam" ? `<a href="https://steamcommunity.com/profiles/${esc(l.uid)}" rel="noopener">${esc(l.display || l.uid)}</a>` : `<b>${esc(l.display || l.uid)}</b>`} ${l.verified ? `<span class="vbadge">✓ Verified</span>` : `<span class="sub">(not verified)</span>`}${l.last_sync_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(l.last_sync_at))}${l.sync_status && l.sync_status !== "ok" ? " · " + esc(l.sync_status) : ""}</div>` : ""}`
         : `<span class="sub">${blurb}</span>`;
-      return `<div class="conn"><span class="cl">${logo}</span><div style="flex:1"><b style="display:block">${NAMES[p]}</b>${who}</div><div>${right}</div></div>`;
+      return `<div class="conn"><span class="cl cl-${p}">${logo}</span><div style="flex:1"><b style="display:block">${NAMES[p]}</b>${who}</div><div>${right}</div></div>`;
     };
     box.innerHTML = msg + `<div style="padding:0 14px">
-      ${card("steam", "S", c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
-      ${card("discord", "D", "Show your Discord name on your profile.")}
-      ${card("bnet", "B", "Show your BattleTag on your profile.")}
+      ${card("steam", `<img src="/assets/brand-steam.svg" alt="" width="22" height="22">`, c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
+      ${card("discord", `<img src="/assets/brand-discord.svg" alt="" width="22" height="22">`, "Show your Discord name on your profile.")}
+      ${card("bnet", `<img src="/assets/brand-battlenet.svg" alt="" width="22" height="22">`, "Show your BattleTag on your profile.")}
       ${c.bnet && c.bnet.needs_reconnect ? `<div class="conn-sub"><span class="sub warn">Reconnect Battle.net to verify characters.</span> <a href="/connect/battlenet">Manage WoW</a></div>` : ""}
       <p class="sub" style="padding:8px 0">Verified accounts show as badges on your profile. You're sent to the provider's own sign-in page; Fraglink never sees your password there.</p></div>`;
     if (q.get("connected")) { ok(box, `${NAMES[q.get("connected")] || "Account"} linked.`); history.replaceState(null, "", "/settings#connections"); }

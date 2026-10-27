@@ -414,6 +414,7 @@ table.gt .gico img,table.gt .gico .gi{width:24px!important;height:24px!important
 /* settings tabs: no stray scrollbar; wrap instead */
 .tabs{overflow:visible;flex-wrap:wrap}
 .conn .cl{width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:4px;background:linear-gradient(#2a4a6e,#16283c);color:#cfe3fa;font-weight:800;margin-right:12px}
+.conn .cl img{width:22px;height:22px;display:block}.conn .cl-steam{background:linear-gradient(#2a475e,#171a21)}.conn .cl-discord{background:#5865f2}.conn .cl-bnet{background:#148eff}
 .conn{display:flex;align-items:center;gap:8px}
 .vbadge{display:inline-block;padding:0 6px;border-radius:3px;background:#1f4a2a;color:#9fe6a8;font-size:11px;font-weight:700;margin-left:4px}
 /* linked-account brand icons under the status line */

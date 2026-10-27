@@ -271,9 +271,9 @@
   }
 
   /* ---- Connections: linked accounts, the same as Settings > Connections on the website ---- */
-  const CONN = [['steam', 'Steam', 'S', '#1b2838', 'Verify your Steam account; it shows as a badge on your profile'],
-    ['bnet', 'Battle.net', 'B', '#148eff', 'Show your BattleTag on your profile'],
-    ['discord', 'Discord', 'D', '#5865f2', 'Show your Discord name on your profile']];
+  const CONN = [['steam', 'Steam', 'steam', '#1b2838', 'Verify your Steam account; it shows as a badge on your profile'],
+    ['bnet', 'Battle.net', 'battlenet', '#148eff', 'Show your BattleTag on your profile'],
+    ['discord', 'Discord', 'discord', '#5865f2', 'Show your Discord name on your profile']];
   async function renderConnections() {
     const box = $('#conn-list'), m = $('#conn-msg');
     const signed = await signedIn();
@@ -289,7 +289,7 @@
       const extra = p === 'bnet' && l ? (v.needs_reconnect
         ? '<div class="conn-sub"><span class="warn">Reconnect Battle.net to verify characters.</span> <button type="button" data-link="bnet">Reconnect</button></div>'
         : '<div class="conn-sub"><button type="button" data-web="connect/battlenet/verify">&#128274; Verify WoW characters</button></div>') : '';
-      return `<div class="conn"><i class="conn-ic" style="--c:${col}">${ic}</i><div class="conn-tx"><b>${name}</b>${who}</div>${right}</div>${extra}`;
+      return `<div class="conn"><i class="conn-ic" style="--c:${col}"><img src="brand/brand-${ic}.svg" alt=""></i><div class="conn-tx"><b>${name}</b>${who}</div>${right}</div>${extra}`;
     }).join('');
     renderWow();
   }
