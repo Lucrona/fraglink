@@ -310,7 +310,7 @@
       const f = await FLB.wowAddonStatus();
       const found = f.some(x => x.installed);
       if (!f.length) { st.textContent = 'Not found. No WoW install seen yet: start WoW once with Fraglink running.'; return; }
-      st.textContent = f.map(x => `${x.game_id === 'wow_forever' ? 'WoW Forever' : 'WoW'}: ${x.installed ? 'Detected (v' + x.installed + ')' : 'Not found'}`).join(' · ');
+      st.textContent = f.map(x => `${x.game_id === 'wow_forever' ? 'WoW Forever' : 'WoW'}: ${x.installed ? 'Detected (v' + x.installed + ')' : 'Not found'}`).join(' · ') + (found ? ' · Log in to each of your characters once so the addon saves its /played. Skipped characters keep their last hours.' : '');
     } catch (x) { st.textContent = String(x); }
   }
   const WOW_UPLOAD_URL = 'https://playfraglink.com/connect/wow';
