@@ -646,7 +646,7 @@
     return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
   }
   /* Friend info panel (dev.17). Top to bottom: header (avatar, name, username, status),
-     Playing Game (icon, name, Realm and a live "Playing for" timer), Stats (This week, Total), then
+     Playing Game (icon, name, Realm), Stats (This session, This week, Total), then
      the buttons. Empty rows and sections are left out. Real friends use presence plus the
      server's friend summary and profile; sample friends (browser preview) their own fields. */
   const sampleStart = {};
@@ -710,10 +710,8 @@
     if (f.kind === 'req') return h + `<p class="sf-note">Wants to be your friend.</p><div class="sf-foot"><button class="dk-btn" data-action="friend-accept" data-handle="${H}">Accept</button><button class="dk-btn" data-action="friend-decline" data-handle="${H}">Decline</button><a class="sf-small" data-action="friend-block" data-handle="${H}">Block</a></div>`;
     if (f.kind === 'out') return h + `<p class="sf-note">Friend request sent. They'll show up here once they accept.</p><div class="sf-foot"><a class="sf-small" data-action="friend-remove" data-handle="${H}">Cancel request</a></div>`;
     if (playing) {
-      const t0 = sessionStart(f);
       h += sfSec('Playing Game') + `<div class="sf-game"><i class="gi sf-gi">${friendGameIcon(f.game)}</i><div class="sf-gn"><b data-tip="${esc(gameLabel(f))}">${esc(gameLabel(f))}</b></div></div>`;
       if (realmOf(f)) h += kv('Realm', esc(realmOf(f)));
-      h += kv('Playing for', t0 ? `<span class="sf-timer" data-start="${t0}">${fmtT(Date.now() - t0)}</span>` : '');
     }
     if (f.kind === 'off' && f.last) h += kv('Last online', esc(f.last));
     if (f.kind === 'fof') {
