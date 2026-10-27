@@ -1,7 +1,7 @@
 # Fraglink brand: "Split Orbit" (concept 28)
 
 The Fraglink logo: an italic, blade-cut **F** with an orbit ring split around it.
-Original Fraglink art (no Xfire or other third-party artwork).
+Original Fraglink art (no third-party artwork).
 
 | File | Use |
 |---|---|

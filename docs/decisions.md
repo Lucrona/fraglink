@@ -25,6 +25,7 @@ the entries say what changing them would cost.
 - The token is never sent to the webview.
 
 ## D5. What "Tracked" means per game
+*Partly superseded: Estimated was removed in D31, and shown hours are now the latest import plus tracked time after it (see D13).*
 - `tracked = max(sum of Fraglink sessions, Steam's playtime_forever)`, **not the sum**. Steam already counts the sessions Fraglink saw for Steam games, so adding them would double count.
 - `display = max(tracked, latest Imported counter)`. The tier marker shows which one won.
 - Estimated is always shown separately (`~`) and **never** added to any total.
@@ -38,6 +39,7 @@ the entries say what changing them would cost.
 - (Before: Tracked only; Imported and Estimated were ignored completely.)
 
 ## D7. One estimate per game
+*Superseded by D31: the history estimator and Estimated hours were removed in 0.3.0-beta.2.*
 - Saving the history estimator again for the same game **replaces** the old estimate instead of stacking another.
 - Imported counters are kept as a history, and the latest one counts.
 - Limits: 1–10 eras, years 1970 to now, at most 80 h/week. Warnings for more than 40 h/week over several years and for overlapping eras.
@@ -62,6 +64,7 @@ the entries say what changing them would cost.
 - Uploads are idempotent by session UUID, so re-sending after a network error never duplicates.
 
 ## D11. Account deletion is immediate and hard
+*Superseded by D31: accounts are now purged 7 days after deletion is requested.*
 - `DELETE /api/v1/me` (with password) removes the user and every row that belongs to them, straight away.
 - There is no 30-day grace period (the spec allows either). Local data on the PC is untouched.
 
@@ -82,7 +85,7 @@ the entries say what changing them would cost.
 - Signing out forgets the token and marks everything as not yet uploaded, so a later sign-in (even to another server) re-sends it all. Uploads are idempotent (see D10).
 
 ## D15. Server web pages are a stop-gap
-- `apps/server` serves minimal no-JavaScript pages: sign up/in, approve a pairing code, link/import Steam, add Estimated/Imported hours, paired devices, export.
+- `apps/server` serves minimal no-JavaScript pages: sign up/in, approve a pairing code, link/import Steam, add Imported hours (Estimated was removed in D31), paired devices, export.
 - They exist so M2 can be used end to end locally. The real website is M4 (Astro in the spec).
 - The cookie is HttpOnly, SameSite=Lax (plus Secure on https). Every cookie-authenticated write also checks Origin/Referer.
 
@@ -122,6 +125,7 @@ the entries say what changing them would cost.
 - Friend requests also pop up (unless muted or pop-ups are off).
 
 ## D24. Away is manual in M3
+*Superseded in 0.2.0-dev.10: the app now sets Away automatically after 10 minutes without keyboard or mouse input.*
 - Away is only set from the status drop-down. Automatic away based on idle time is deferred: idle during a game already means "still playing" for friends.
 
 ## D25. Tray account totals, with offline fallback
@@ -144,13 +148,13 @@ the entries say what changing them would cost.
 - **Needs a Windows test:** exe icon extraction (GDI code) is only compile-checked on Linux.
 
 ## Open questions for you
-1. **Hosting:** Supabase (as in the spec) vs a small VPS/managed Postgres running `fraglink-server`, and the region (spec: Sydney). Nothing is deployed.
-2. **Steam Web API key:** needed for real imports. Create one at <https://steamcommunity.com/dev/apikey> (needs a Steam account with a purchase). Set it as `STEAM_API_KEY` on the server only. Never commit it.
-3. **Discord login** (spec M2): not built yet. It needs a Discord application (client id/secret), which means creating an external account.
-4. **Email verification and password reset:** they need an email provider (external service), so they are not built. Accounts work without verification for now.
-5. **Grace period** for account deletion (D11) and whether excluded games should also be deleted server-side (D9).
+1. **Hosting:** *Resolved.* `fraglink-server` runs on a VPS behind HTTPS at playfraglink.com (see [deploy.md](deploy.md)).
+2. **Steam Web API key:** *Resolved*, Steam imports are live. It is needed for real imports. Create one at <https://steamcommunity.com/dev/apikey> (needs a Steam account with a purchase). Set it as `STEAM_API_KEY` on the server only. Never commit it.
+3. **Discord login** (spec M2): *Partly resolved.* Discord can be linked as a connected account (shown on profiles, used for Message on Discord). Signing in with Discord is not built.
+4. **Email verification and password reset:** *Resolved.* Both are live on the website, along with optional two-step sign-in.
+5. **Grace period** for account deletion (D11): *resolved*, 7 days (D31). Still open: whether excluded games should also be deleted server-side (D9).
 6. **Privacy policy / Terms:** Live 19 October 2026 (privacy v11, terms v6; v10 added the Steam profile name, "Show connected account names" and privacy settings in the export; v11 drops self-imported hours now that manual imports are disabled): under-18 starts private and may go public after confirm; new accounts get `age: false` in privacy at sign-up (existing rows unchanged). Regenerates via `apps/site-web/publish_legal.py`. Sources: `docs/privacy-policy.md`, `docs/terms.md`.
-7. **Presence scaling (D21):** fine for a single server. Pick Postgres LISTEN/NOTIFY or Redis when hosting is decided.
+7. **Presence scaling (D21):** fine for a single server. Fraglink still runs as one server; pick Postgres LISTEN/NOTIFY or Redis if it ever needs more than one.
 
 ## D29. Dark resizable main window by default; Options in its own window
 *28 Sep 2026.* After testing 0.2.0-dev on Windows, the user asked for the 2013-era dark client look instead of the silver chassis, a resizable window, and a real Options window.
@@ -165,7 +169,7 @@ the entries say what changing them would cost.
 **Date:** 2026-09-28 (0.2.0-dev.4)
 
 - **Logo:** concept 28 "Split Orbit" (an italic blade F inside a split orbit ring) replaces the chain-link F. Flat white at 16/32 px and in the dark header; chrome for larger icons, the banner and the installer. Sources and the icon generator live in `assets/brand/`. The wordmark is Saira Expanded Bold converted to outlines (SIL OFL 1.1), so no font file ships.
-- **Layout:** menus, the three-column friends list, group names, the status dropdown (current game shown automatically) and the context-aware right panel follow the 2013 dark client's structure, drawn with Fraglink's own CSS and wording (no Xfire art or strings).
+- **Layout:** menus, the three-column friends list, group names, the status dropdown (current game shown automatically) and the context-aware right panel follow the 2013 dark client's structure, drawn with Fraglink's own CSS and wording (no third-party art or strings).
 - **Options** is a small tabbed dialog with plain Windows-style controls rather than a themed window: it is where people expect settings, and it stays readable at any DPI.
 - **Scope:** chat, voice, video, broadcasting, file transfer, screenshots, chat rooms, the in-game overlay and the server browser are left out. Settings for features that don't exist yet (sounds, nickname, language, some privacy switches, custom status and groups) are saved so the dialog is complete, and are listed in the changelog as inert.
 - **Launching** only uses data Fraglink found itself or the user typed into Options (Steam/Epic launcher URLs, a known .exe); the UI passes a game id, never a command line.

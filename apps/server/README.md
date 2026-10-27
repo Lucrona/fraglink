@@ -1,7 +1,8 @@
-# fraglink-server (M2, local development)
+# fraglink-server
 
-Accounts, desktop pairing, session sync, trust-tier hours and Steam import for Fraglink.
-Rust (axum 0.8, sqlx 0.9) + Postgres. **Local only: nothing is deployed.** See
+The Fraglink server: accounts, desktop pairing, session sync, hours, friends and presence, linked accounts
+(Steam, Battle.net, Discord), WoW /played uploads and the website API. It runs the live service at
+`https://playfraglink.com`. Rust (axum 0.8, sqlx 0.9) + Postgres. This page covers running it locally. See
 [`docs/decisions.md`](../../docs/decisions.md) for the design choices.
 
 ## Run it
@@ -20,10 +21,11 @@ cargo run -p fraglink-server
 
 Or everything in containers: `docker compose --profile server up --build`.
 
-Then point the client at it: on the Login screen open **Server** and enter `http://localhost:8787`
-(or use Options > Account). Since dev.11 the client defaults to the hosted Fraglink server at
-`https://playfraglink.com` (falling back to `http://119.42.54.86` when HTTPS fails). Log in or use **Create Account**; "Sign in with your browser instead" uses
-the pairing page (sign in, check the code, approve).
+Then point the desktop app at it: start the app with the `FRAGLINK_SERVER` environment variable set,
+for example `FRAGLINK_SERVER=http://localhost:8787`. Without it the app always uses
+`https://playfraglink.com` (the Server field on the Login screen was removed in 0.3.0-beta.3). Log in or
+use **Create Account**; "Sign in with your browser instead" uses the pairing page (sign in, check the
+code, approve).
 
 ## Configuration (environment variables)
 
@@ -60,7 +62,7 @@ See `.env.example`. Keep real values out of git (`.env` is ignored).
 | POST | `/device/approve` `{user_code}` | web token | |
 | GET / DELETE | `/devices`, `/devices/{id}` | token | list / revoke paired apps |
 | POST | `/sessions/upload` | - | removed: 410 Gone (hours come from live presence) |
-| GET | `/stats` | token | per-game tracked / imported / estimated / display + tier |
+| GET | `/stats` | token | per-game tracked / imported / display + tier (`estimated` is always 0, kept for app builds up to 0.3.0-beta.1) |
 | GET | `/leaderboard/{game_id}?period=7d\|all` | token | like profiles: all = `display_min`, 7d = sessions or Imported growth (D6) |
 | POST | `/hours/estimate` | - | removed: 410 Gone `estimates_removed` (the history estimator is gone) |
 | POST | `/hours/import` | - | disabled: 410 Gone `imports_disabled`, "Manual hour imports are disabled." Nothing is stored. Rows saved before stay, still count, and can be deleted. The old `/web/import` form answers the same. |

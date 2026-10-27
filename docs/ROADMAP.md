@@ -1,18 +1,20 @@
 # Roadmap
 
-Fraglink is built in milestones. Durations are rough estimates for a solo developer, and the order can change. The full plan is in [`fraglink-mvp-spec.md`](fraglink-mvp-spec.md) §11.
+Fraglink is built in milestones, and the order can change. The original plan is in [`fraglink-mvp-spec.md`](fraglink-mvp-spec.md) §11; this page shows where things stand now. What changed in each release is in the [changelog](../CHANGELOG.md) and on [playfraglink.com/changelog](https://playfraglink.com/changelog).
+
+**Now:** public beta. The app is at **0.3.0-beta.9.1** (27 October 2026) and the website is live at [playfraglink.com](https://playfraglink.com).
 
 | | Milestone | What it delivers | Status |
 |---|---|---|---|
-| **M0** | Setup | Monorepo, Tauri 2 app running the classic UI, tray, single instance, autostart, CI with Windows installers | ✅ Done (unsigned builds) |
-| **M1** | Local tracker + tray tabs | Game detection (signatures + Steam, Epic and GOG libraries), idle trimming, local SQLite, tagging/exclusions, Stats and Activity tabs, local toasts, export | ✅ Done (0.1.1). The Stats and Activity tabs are hidden in the 0.2 client for now and return with the website's stats |
-| **M2** | Accounts + Steam + trust tiers | Sign-in (email/Discord), Steam link and hours import, offline-safe sync, Tracked / Imported / Estimated hours, export v1, privacy policy | 🚧 Mostly done: accounts (username/password in the client from dev.6, email optional, rate-limited), browser pairing, sync, tiers, Steam import (verified link, daily refresh), JSON + zip/CSV export, draft privacy policy, hosted server (dev.6 default). Still to do: Discord login, email verification/reset, HTTPS domain, legal review of the policy |
-| **M3** | Friends + presence + feed | Friend requests and blocks, live presence (Online/Away/Invisible), Friends tab and side panel, friend toasts, activity feed, Steam friends presence | 🚧 In progress: user search and requests (dev.6), accept/remove/block, WebSocket presence with Invisible, friends list with groups, tooltip, right-click menu and info panel, sign-on toasts. Still to do: activity feed (friends' events), Steam friends presence, live web friends page, auto-away, "Message on Discord" |
-| **M4** | Website core | `playfraglink.com` profiles (drag/hide/reorder, themes), gaming history with trust markers, onboarding with the history estimator, linked accounts, signature images | Planned |
-| **M5** | WoW + imported hours | Battle.net link and verified character cards, Raider.IO, Fraglink Played addon for exact `/played` import | Planned |
-| **M6** | Website depth | Game pages, play-time achievements, weekly recap, rig card, Twitch live badge and OBS widget, opt-in Discord Rich Presence | Planned |
-| **M7** | Beta hardening | Code signing, auto-updater, opt-in crash reports, download page, ToS/privacy policy and shutdown pledge, closed beta | 🚧 Signed auto-update is in (dev.6). The rest is planned |
-| v1.1 | Post-beta | Supporter tier (cosmetics only, stats stay free), yearly recap | Later |
+| **M0** | Setup | Monorepo, Tauri 2 app, tray, single instance, autostart, CI with Windows installers | ✅ Done |
+| **M1** | Local tracker | Game detection (Steam, Battle.net, Epic, GOG, EA, Ubisoft, Xbox, RSI and standalone games, plus a folder scan), local SQLite, tagging and exclusions, toasts, export | ✅ Done. The app's Stats and Activity tabs are switched off for now; your hours and activity are on the website instead |
+| **M2** | Accounts and hours | Accounts, email verification and password reset, two-step sign-in, sign-in from the app, HTTPS at playfraglink.com, Steam link and hours import, **Tracked** and **Imported** hours, data export, privacy policy and terms | ✅ Done. Steam hours are imported when you press Import hours (no automatic refresh). The Estimated tier was dropped |
+| **M3** | Friends and presence | Friend requests and blocks, live presence (Online / Away / Invisible / Looking to Play), automatic Away, groups, side panel, friend toasts, friends' activity, live friends page on the website, Message on Discord | ✅ Done. Still to do: Steam friends' presence |
+| **M4** | Website core | Public profiles at `playfraglink.com/u/<name>`, games and hours, linked accounts (Steam, Battle.net, Discord) with a verified tick, privacy switches shared with the app, Miniprofile signature image, achievements, gaming rig, leaderboards, news | ✅ Live. Still to do: rearranging profile sections and profile themes |
+| **M5** | World of Warcraft | Battle.net link, verified WoW characters with gear, raids and PvP, the [Fraglink addon](https://www.curseforge.com/projects/1766775) for exact `/played`, uploaded on the website | ✅ Live for Retail. WoW: Forever uploads open after it launches. Classic is tracked by the app; Classic uploads come later. Still to do: Raider.IO |
+| **M6** | Website depth | Game pages, weekly recap, Twitch live badge and OBS widget, opt-in Discord Rich Presence | Planned. Per-game leaderboards are already live |
+| **M7** | Beta | Auto-updater, download page, privacy policy, terms and 90-day shutdown notice, public beta, code signing, opt-in crash reports | 🚧 Public beta since 0.3.0-beta.1 (12 October 2026), with auto-update and the download page. Still to do: code-signed installers and opt-in crash reports (crash logs are kept on your PC for now) |
+| v1.1 | After beta | Supporter tier (cosmetics only, stats stay free), yearly recap | Later |
 
 ## Never planned
 
