@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.9] - 2026-10-27
+
+Missed a few spots in beta.8 - here they are.
+
+### Side panel (Flat Navy and Flat Grey)
+- No more blue banner or solid blue section bars
+- Quieter section headers
+- Offline friends no longer show as green
+- The friend's avatar now sits half above the top of the panel
+
+### Connections and WoW
+- New Manage WoW button that opens your Battle.net page on the website
+- Verify WoW characters moved into the World of Warcraft button row
+- The Spotify "coming soon" row is hidden for now
+
+### Fixes
+- The arrow next to your status opens the status menu again in the flat themes
+
 ## [0.3.0-beta.8] - 2026-10-27
 
 ### Look and themes

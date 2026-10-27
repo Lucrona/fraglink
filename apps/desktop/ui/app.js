@@ -1030,6 +1030,11 @@
   /* "What's new" after an update. Edit WHATS_NEW for each release (keyed by the
      app version as devVer() shows it); versions without an entry just get the link. */
   const WHATS_NEW = {
+    '0.3.0-beta.9': [
+      'Cleaner friend side panel in Flat Navy and Flat Grey',
+      'Manage WoW and Verify WoW characters buttons in Connections',
+      'The status menu arrow works in the flat themes',
+    ],
     '0.3.0-beta.8': [
       'Tray icon shows one mark: update ready, friend requests, or your status',
       'Friend requests badge on the Friends tab',
