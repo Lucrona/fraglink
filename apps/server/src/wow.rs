@@ -921,18 +921,37 @@ pub async fn characters(
     all: bool,
     verified_only: bool,
 ) -> ApiResult<Vec<Value>> {
-    #[allow(clippy::type_complexity)]
-    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, DateTime<Utc>, bool, bool, Option<String>, Option<String>, Option<String>, bool, Option<String>)> =
-        sqlx::query_as(
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: Uuid,
+        game_id: String,
+        region: String,
+        realm: String,
+        name: String,
+        class: String,
+        level: i32,
+        played_s: i64,
+        played_at: DateTime<Utc>,
+        verified: bool,
+        hid: bool,
+        race: Option<String>,
+        gender: Option<String>,
+        spec: Option<String>,
+        show_guild: bool,
+        guild: Option<String>,
+        featured: Option<i16>,
+    }
+    let rows: Vec<Row> = sqlx::query_as(
             "SELECT id, game_id, region, realm, name, class, level, played_s, played_at, verified,
-                    hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false),
-                    race, gender, coalesce(spec, bnet_spec), show_guild,
+                    hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false) AS hid,
+                    race, gender, coalesce(spec, bnet_spec) AS spec, show_guild,
                     CASE WHEN show_guild THEN (SELECT d.data->'guild'->>'name' FROM wow_char_details d
-                         WHERE d.char_id = wow_characters.id AND d.status = 'ok') END
+                         WHERE d.char_id = wow_characters.id AND d.status = 'ok') END AS guild,
+                    featured
              FROM wow_characters WHERE user_id = $1
                AND ($2 OR NOT (hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false)))
                AND (NOT $3 OR verified)
-             ORDER BY game_id, played_s DESC LIMIT 200",
+             ORDER BY game_id, featured NULLS LAST, played_s DESC LIMIT 200",
         )
         .bind(uid)
         .bind(all)
@@ -941,14 +960,13 @@ pub async fn characters(
         .await?;
     Ok(rows
         .into_iter()
-        .map(
-            |(id, g, r, realm, name, class, level, s, at, v, h, race, gender, spec, sg, guild)| {
-                json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
-                    "class": class, "level": level, "played_min": s / 60, "played_at": at,
-                    "verified": v, "hidden": h, "race": race, "gender": gender, "spec": spec,
-                    "show_guild": sg, "guild": guild })
-            },
-        )
+        .map(|c| {
+            json!({ "id": c.id, "game_id": c.game_id, "region": c.region, "realm": c.realm,
+                "name": c.name, "class": c.class, "level": c.level, "played_min": c.played_s / 60,
+                "played_at": c.played_at, "verified": c.verified, "hidden": c.hid, "race": c.race,
+                "gender": c.gender, "spec": c.spec, "show_guild": c.show_guild, "guild": c.guild,
+                "featured": c.featured })
+        })
         .collect())
 }
 
@@ -976,13 +994,16 @@ async fn set_hidden(
     Json(r): Json<HiddenReq>,
 ) -> ApiResult<Json<Value>> {
     api::check_origin(&a, &headers, &st)?;
-    let n = sqlx::query("UPDATE wow_characters SET hidden = $3 WHERE id = $1 AND user_id = $2")
-        .bind(id)
-        .bind(a.user.id)
-        .bind(r.hidden)
-        .execute(&st.db)
-        .await?
-        .rows_affected();
+    let n = sqlx::query(
+        "UPDATE wow_characters SET hidden = $3, featured = CASE WHEN $3 THEN NULL ELSE featured END
+         WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(a.user.id)
+    .bind(r.hidden)
+    .execute(&st.db)
+    .await?
+    .rows_affected();
     if n == 0 {
         return Err(AppError::not_found());
     }

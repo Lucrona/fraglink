@@ -597,6 +597,7 @@ pages.bnet = async () => {
     : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify your WoW characters. Only verified characters count toward your hours.${s.unverified ? ` You have ${plural(s.unverified, "uploaded character")} waiting.` : ""}</div></div>
         <div class="bn-acts"><button class="btn blue" type="button" data-link>Link Battle.net</button><a class="btn" href="/connect/wow">Upload /played</a></div></div>`;
   el.innerHTML = `<section class="panel bn-box"><h2>Battle.net</h2><div data-msg></div>${head}</section>
+    ${s.linked ? `<section class="panel bn-box" data-feat><h2>Featured on profile</h2><p class="sub" style="padding:0 14px">Pick up to 3 characters to show first on your profile, in this order. Leave empty to show your most played. Hidden characters can't be featured.</p><div data-fbox><p class="empty" style="padding:12px">Loading…</p></div></section>` : ""}
     <section class="panel bn-box"><h2><span data-ttl>Verified characters</span><label class="bn-sw bn-hd"><span>Hide all from profile</span><input type="checkbox" data-hideall ${s.hide_all ? "checked" : ""}><i class="bn-tg"></i></label></h2>
       <div class="bn-tools"><input type="search" data-q placeholder="Search name or realm" aria-label="Search name or realm" maxlength="64">
         <select data-sort aria-label="Sort"><option value="hours">Sort: Hours played</option><option value="level">Sort: Level</option><option value="name">Sort: Name</option><option value="realm">Sort: Realm</option></select>
@@ -648,6 +649,7 @@ pages.bnet = async () => {
     const cb = e.target.closest("[data-hide]"); if (!cb) return;
     const r = cb.closest(".bn-ch"), c = st.items.find(x => x.id === r.dataset.id), hidden = !cb.checked; cb.disabled = true;
     try { await api("/me/wow/" + c.id, { method: "POST", body: { hidden } }); c.hidden = c.own_hidden = hidden;
+      if (hidden) el.dispatchEvent(new CustomEvent("wowhid", { detail: c.id }));
       if (st.vis) await load(false); else { r.outerHTML = row(c); } }
     catch (x) { cb.checked = !cb.checked; showErr(msgBox, x); cb.disabled = false; }
   });
@@ -666,6 +668,44 @@ pages.bnet = async () => {
     } catch (x) { t.disabled = false; showErr(msgBox, x); }
   });
   load(false);
+  // Featured top 3 per WoW version: search picker (fine with 1000+ characters), up/down, remove
+  const fbox = $("[data-fbox]", el);
+  if (fbox) {
+    const FL = [["wow", "World of Warcraft"], ["wow_forever", "WoW: Forever"]];
+    let F; try { F = await api("/me/wow/featured"); } catch (x) { fbox.innerHTML = `<p class="empty">${esc(x.message)}</p>`; return; }
+    const lbl = c => `${esc(c.name)} <span class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())} · ${hours(c.played_min, { zero: true })}</span>`;
+    const draw = () => { fbox.innerHTML = FL.map(([g, nm]) => `<div class="bn-feat" data-g="${g}" style="padding:6px 14px 12px"><b>${nm}</b>
+      <ol style="margin:6px 0 6px 20px">${F[g].map((c, i) => `<li data-i="${i}">${lbl(c)} <button class="btn sm" type="button" data-up ${i ? "" : "disabled"} aria-label="Move up">↑</button><button class="btn sm" type="button" data-dn ${i < F[g].length - 1 ? "" : "disabled"} aria-label="Move down">↓</button><button class="btn sm" type="button" data-rm aria-label="Remove">✕</button></li>`).join("") || `<li class="empty" style="list-style:none;margin-left:-20px">None picked: your most played show first.</li>`}</ol>
+      ${F[g].length < 3 ? `<input type="search" data-fq placeholder="Search a character to add #${F[g].length + 1}" aria-label="Search a character to feature" maxlength="64"><div data-fr></div>` : ""}</div>`).join(""); };
+    const save = async (g, next) => {
+      try { await api("/me/wow/featured", { method: "POST", body: { game_id: g, ids: next.map(c => c.id) } }); F[g] = next; draw(); }
+      catch (x) { showErr(msgBox, x); }
+    };
+    draw();
+    el.addEventListener("wowhid", e => { FL.forEach(([g]) => { F[g] = F[g].filter(c => c.id !== e.detail); }); draw(); });
+    let tf;
+    fbox.addEventListener("input", e => {
+      const q = e.target.closest("[data-fq]"); if (!q) return;
+      const box = q.closest("[data-g]"), g = box.dataset.g, out = $("[data-fr]", box);
+      clearTimeout(tf); tf = setTimeout(async () => {
+        if (!q.value.trim()) { out.innerHTML = ""; return; }
+        const p = new URLSearchParams({ q: q.value.trim(), vis: "shown", sort: "hours", limit: 50 });
+        let d; try { d = await api("/me/wow/list?" + p); } catch (x) { showErr(msgBox, x); return; }
+        const have = new Set(F[g].map(c => c.id)), hits = d.items.filter(c => c.game_id === g && !have.has(c.id)).slice(0, 8);
+        out._hits = hits;
+        out.innerHTML = hits.length ? hits.map((c, i) => `<button class="btn sm" type="button" data-add="${i}" style="display:block;margin:4px 0;text-align:left">${lbl(c)}</button>`).join("") : `<p class="sub">No shown characters match.</p>`;
+      }, 250);
+    });
+    fbox.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      const box = b.closest("[data-g]"), g = box.dataset.g, cur = F[g].slice();
+      if (b.matches("[data-add]")) { const c = $("[data-fr]", box)._hits[+b.dataset.add]; return save(g, cur.concat([c]).slice(0, 3)); }
+      const i = +b.closest("li").dataset.i;
+      if (b.matches("[data-rm]")) cur.splice(i, 1);
+      else { const j = b.matches("[data-up]") ? i - 1 : i + 1; [cur[i], cur[j]] = [cur[j], cur[i]]; }
+      save(g, cur);
+    });
+  }
 };
 
 pages.bnetverify = async () => {
@@ -1112,7 +1152,7 @@ pages.profile = async () => {
     const pop = c => FEATURES.wow_characters && c.game_id === "wow" && !c.hidden;
     const card = c => `<div class="wc${c.hidden ? " wc-hid" : ""}${pop(c) ? " wc-click" : ""}"${pop(c) ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}><span class="wc-ic">${c.class ? `<img src="${WOW.clsIcon(c.class)}" alt="" title="${esc(WOW.cls(c.class))}" loading="lazy" ${imgOk}>` : ""}${c.spec && WOW.specIcon(c.class, c.spec) ? `<img src="${WOW.specIcon(c.class, c.spec)}" alt="" title="${esc(c.spec)}" loading="lazy" ${imgOk}>` : ""}</span></div>
       <div class="wc-t"><b>${esc(c.name)}</b><div class="sub">${c.level} ${esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" "))} · ${esc(c.realm)} ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""}</div>${c.show_guild && c.guild ? `<div class="sub wc-g">&lt;${esc(c.guild)}&gt;</div>` : ""}</div></div>`;
-    const WS = [...WC].sort((a, b) => (b.played_min || 0) - (a.played_min || 0)), WMAX = 3;
+    const WS = [...WC].sort((a, b) => (a.featured || 9) - (b.featured || 9) || (b.played_min || 0) - (a.played_min || 0)), WMAX = 3; // featured picks first, in order
     wowc = sec("WoW characters", `<div class="wcs">${WS.slice(0, WMAX).map(card).join("")}</div>${WS.length > WMAX ? `<div class="wcs" data-wmore hidden>${WS.slice(WMAX).map(card).join("")}</div><p style="padding:0 14px 10px"><button class="btn sm" type="button" data-wall onclick="this.closest('section,div').parentNode.querySelector('[data-wmore]').hidden=false;this.parentNode.remove()">Show all ${WS.length} characters</button></p>` : ""}${self ? `<p class="sub" style="padding:0 14px 10px">Only you see hidden characters. <a href="/connect/battlenet">Manage on your Battle.net page</a></p>` : ""}`);
   }
 

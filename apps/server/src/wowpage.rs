@@ -25,6 +25,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/me/bnet", get(summary))
         .route("/api/v1/me/wow/list", get(list))
         .route("/api/v1/me/wow/hide_all", post(hide_all))
+        .route("/api/v1/me/wow/featured", get(featured).post(set_featured))
         .route("/api/v1/me/wow/{id}/spec", post(set_spec))
         .route("/api/v1/wow/icons/{file}", get(icon))
 }
@@ -443,4 +444,92 @@ mod tests {
         assert!(specs_of("DEATHKNIGHT").contains(&"Unholy"));
         assert!(specs_of("nope").is_empty());
     }
+}
+
+// ------------------------------------------------------------------ featured
+
+/// The owner's featured characters (up to 3 per flavour, in order), for the picker.
+async fn featured(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, i16)> = sqlx::query_as(
+        "SELECT id, game_id, region, realm, name, class, level, played_s, featured
+         FROM wow_characters WHERE user_id = $1 AND featured IS NOT NULL
+         ORDER BY game_id, featured",
+    )
+    .bind(a.user.id)
+    .fetch_all(&st.db)
+    .await?;
+    let mut out = serde_json::Map::new();
+    for (g, _) in crate::wow::GAMES {
+        out.insert(g.to_string(), json!([]));
+    }
+    for (id, g, r, realm, name, class, level, s, f) in rows {
+        if let Some(Value::Array(v)) = out.get_mut(&g) {
+            v.push(
+                json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
+                "class": class, "level": level, "played_min": s / 60, "featured": f }),
+            );
+        }
+    }
+    Ok(Json(Value::Object(out)))
+}
+
+#[derive(Deserialize)]
+struct FeaturedReq {
+    game_id: String,
+    /// In order: first is #1. Empty clears the picks (profile sorts by hours again).
+    ids: Vec<Uuid>,
+}
+
+async fn set_featured(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<FeaturedReq>,
+) -> ApiResult<Json<Value>> {
+    api::check_origin(&a, &headers, &st)?;
+    let uid = a.user.id;
+    if !crate::wow::GAMES.iter().any(|(g, _)| *g == r.game_id) {
+        return Err(AppError::bad_request("bad_game", "Unknown WoW version."));
+    }
+    let mut seen = std::collections::HashSet::new();
+    if r.ids.len() > 3 || !r.ids.iter().all(|i| seen.insert(*i)) {
+        return Err(AppError::bad_request(
+            "too_many",
+            "Pick up to 3 different characters.",
+        ));
+    }
+    let ok: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM wow_characters WHERE user_id = $1 AND game_id = $2 AND id = ANY($3)
+           AND verified AND NOT hidden",
+    )
+    .bind(uid)
+    .bind(&r.game_id)
+    .bind(&r.ids)
+    .fetch_one(&st.db)
+    .await?;
+    if ok != r.ids.len() as i64 {
+        return Err(AppError::bad_request(
+            "not_featurable",
+            "Only your own verified, shown characters of this WoW version can be featured.",
+        ));
+    }
+    let mut tx = st.db.begin().await?;
+    sqlx::query("UPDATE wow_characters SET featured = NULL WHERE user_id = $1 AND game_id = $2 AND featured IS NOT NULL")
+        .bind(uid)
+        .bind(&r.game_id)
+        .execute(&mut *tx)
+        .await?;
+    for (n, id) in r.ids.iter().enumerate() {
+        sqlx::query("UPDATE wow_characters SET featured = $3 WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(uid)
+            .bind(n as i16 + 1)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(Json(
+        json!({ "ok": true, "game_id": r.game_id, "ids": r.ids }),
+    ))
 }

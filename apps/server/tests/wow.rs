@@ -612,3 +612,108 @@ async fn played_more_than_tracked_carries_nothing(pool: PgPool) {
             .unwrap();
     assert_eq!(c, 0);
 }
+
+#[sqlx::test]
+async fn featured_characters_lead_the_profile(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let (t, _) = two_chars(&app, &pool, "feat").await;
+    sqlx::query("INSERT INTO site_settings(key, enabled) VALUES('wow_characters', true)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    fraglink_server::features::forget();
+    let names = || async {
+        fraglink_server::features::forget(); // the flag cache is shared with parallel tests
+        let p: Value = serde_json::from_str(
+            &api(&app, "GET", "/api/v1/users/feat/profile", Some(&t), None)
+                .await
+                .text,
+        )
+        .unwrap();
+        p["wow_characters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c["hidden"] != true)
+            .map(|c| c["name"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+    let id_of = |n: &str| {
+        let pool = pool.clone();
+        let n = n.to_string();
+        async move {
+            sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM wow_characters WHERE name = $1")
+                .bind(n)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    let (thrall, alt) = (id_of("Thrall").await, id_of("Alt").await);
+    let feature = |ids: Vec<uuid::Uuid>, g: &str| {
+        let body = json!({ "game_id": g, "ids": ids });
+        let (app, t) = (app.clone(), t.clone());
+        async move {
+            api(
+                &app,
+                "POST",
+                "/api/v1/me/wow/featured",
+                Some(&t),
+                Some(body),
+            )
+            .await
+            .status
+        }
+    };
+
+    // none picked: by hours
+    assert_eq!(names().await, ["Thrall", "Alt"]);
+    // picked: in the chosen order, ahead of hours
+    assert_eq!(feature(vec![alt, thrall], "wow").await, 200);
+    assert_eq!(names().await, ["Alt", "Thrall"]);
+    let f: Value = serde_json::from_str(
+        &api(&app, "GET", "/api/v1/me/wow/featured", Some(&t), None)
+            .await
+            .text,
+    )
+    .unwrap();
+    assert_eq!(f["wow"][0]["name"], "Alt", "{f}");
+    assert_eq!(f["wow_forever"], json!([]), "{f}");
+    // bad picks are refused and change nothing
+    assert_eq!(feature(vec![alt, alt], "wow").await, 400);
+    assert_eq!(feature(vec![alt, thrall, alt, thrall], "wow").await, 400);
+    assert_eq!(
+        feature(vec![alt], "wow_forever").await,
+        400,
+        "other flavour"
+    );
+    assert_eq!(feature(vec![alt], "wow_classic").await, 400);
+    assert_eq!(feature(vec![uuid::Uuid::new_v4()], "wow").await, 400);
+    assert_eq!(names().await, ["Alt", "Thrall"]);
+    // hiding a featured character drops its pick; hidden ones can't be featured
+    let r = api(
+        &app,
+        "POST",
+        &format!("/api/v1/me/wow/{alt}"),
+        Some(&t),
+        Some(json!({ "hidden": true })),
+    )
+    .await;
+    assert_eq!(r.status, 200, "{}", r.text);
+    assert_eq!(names().await, ["Thrall"]);
+    assert_eq!(feature(vec![alt], "wow").await, 400);
+    let left: Vec<Option<i16>> =
+        sqlx::query_scalar("SELECT featured FROM wow_characters ORDER BY name")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(left, [None, Some(2)]);
+    // clearing goes back to hours
+    assert_eq!(feature(vec![], "wow").await, 200);
+    let n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM wow_characters WHERE featured IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(n, 0);
+}
