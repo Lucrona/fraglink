@@ -538,4 +538,5 @@ body.skin-dark.has-news .dk-vtabs, body.skin-dark.has-news .dk-sechead { top: 15
 body.skin-dark.has-news .xf-list { top: 177px; }
 
 .dk-vtabs button { position: relative; }
-.dk-vtabs .fl-req-badge { position: absolute; top: -2px; right: -2px; min-width: 12px; height: 12px; padding: 0 3px; border-radius: 6px; background: #e07020; color: #1b1006; font-size: 9px; font-weight: 700; line-height: 12px; text-align: center; pointer-events: none; }
+.dk-vtabs .fl-req-badge { position: absolute; top: -2px; right: -2px; min-width: 12px; height: 12px; padding: 0 3px; border-radius: 6px; background: #d8232a; color: #fff; box-shadow: 0 0 0 1px #000; font-size: 9px; font-weight: 700; line-height: 12px; text-align: center; pointer-events: none; }
+body.skin-dark .xf-row.pending:not(.sel) { background: linear-gradient(90deg, rgba(216,35,42,.24), rgba(216,35,42,.05)); }

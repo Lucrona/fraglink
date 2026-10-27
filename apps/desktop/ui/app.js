@@ -308,7 +308,7 @@
     const fof = sorted(F.filter(f => f.kind === 'fof')), reqs = F.filter(f => f.kind === 'req' || f.kind === 'out'), off = sorted(F.filter(f => f.kind === 'off'));
     const block = (key, label, cls, rows, rowCls = '', count) => {
       if (hidden.includes(key)) return '';
-      return sec(key, label, cls, count != null ? count : rows.length) + (state.collapsed[key] ? '' : rows.map(f => row(f, rowCls || (f.kind === 'off' ? 'off' : ''))).join(''));
+      return sec(key, label, cls, count != null ? count : rows.length) + (state.collapsed[key] ? '' : rows.map(f => row(f, (rowCls || (f.kind === 'off' ? 'off' : '')) + (f.kind === 'req' ? ' pending' : ''))).join(''));
     };
     const onlineOf = rows => rows.filter(f => f.kind === 'playing' || f.kind === 'online').length;
     let h = note || '';

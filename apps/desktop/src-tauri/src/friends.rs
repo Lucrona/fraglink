@@ -55,6 +55,7 @@ fn setting(app: &AppHandle, k: &str) -> Option<String> {
 }
 
 pub fn emit(app: &AppHandle) {
+    crate::refresh_tray_icon(app);
     let _ = app.emit(FRIENDS_EVENT, ());
 }
 
@@ -236,6 +237,31 @@ pub fn view(app: &AppHandle) -> Value {
         "list": if signed_in { st.friends.list.lock_ok().clone() } else { None },
         "muted": muted(app),
     })
+}
+
+/// Signed in with the presence socket up.
+pub fn connected(app: &AppHandle) -> bool {
+    sync::signed_in(app)
+        && app
+            .state::<AppState>()
+            .friends
+            .connected
+            .load(Ordering::SeqCst)
+}
+
+/// Incoming friend requests waiting in the cached list (0 while signed out).
+pub fn pending_requests(app: &AppHandle) -> usize {
+    if !sync::signed_in(app) {
+        return 0;
+    }
+    app.state::<AppState>()
+        .friends
+        .list
+        .lock_ok()
+        .as_ref()
+        .and_then(|l| l.get("incoming"))
+        .and_then(|v| v.as_array())
+        .map_or(0, |a| a.len())
 }
 
 /// Start the presence thread (no-op when already running or signed out).

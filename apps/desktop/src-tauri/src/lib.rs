@@ -126,6 +126,7 @@ fn update_auto_away(app: &AppHandle, idle_s: u64) {
         log::info!("auto-away: {}", if away { "away" } else { "back" });
         let _ = app.emit("fraglink://auto-away", away);
         friends::nudge(app);
+        refresh_tray_icon(app);
     }
 }
 
@@ -267,17 +268,10 @@ pub fn handle_events(app: &AppHandle, evs: Vec<TrackerEvent>) {
     update_tray_tooltip(app);
 }
 
-/// The tray tooltip is just "Fraglink" (0.2.0-dev.9: the playing / paused detail
-/// lives in the main window; a simulation build is still labelled).
+/// The tray tooltip is "Fraglink" plus any waiting friend requests (the playing /
+/// paused detail lives in the main window; a simulation build is still labelled).
 pub fn update_tray_tooltip(app: &AppHandle) {
-    let tip = if app.state::<AppState>().sim {
-        "Fraglink [simulation]"
-    } else {
-        "Fraglink"
-    };
-    if let Some(tray) = app.tray_by_id("main") {
-        let _ = tray.set_tooltip(Some(tip));
-    }
+    refresh_tray_icon(app);
 }
 
 /// A 16 px menu icon from a cached game icon (`data:image/png;base64,...`).
@@ -537,9 +531,106 @@ fn tray_size() -> u32 {
     32
 }
 
-/// The tray image for the current display scale, with a small green dot in the
-/// bottom-right corner while an update is ready.
-fn tray_image(update_ready: bool) -> Option<tauri::image::Image<'static>> {
+/// The one corner mark on the tray icon (never stacked): a red dot while friend
+/// requests are waiting, else a blue dot while an update is ready, else the status.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrayMark {
+    Requests,
+    Update,
+    Online,
+    Away,
+    Invisible,
+    Offline,
+}
+
+/// Pick the tray mark. Offline (greyed logo) while signed out or not connected;
+/// `status` is the effective status ("online", "away", "invisible").
+pub fn tray_mark(connected: bool, status: &str, pending: usize, update_ready: bool) -> TrayMark {
+    if pending > 0 {
+        TrayMark::Requests
+    } else if update_ready {
+        TrayMark::Update
+    } else if !connected {
+        TrayMark::Offline
+    } else {
+        match status {
+            "away" => TrayMark::Away,
+            "invisible" => TrayMark::Invisible,
+            _ => TrayMark::Online,
+        }
+    }
+}
+
+/// The tray tooltip text.
+pub fn tray_tip(sim: bool, pending: usize, update_ready: bool) -> String {
+    let mut t = String::from(if sim {
+        "Fraglink [simulation]"
+    } else {
+        "Fraglink"
+    });
+    match pending {
+        0 => {}
+        1 => t.push_str("\n1 friend request"),
+        n => t.push_str(&format!("\n{n} friend requests")),
+    }
+    if update_ready {
+        t.push_str("\nUpdate ready");
+    }
+    t
+}
+
+/// Grey out the logo (offline): desaturate and fade.
+fn grey_logo(img: &mut image::RgbaImage) {
+    for p in img.pixels_mut() {
+        let [r, g, b, a] = p.0;
+        let l = (0.3 * r as f32 + 0.59 * g as f32 + 0.11 * b as f32) * 0.72;
+        p.0 = [l as u8, l as u8, l as u8, (a as f32 * 0.8) as u8];
+    }
+}
+
+/// Draw the corner dot. `hole` > 0 leaves a transparent centre of that radius
+/// (Invisible's hollow ring). Anti-aliased, with a dark outline so it reads on
+/// light and dark taskbars.
+fn draw_dot(img: &mut image::RgbaImage, top: [f32; 3], bottom: [f32; 3], hole: f32) {
+    let (w, h) = img.dimensions();
+    let n = w.min(h) as f32;
+    let r = (n * 0.2).max(3.0); // 3.2 px at 16, 6.4 at 32
+    let ring = (n / 16.0).max(1.0);
+    let (cx, cy) = (w as f32 - r - ring, h as f32 - r - ring);
+    let dark = [12.0, 14.0, 16.0];
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+            let cov = |edge: f32| (edge - d + 0.5).clamp(0.0, 1.0);
+            let (outer, inner) = (cov(r + ring), cov(r));
+            if outer <= 0.0 {
+                continue;
+            }
+            let fill = if y as f32 + 0.5 < cy - r * 0.2 {
+                top
+            } else {
+                bottom
+            };
+            let p = img.get_pixel_mut(x, y);
+            for ((ch, d), fc) in p.0.iter_mut().take(3).zip(dark).zip(fill) {
+                let c = d * (1.0 - inner) + fc * inner;
+                *ch = (*ch as f32 * (1.0 - outer) + c * outer).round() as u8;
+            }
+            p.0[3] = (p.0[3] as f32 + (255.0 - p.0[3] as f32) * outer).round() as u8;
+            if hole > 0.0 {
+                // dark inner edge, then see-through centre
+                let (hi, ho) = (cov(hole), cov(hole + ring));
+                for ch in p.0.iter_mut().take(3) {
+                    *ch = (*ch as f32 * (1.0 - ho) + dark[0] * ho).round() as u8;
+                }
+                p.0[3] = (p.0[3] as f32 * (1.0 - hi)).round() as u8;
+            }
+        }
+    }
+}
+
+/// The tray image for the current display scale with its corner mark.
+fn tray_image(mark: TrayMark) -> Option<tauri::image::Image<'static>> {
     let want = tray_size();
     // exact size, else the next bigger one (Windows scales down more cleanly than up)
     let set = if taskbar_light() {
@@ -549,47 +640,60 @@ fn tray_image(update_ready: bool) -> Option<tauri::image::Image<'static>> {
     };
     let (_, bytes) = set.iter().find(|(n, _)| *n >= want).unwrap_or(&set[3]);
     let mut img = image::load_from_memory(bytes).ok()?.to_rgba8();
-    if update_ready {
-        let (w, h) = img.dimensions();
-        let n = w.min(h) as f32;
-        let r = (n * 0.2).max(3.0); // 3.2 px at 16, 6.4 at 32
-        let ring = (n / 16.0).max(1.0);
-        let (cx, cy) = (w as f32 - r - ring, h as f32 - r - ring);
-        for y in 0..h {
-            for x in 0..w {
-                let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
-                // anti-aliased: green inside, a dark ring so it reads on light and dark taskbars
-                let cov = |edge: f32| (edge - d + 0.5).clamp(0.0, 1.0);
-                let (outer, inner) = (cov(r + ring), cov(r));
-                if outer <= 0.0 {
-                    continue;
-                }
-                let top = y as f32 + 0.5 < cy - r * 0.2; // lighter top half, like the title-bar arrow
-                let g: [f32; 3] = if top {
-                    [96.0, 226.0, 124.0]
-                } else {
-                    [52.0, 196.0, 88.0]
-                };
-                let dark = [12.0, 30.0, 18.0];
-                let p = img.get_pixel_mut(x, y);
-                for ((ch, d), gc) in p.0.iter_mut().take(3).zip(dark).zip(g) {
-                    let c = d * (1.0 - inner) + gc * inner;
-                    *ch = (*ch as f32 * (1.0 - outer) + c * outer).round() as u8;
-                }
-                p.0[3] = (p.0[3] as f32 + (255.0 - p.0[3] as f32) * outer).round() as u8;
-            }
-        }
-    }
+    paint_mark(&mut img, mark);
     let (w, h) = img.dimensions();
     Some(tauri::image::Image::new_owned(img.into_raw(), w, h))
+}
+
+fn paint_mark(img: &mut image::RgbaImage, mark: TrayMark) {
+    let r = (img.width().min(img.height()) as f32 * 0.2).max(3.0);
+    match mark {
+        TrayMark::Requests => draw_dot(img, [240.0, 70.0, 74.0], [216.0, 35.0, 42.0], 0.0),
+        TrayMark::Update => draw_dot(img, [96.0, 170.0, 245.0], [52.0, 130.0, 220.0], 0.0),
+        TrayMark::Online => draw_dot(img, [96.0, 226.0, 124.0], [52.0, 196.0, 88.0], 0.0),
+        TrayMark::Away => draw_dot(img, [252.0, 206.0, 70.0], [240.0, 180.0, 30.0], 0.0),
+        TrayMark::Invisible => {
+            draw_dot(img, [150.0, 150.0, 150.0], [128.0, 128.0, 128.0], r * 0.45)
+        }
+        TrayMark::Offline => {
+            grey_logo(img);
+            draw_dot(img, [112.0, 112.0, 112.0], [96.0, 96.0, 96.0], 0.0);
+        }
+    }
+}
+
+/// Recompute the tray icon and tooltip (status, connection, requests or update changed).
+pub fn refresh_tray_icon(app: &AppHandle) {
+    let st = app.state::<AppState>();
+    let connected = friends::connected(app);
+    let status = friends::my_presence(app).status;
+    let pending = friends::pending_requests(app);
+    let update = TRAY_DOT.load(std::sync::atomic::Ordering::Relaxed);
+    let mark = tray_mark(connected, &status, pending, update);
+    let tip = tray_tip(st.sim, pending, update);
+    // presence updates arrive often: only touch the tray when something shows differently
+    static LAST: std::sync::Mutex<Option<(TrayMark, String, u32, bool)>> =
+        std::sync::Mutex::new(None);
+    let key = (mark, tip.clone(), tray_size(), taskbar_light());
+    {
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        if last.as_ref() == Some(&key) {
+            return;
+        }
+        *last = Some(key);
+    }
+    if let Some(tray) = app.tray_by_id("main") {
+        if let Some(img) = tray_image(mark) {
+            let _ = tray.set_icon(Some(img));
+        }
+        let _ = tray.set_tooltip(Some(tip));
+    }
 }
 
 /// Switch the tray icon's update dot on or off.
 pub fn set_tray_update_dot(app: &AppHandle, on: bool) {
     TRAY_DOT.store(on, std::sync::atomic::Ordering::Relaxed);
-    if let (Some(tray), Some(img)) = (app.tray_by_id("main"), tray_image(on)) {
-        let _ = tray.set_icon(Some(img));
-    }
+    refresh_tray_icon(app);
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -598,7 +702,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let mut tb = TrayIconBuilder::with_id("main");
     let dot = updater::ready_version(app).is_some();
     TRAY_DOT.store(dot, std::sync::atomic::Ordering::Relaxed);
-    if let Some(icon) = tray_image(dot) {
+    if let Some(icon) = tray_image(tray_mark(false, "online", 0, dot)) {
         tb = tb.icon(icon);
     }
     watch_taskbar_theme(app.clone());
@@ -636,6 +740,7 @@ pub fn set_status(app: &AppHandle, status: &str) {
         let _ = e.tracker.store.set_setting(keys::STATUS, status);
     }
     refresh_tray(app);
+    refresh_tray_icon(app);
     let _ = app.emit("fraglink://status", status);
     friends::nudge(app);
 }
@@ -1007,4 +1112,61 @@ pub fn run() {
             let _ = app;
         }
     });
+}
+
+#[cfg(test)]
+mod tray_mark_tests {
+    use super::*;
+
+    #[test]
+    fn single_mark_requests_win() {
+        assert_eq!(tray_mark(true, "online", 2, true), TrayMark::Requests);
+        assert_eq!(tray_mark(false, "away", 1, false), TrayMark::Requests);
+        assert_eq!(tray_mark(true, "online", 0, true), TrayMark::Update);
+        assert_eq!(tray_mark(true, "online", 0, false), TrayMark::Online);
+        assert_eq!(tray_mark(true, "away", 0, false), TrayMark::Away);
+        assert_eq!(tray_mark(true, "invisible", 0, false), TrayMark::Invisible);
+        assert_eq!(tray_mark(false, "online", 0, false), TrayMark::Offline);
+    }
+
+    #[test]
+    fn tooltip_counts_requests() {
+        assert_eq!(tray_tip(false, 0, false), "Fraglink");
+        assert_eq!(tray_tip(false, 1, false), "Fraglink\n1 friend request");
+        assert_eq!(
+            tray_tip(true, 3, true),
+            "Fraglink [simulation]\n3 friend requests\nUpdate ready"
+        );
+    }
+
+    #[test]
+    fn marks_paint_every_size() {
+        for (n, bytes) in TRAY_PNGS.iter().chain(TRAY_PNGS_LIGHT.iter()) {
+            for m in [
+                TrayMark::Requests,
+                TrayMark::Update,
+                TrayMark::Online,
+                TrayMark::Away,
+                TrayMark::Invisible,
+                TrayMark::Offline,
+            ] {
+                let mut img = image::load_from_memory(bytes).unwrap().to_rgba8();
+                paint_mark(&mut img, m);
+                assert_eq!(img.width(), *n);
+                let f = *n as f32;
+                let r = (f * 0.2).max(3.0);
+                let c = (f - r - (f / 16.0).max(1.0)) as u32;
+                let br = img.get_pixel(c, c).0;
+                if m == TrayMark::Requests {
+                    assert!(br[0] > 150 && br[1] < 90, "red at {n}: {br:?}");
+                }
+            }
+        }
+        // hollow ring: centre is see-through
+        let mut img = image::load_from_memory(TRAY_PNGS[3].1).unwrap().to_rgba8();
+        paint_mark(&mut img, TrayMark::Invisible);
+        let r: f32 = 32.0 * 0.2;
+        let c = (32.0 - r - 2.0) as u32;
+        assert!(img.get_pixel(c, c).0[3] < 60);
+    }
 }

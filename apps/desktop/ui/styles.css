@@ -639,9 +639,14 @@ body.col-dragging, body.col-dragging * { cursor: col-resize !important; user-sel
 .nick-foot .msg.bad { color: #d9534f; }
 
 .xf-tab { position: relative; }
-.fl-req-badge { position: absolute; top: 2px; right: 2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #e07020; color: #1b1006; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center; pointer-events: none; }
+.fl-req-badge { position: absolute; top: 2px; right: 2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #d8232a; color: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.45); font-size: 10px; font-weight: 700; line-height: 14px; text-align: center; pointer-events: none; }
 
 .lg-dob{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.2fr);gap:6px;width:100%;margin:4px 0 8px}
 .lg-dob select{width:100%;min-width:0;box-sizing:border-box}
 .lg-hint{font-size:12px;opacity:.85;margin:6px 0 10px;line-height:1.35}
 .lg-hint a{color:var(--link,#6cb6ff)}
+
+/* incoming friend requests stand out until accepted or declined */
+.xf-row.pending:not(.sel) { background: linear-gradient(90deg, rgba(216,35,42,.22), rgba(216,35,42,.05)); }
+.xf-row.pending { box-shadow: inset 3px 0 0 #d8232a; }
+.xf-row.pending .nm { font-weight: bold; }
