@@ -42,8 +42,13 @@
   const VTICK = '<i class="vtick" title="Verified by Fraglink" aria-label="Verified by Fraglink" role="img"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="#3b82f6" d="M8 0l1.9 1.4 2.3-.2.8 2.2 2 1.2-.6 2.3.6 2.3-2 1.2-.8 2.2-2.3-.2L8 16l-1.9-1.4-2.3.2-.8-2.2-2-1.2.6-2.3L1 6.8l2-1.2.8-2.2 2.3.2z"/><path fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 8.2l2 2 4-4.2"/></svg></i>';
   const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
-  // Options always uses the dark look (Dark is the only skin since 0.2.0-dev.20).
-  const applyTheme = () => document.body.classList.add('dark');
+  // Options always uses the dark look (Dark is the only skin since 0.2.0-dev.20), plus the chosen theme.
+  const THEMES = ['blue', 'flat-navy', 'flat-grey'];
+  const applyTheme = (t) => {
+    document.body.classList.add('dark');
+    const root = document.documentElement;
+    root.classList.toggle('theme-flat-navy', t === 'flat-navy'); root.classList.toggle('theme-flat-grey', t === 'flat-grey');
+  };
 
   function show(page) {
     page = PAGES[page] || page;
@@ -67,7 +72,7 @@
       share_game: on(s, 'share_game'), friend_request_toasts: on(s, 'friend_request_toasts'), share_fof: on(s, 'share_fof'),
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
       zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
-      theme: s.theme || 'blue', always_on_top: on(s, 'always_on_top', '0'),
+      theme: THEMES.includes(s.theme) ? s.theme : 'blue', always_on_top: on(s, 'always_on_top', '0'),
       text_size: ['small', 'normal', 'large', 'larger'].includes(s.text_size) ? s.text_size : 'normal',
     };
     $$('[data-key]').forEach(el => {
@@ -92,7 +97,7 @@
     if (t.matches('[data-pv], [data-pv-top]')) { savePrivacy(t); return; }
     const el = t.closest('[data-key]');
     $('#apply').disabled = false;
-    if (el) { pending.set(el.dataset.key, value(el)); return; }
+    if (el) { pending.set(el.dataset.key, value(el)); if (el.dataset.key === 'theme') applyTheme(el.value); return; }
     if (!gsel) return;
     if (t.id === 'gd-path') pending.set('game_path:' + gsel, t.value.trim());
     else if (t.id === 'gd-args') pending.set('launch_args:' + gsel, t.value.trim());
@@ -465,7 +470,7 @@
     }
     if (FLB.tauri) document.body.classList.add('tauri');
     const ts = st && st.settings && st.settings.text_size; if (ts) document.body.style.zoom = { large: 1.1, larger: 1.2 }[ts] || '';
-    applyTheme();
+    applyTheme(st && st.settings && st.settings.theme);
     renderDetail();
     show(params.get('page') || 'general');
     if (FLB.on) {
