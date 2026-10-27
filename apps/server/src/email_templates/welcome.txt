@@ -11,7 +11,7 @@ Link Steam in Settings > Connections and import your playtime once. Hours you pl
 Link Steam: https://playfraglink.com/settings#connections
 
 3. Playing WoW? Add your /played
-Link Battle.net, install the Fraglink /played addon from CurseForge, type /played in game, then upload it on the WoW page.
+Link Battle.net, install the Fraglink /played addon from CurseForge, type /played in game, then upload it once on the WoW page. Hours you play after that add on top.
 Get the addon: https://www.curseforge.com/wow/addons/fraglink-played
 Upload /played: https://playfraglink.com/connect/battlenet
 

@@ -455,7 +455,7 @@ pages.wowupload = async () => {
   const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
   const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
   el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
-    <p class="sub">Upload once to bring in your past WoW playtime. After that, Fraglink tracks your hours while it's running. Upload again any time to catch up on time played while Fraglink was closed.</p></div></div>
+    <p class="sub">Upload once to bring in your past WoW playtime. Hours Fraglink tracks after that add on top. Uploading again is optional: it catches up time played while Fraglink was closed, the higher total is always kept, and time tracked in menus and loading screens (which /played leaves out) stays. Each character counts once, and Retail and Forever are kept separate.</p></div></div>
     <form class="wu-form" data-form>
       <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
       <div class="alert info"><b>Before you upload: log in to every character.</b> The addon only saves a character's /played when you log in to it (then log out or <code>/reload</code>). Characters you skip keep the hours from their last upload, and Fraglink always keeps your higher total, so a partial upload never lowers your hours.</div>
@@ -593,7 +593,7 @@ pages.bnet = async () => {
     ? `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">${esc(s.battletag)} ${s.needs_reconnect ? `<span class="srbadge">Reconnect to verify</span>` : `<span class="vbadge">✓ Verified</span>`}</div>
         <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") + (s.regions.length === 1 ? " region" : " regions") : "", s.last_verified ? "last verified " + ago(s.last_verified) : "not verified yet"].filter(Boolean).join(" · ")}</div></div>
         <div class="bn-acts"><a class="btn blue" href="/connect/battlenet/verify">🔒 Verify WoW characters</a><a class="btn" href="/connect/wow">Upload /played</a><button class="btn bn-unlink" type="button" data-unlink>Unlink</button></div></div>
-       <p class="sub bn-note">Verify asks Battle.net which characters are on your account. Upload /played once to bring in past hours; Fraglink tracks new hours while it's running.</p>`
+       <p class="sub bn-note">Verify asks Battle.net which characters are on your account. Upload /played once to bring in past hours; hours Fraglink tracks after that add on top.</p>`
     : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify your WoW characters. Only verified characters count toward your hours.${s.unverified ? ` You have ${plural(s.unverified, "uploaded character")} waiting.` : ""}</div></div>
         <div class="bn-acts"><button class="btn blue" type="button" data-link>Link Battle.net</button><a class="btn" href="/connect/wow">Upload /played</a></div></div>`;
   el.innerHTML = `<section class="panel bn-box"><h2>Battle.net</h2><div data-msg></div>${head}</section>

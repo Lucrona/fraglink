@@ -28,6 +28,9 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use uuid::Uuid;
 
+/// WoW flavours that take /played uploads. Each is kept separate, and the per-character
+/// checks, keep-the-higher rule and menu-time carry (`record_total`) apply to every entry
+/// here, so a new flavour (Classic) only needs adding here and in the app's `FLAVOURS`.
 pub const GAMES: [(&str, &str); 2] = [
     ("wow", "World of Warcraft"),
     ("wow_forever", "World of Warcraft: Forever"),
@@ -480,22 +483,32 @@ pub enum Recount {
     Reset,
 }
 
-/// The shown imported total for a game: latest imported entry + tracked play after it
-/// (the same rule as `user_game_stats`). None without any imported entry.
-pub(crate) async fn imported_floor(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<Option<i64>> {
-    Ok(sqlx::query_scalar(
-        "WITH i AS (SELECT minutes, captured_at FROM hours_entries
+/// The game's latest imported entry: (minutes, carried extra, tracked minutes after it).
+/// The shown imported total is their sum (the same rule as `user_game_stats`).
+pub(crate) async fn last_import(
+    st: &AppState,
+    uid: Uuid,
+    gid: &str,
+) -> ApiResult<Option<(i64, i64, i64)>> {
+    Ok(sqlx::query_as(
+        "WITH i AS (SELECT minutes, carry_min, captured_at FROM hours_entries
                     WHERE user_id = $1 AND game_id = $2 AND tier = 'imported'
                     ORDER BY captured_at DESC, created_at DESC LIMIT 1)
-         SELECT (i.minutes + coalesce((SELECT (sum(LEAST(x.duration_s::numeric,
+         SELECT i.minutes::bigint, i.carry_min::bigint,
+                coalesce((SELECT (sum(LEAST(x.duration_s::numeric,
                     extract(epoch FROM x.ended_at - GREATEST(x.started_at, i.captured_at)))) / 60)::bigint
-                  FROM sessions x WHERE x.user_id = $1 AND x.game_id = $2 AND x.ended_at > i.captured_at), 0))::bigint
+                  FROM sessions x WHERE x.user_id = $1 AND x.game_id = $2 AND x.ended_at > i.captured_at), 0)::bigint
          FROM i",
     )
     .bind(uid)
     .bind(gid)
     .fetch_optional(&st.db)
     .await?)
+}
+
+/// The shown imported total: latest import + carried extra + tracked play after it.
+pub(crate) async fn imported_floor(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<Option<i64>> {
+    Ok(last_import(st, uid, gid).await?.map(|(m, c, a)| m + c + a))
 }
 
 /// Store the game's total when it changed. Only Battle.net-verified characters count;
@@ -526,21 +539,25 @@ async fn record_total(
     .fetch_optional(&st.db)
     .await?;
     let mut kept = None;
+    // Minutes the app tracked beyond what /played gained (menus, loading screens) are
+    // carried forward on top of each new upload; a recount or unlink starts again at 0.
+    let mut carry = 0i64;
     let store = match mode {
         Recount::Reset => last.is_some() || sum > 0,
         Recount::Exact => last.map(i64::from) != Some(sum) && !(last.is_none() && sum == 0),
-        Recount::KeepHigher => {
-            let floor = imported_floor(st, uid, gid).await?;
-            match floor {
-                Some(f) if sum <= f => {
-                    if sum < f {
-                        kept = Some(f);
-                    }
-                    false
-                }
-                _ => sum > 0 && last.map(i64::from) != Some(sum),
+        Recount::KeepHigher => match last_import(st, uid, gid).await? {
+            None => sum > 0,
+            Some((m0, c0, after)) if sum > m0 => {
+                carry = c0 + (after - (sum - m0)).max(0);
+                true
             }
-        }
+            Some((m0, c0, after)) => {
+                if sum < m0 + c0 + after {
+                    kept = Some(m0 + c0 + after);
+                }
+                false
+            }
+        },
     };
     if store {
         let note = if mode == Recount::Reset {
@@ -549,8 +566,8 @@ async fn record_total(
             "WoW /played (Fraglink addon)"
         };
         sqlx::query(
-            "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, inputs, note)
-             VALUES($1, $2, $3, 'imported', 'wow_addon', $4, $5, $6)",
+            "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, inputs, note, carry_min)
+             VALUES($1, $2, $3, 'imported', 'wow_addon', $4, $5, $6, $7)",
         )
         .bind(Uuid::new_v4())
         .bind(uid)
@@ -558,6 +575,7 @@ async fn record_total(
         .bind(sum as i32)
         .bind(json!({ "characters": n, "verified": v, "reset": mode == Recount::Reset }))
         .bind(note)
+        .bind(carry.min(i32::MAX as i64) as i32)
         .execute(&st.db)
         .await?;
     }
@@ -729,14 +747,16 @@ pub async fn sync_characters(
 /// A character is verified while it is on the linked Battle.net account (`wow.profile`
 /// list) and its latest accepted entry was saved under that account's BattleTag. Several
 /// WoW licences on one Battle.net (WoW1, WoW2) share the BattleTag, so all of them count.
+/// During an upload: the total is stored once at the end, so the whole upload's /played
+/// gain is compared with the tracked time (see `record_total`).
 async fn reverify_one(st: &AppState, id: Uuid) {
-    set_verified(st, Some(id), None, Recount::KeepHigher).await;
+    set_verified(st, Some(id), None, None).await;
 }
 
 /// A character is verified while it is on the linked Battle.net account (its `wow.profile`
 /// list) and its latest accepted entry was saved under that account's BattleTag. Several
 /// WoW licences on one Battle.net (WoW1, WoW2) share the BattleTag, so all of them count.
-async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>, mode: Recount) {
+async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>, mode: Option<Recount>) {
     let _ = sqlx::query(
         "UPDATE wow_characters c SET verified = EXISTS (
              SELECT 1 FROM bnet_characters b WHERE b.user_id = c.user_id AND b.game_id = c.game_id
@@ -762,7 +782,7 @@ async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>, mode: 
             .flatten(),
         _ => None,
     };
-    if let Some(u) = owner {
+    if let (Some(u), Some(mode)) = (owner, mode) {
         for (gid, _) in GAMES {
             let _ = record_total(st, u, gid, mode).await;
         }
@@ -773,7 +793,7 @@ async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>, mode: 
 /// character stays verified only while it is on the linked account; the BattleTag
 /// check was made when its entry was accepted.
 pub async fn reverify(st: &AppState, uid: Uuid) {
-    set_verified(st, None, Some(uid), Recount::KeepHigher).await;
+    set_verified(st, None, Some(uid), Some(Recount::KeepHigher)).await;
 }
 
 /// Battle.net unlinked: forget its characters; nothing counts on leaderboards any more.
@@ -783,7 +803,7 @@ pub async fn on_unlink(st: &AppState, uid: Uuid) {
         .execute(&st.db)
         .await;
     // Unverified characters must stop counting, so store the exact (lower) sum here.
-    set_verified(st, None, Some(uid), Recount::Exact).await;
+    set_verified(st, None, Some(uid), Some(Recount::Exact)).await;
 }
 
 pub(crate) async fn app_token() -> Option<String> {

@@ -439,8 +439,8 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
         .execute(&pool).await.unwrap();
     assert_eq!(shown(&pool, "keephigher").await, (6_720, 6_720));
 
-    // partial upload (only Thrall, +1 h): Alt keeps its hours; the sum 6 660 is below the
-    // shown 6 720, so the higher total is kept and nothing is stored
+    // partial upload (only Thrall, +1 h): Alt keeps its hours. /played rose 1 h against 2 h
+    // tracked, so the extra hour (menus etc.) is carried forward: 6 660 + 60
     let r = up(
         &app,
         &t,
@@ -448,16 +448,24 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
     )
     .await;
     assert_eq!(r["total_min"], 6_660, "{r}");
-    assert_eq!(r["kept_min"], 6_720, "{r}");
-    assert_eq!(wow_total(&pool).await, Some(6_600));
+    assert!(r["kept_min"].is_null(), "{r}");
     assert_eq!(shown(&pool, "keephigher").await, (6_720, 6_720));
 
     // a /played that goes down is refused per character; the total stays
     let r = up(&app, &t, &[entry("Alt", 30_000, now, "Thrall#1234")]).await;
     assert_eq!(r["rejected"][0]["reason"], "wow_decrease", "{r}");
     assert_eq!(shown(&pool, "keephigher").await, (6_720, 6_720));
+    // an upload adding nothing is not stored and lowers nothing
+    let r = up(
+        &app,
+        &t,
+        &[entry("Thrall", 363_600, now - 1800, "Thrall#1234")],
+    )
+    .await;
+    assert!(r["kept_min"].is_null() || r["kept_min"] == 6_720, "{r}");
+    assert_eq!(shown(&pool, "keephigher").await, (6_720, 6_720));
 
-    // a higher upload replaces it; tracked play before it isn't counted twice
+    // a higher upload adds on; the carried hour stays, tracked play isn't counted twice
     let r = up(
         &app,
         &t,
@@ -465,8 +473,7 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
     )
     .await;
     assert_eq!(r["total_min"], 6_840, "{r}");
-    assert!(r["kept_min"].is_null(), "{r}");
-    assert_eq!(shown(&pool, "keephigher").await, (6_840, 6_840));
+    assert_eq!(shown(&pool, "keephigher").await, (6_900, 6_900));
 
     // the user can lower it on purpose (after deleting a character, say)
     sqlx::query("DELETE FROM bnet_characters WHERE name = 'Alt'")
@@ -474,7 +481,7 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
         .await
         .unwrap();
     api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
-    assert_eq!(shown(&pool, "keephigher").await, (6_840, 6_840));
+    assert_eq!(shown(&pool, "keephigher").await, (6_900, 6_900));
     let r = api(
         &app,
         "POST",
@@ -494,4 +501,114 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
     )
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
+}
+
+/// A user with Thrall and Alt on a linked Battle.net, uploaded 8 hours ago (100 h + 10 h).
+async fn two_chars(app: &axum::Router, pool: &PgPool, handle: &str) -> (String, i64) {
+    let t = signup(app, &format!("{handle}@example.com"), handle).await;
+    sqlx::query("INSERT INTO linked_accounts(user_id, provider, provider_uid, display, verified, scopes)
+                 SELECT id, 'bnet', '42', 'Thrall#1234', true, 'openid wow.profile' FROM users WHERE handle = $1")
+        .bind(handle).execute(pool).await.unwrap();
+    for n in ["Thrall", "Alt"] {
+        sqlx::query(
+            "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, name)
+                     SELECT id, 'wow', 'us', 'area-52', $2 FROM users WHERE handle = $1",
+        )
+        .bind(handle)
+        .bind(n)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+    let now = chrono::Utc::now().timestamp() - 60;
+    let r = up(
+        app,
+        &t,
+        &[
+            entry("Thrall", 360_000, now - 8 * 3600, "Thrall#1234"),
+            entry("Alt", 36_000, now - 8 * 3600, "Thrall#1234"),
+        ],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_600, "{r}");
+    sqlx::query("UPDATE hours_entries SET captured_at = now() - interval '8 hours'")
+        .execute(pool)
+        .await
+        .unwrap();
+    (t, now)
+}
+
+async fn track(pool: &PgPool, handle: &str, from_h: f64, secs: i64) {
+    sqlx::query("INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source)
+                 SELECT gen_random_uuid(), id, 'wow', now() - make_interval(secs => $2),
+                        now() - make_interval(secs => $2) + make_interval(secs => $3), $3::int, 'live'
+                 FROM users WHERE handle = $1")
+        .bind(handle).bind(from_h * 3600.0).bind(secs as f64).execute(pool).await.unwrap();
+}
+
+/// /played +5 h with 6 h tracked: the extra hour (menus, loading) is kept, so +6 h.
+/// More uploads keep adding their extra; a recount starts again from /played.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn menu_time_is_carried_forward(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let h = "menutime";
+    let (t, now) = two_chars(&app, &pool, h).await;
+    track(&pool, h, 7.5, 6 * 3600).await;
+    assert_eq!(shown(&pool, h).await, (6_960, 6_960));
+    let r = up(
+        &app,
+        &t,
+        &[entry("Thrall", 360_000 + 5 * 3600, now, "Thrall#1234")],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_900, "{r}");
+    assert_eq!(shown(&pool, h).await, (6_960, 6_960));
+
+    // second upload: Alt +10 min with 50 min tracked: 40 more carried, 100 in all
+    sqlx::query(
+        "UPDATE hours_entries SET captured_at = now() - interval '1 hour'
+                 WHERE created_at = (SELECT max(created_at) FROM hours_entries)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    track(&pool, h, 0.9, 3000).await;
+    let r = up(&app, &t, &[entry("Alt", 36_000 + 600, now, "Thrall#1234")]).await;
+    assert_eq!(r["total_min"], 6_910, "{r}");
+    assert_eq!(shown(&pool, h).await, (7_010, 7_010));
+
+    // a recount drops the carried extra
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/wow_played/recount",
+        Some(&t),
+        Some(json!({ "game_id": "wow" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(shown(&pool, h).await, (6_910, 6_910));
+}
+
+/// /played +5 h with only 3 h tracked (played with the app closed): +5 h, nothing carried.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn played_more_than_tracked_carries_nothing(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let h = "offlineplay";
+    let (t, now) = two_chars(&app, &pool, h).await;
+    track(&pool, h, 7.0, 3 * 3600).await;
+    let r = up(
+        &app,
+        &t,
+        &[entry("Thrall", 360_000 + 5 * 3600, now, "Thrall#1234")],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_900, "{r}");
+    assert_eq!(shown(&pool, h).await, (6_900, 6_900));
+    let c: i32 =
+        sqlx::query_scalar("SELECT carry_min FROM hours_entries ORDER BY created_at DESC LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(c, 0);
 }

@@ -30,7 +30,7 @@ the entries say what changing them would cost.
 - Estimated is always shown separately (`~`) and **never** added to any total.
 
 ## D6. Rankings count like profiles (changed 19 October 2026)
-- Leaderboards (all time, 7 days, and the home page's Top players and Most played this week) include Imported hours (Steam, manual counters, later WoW /played), the same way a profile's total does: per game the **larger** of the app's sessions, Steam and Imported (`display_min`), never the sum. Estimated hours never count.
+- Leaderboards (all time, 7 days, and the home page's Top players and Most played this week) include Imported hours (Steam, manual counters, later WoW /played), the same way a profile's total does (`board_min = display_min`): per game the latest import + its menu-time carry + tracked minutes after it, or the app's sessions if larger. Estimated hours never count.
 - 7 days: the larger of the week's sessions and how much the Imported counter grew this week. The baseline is the last entry before the week, else the first entry in it, so a first import doesn't count, and growth is capped at the week's real time. Steam only reports a two-week figure, so it counts in all time but not in 7 days.
 - Only public profiles that show games and hours, have Leaderboards on and haven't hidden the game; never test accounts. The per-game API still needs a signed-in caller.
 - Self-reported manual imports are **disabled** (19 October 2026): `POST /api/v1/hours/import` and the old `/web/import` form answer 410 and store nothing. Rows saved before stay and still count. The **WoW addon will need its own validated import** (it must check where the counter came from, not trust a typed number). It can reuse `api::import_for`, which keeps the game checks and the cap below.
@@ -72,7 +72,7 @@ the entries say what changing them would cost.
 
 ## D13. Steam import frequency
 - Manual "Import Steam playtime": at most once per 10 minutes per account.
-- No automatic refresh (Oct 2026, replaced the daily re-import): imports are one-off and the user presses Import hours to refresh. Shown hours = latest import + tracked minutes played after it (Steam and WoW /played alike, migration 0045); a new import replaces the base.
+- No automatic refresh (Oct 2026, replaced the daily re-import): imports are one-off and the user presses Import hours to refresh. Shown hours = latest import + tracked minutes played after it (Steam and WoW /played alike, migration 0045); a higher import replaces the base; a lower one is not stored (keep higher) unless the user or a moderator recounts. WoW keeps app-tracked time /played misses (menus, loading): on each higher upload, carry += max(0, tracked since last upload − /played increase); a recount resets it (migration 0047). Uploads are per character; each WoW flavour (wow, wow_forever) is separate; wow_classic is not supported.
 - Games with 0 minutes are skipped.
 
 ## D14. Sync is opt-in and offline-first
