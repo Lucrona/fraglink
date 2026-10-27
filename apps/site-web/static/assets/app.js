@@ -1107,7 +1107,7 @@ pages.profile = async () => {
 
   // WoW characters from the Fraglink addon: the server sends only Battle.net-verified ones
   let wowc = "";
-  const WC = p.wow_characters;
+  const WC = (p.wow_characters || []).filter(c => !c.hidden); // hidden ones never show here, even to the owner; unhide on /connect/battlenet
   if (WC && WC.length) {
     const pop = c => FEATURES.wow_characters && c.game_id === "wow" && !c.hidden;
     const card = c => `<div class="wc${c.hidden ? " wc-hid" : ""}${pop(c) ? " wc-click" : ""}"${pop(c) ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}><span class="wc-ic">${c.class ? `<img src="${WOW.clsIcon(c.class)}" alt="" title="${esc(WOW.cls(c.class))}" loading="lazy" ${imgOk}>` : ""}${c.spec && WOW.specIcon(c.class, c.spec) ? `<img src="${WOW.specIcon(c.class, c.spec)}" alt="" title="${esc(c.spec)}" loading="lazy" ${imgOk}>` : ""}</span></div>
