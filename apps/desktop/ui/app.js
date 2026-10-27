@@ -270,7 +270,9 @@
     // classic: the game icon sits before the name while playing, a blank slot otherwise
     const icon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
+    // data-dot / data-ini: the Flat themes draw a letter avatar with a status dot (themes-flat.css)
+    const dot = f.kind === 'off' ? 'off' : f.away || /away/i.test(f.status || '') ? 'away' : /busy|disturb/i.test(f.status || '') ? 'busy' : 'on';
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name" data-dot="${dot}" data-ini="${esc((f.name || '?').charAt(0).toUpperCase())}">${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
@@ -1028,7 +1030,7 @@
       'New Help menu with FAQ and Changelog',
       'Hours imported dates for Steam and Battle.net in Connections',
       'New Flat Navy and Flat Grey themes',
-      'New Steam-style pop-ups',
+      'New Steam-style pop-ups, with Accept / Ignore on friend requests and an Update ready pop-up',
     ],
   };
   function whatsNew() {

@@ -662,6 +662,13 @@ pub async fn toast_clicked(app: AppHandle) {
         .as_ref()
         .map(|t| (t.kind.clone(), t.game_id.clone()))
         .unwrap_or_default();
+    if kind.starts_with("update:") {
+        // update-ready toast: clicking the body just dismisses it (the tray arrow stays)
+        if let Some(w) = app.get_webview_window("toast") {
+            let _ = w.close();
+        }
+        return;
+    }
     if kind.starts_with("news:") {
         // staff announcement: open its link (https only), else just close
         if link.starts_with("https://") {

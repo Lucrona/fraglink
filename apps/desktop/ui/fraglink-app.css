@@ -182,3 +182,12 @@ body.toast-page.skin-dark .toast-body .tx b { color: #fff; font-size: 12.5px; fo
 body.toast-page.skin-dark .toast-body .ln { color: #8b93a7; font-size: 11.5px; }
 body.toast-page.skin-dark .toast-body .g { color: #5b9bff; font-size: 11.5px; font-weight: normal; }
 body.toast-page.skin-dark .toast-body small { color: #8b93a7; font-size: 11px; }
+/* beta.9: Accept / Ignore on request toasts, and the green update-ready toast */
+body.toast-page.skin-dark .toast-body .tx > .jq { display: flex; gap: 5px; margin-top: 2px; overflow: visible; }
+body.toast-page .toast-body .jq button { font: 600 10px/14px "Segoe UI", Tahoma, sans-serif; padding: 0 9px; border: 0; border-radius: 2px; cursor: pointer; background: rgba(255,255,255,.1); color: #c3c9d6; }
+body.toast-page .toast-body .jq button:hover { background: rgba(255,255,255,.18); color: #fff; }
+body.toast-page .toast-body .jq button.ok { background: #3f6fd8; color: #fff; } body.toast-page .toast-body .jq button.ok:hover { background: #5583ea; }
+body.toast-page .toast-body .jq button.up { background: #2a9c4a; } body.toast-page .toast-body .jq button.up:hover { background: #33b358; }
+body.toast-page .toast-body .jq button:disabled { opacity: .5; cursor: default; }
+body.toast-page.skin-dark .toast-body .jl .gi.ju, body.toast-page.skin-dark .toast-body .jl .gi.ju svg { width: 42px; height: 42px; border-radius: 0; }
+body.toast-page.skin-dark .toast-body .jb.st-up { background: #3fcf6a; }

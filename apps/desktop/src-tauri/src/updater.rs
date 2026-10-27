@@ -302,6 +302,24 @@ fn announce_ready(app: &AppHandle) {
     crate::refresh_tray(app);
     crate::set_tray_update_dot(app, true);
     let _ = app.emit(UPDATE_EVENT, &version);
+    // beta.9: one "Update ready" toast per version (not affected by friend pop-up mutes).
+    static TOASTED: Mutex<Option<String>> = Mutex::new(None);
+    let mut last = TOASTED.lock_ok();
+    if last.as_deref() != Some(version.as_str()) {
+        *last = Some(version.clone());
+        drop(last);
+        crate::windows::show_toast(
+            app,
+            crate::ToastPayload {
+                kind: format!("update:{version}"),
+                title: "Update ready".into(),
+                line: "is ready to install".into(),
+                game: format!("v{}", crate::dev_version(&version)),
+                icon: Some(String::new()),
+                ..Default::default()
+            },
+        );
+    }
 }
 
 async fn install(app: &AppHandle) -> Result<(), String> {
