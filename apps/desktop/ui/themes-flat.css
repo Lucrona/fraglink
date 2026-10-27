@@ -767,7 +767,10 @@ html[class*=theme-flat] body.skin-dark #menubar .xf-menu > span u { text-decorat
 html[class*=theme-flat] body.skin-dark .xf-status .st-btn::before { display: none; }
 html[class*=theme-flat] body.skin-dark .xf-status .st-btn span { flex: 0 1 auto; text-align: left; padding-right: 0; color: var(--fmut); }
 html[class*=theme-flat] body.skin-dark .xf-status .st-btn[data-st=away] span { color: var(--faway); }
-html[class*=theme-flat] body.skin-dark .xf-status .st-btn::after { content: ''; margin-left: 5px; border: 4px solid transparent; border-top: 5px solid var(--fmut); border-bottom: 0; }
+/* beta.9: the arrow lives on the span, the only part of the status bar that takes clicks (.xf-status is pointer-events:none), so clicking it opens the menu. */
+html[class*=theme-flat] body.skin-dark .xf-status .st-btn span { cursor: pointer; }
+html[class*=theme-flat] body.skin-dark .xf-status .st-btn span::after { content: ''; display: inline-block; vertical-align: middle; margin: -2px 0 0 5px; border: 4px solid transparent; border-top: 5px solid var(--fmut); border-bottom: 0; }
+html[class*=theme-flat] body.skin-dark .xf-status .st-btn:hover:not(:disabled) span::after { border-top-color: var(--ftx); }
 html[class*=theme-flat] body.skin-dark .xf-status .xf-status-arrow { display: none; }
 html[class*=theme-flat] body.skin-dark .xf-status .st-btn:hover:not(:disabled) { text-decoration: none; }
 html[class*=theme-flat] body.skin-dark .xf-status .st-btn:hover:not(:disabled) span { color: var(--ftx); }
