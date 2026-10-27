@@ -209,6 +209,18 @@ async fn play_after_import_adds_on(pool: PgPool) {
     live_session(&pool, "wower", "wow", now() - 5 * 3600 - 60, 5 * 3600).await;
     live_session(&pool, "wower", "wow", now() - 7 * 3600 - 1800, 7200).await;
     assert_eq!(display_min(&pool, "wower", "wow").await, 600 + 300 + 30);
+    // app-tracked play counts on the all-time leaderboard too (same rule as the total)
+    let viewer = signup(&app, "v@example.com", "viewer").await;
+    let r = api(
+        &app,
+        "GET",
+        "/api/v1/leaderboard/wow?period=all",
+        Some(&viewer),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["ranks"][0]["minutes"], 930, "{}", r.text);
 
     // re-import: the counter now includes that play, so it replaces the add-on
     seed_imported(&pool, "wower", "wow", "World of Warcraft", 930).await;
