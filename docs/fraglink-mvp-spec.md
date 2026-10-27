@@ -1,5 +1,7 @@
 # Fraglink: MVP Product Spec & Technical Plan
 
+> **This is the original plan from September 2026, kept for reference.** A lot has changed since: for example, the Estimated tier and history calculator were dropped, and Discord is a linked account rather than a sign-in option. For where things stand now, see the [roadmap](ROADMAP.md), the [design decisions](decisions.md) and the [changelog](../CHANGELOG.md).
+
 *Product name: Fraglink (decided 25 Sep 2026; replaces the placeholder "Gamewire"). Author: Lucrona (solo/indie, Sydney). **Draft v0.2, 26 Sep 2026 (AEST).** The previous draft (v0.1, 25 Sep 2026) is kept as `fraglink-mvp-spec-v1.md`.*
 *All effort figures, timings and thresholds here are **estimates or proposed targets**, not measured data. External facts were checked against the linked sources on 25–26 Sep 2026. Terms change, so re-check them before launch.*
 
@@ -23,7 +25,7 @@
 
 It sits next to Discord, Steam and Twitch and doesn't replace them. Discord keeps chat, voice and communities. Steam keeps the store and its own friends list. Twitch keeps streaming. Fraglink adds what none of them does well: a single, launcher-agnostic record of your hours (with an honest trust label on every number), a cross-platform "who's playing what" list, and a profile you're proud to link.
 
-**Why now / why this shape.** Xfire's most-loved feature was an accident: automatic hours on an auto-generated profile ("incredibly popular… essentially an afterthought", co-founder Chris Kirmse). It died partly from a heavy client and feature sprawl, and its users lost years of logged hours with 2 days' notice. The xf1re.com fan revival proves the nostalgia is real (~9,000 profiles) but also shows the failure mode: **41% of its profiles have no games at all**, and its WoW-character feature is dead (legacy Armory endpoints return 404). Fraglink fixes both: back-filled history on day one, and a working, verified WoW character card. See `/workspace/xfire-refs-hd/xfire-feature-history.md` and `/workspace/xf1re-refs/deep/xf1re-deep-dive.md`.
+**Why now / why this shape.** The most-loved feature of the classic gaming clients was almost an accident: automatic hours on an auto-generated profile. Those clients died partly from heavy software and feature sprawl, and their users lost years of logged hours with very little notice. Fan revival sites show the nostalgia is real, but also the failure mode: many of their profiles have no games at all, and their WoW character features stopped working when the legacy Armory endpoints were retired. Fraglink fixes both: history on day one, and a working, verified WoW character card.
 
 **Target user (v1):** PC gamers aged about 18 to 35 who play across several launchers, belong to one or more small Discord friend groups, and care about their hours as a trophy ("30k hours in WoW"). Segments:
 - **Core:** friend groups of roughly 5 to 30 people who want to see who's on and compare hours.
@@ -50,7 +52,7 @@ The beta seeds from Lucrona's own friend circle and Discord communities. Growth 
 | # | Feature | Acceptance criteria |
 |---|---|---|
 | T1 | **Tray app + classic UI shell** | Per-user signed NSIS installer, starts minimised to tray, optional launch at login, single instance. Main window is the prototype's 290×381 chassis (1×/1.5×/2× scale), frameless, draggable, remembers position. Tray menu: Open, Status (Online/Away/Invisible), Pause tracking, Open playfraglink.com, Quit. Idle footprint target (estimate to validate): under 1% CPU averaged over 10 min and under ~80 MB RAM with the window hidden (the WebView is destroyed when hidden). |
-| T2 | **Game detection & session tracking** | Detects a game within 15 s of launch (target) and ends the session within 15 s of exit. Sessions under 2 min dropped (configurable). A 10-minute crash/relaunch gap merges sessions. **Idle trimming:** if there's no user input for N minutes (default 15, via `GetLastInputInfo`), the session pauses; this fixes Xfire's "left at the menu for 3 days = 72 h" bug. Sessions are written to local SQLite before any upload (offline-safe). Works for Steam, Epic, GOG, Battle.net, EA, Riot and standalone games when the exe is in the signature DB or manually tagged. |
+| T2 | **Game detection & session tracking** | Detects a game within 15 s of launch (target) and ends the session within 15 s of exit. Sessions under 2 min dropped (configurable). A 10-minute crash/relaunch gap merges sessions. **Idle trimming:** if there's no user input for N minutes (default 15, via `GetLastInputInfo`), the session pauses; this fixes the classic "left at the menu for 3 days = 72 h" bug. Sessions are written to local SQLite before any upload (offline-safe). Works for Steam, Epic, GOG, Battle.net, EA, Riot and standalone games when the exe is in the signature DB or manually tagged. |
 | T3 | **Signature DB + manual tagging** | Ships with and auto-updates a curated exe→game DB (§7.2). Steam library scan (Epic/GOG manifests as a stretch). "This is a game…" tagging, per-exe exclusions, suggestions to the global DB. |
 | T4 | **Friends tab** | Sections: *Playing* (game + session time), *Online*, *Steam friends playing* (bonus, W4), *Requests*, *Offline* (collapsible, sortable, as in the prototype). Presence change reaches online friends in under 5 s at p95 (target). Friend side panel shows game, session time, hours in that game, and (v1.1) a one-line WoW character ("Playing WoW as Fragnar – Frostmourne, 80 Hunter"). Chat button hands off to Discord (`discord.com/users/<id>`) if linked. |
 | T5 | **Stats tab (quick glance)** | Shows **Now playing** (live timer), **Today** (total + per game), **This week** (total, vs last week), **Top games** (top 5: 7-day hours, total with trust marker, small bar), and a **"Full stats on playfraglink.com"** link. No sorting UI, no history: the website does that. Loads from local SQLite in under 200 ms (target). |
@@ -65,8 +67,8 @@ The beta seeds from Lucrona's own friend circle and Discord communities. Growth 
 
 | # | Feature | Acceptance criteria |
 |---|---|---|
-| W1 | **Accounts + onboarding without empty profiles** | Sign up with email (magic link/password) or Discord OAuth; unique handle (3–20 chars). The signup wizard has 4 steps: (1) account, (2) **Link Steam** (imports owned games + playtime, target under 60 s), (3) **"Estimate your history"** (the calculator, §5.4, prefilled with the top Steam games plus a picker for non-Steam classics such as WoW), (4) download the tray client. Every step except (1) can be skipped, but a live profile preview shows it filling up. Target: under 15% of activated beta profiles with zero games (xf1re: 41%). |
-| W2 | **Profile (auto-filled, xf1re-style)** | `/u/<handle>`. Two columns. Sections: Miniprofile/signature, Details (incl. linked accounts), Gaming History, WoW Characters, Achievements, Recent Activity, Friends, Gaming Rig, Data. Owner can **drag between columns, reorder, hide** (model: `{section_id, column, order, hidden}[]`, as xf1re does) and "preview as visitor". **3–5 themes** in v1 (Cyan Grid, Gold 567, plus 1–3 more, e.g. Phoenix Dark, StreamEngine Red, Classic Blue). Server-rendered, loads without JS, OG tags so links unfurl on Discord. |
+| W1 | **Accounts + onboarding without empty profiles** | Sign up with email (magic link/password) or Discord OAuth; unique handle (3–20 chars). The signup wizard has 4 steps: (1) account, (2) **Link Steam** (imports owned games + playtime, target under 60 s), (3) **"Estimate your history"** (the calculator, §5.4, prefilled with the top Steam games plus a picker for non-Steam classics such as WoW), (4) download the tray client. Every step except (1) can be skipped, but a live profile preview shows it filling up. Target: under 15% of activated beta profiles with zero games. |
+| W2 | **Profile (auto-filled)** | `/u/<handle>`. Two columns. Sections: Miniprofile/signature, Details (incl. linked accounts), Gaming History, WoW Characters, Achievements, Recent Activity, Friends, Gaming Rig, Data. Owner can **drag between columns, reorder, hide** (model: `{section_id, column, order, hidden}[]`) and "preview as visitor". **3–5 themes** in v1 (Cyan Grid, Gold 567, plus 1–3 more, e.g. Phoenix Dark, StreamEngine Red, Classic Blue). Server-rendered, loads without JS, OG tags so links unfurl on Discord. |
 | W3 | **Stats dashboard + gaming history** | Table of games with Past 7 Days, Total and a **trust tier marker** on every total (Tracked ● / Imported ◆ / Estimated ~, §5). Sortable; "Show entire gaming history"; Overall Hours footer shows *verified* (Tracked + Imported) and *estimated* separately. Charts: last 30 days by day, per-game history. Supporters get longer chart ranges (§10) but **all underlying stats and exports stay free**. Optional story note per game. |
 | W4 | **Friends from anywhere** | Web friends page (responsive, works on phones) with live presence. **Core:** Fraglink friends on any launcher. **Bonus:** Steam friends' presence via `GetFriendList` + `GetPlayerSummaries` (`personastate`, `gameextrainfo`) for users who link Steam and friends whose profiles are public; separate "Steam friends" section with "Invite to Fraglink". Polled server-side, batched 100 SteamIDs per call, only while the viewer is online (budget §8.3). |
 | W5 | **WoW character cards** | Battle.net OAuth (`openid wow.profile`) → list of characters → user ticks which to show. Card: portrait/render, name, realm, level, race, class, active spec, guild, equipped item level, achievement points, M+ score and raid progress (Raider.IO), last login, **"Verified via Battle.net"** badge. Classic flavours supported. Private-server characters as manual **Unverified** entries. Details in §6. |
@@ -75,7 +77,7 @@ The beta seeds from Lucrona's own friend circle and Discord communities. Growth 
 | W8 | **Game pages** | `/g/<slug>`: header, 7-day community hours chart, **Fraglink rank** (#N by hours this week), total hours, **friends who play it**, top players (Tracked only, opt-in public profiles), **live Twitch streams** for the category (Helix Get Streams), JSON-LD `VideoGame` for SEO. |
 | W9 | **Activity feed** | Same events as T6, full history with filters, on the website home and the profile "Recent Activity". |
 | W10 | **Recaps** | Weekly recap (Mondays, user's timezone): hours, top games, streak, new games, friend comparisons; web page + tray notification + optional email. **Yearly recap** ("Your 2026 in games") shareable card: v1 if time allows, otherwise v1.1 (must ship before Dec 2026, its moment). |
-| W11 | **Linked accounts with Verified badges** | Steam (OpenID), Discord (OAuth `identify`), Twitch (OAuth), Battle.net (OAuth). Each row: green **✓ Verified** badge, "show on profile" toggle, unlink. Above the fold on the profile (as xf1re does). Typed-in handles (Riot ID, Xbox gamertag, PSN ID) can be shown but are labelled **Unverified**. |
+| W11 | **Linked accounts with Verified badges** | Steam (OpenID), Discord (OAuth `identify`), Twitch (OAuth), Battle.net (OAuth). Each row: green **✓ Verified** badge, "show on profile" toggle, unlink. Above the fold on the profile. Typed-in handles (Riot ID, Xbox gamertag, PSN ID) can be shown but are labelled **Unverified**. |
 | W12 | **Gaming rig card** (v1 or soon after) | Auto-filled by the tray (T8c); user-editable free-text fields for peripherals. Hidden until the user reviews it. |
 | W13 | **Privacy controls** | Profile visibility Public / Friends-only / Private (**default Friends-only**, open decision §12.3), per-section hide, **per-game hide** (hidden games never appear to others, including feeds and signature), **Invisible** mode (records hours, publishes no presence), block (hides from search, feed, profile), per-linked-account visibility. |
 | W14 | **Export everything** | One click in Settings → Data: a zip with `sessions.csv`, `games.csv` (per-game totals by tier), `hours_entries.json` (all tiers with evidence metadata and estimator inputs), `characters.json`, `friends.json`, `activity.json`, `profile.json`, plus a documented JSON schema. **Any time, free**, at most 1 per hour. A headline feature on the landing page. |
@@ -93,12 +95,12 @@ The beta seeds from Lucrona's own friend circle and Discord communities. Growth 
 
 | Skipped | Reason |
 |---|---|
-| **In-game overlay** (Xfire's XIG) | Needs DLL injection/graphics hooks. Kernel anti-cheat (Vanguard, EAC, BattlEye, Ricochet) treats unknown injected overlays as cheats, which means bans. Discord and Steam overlays already exist. Toasts instead. |
-| **Keyboard hooks for auto-away** | Global keyboard hooks look like keyloggers (AV tools flagged Xfire's `xfire_toucan.dll`). Use the `GetLastInputInfo` idle-time API instead. |
+| **In-game overlay** | Needs DLL injection/graphics hooks. Kernel anti-cheat (Vanguard, EAC, BattlEye, Ricochet) treats unknown injected overlays as cheats, which means bans. Discord and Steam overlays already exist. Toasts instead. |
+| **Keyboard hooks for auto-away** | Global keyboard hooks look like keyloggers (antivirus tools have flagged older gaming clients for this). Use the `GetLastInputInfo` idle-time API instead. |
 | **Chat, voice, clans/communities, forums, file sharing** | Discord owns these; moderation, retention and age-safety burden is too high for a solo dev. The chat button hands off to Discord. |
 | **Video capture / replay / streaming** | Needs graphics hooks; NVIDIA ShadowPlay/Instant Replay, Steam Game Recording and Xbox Game Bar already do it; Twitch does streaming. *Later:* a screenshot-folder watcher (Steam `userdata/*/760/remote`, Game Bar `Videos\Captures`, NVIDIA folders) that offers to attach shots to a session. |
-| **Ads (ads-first model)** | Xfire's 2013 CEO: gamers "rarely click through the ads". Ads also clash with Twitch and Blizzard data terms (§10). |
-| **Wagering, coins, loot boxes, sweepstakes** | Australian gambling rules; Xfire's Arcade/X-Coins were part of the strategy whiplash that preceded its decline. |
+| **Ads (ads-first model)** | Gamers rarely click through ads, and ads also clash with Twitch and Blizzard data terms (§10). |
+| **Wagering, coins, loot boxes, sweepstakes** | Australian gambling rules, and coin and arcade schemes have hurt gaming communities before. |
 | **Servers tab** (deferred, not skipped) | Only community-server games can be supported, via Steam master server + A2S queries (Rust, DayZ, ARK, CS2/TF2 community servers, Squad; Minecraft via SLP). Matchmade games (Valorant, LoL, CS2 Premier, most modern shooters) can't be. Revisit after beta. |
 | **Xbox / PSN integrations** | No open public API for third parties (Xbox is GDK-partner only; PSN has none); unofficial APIs carry ToS risk. Xbox yearly-recap hours can be entered as Imported with a screenshot. |
 | **Reading game memory / packet sniffing** | Anti-cheat and privacy risk. Fraglink only enumerates processes with limited-query handles and reads documented files. |
@@ -196,7 +198,7 @@ Hours are Fraglink's trophy, so every number carries an honest label. Profiles, 
 
 ## 6. WoW characters and other game accounts
 
-**Goal:** beat xf1re, whose legacy Armory-based Character Sheet is dead (its endpoints return 404 and none of ~9,000 public profiles shows a character). Fraglink does it with today's official APIs.
+**Goal:** a WoW character card that works. Older character sheets built on the legacy Armory stopped working when those endpoints were retired; Fraglink uses today's official APIs.
 
 ### 6.1 Design
 1. **Tray discovery (no API call):** character and realm names from `WTF\Account\<ACCOUNT>\<Realm>\<Character>\` folder names for `_retail_`, `_classic_` and `_classic_era_`; region from `WTF\Config.wtf` (`SET portal`). Uploaded as *suggested* characters only; folder mtime gives "last played on this PC".
@@ -327,7 +329,7 @@ The Steam Web API Terms cap usage at **100,000 calls/day** and require the key t
 
 **Data promise (headline feature)**
 1. **Export everything, any time, free** (JSON + CSV, documented schema; W14).
-2. **Public shutdown pledge** (About page + ToS): "If Fraglink ever shuts down, we'll give at least **90 days' notice** (proposed; open decision), keep export working the whole time, and publish a final archive option. Your hours are yours." For contrast: Xfire gave 2 days' notice in June 2015, its export tool was buggy, and ArchiveTeam saved about 20% of screenshots and no profiles.
+2. **Public shutdown pledge** (About page + ToS): "If Fraglink ever shuts down, we'll give at least **90 days' notice** (proposed; open decision), keep export working the whole time, and publish a final archive option. Your hours are yours."
 3. Account deletion removes all server data within 30 days (policy commitment), including data derived from Blizzard, Steam and Twitch.
 
 **Integration ToS checklist**
@@ -361,7 +363,7 @@ The Steam Web API Terms cap usage at **100,000 calls/day** and require the key t
 - **Custom profile URL** (`playfraglink.com/<slug>`)
 - **Supporter badge**
 
-**Rules:** never paywall stats, tracking, friends, history, exports, WoW cards or any linked-account feature. No ads-first model. No gambling, coins, loot boxes or sweepstakes (Australian gambling rules). No bundleware (Xfire removed OpenCandy in 2011 after it hurt trust).
+**Rules:** never paywall stats, tracking, friends, history, exports, WoW cards or any linked-account feature. No ads-first model. No gambling, coins, loot boxes or sweepstakes (Australian gambling rules). No bundleware.
 
 **Terms to settle before launching Supporter (target v1.1):**
 - **IGDB** is free for non-commercial use only → contact partner@igdb.com, or move to fallback metadata (§7.7).
@@ -397,7 +399,7 @@ Sequencing note: M1 is useful on its own (a local tracker). M2 + M4 together alr
 
 | Metric | Proposed beta target |
 |---|---|
-| Signed up → non-empty profile (any tier) within 24 h | ≥ 85% (xf1re: 59% of profiles non-empty) |
+| Signed up → non-empty profile (any tier) within 24 h | ≥ 85% |
 | Installed tray → first detected session within 24 h | ≥ 60% |
 | Detection coverage (survey + "untracked programs" data) | ≥ 85% |
 | Median accepted friends per active user after 2 weeks | ≥ 3 |
@@ -422,7 +424,7 @@ Sequencing note: M1 is useful on its own (a local tracker). M2 + M4 together alr
 | **Platform/policy changes** (Discord IPC, Twitch, Steam privacy defaults, Blizzard terms) | Isolated integration modules; the core (local tracking + own presence + export) doesn't depend on third parties. |
 | **Realtime cost at scale** | Budget alarm; re-evaluate a Go/Node WebSocket service when Realtime spend passes ~US$100/mo or 5k concurrent connections (estimate). |
 | **Monetisation vs data terms** (IGDB, Twitch, Blizzard) | Cosmetic-only Supporter; perks independent of third-party data; IGDB conversation before launch. |
-| **Trademark/IP** (Xfire-inspired look; WoW art) | Original mark and icons; no Xfire name/logo; placeholder portraits in product UI; Blizzard renders only as API-returned for verified characters, with attribution; trademark clearance for "Fraglink" and the skin names ("StreamEngine", "Phoenix"). |
+| **Trademark/IP** (classic-client look; WoW art) | Original mark and icons; no third-party names or logos; placeholder portraits in product UI; Blizzard renders only as API-returned for verified characters, with attribution; trademark clearance for "Fraglink" and the skin names ("StreamEngine", "Phoenix"). |
 | **SmartScreen / AV flags** | Code signing from the first beta build; public "what Fraglink reads" doc; no hooks. |
 | **Legal/age (AU under-16 law, privacy)** | Advice before public launch; conservative age gate; APP-aligned privacy policy; data in Sydney. |
 | **Shutdown trust** | Export from day one; public pledge (90 days proposed). |
@@ -430,7 +432,7 @@ Sequencing note: M1 is useful on its own (a local tracker). M2 + M4 together alr
 ### 12.3 Decisions
 
 **Resolved (26 Sep 2026)**
-1. ✅ **Name: Fraglink** (decided 25 Sep). On 25 Sep, `fraglink.gg`/`.app`/`.io`/`.com.au` looked unregistered and `fraglink.com` was listed for sale. **Domain:** `playfraglink.com` (bought 3 Oct 2026, replaces the planned `fraglink.gg`). **Still to do:** IP Australia (ATMOSS) + TMview searches; AU trademark filing in classes 9, 41 and 42. Brand assets are in `/workspace/fraglink-brand/`.
+1. ✅ **Name: Fraglink** (decided 25 Sep). On 25 Sep, `fraglink.gg`/`.app`/`.io`/`.com.au` looked unregistered and `fraglink.com` was listed for sale. **Domain:** `playfraglink.com` (bought 3 Oct 2026, replaces the planned `fraglink.gg`). **Still to do:** IP Australia (ATMOSS) + TMview searches; AU trademark filing in classes 9, 41 and 42. Brand assets are in [`assets/brand/`](../assets/brand/).
 2. ✅ **Product direction:** stats + friends from anywhere; tiny tray, the website carries the bulk.
 3. ✅ **Client tabs: Friends | Stats | Activity.** Profile moves to the website; Servers deferred (A2S community-server games only).
 4. ✅ **Monetisation direction:** free core + optional cosmetic Supporter tier (post-beta); never paywall stats; no ads-first; no gambling/coins. (Was open decision 7.)
@@ -445,7 +447,7 @@ Sequencing note: M1 is useful on its own (a local tracker). M2 + M4 together alr
 1. **Minimum age: 13+ or 16+**, and whether Australia's under-16 social media minimum age applies (more likely now that v1 has public profiles, feeds and story notes). Get legal advice or do the eSafety self-assessment before public launch. Simplest conservative option: 16+ at signup.
 2. **Default profile visibility:** Friends-only (recommended for privacy) or Public (better for sharing and growth; signature images need either a public profile or a public "card-only" mode).
 3. **Do Imported hours count toward ranks/leaderboards?** v1 proposal: Tracked only; addon-captured Imported counts toward totals and achievements.
-4. **Shutdown pledge length:** 90 days proposed (Xfire gave 2).
+4. **Shutdown pledge length:** 90 days proposed. *(Decided: 90 days, in the Terms.)*
 5. **Supporter price and timing** (e.g. A$4/mo or A$40/yr; v1.1) and the IGDB commercial route (partnership vs fallback metadata).
 6. **Discord RP presentation:** "Fraglink" activity (recommended) vs `SetName`; legacy IPC crate (recommended) vs Social SDK FFI.
 7. **Twitch category suggest:** v1.1 (recommended) or v1.
@@ -457,7 +459,7 @@ Sequencing note: M1 is useful on its own (a local tracker). M2 + M4 together alr
 
 ---
 
-### Appendix A: Prototype → app mapping (`/workspace/fraglink-prototype`)
+### Appendix A: Prototype → app mapping
 
 | Prototype element | v1 treatment |
 |---|---|
@@ -495,4 +497,3 @@ Sequencing note: M1 is useful on its own (a local tracker). M2 + M4 together alr
 - Tauri Windows installer: https://v2.tauri.app/distribute/windows-installer/
 - Supabase Realtime limits / pricing: https://supabase.com/docs/guides/realtime/limits , https://supabase.com/docs/guides/realtime/pricing
 - eSafety social media age restrictions: https://www.esafety.gov.au/about-us/industry-regulation/social-media-age-restrictions
-- Research notes: `/workspace/xfire-refs-hd/xfire-feature-history.md` (Xfire feature history, 2-day shutdown notice, lessons) and `/workspace/xf1re-refs/deep/xf1re-deep-dive.md` (xf1re profile sections, 41% empty profiles, dead WoW Character Sheet, achievements catalogue, miniprofile PNG).
