@@ -32,8 +32,11 @@
     const friend = /^(friend|request):/.test(p.kind || '');
     // icon (game, or a letter avatar for a friend with no game), bold name, one line, then a dim line (realm / @username)
     // playing: the game icon with the friend's picture in its corner; otherwise the picture
-    const lead = !friend ? `<i class="gi">${icon}</i>` : p.game_id ? `<i class="gi lead-g">${icon}${avatar(p, 'mini')}</i>` : avatar(p);
+    // 0.3.0-beta.9 (option J): Steam 2024 layout. Friend's picture + a thin status bar
+    // (Fraglink blue in game, light blue online / request); the game icon rides in its corner.
     const req = /^request:/.test(p.kind || '');
+    const st = req ? 'st-req' : p.game_id ? 'st-game' : 'st-on';
+    const lead = !friend ? `<i class="gi">${icon}</i>` : `<span class="jl">${avatar(p)}${p.game_id && p.icon ? `<i class="jg">${icon}</i>` : ''}<i class="jb ${st}"></i></span>`;
     const sub = req ? p.game : (SHOW_REALM ? p.detail || '' : '');
     // Steam-style: bold name / action ("is now playing", "played 1h 33m of") / game name
     // on its own accent line (wraps to 2 lines, then …)

@@ -1027,6 +1027,8 @@
       'Session time in the friend side panel',
       'New Help menu with FAQ and Changelog',
       'Hours imported dates for Steam and Battle.net in Connections',
+      'New Flat Navy and Flat Grey themes',
+      'New Steam-style pop-ups',
     ],
   };
   function whatsNew() {
@@ -1275,11 +1277,16 @@
     render();
   }
   const loadCatalog = () => FLB.catalog ? FLB.catalog().then(setCatalog).catch(e => console.warn('catalog', e)) : null;
-  const THEMES = { blue: ['#4b82d6', '#1f4f9e', '#173d7c'], crimson: ['#d65b5b', '#9e1f2a', '#7c1720'], emerald: ['#4bb87a', '#1f7e4a', '#175f38'], graphite: ['#8a9099', '#4f555e', '#3a3f46'] };
-  function applyTheme(t) {
-    if (!THEMES[t]) t = 'blue';
-    const [a, b, c] = THEMES[t], r = document.documentElement.style;
-    r.setProperty('--dk-blue1', a); r.setProperty('--dk-blue2', b); r.setProperty('--dk-blue3', c);
+  /* Themes (0.3.0-beta.9): Cobalt is the classic look; Flat Navy / Flat Grey are flat recolours
+     without the banner (themes-flat.css, scoped by a class on <html>). Crimson, Emerald and
+     Graphite were removed: anyone still on one falls back to Cobalt and the setting is rewritten. */
+  const THEMES = { blue: ['#4b82d6', '#1f4f9e', '#173d7c'], 'flat-navy': null, 'flat-grey': null };
+  function applyTheme(t, migrate) {
+    if (!(t in THEMES)) { if (migrate && t) saveSetting('theme', 'blue'); t = 'blue'; }
+    const root = document.documentElement, r = root.style, pal = THEMES[t];
+    root.classList.toggle('theme-flat-navy', t === 'flat-navy'); root.classList.toggle('theme-flat-grey', t === 'flat-grey');
+    if (pal) { r.setProperty('--dk-blue1', pal[0]); r.setProperty('--dk-blue2', pal[1]); r.setProperty('--dk-blue3', pal[2]); }
+    else ['--dk-blue1', '--dk-blue2', '--dk-blue3'].forEach(k => r.removeProperty(k));
     $$('.theme-opt').forEach(x => x.classList.toggle('checked', x.dataset.theme === t));
   }
   function syncMenus() {
@@ -1641,7 +1648,7 @@
     try { st = await FLB.settings(); LIVE.settings = st; } catch (e) {}
     const saved = st && st.settings || {};
     if (['online', 'away', 'invisible'].includes(saved.status)) myStatus = saved.status;
-    applyTheme(saved.theme); syncMenus(); syncStatus();
+    applyTheme(saved.theme, true); syncMenus(); syncStatus();
     for (const k of jsonList('collapsed_groups')) state.collapsed[k] = true;
     setZoom(params.get('zoom') || (TAURI ? (saved.zoom || '1.5') : (document.body.classList.contains('compare') ? 1 : 2)));
     applySkin();

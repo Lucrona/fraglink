@@ -165,3 +165,20 @@ body.toast-page.skin-dark .toast-body small { font-size: 11px; }
 .toast-body .tq button.add-it:hover, .fl-ask button.add-it:hover { background: linear-gradient(#fff0b8, #f0bd45 50%, #d99f22 51%, #f3c552); }
 .toast-body .tq button.not-game, .fl-ask button.not-game, .fl-ask button.ask-x { background: none; border-color: transparent; color: #9aa3b2; text-decoration: underline; }
 .fl-ask button.ask-x { text-decoration: none; }
+
+/* 0.3.0-beta.9: option J toast (Steam 2024 proportions, Fraglink navy + blue). 283 x 70, 6px radius,
+   42px picture with a 4px status bar, white name / grey action / blue game, faint logo watermark. */
+body.toast-page.skin-dark .xf-toast { border: 0; border-radius: 6px; background: linear-gradient(90deg, #141c33, #182345); box-shadow: 0 2px 10px rgba(0,0,0,.55); min-height: 70px; }
+body.toast-page.skin-dark .toast-head img { right: -14px; top: -18px; bottom: auto; width: 110px; height: auto; opacity: .06; filter: none; }
+body.toast-page.skin-dark .toast-body { padding: 0 24px 0 10px; gap: 11px; font-family: "Segoe UI", Tahoma, sans-serif; }
+body.toast-page.skin-dark .toast-body .jl { position: relative; display: flex; flex: none; gap: 1px; }
+body.toast-page.skin-dark .toast-body .jl .av, body.toast-page.skin-dark .toast-body .jl .av.fav { width: 42px; height: 42px; border: 0; border-radius: 0; }
+body.toast-page.skin-dark .toast-body .jb { width: 4px; height: 42px; background: #8fb0ff; }
+body.toast-page.skin-dark .toast-body .jb.st-on { background: #5b9bff; } body.toast-page.skin-dark .toast-body .jb.st-game { background: #5b9bff; }
+body.toast-page.skin-dark .toast-body .jg { position: absolute; left: 28px; top: 28px; width: 16px; height: 16px; box-shadow: 0 0 0 1px #141c33; }
+body.toast-page.skin-dark .toast-body .jg img, body.toast-page.skin-dark .toast-body .jg svg { width: 16px; height: 16px; display: block; }
+body.toast-page.skin-dark .toast-body .tx { line-height: 16px; }
+body.toast-page.skin-dark .toast-body .tx b { color: #fff; font-size: 12.5px; font-weight: 600; }
+body.toast-page.skin-dark .toast-body .ln { color: #8b93a7; font-size: 11.5px; }
+body.toast-page.skin-dark .toast-body .g { color: #5b9bff; font-size: 11.5px; font-weight: normal; }
+body.toast-page.skin-dark .toast-body small { color: #8b93a7; font-size: 11px; }
