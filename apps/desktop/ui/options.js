@@ -68,7 +68,7 @@
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
       zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
       theme: s.theme || 'blue', always_on_top: on(s, 'always_on_top', '0'),
-      text_size: ['normal', 'large', 'larger'].includes(s.text_size) ? s.text_size : 'normal',
+      text_size: ['small', 'normal', 'large', 'larger'].includes(s.text_size) ? s.text_size : 'normal',
     };
     $$('[data-key]').forEach(el => {
       const v = cur[el.dataset.key] ?? '';
@@ -283,7 +283,7 @@
       const v = c[p] || {}, l = v.linked;
       const who = l ? `<small class="linked">${esc(l.display || l.uid)}${l.verified ? ' · verified' : ''}</small>` : `<small>${blurb}</small>`;
       const fmtD = t => new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-      const hrs = !l ? '' : p === 'steam' && l.last_sync_at ? `<small>Hours imported ${fmtD(l.last_sync_at)}</small>`
+      const hrs = !l ? '' : p === 'steam' && l.last_sync_at ? `<small>Hours imported ${fmtD(l.last_sync_at)}${l.sync_status && l.sync_status !== 'ok' ? ' · ' + esc(l.sync_status) : ''}</small>`
         : p === 'bnet' ? (v.wow_imported_at ? `<small>Hours imported ${fmtD(v.wow_imported_at)}</small>` : '<small><a role="button" tabindex="0" style="cursor:pointer;text-decoration:underline" data-web="connect/battlenet">No /played upload yet</a></small>') : '';
       const right = !signed ? '<button type="button" disabled>Connect</button><span class="soon">sign in first</span>'
         : l ? `<button type="button" data-unlink="${p}">Disconnect</button><span class="soon ok">linked</span>`

@@ -658,6 +658,8 @@
   // val is HTML (already escaped); plain values also get a title so a clipped value can be read
   const kv = (label, val) => val ? `<div class="sf-kv"><span>${label}</span><b${/</.test(val) ? '' : ` data-tip="${val}"`}>${val}</b></div>` : '';
   const sfSec = title => `<div class="side-sec"><h4>${title}</h4></div>`;
+  // "1h 23m" / "45m": the friend's current game session, ticked each minute by clock()
+  const fmtSess = ms => { const m = Math.max(0, Math.floor(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
   const hrsText = sec => sec == null ? '' : fmtHrs(sec) + 'h';
   /* Profile pictures (dev.19), drawn like the website: an uploaded picture (fetched and
      cached by the app), a preset tile, or the Fraglink mark on one of six muted colours. */
@@ -722,7 +724,8 @@
       if (!s) h += sfSec('Stats') + '<p class="sf-note">Loading…</p>';
       else if (s.private) h += sfSec('Stats') + `<p class="sf-note">${esc(f.name)} keeps their play history private.</p>`;
       else if (!s.none) {
-        const rows = kv('This week', hrsText(s.week)) + kv('Total', s.total ? hrsText(s.total) : '');
+        const t0 = playing ? sessionStart(f) : null;
+        const rows = kv('This session', t0 ? `<span class="sf-sess" data-start="${t0}">${fmtSess(Date.now() - t0)}</span>` : '') + kv('This week', hrsText(s.week)) + kv('Total', s.total ? hrsText(s.total) : '');
         if (rows) h += sfSec('Stats') + rows;
       }
     }
@@ -1017,6 +1020,28 @@
     if (newsCur.link && /^https:\/\//.test(newsCur.link)) { if (FLB.openUrl) FLB.openUrl(newsCur.link).catch(() => {}); else open(newsCur.link, '_blank'); }
   });
   setTimeout(loadNews, 1500); setInterval(loadNews, 2 * 60 * 1000); addEventListener('focus', () => loadNews());
+  /* "What's new" after an update. Edit WHATS_NEW for each release (keyed by the
+     app version as devVer() shows it); versions without an entry just get the link. */
+  const WHATS_NEW = {
+    '0.3.0-beta.9': [
+      'Tray icon shows one mark: update ready, friend requests, or your status',
+      'Friend requests badge on the Friends tab',
+      'Session time in the friend side panel',
+      'New Help menu with FAQ and Changelog',
+      'Hours imported dates for Steam and Battle.net in Connections',
+    ],
+  };
+  function whatsNew() {
+    const s = LIVE.settings; if (!s || !s.version) return;
+    const v = devVer(s.version), last = SET().last_run_version;
+    // Not a first install: an earlier version ran (older builds didn't record it, so use other traces).
+    const before = last || SET().login_last || SET().games_detected_once;
+    if (last === v) return;
+    saveSetting('last_run_version', v);
+    if (!before) return;
+    const items = WHATS_NEW[v] || [];
+    notice('Fraglink updated', `<p><b>Fraglink updated to ${esc(v)}</b></p>${items.length ? `<ul class="wn-list">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}<p><a data-action="changelog-web">See full changelog</a></p>`);
+  }
   function notice(title, html) {
     const foot = $('#notice .dlg-foot'); foot.innerHTML = `<button class="hw" data-action="notice-close" type="button">OK</button>`;
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false; placeDlg($('#notice'));
@@ -1167,6 +1192,7 @@
       else if (r.result === 'installing') m.innerHTML = `Installing Fraglink ${esc(devVer(r.version))}…<br><small>Fraglink restarts when it's done.</small>`;
       else m.innerHTML = `Couldn't check for updates.<br><small>${esc(r.message || '')}</small>`;
     },
+    'changelog-web': () => { const u = 'https://playfraglink.com/changelog'; if (FLB.openUrl) FLB.openUrl(u).catch(() => {}); else open(u, '_blank'); },
     'detect-skip': () => { state.detectRun = false; if (TAURI) saveSetting('games_detected_once', '1'); render(); },
     'activity-more': () => { if (tabOn('activity')) { state.tab = 'activity'; render(); } else notice('Activity Report', 'The full Activity Report (all of your friends\' recent games, with filters) arrives with the Fraglink website. The side panel shows the latest few.'); },
     'status-menu': a => statusMenu(a),
@@ -1526,10 +1552,10 @@
     });
   }
 
-  /* Text size (Options > Appearance): Normal / Large / Larger scales the whole dark window. */
-  const TEXT_ZOOM = { normal: 1, large: 1.15, larger: 1.3 };
+  /* Text size (Options > Appearance): Small / Normal (default) / Large / Larger scales the whole dark window. */
+  const TEXT_ZOOM = { small: 1, normal: 1.15, large: 1.3, larger: 1.45 };
   function applyTextSize(v) {
-    const z = TEXT_ZOOM[v] || 1;
+    const z = TEXT_ZOOM[v] || TEXT_ZOOM.normal;
     document.body.style.zoom = z === 1 ? '' : String(z);
     document.body.classList.toggle('ts-big', z !== 1);
     requestAnimationFrame(() => { LS.update(); SS.update(); });
@@ -1592,12 +1618,19 @@
     }
     placeChat();
   }
+  // Auto-Login needs a saved session: ticking it ticks Save Password; unticking Save Password unticks Auto-Login.
+  document.addEventListener('change', e => {
+    const t = e.target; if (!t || !t.id) return;
+    if (t.id === 'lg-auto' && t.checked && $('#lg-save')) $('#lg-save').checked = true;
+    if (t.id === 'lg-save' && !t.checked && $('#lg-auto')) $('#lg-auto').checked = false;
+  });
   $('#zoom').addEventListener('change', e => setZoom(e.target.value));
   window.addEventListener('resize', layout);
   function clock() {
     $('#clock').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const s = $('#session'); if (s) s.textContent = fmtT(liveSeconds() * 1000);
     $$('.sf-timer').forEach(t => { t.textContent = fmtT(Date.now() - +t.dataset.start); });
+    $$('.sf-sess').forEach(t => { const v = fmtSess(Date.now() - +t.dataset.start); if (t.textContent !== v) t.textContent = v; });
   }
   setInterval(clock, 1000);
   document.addEventListener('input', e => { if (!state.addFriend) return; if (e.target.id === 'add-handle') { state.addFriend.q = e.target.value; $('#add-search').disabled = !e.target.value.trim(); } else if (e.target.id === 'add-msg-text') state.addFriend.msg = e.target.value; });
@@ -1635,6 +1668,7 @@
     }
     await refreshFriends();
     await refresh();
+    whatsNew();
     loadCatalog();
     FLB.on('fraglink://events', () => { for (const k in ICONS) if (ICONS[k] === null && !k.startsWith('f:')) delete ICONS[k]; refreshSoon(); }); // a newly detected game may now have an exe icon
     FLB.on('fraglink://friends', refreshFriends);
