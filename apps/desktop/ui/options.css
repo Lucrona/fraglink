@@ -137,7 +137,7 @@ label.stack input[type=text] { width: 100%; }
 .conn:last-child { border-bottom: 0; }
 .conn-ic { width: 26px; height: 26px; flex: none; border-radius: 5px; background: var(--c); color: #fff; font: bold 14px/26px Tahoma, sans-serif; text-align: center; font-style: normal; box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 0 1px #000; }
 .conn-ic img { width: 16px; height: 16px; margin: 5px; display: block; }
-.conn-tx { flex: 1; min-width: 0; } .conn-tx b { display: block; } .conn-tx small { color: #777; }
+.conn-tx { flex: 1; min-width: 0; } .conn-tx b { display: block; } .conn-tx small { display: block; color: #777; }
 body.dark .conn-tx small { color: #8d939c; }
 .conn button { min-width: 70px; }
 .conn .soon { font-size: 9px; color: #c08a1a; text-transform: uppercase; letter-spacing: .5px; width: 72px; }

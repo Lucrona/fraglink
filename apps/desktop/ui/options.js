@@ -282,6 +282,9 @@
     box.innerHTML = CONN.map(([p, name, ic, col, blurb]) => {
       const v = c[p] || {}, l = v.linked;
       const who = l ? `<small class="linked">${esc(l.display || l.uid)}${l.verified ? ' · verified' : ''}</small>` : `<small>${blurb}</small>`;
+      const fmtD = t => new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+      const hrs = !l ? '' : p === 'steam' && l.last_sync_at ? `<small>Hours imported ${fmtD(l.last_sync_at)}</small>`
+        : p === 'bnet' ? (v.wow_imported_at ? `<small>Hours imported ${fmtD(v.wow_imported_at)}</small>` : '<small><a role="button" tabindex="0" style="cursor:pointer;text-decoration:underline" data-web="connect/battlenet">No /played upload yet</a></small>') : '';
       const right = !signed ? '<button type="button" disabled>Connect</button><span class="soon">sign in first</span>'
         : l ? `<button type="button" data-unlink="${p}">Disconnect</button><span class="soon ok">linked</span>`
         : v.available ? `<button type="button" data-link="${p}">Connect</button><span class="soon"></span>`
@@ -289,7 +292,7 @@
       const extra = p === 'bnet' && l ? (v.needs_reconnect
         ? '<div class="conn-sub"><span class="warn">Reconnect Battle.net to verify characters.</span> <button type="button" data-link="bnet">Reconnect</button></div>'
         : '<div class="conn-sub"><button type="button" data-web="connect/battlenet/verify">&#128274; Verify WoW characters</button></div>') : '';
-      return `<div class="conn"><i class="conn-ic" style="--c:${col}"><img src="brand/brand-${ic}.svg" alt=""></i><div class="conn-tx"><b>${name}</b>${who}</div>${right}</div>${extra}`;
+      return `<div class="conn"><i class="conn-ic" style="--c:${col}"><img src="brand/brand-${ic}.svg" alt=""></i><div class="conn-tx"><b>${name}</b>${who}${hrs}</div>${right}</div>${extra}`;
     }).join('');
     renderWow();
   }

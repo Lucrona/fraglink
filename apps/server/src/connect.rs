@@ -82,6 +82,13 @@ async fn status(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value
     .bind(a.user.id)
     .fetch_one(&st.db)
     .await?;
+    // latest WoW (Retail) /played upload, for the "Hours imported" line under Battle.net
+    let wow_imported_at: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+        "SELECT max(uploaded_at) FROM wow_characters WHERE user_id = $1 AND game_id = 'wow'",
+    )
+    .bind(a.user.id)
+    .fetch_one(&st.db)
+    .await?;
     let mut out = serde_json::Map::new();
     for p in PROVIDERS {
         // a switched-off service (Admin > Site settings) can't be linked; unlinking still works
@@ -91,6 +98,9 @@ async fn status(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value
             json!({ "available": available(p) && !off, "off": off, "linked": linked.get(p),
                     "import": p == "steam" && st.steam.configured() && !off }),
         );
+        if p == "bnet" {
+            out[p]["wow_imported_at"] = json!(wow_imported_at);
+        }
     }
     Ok(Json(Value::Object(out)))
 }
