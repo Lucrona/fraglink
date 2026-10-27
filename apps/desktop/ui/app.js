@@ -1030,6 +1030,10 @@
   /* "What's new" after an update. Edit WHATS_NEW for each release (keyed by the
      app version as devVer() shows it); versions without an entry just get the link. */
   const WHATS_NEW = {
+    '0.3.0-beta.9.1': [
+      'Pop-up boxes fit the window, with the main button blue and last',
+      'The resize grip sits in the window corner',
+    ],
     '0.3.0-beta.9': [
       'Cleaner friend side panel in Flat Navy and Flat Grey',
       'Manage WoW and Verify WoW characters buttons in Connections',

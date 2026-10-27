@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.9.1] - 2026-10-27
+
+(╯°□°)╯︵ ┻━┻ One more pass.
+
+### Pop-up boxes
+- Every pop-up box fits inside the window, even at its smallest size
+- Change Nickname fits, and Save is blue and on the right
+- Set Custom Status and Add Custom Group lose the extra button inside the box
+- Add Friend buttons are blue
+
+### Window
+- The resize grip sits in the true bottom-right corner
+- Its tooltip no longer covers the side panel
+
 ## [0.3.0-beta.9] - 2026-10-27
 
 Missed a few spots in beta.8 - here they are.

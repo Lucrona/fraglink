@@ -475,6 +475,9 @@ mod tests {
         assert!(is_newer(&v("0.2.0-9"), &v("0.3.0-beta.1")));
         assert!(is_newer(&v("0.3.0-beta.1"), &v("0.3.0-beta.2")));
         assert!(is_newer(&v("0.3.0-beta.9"), &v("0.3.0-beta.10")));
+        assert!(is_newer(&v("0.3.0-beta.9"), &v("0.3.0-beta.9.1")));
+        assert!(is_newer(&v("0.3.0-beta.9.1"), &v("0.3.0-beta.10")));
+        assert!(!is_newer(&v("0.3.0-beta.9.1"), &v("0.3.0-beta.9")));
         assert!(is_newer(&v("0.3.0-beta.12"), &v("0.3.0")));
         assert!(!is_newer(&v("0.3.0-beta.1"), &v("0.2.0-21")));
         assert!(!is_newer(&v("0.3.0-beta.2"), &v("0.3.0-beta.2")));
