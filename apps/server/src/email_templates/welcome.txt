@@ -13,7 +13,7 @@ Link Steam: https://playfraglink.com/settings#connections
 3. Playing WoW? Add your /played
 Link Battle.net, install the Fraglink /played addon from CurseForge, type /played in game, then upload it on the WoW page.
 Get the addon: https://www.curseforge.com/wow/addons/fraglink-played
-Upload /played: https://playfraglink.com/connect/wow
+Upload /played: https://playfraglink.com/connect/battlenet
 
 4. Add your friends
 See who's online and what they're playing, with a pop-up when they come online or start a game.
