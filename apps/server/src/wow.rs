@@ -35,6 +35,8 @@ pub const GAMES: [(&str, &str); 2] = [
     ("wow", "World of Warcraft"),
     ("wow_forever", "World of Warcraft: Forever"),
 ];
+/// Flavours taking /played uploads now. Forever isn't released: app-tracked only.
+pub const UPLOADS_OPEN: [&str; 1] = ["wow"];
 const REGIONS: [&str; 4] = ["us", "eu", "kr", "tw"];
 /// Slack for clocks and the game's rounding when comparing growth with real time.
 const SLACK_S: i64 = 300;
@@ -353,6 +355,12 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
             "game_id is wow or wow_forever",
         ));
     };
+    if !UPLOADS_OPEN.contains(gid) {
+        return Err(AppError::bad_request(
+            "forever_not_open",
+            "Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app.",
+        ));
+    }
     if chars.len() > 200 {
         return Err(AppError::bad_request("too_many", "At most 200 characters."));
     }
@@ -445,10 +453,12 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
             json!({ "name": e.name, "realm": e.realm, "region": e.region,
             "delta_s": prev.map(|p| (e.played - p.1).max(0)), "first": prev.is_none() }),
         );
-        reverify_one(st, id).await;
         check_bnet_level(st, uid, gid, id, e).await;
         accepted += 1;
     }
+    // every character of the user, so renames, transfers and sales are seen on each upload;
+    // the total is stored once here, so the whole upload's /played gain meets the tracked time
+    set_verified(st, uid, None).await;
     let (total_min, kept_min) = record_total(st, uid, gid, Recount::KeepHigher).await?;
     let verified: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM wow_characters WHERE user_id = $1 AND game_id = $2 AND verified",
@@ -472,10 +482,8 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
 /// How a new character sum is stored.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Recount {
-    /// Normal path (uploads, Battle.net sync): keep the higher total. A sum at or below the
-    /// shown imported total (latest import + tracked play after it) is not stored, so a
-    /// partial upload, a deleted or transferred character, or tracked time /played didn't
-    /// count never lowers the profile or the board.
+    /// Normal path (uploads, Battle.net sync): the higher /played per character (see
+    /// `record_total`); a partial upload or a deleted character never lowers the total.
     KeepHigher,
     /// Battle.net unlinked: store the exact sum (unverified characters must stop counting).
     Exact,
@@ -511,51 +519,94 @@ pub(crate) async fn imported_floor(st: &AppState, uid: Uuid, gid: &str) -> ApiRe
     Ok(last_import(st, uid, gid).await?.map(|(m, c, a)| m + c + a))
 }
 
-/// Store the game's total when it changed. Only Battle.net-verified characters count;
-/// unverified ones are kept and start counting once they verify. Returns the characters'
-/// sum and, when a lower sum was not stored, the higher total that was kept.
+/// The characters that count toward a user's game, one per Battle.net character id
+/// (row id, /played seconds):
+/// - verified ones (on the linked account's newest listing, see `set_verified`);
+/// - ones verified before that are on nobody's listing any more (deleted: they keep their
+///   hours) while Battle.net is linked;
+/// - never one another user's Battle.net lists now (sold or moved), and a renamed or
+///   transferred character counts once (its rows share the id; the verified/higher one).
+const COUNTED: &str = "
+    WITH c AS (
+      SELECT c.id, c.bnet_id, c.played_s, c.verified FROM wow_characters c
+      WHERE c.user_id = $1 AND c.game_id = $2
+        AND (c.verified OR (c.ever_verified
+             AND EXISTS (SELECT 1 FROM linked_accounts l WHERE l.user_id = c.user_id
+                           AND l.provider = 'bnet' AND l.verified)
+             AND (c.bnet_id IS NULL OR NOT EXISTS (
+                  SELECT 1 FROM bnet_characters b WHERE b.game_id = c.game_id AND b.region = c.region
+                    AND b.bnet_id = c.bnet_id AND b.user_id <> c.user_id)))))
+    SELECT DISTINCT ON (coalesce('b' || bnet_id::text, id::text)) id::text, played_s
+    FROM c ORDER BY coalesce('b' || bnet_id::text, id::text), verified DESC, played_s DESC";
+
+/// Store the game's total when the counted characters changed. Each character's /played
+/// only goes up (`check_entry`), so per character the higher value is kept; the sum drops
+/// only when a character moves to another owner or a rename merges two rows.
+///
+/// Menu-time extra: minutes the app tracked beyond what the counted characters' /played
+/// gained since the last stored total. If a character stopped counting nothing is added
+/// (no extra fed by its missing hours); a newly counted one counts in full. A recount or
+/// unlink starts the extra again at 0. Returns (sum, kept); `kept` is always None now (no
+/// lower sum is held back) and stays in the reply for older clients.
 async fn record_total(
     st: &AppState,
     uid: Uuid,
     gid: &str,
     mode: Recount,
 ) -> ApiResult<(i64, Option<i64>)> {
-    let (sum, n, v): (i64, i64, i64) = sqlx::query_as(
-        "SELECT coalesce(sum(played_s) FILTER (WHERE verified), 0)::bigint / 60, count(*),
-                count(*) FILTER (WHERE verified)
-         FROM wow_characters WHERE user_id = $1 AND game_id = $2",
+    let rows: Vec<(String, i64)> = sqlx::query_as(COUNTED)
+        .bind(uid)
+        .bind(gid)
+        .fetch_all(&st.db)
+        .await?;
+    let (n, v): (i64, i64) = sqlx::query_as(
+        "SELECT count(*), count(*) FILTER (WHERE verified) FROM wow_characters
+         WHERE user_id = $1 AND game_id = $2",
     )
     .bind(uid)
     .bind(gid)
     .fetch_one(&st.db)
     .await?;
-    let sum = sum.min(i32::MAX as i64);
-    let last: Option<i32> = sqlx::query_scalar(
-        "SELECT minutes FROM hours_entries WHERE user_id = $1 AND game_id = $2 AND source = 'wow_addon'
+    let now_map: std::collections::BTreeMap<String, i64> = rows.into_iter().collect();
+    let sum = (now_map.values().sum::<i64>() / 60).min(i32::MAX as i64);
+    let last: Option<(i32, Value)> = sqlx::query_as(
+        "SELECT minutes, inputs FROM hours_entries WHERE user_id = $1 AND game_id = $2 AND source = 'wow_addon'
          ORDER BY created_at DESC, id DESC LIMIT 1",
     )
     .bind(uid)
     .bind(gid)
     .fetch_optional(&st.db)
     .await?;
-    let mut kept = None;
-    // Minutes the app tracked beyond what /played gained (menus, loading screens) are
-    // carried forward on top of each new upload; a recount or unlink starts again at 0.
+    let prev_map: Option<std::collections::BTreeMap<String, i64>> = last
+        .as_ref()
+        .and_then(|(_, i)| serde_json::from_value(i["chars"].clone()).ok());
     let mut carry = 0i64;
     let store = match mode {
         Recount::Reset => last.is_some() || sum > 0,
-        Recount::Exact => last.map(i64::from) != Some(sum) && !(last.is_none() && sum == 0),
+        Recount::Exact => {
+            last.as_ref().map(|l| i64::from(l.0)) != Some(sum) && !(last.is_none() && sum == 0)
+        }
         Recount::KeepHigher => match last_import(st, uid, gid).await? {
             None => sum > 0,
-            Some((m0, c0, after)) if sum > m0 => {
-                carry = c0 + (after - (sum - m0)).max(0);
-                true
-            }
             Some((m0, c0, after)) => {
-                if sum < m0 + c0 + after {
-                    kept = Some(m0 + c0 + after);
+                // /played gained by the counted characters (None: one stopped counting)
+                let gain = match &prev_map {
+                    Some(p) if p.keys().any(|k| !now_map.contains_key(k)) => None,
+                    Some(p) => Some(
+                        now_map
+                            .iter()
+                            .map(|(k, s)| (s - p.get(k).copied().unwrap_or(0)).max(0))
+                            .sum::<i64>()
+                            / 60,
+                    ),
+                    // totals stored before per-character records: the sum's rise
+                    None => Some(sum - m0),
+                };
+                carry = c0 + gain.filter(|g| *g > 0).map_or(0, |g| (after - g).max(0));
+                match &prev_map {
+                    Some(p) => *p != now_map,
+                    None => sum != m0,
                 }
-                false
             }
         },
     };
@@ -573,13 +624,13 @@ async fn record_total(
         .bind(uid)
         .bind(gid)
         .bind(sum as i32)
-        .bind(json!({ "characters": n, "verified": v, "reset": mode == Recount::Reset }))
+        .bind(json!({ "characters": n, "verified": v, "reset": mode == Recount::Reset, "chars": now_map }))
         .bind(note)
         .bind(carry.min(i32::MAX as i64) as i32)
         .execute(&st.db)
         .await?;
     }
-    Ok((sum, kept))
+    Ok((sum, None))
 }
 
 /// Recount a user's WoW total from their characters now, even if lower. For the user
@@ -663,6 +714,7 @@ pub async fn sync_characters(
         String,
         Option<i32>,
         [Option<String>; 3],
+        Option<i64>,
     )> = Vec::new();
     let mut any_ok = false;
     for (game, _) in GAMES {
@@ -706,6 +758,7 @@ pub async fn sync_characters(
                             c["gender"]["type"].as_str().map(|g| g.to_lowercase()),
                             name_of(&c["playable_class"]),
                         ],
+                        c["id"].as_i64(),
                     ));
                 }
             }
@@ -719,11 +772,11 @@ pub async fn sync_characters(
         .bind(uid)
         .execute(&st.db)
         .await;
-    for (g, r, slug, rn, name, lvl, [race, gender, class]) in &rows {
+    for (g, r, slug, rn, name, lvl, [race, gender, class], bid) in &rows {
         let _ = sqlx::query(
             "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, realm_name, name, level,
-                                         race, gender, class_name)
-             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING",
+                                         race, gender, class_name, bnet_id)
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT DO NOTHING",
         )
         .bind(uid)
         .bind(g)
@@ -735,6 +788,7 @@ pub async fn sync_characters(
         .bind(race)
         .bind(gender)
         .bind(class)
+        .bind(bid)
         .execute(&st.db)
         .await;
     }
@@ -744,19 +798,34 @@ pub async fn sync_characters(
     Some(rows.into_iter().map(|r| (r.0, r.1)).collect())
 }
 
-/// A character is verified while it is on the linked Battle.net account (`wow.profile`
-/// list) and its latest accepted entry was saved under that account's BattleTag. Several
-/// WoW licences on one Battle.net (WoW1, WoW2) share the BattleTag, so all of them count.
-/// During an upload: the total is stored once at the end, so the whole upload's /played
-/// gain is compared with the tracked time (see `record_total`).
-async fn reverify_one(st: &AppState, id: Uuid) {
-    set_verified(st, Some(id), None, None).await;
-}
-
 /// A character is verified while it is on the linked Battle.net account (its `wow.profile`
-/// list) and its latest accepted entry was saved under that account's BattleTag. Several
-/// WoW licences on one Battle.net (WoW1, WoW2) share the BattleTag, so all of them count.
-async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>, mode: Option<Recount>) {
+/// list), its latest accepted entry was saved under that account's BattleTag, and no other
+/// user's Battle.net listed the same character id more recently (sold or moved: the
+/// current holder gets the hours). Several WoW licences on one Battle.net (WoW1, WoW2)
+/// share the BattleTag, so all of them count. Other users holding one of this user's
+/// character ids are rechecked too, so a sold character leaves the old owner's total.
+/// `mode` None: the caller stores this user's totals itself (an upload).
+async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
+    // ids from this user's listing onto their uploaded rows
+    let _ = sqlx::query(
+        "UPDATE wow_characters c SET bnet_id = b.bnet_id FROM bnet_characters b
+         WHERE c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
+           AND b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name) AND b.bnet_id IS NOT NULL
+           AND c.bnet_id IS DISTINCT FROM b.bnet_id",
+    )
+    .bind(uid)
+    .execute(&st.db)
+    .await;
+    let mut users: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT o.user_id FROM wow_characters o JOIN wow_characters c
+           ON c.user_id = $1 AND o.game_id = c.game_id AND o.region = c.region AND o.bnet_id = c.bnet_id
+         WHERE o.user_id <> $1",
+    )
+    .bind(uid)
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    users.insert(0, uid);
     let _ = sqlx::query(
         "UPDATE wow_characters c SET verified = EXISTS (
              SELECT 1 FROM bnet_characters b WHERE b.user_id = c.user_id AND b.game_id = c.game_id
@@ -764,27 +833,33 @@ async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>, mode: 
             AND EXISTS (SELECT 1 FROM linked_accounts l WHERE l.user_id = c.user_id
                            AND l.provider = 'bnet' AND l.verified AND c.battletag <> ''
                            AND lower(l.display) = lower(c.battletag))
-         WHERE ($1::uuid IS NULL OR c.id = $1) AND ($2::uuid IS NULL OR c.user_id = $2)
-           AND ($1::uuid IS NOT NULL OR $2::uuid IS NOT NULL)",
+            AND (c.bnet_id IS NULL OR NOT EXISTS (
+                 SELECT 1 FROM bnet_characters o WHERE o.user_id <> c.user_id AND o.game_id = c.game_id
+                    AND o.region = c.region AND o.bnet_id = c.bnet_id
+                    AND o.fetched_at > coalesce((SELECT max(m.fetched_at) FROM bnet_characters m
+                        WHERE m.user_id = c.user_id AND m.game_id = c.game_id AND m.region = c.region
+                          AND m.bnet_id = c.bnet_id), '-infinity')))
+         WHERE c.user_id = ANY($1)",
     )
-    .bind(id)
-    .bind(uid)
+    .bind(&users)
+    .execute(&st.db)
+    .await;
+    let _ = sqlx::query(
+        "UPDATE wow_characters SET ever_verified = true
+         WHERE user_id = ANY($1) AND verified AND NOT ever_verified",
+    )
+    .bind(&users)
     .execute(&st.db)
     .await;
     // Verification decides what counts, so refresh the stored totals.
-    let owner = match (uid, id) {
-        (Some(u), _) => Some(u),
-        (None, Some(id)) => sqlx::query_scalar("SELECT user_id FROM wow_characters WHERE id = $1")
-            .bind(id)
-            .fetch_optional(&st.db)
-            .await
-            .ok()
-            .flatten(),
-        _ => None,
-    };
-    if let (Some(u), Some(mode)) = (owner, mode) {
+    for (i, u) in users.iter().enumerate() {
+        let m = match (i, mode) {
+            (0, None) => continue,
+            (0, Some(m)) => m,
+            _ => Recount::KeepHigher,
+        };
         for (gid, _) in GAMES {
-            let _ = record_total(st, u, gid, mode).await;
+            let _ = record_total(st, *u, gid, m).await;
         }
     }
 }
@@ -793,7 +868,7 @@ async fn set_verified(st: &AppState, id: Option<Uuid>, uid: Option<Uuid>, mode: 
 /// character stays verified only while it is on the linked account; the BattleTag
 /// check was made when its entry was accepted.
 pub async fn reverify(st: &AppState, uid: Uuid) {
-    set_verified(st, None, Some(uid), Some(Recount::KeepHigher)).await;
+    set_verified(st, uid, Some(Recount::KeepHigher)).await;
 }
 
 /// Battle.net unlinked: forget its characters; nothing counts on leaderboards any more.
@@ -803,7 +878,7 @@ pub async fn on_unlink(st: &AppState, uid: Uuid) {
         .execute(&st.db)
         .await;
     // Unverified characters must stop counting, so store the exact (lower) sum here.
-    set_verified(st, None, Some(uid), Some(Recount::Exact)).await;
+    set_verified(st, uid, Some(Recount::Exact)).await;
 }
 
 pub(crate) async fn app_token() -> Option<String> {
@@ -876,7 +951,8 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
         .and_then(|ms| Utc.timestamp_millis_opt(ms).single());
     let _ = sqlx::query(
         "UPDATE wow_characters SET bnet_level = $2, bnet_last_login = $3, bnet_checked_at = now(),
-                bnet_spec = coalesce($4, bnet_spec), race = coalesce($5, race), gender = coalesce($6, gender)
+                bnet_spec = coalesce($4, bnet_spec), race = coalesce($5, race), gender = coalesce($6, gender),
+                bnet_id = coalesce(bnet_id, $7)
          WHERE id = $1",
     )
     .bind(id)
@@ -885,6 +961,7 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
     .bind(name_of(&v["active_spec"]))
     .bind(name_of(&v["race"]))
     .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
+    .bind(v["id"].as_i64())
     .execute(&st.db)
     .await;
     if let (Some(l), Some(t)) = (level, last) {
@@ -1031,6 +1108,72 @@ pub async fn admin_flags(st: &AppState, days: i32) -> ApiResult<Vec<Value>> {
                     "when": at, "minutes": s.map(|s| s / 60), "detail": format!("{who}: {d}") })
         })
         .collect())
+}
+
+/// Fill missing Battle.net character ids (rows from before ids were stored) from the public
+/// character profile, once per row, then recheck the users touched: a rename or move found
+/// this way merges into one character. A profile Blizzard doesn't answer (deleted,
+/// renamed since, private) leaves the id empty and the row counting as before.
+pub async fn backfill_ids(st: AppState) {
+    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+    let rows: Vec<(Uuid, Uuid, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, user_id, game_id, region, realm_slug, name FROM wow_characters
+         WHERE bnet_id IS NULL AND bnet_id_tried_at IS NULL ORDER BY user_id LIMIT 2000",
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    if rows.is_empty() {
+        return;
+    }
+    let (Some(tok), Some(http)) = (app_token().await, http()) else {
+        return;
+    };
+    let (mut found, mut users) = (0, std::collections::BTreeSet::new());
+    for (id, uid, gid, region, slug, name) in &rows {
+        let Some(ns) = namespace(gid, region) else {
+            continue;
+        };
+        let url = format!(
+            "https://{region}.api.blizzard.com/profile/wow/character/{slug}/{}?namespace={ns}&locale=en_US",
+            name.to_lowercase()
+        );
+        let bid = match http.get(&url).bearer_auth(&tok).send().await {
+            Ok(r) if r.status().is_success() => {
+                r.json::<Value>().await.ok().and_then(|v| v["id"].as_i64())
+            }
+            Ok(r) if r.status().as_u16() == 404 => None,
+            _ => continue, // try again next start
+        };
+        let _ = sqlx::query(
+            "UPDATE wow_characters SET bnet_id = coalesce(bnet_id, $2), bnet_id_tried_at = now() WHERE id = $1",
+        )
+        .bind(id)
+        .bind(bid)
+        .execute(&st.db)
+        .await;
+        if let Some(b) = bid {
+            found += 1;
+            let _ = sqlx::query(
+                "UPDATE bnet_characters SET bnet_id = $5 WHERE user_id = $1 AND game_id = $2 AND region = $3
+                   AND realm_slug = $4 AND lower(name) = lower($6) AND bnet_id IS NULL",
+            )
+            .bind(uid)
+            .bind(gid)
+            .bind(region)
+            .bind(slug)
+            .bind(b)
+            .bind(name)
+            .execute(&st.db)
+            .await;
+            users.insert(*uid);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+    for u in users {
+        reverify(&st, u).await;
+    }
+    tracing::info!("bnet ids: filled {found} of {} characters", rows.len());
 }
 
 #[cfg(test)]

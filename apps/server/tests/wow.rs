@@ -277,10 +277,16 @@ async fn wow_total(pool: &PgPool) -> Option<i32> {
     .unwrap()
 }
 
+/// The site-settings flag cache is process-wide: tests switching flags take turns.
+static FLAGS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Only Battle.net-verified characters count toward hours and show on the profile.
 /// Unverified ones are stored and start counting once they verify.
+
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn only_verified_characters_count(pool: PgPool) {
+    let _flags = FLAGS.lock().await;
+    fraglink_server::features::forget();
     let app = fraglink_server::router(state(pool.clone()));
     let t = signup(&app, "v@example.com", "onlyverified").await;
     let now = chrono::Utc::now().timestamp() - 60;
@@ -475,7 +481,8 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
     assert_eq!(r["total_min"], 6_840, "{r}");
     assert_eq!(shown(&pool, "keephigher").await, (6_900, 6_900));
 
-    // the user can lower it on purpose (after deleting a character, say)
+    // a deleted character (on no Battle.net listing any more) keeps its hours, even through
+    // a recount, which only drops the carried extra
     sqlx::query("DELETE FROM bnet_characters WHERE name = 'Alt'")
         .execute(&pool)
         .await
@@ -491,7 +498,7 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-    assert_eq!(shown(&pool, "keephigher").await, (6_060, 6_060));
+    assert_eq!(shown(&pool, "keephigher").await, (6_840, 6_840));
     let r = api(
         &app,
         "POST",
@@ -615,6 +622,8 @@ async fn played_more_than_tracked_carries_nothing(pool: PgPool) {
 
 #[sqlx::test]
 async fn featured_characters_lead_the_profile(pool: PgPool) {
+    let _flags = FLAGS.lock().await;
+    fraglink_server::features::forget();
     let app = fraglink_server::router(state(pool.clone()));
     let (t, _) = two_chars(&app, &pool, "feat").await;
     sqlx::query("INSERT INTO site_settings(key, enabled) VALUES('wow_characters', true)")
@@ -716,4 +725,151 @@ async fn featured_characters_lead_the_profile(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(n, 0);
+}
+
+fn entry_on(realm: &str, name: &str, played: i64, at: i64, tag: &str) -> CharEntry {
+    let mut e = entry(name, played, at, tag);
+    e.realm = realm.into();
+    e.sig = sign_with(SIG_KEYS[0].1, &e);
+    e
+}
+
+/// Link Battle.net for `handle` under `tag` (no listing yet).
+async fn link(app: &axum::Router, pool: &PgPool, handle: &str, uid: &str, tag: &str) -> String {
+    let t = signup(app, &format!("{handle}@example.com"), handle).await;
+    sqlx::query("INSERT INTO linked_accounts(user_id, provider, provider_uid, display, verified, scopes)
+                 SELECT id, 'bnet', $2, $3, true, 'openid wow.profile' FROM users WHERE handle = $1")
+        .bind(handle).bind(uid).bind(tag).execute(pool).await.unwrap();
+    t
+}
+
+/// Replace `handle`'s Battle.net listing (as a sync does), `ago_h` hours old.
+async fn listing(pool: &PgPool, handle: &str, chars: &[(&str, &str, i64)], ago_h: i32) {
+    sqlx::query(
+        "DELETE FROM bnet_characters WHERE user_id = (SELECT id FROM users WHERE handle = $1)",
+    )
+    .bind(handle)
+    .execute(pool)
+    .await
+    .unwrap();
+    for (slug, name, id) in chars {
+        sqlx::query(
+            "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, name, bnet_id, fetched_at)
+             SELECT id, 'wow', 'us', $2, $3, $4, now() - make_interval(hours => $5) FROM users WHERE handle = $1",
+        )
+        .bind(handle)
+        .bind(slug)
+        .bind(name)
+        .bind(id)
+        .bind(ago_h)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+}
+
+async fn total_of(pool: &PgPool, handle: &str) -> i64 {
+    shown(pool, handle).await.0
+}
+
+/// A rename and a realm transfer keep Battle.net's character id: still one character,
+/// counted once, with the higher /played.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn renames_and_realm_transfers_are_one_character(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let h = "renamer";
+    let t = link(&app, &pool, h, "50", "Ren#1").await;
+    let now = chrono::Utc::now().timestamp() - 60;
+    listing(&pool, h, &[("area-52", "Zqxoldname", 9001)], 0).await;
+    let r = up(
+        &app,
+        &t,
+        &[entry("Zqxoldname", 360_000, now - 7200, "Ren#1")],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_000, "{r}");
+
+    // renamed: Battle.net lists the same id under the new name
+    listing(&pool, h, &[("area-52", "Zqxnewname", 9001)], 0).await;
+    let r = up(
+        &app,
+        &t,
+        &[entry("Zqxnewname", 361_800, now - 3600, "Ren#1")],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_030, "{r}");
+    assert_eq!(total_of(&pool, h).await, 6_030);
+
+    // moved to another realm: same id again
+    listing(&pool, h, &[("moon-guard", "Zqxnewname", 9001)], 0).await;
+    let r = up(
+        &app,
+        &t,
+        &[entry_on("Moon Guard", "Zqxnewname", 363_600, now, "Ren#1")],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_060, "{r}");
+    assert_eq!(total_of(&pool, h).await, 6_060);
+    // the old rows stay in the list but don't count
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM wow_characters WHERE bnet_id = 9001")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 3);
+}
+
+/// Sold (or moved to another Battle.net): the user Battle.net lists it under now gets the
+/// hours, and it leaves the old owner's total, with no menu-time extra from the gap.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn a_sold_character_moves_to_its_new_owner(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let now = chrono::Utc::now().timestamp() - 60;
+    let ts = link(&app, &pool, "seller", "60", "Sel#1").await;
+    listing(
+        &pool,
+        "seller",
+        &[("area-52", "Zqxsold", 9002), ("area-52", "Zqxkept", 9003)],
+        24,
+    )
+    .await;
+    let r = up(
+        &app,
+        &ts,
+        &[
+            entry("Zqxsold", 360_000, now - 7200, "Sel#1"),
+            entry("Zqxkept", 36_000, now - 7200, "Sel#1"),
+        ],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_600, "{r}");
+    track(&pool, "seller", 1.0, 3600).await;
+
+    let tb = link(&app, &pool, "buyer", "61", "Buy#1").await;
+    listing(&pool, "buyer", &[("area-52", "Zqxsold", 9002)], 0).await;
+    let r = up(&app, &tb, &[entry("Zqxsold", 363_600, now, "Buy#1")]).await;
+    assert_eq!(r["total_min"], 6_060, "{r}");
+    assert_eq!(total_of(&pool, "buyer").await, 6_060);
+    // the seller keeps only the character they still have; the tracked hour adds nothing
+    assert_eq!(total_of(&pool, "seller").await, 600);
+    // and their next upload doesn't bring it back
+    let r = up(&app, &ts, &[entry("Zqxkept", 36_600, now, "Sel#1")]).await;
+    assert_eq!(r["total_min"], 610, "{r}");
+}
+
+/// WoW Forever isn't out: its /played uploads are refused (hours are app-tracked).
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn forever_uploads_are_closed(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = link(&app, &pool, "forever", "70", "For#1").await;
+    let now = chrono::Utc::now().timestamp() - 60;
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/wow_played",
+        Some(&t),
+        Some(json!({ "game_id": "wow_forever", "characters": [entry("Zqx", 3600, now, "For#1")] })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
+    assert!(r.text.contains("forever_not_open"), "{}", r.text);
 }

@@ -455,16 +455,17 @@ pages.wowupload = async () => {
   const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
   const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
   el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
-    <p class="sub">Upload once to bring in your past WoW playtime. Hours Fraglink tracks after that add on top. Uploading again is optional: it catches up time played while Fraglink was closed, the higher total is always kept, and time tracked in menus and loading screens (which /played leaves out) stays. Each character counts once, and Retail and Forever are kept separate.</p></div></div>
+    <p class="sub">Upload once to bring in your past WoW playtime. Hours Fraglink tracks after that add on top. Uploading again is optional: it catches up time played while Fraglink was closed, the higher total is always kept, and time tracked in menus and loading screens (which /played leaves out) stays. Each character counts once, even after a rename or realm transfer.</p></div></div>
     <form class="wu-form" data-form>
-      <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
+      <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label class="sub" title="Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app."><input type="radio" name="game" value="wow_forever" disabled> World of Warcraft: Forever</label></div>
+      <p class="sub">Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app.</p>
       <div class="alert info"><b>Before you upload: log in to every character.</b> The addon only saves a character's /played when you log in to it (then log out or <code>/reload</code>). Characters you skip keep the hours from their last upload, and Fraglink always keeps your higher total, so a partial upload never lowers your hours.</div>
       <label class="check wu-row"><input type="checkbox" name="all" required> I've logged in to each of my characters with the addon on since my last upload</label>
       <div class="wu-row"><span class="wu-l">File</span><input type="file" name="f" accept=".lua" required> <button class="btn blue" type="submit">Upload and check</button></div>
       <details class="wu-help"><summary>Where is FraglinkPlayed.lua?</summary>
         <p>Log out of WoW (or type <code>/reload</code>) first so the game saves it, then open:</p>
         <p><code>World of Warcraft\\_retail_\\WTF\\Account\\&lt;ACCOUNT&gt;\\SavedVariables\\FraglinkPlayed.lua</code></p>
-        <p class="sub">For Forever use the <code>_forever_</code> folder instead of <code>_retail_</code>. If you have several WoW accounts there (WoW1, WoW2, or a family member's), upload each account's file. Characters from a Battle.net account other than the one you linked are refused.</p></details>
+        <p class="sub">If you have several WoW accounts there (WoW1, WoW2, or a family member's), upload each account's file. Characters from a Battle.net account other than the one you linked are refused.</p></details>
     </form>
     <ol class="bv-steps" data-steps hidden>${STEPS.map(([k, t]) => `<li data-s="${k}"><span class="bv-ic"></span><b>${t}</b><small></small></li>`).join("")}</ol>
     <div data-res></div>`;
@@ -671,7 +672,7 @@ pages.bnet = async () => {
   // Featured top 3 per WoW version: search picker (fine with 1000+ characters), up/down, remove
   const fbox = $("[data-fbox]", el);
   if (fbox) {
-    const FL = [["wow", "World of Warcraft"], ["wow_forever", "WoW: Forever"]];
+    const FL = [["wow", "World of Warcraft"]]; // Forever: once its /played uploads open
     let F; try { F = await api("/me/wow/featured"); } catch (x) { fbox.innerHTML = `<p class="empty">${esc(x.message)}</p>`; return; }
     const lbl = c => `${esc(c.name)} <span class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())} · ${hours(c.played_min, { zero: true })}</span>`;
     const draw = () => { fbox.innerHTML = FL.map(([g, nm]) => `<div class="bn-feat" data-g="${g}" style="padding:6px 14px 12px"><b>${nm}</b>
