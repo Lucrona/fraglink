@@ -294,6 +294,7 @@ const ALLOWED: &[&str] = &[
     "login_last",
     "save_password",
     "auto_login",
+    "last_run_version",
     "status_history",
     "favorite_friends",
     "friend_groups",

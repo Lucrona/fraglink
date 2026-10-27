@@ -170,6 +170,16 @@ pub fn view(app: &AppHandle) -> SyncView {
 
 /// Called at startup: only starts the sync thread if the user signed in before.
 pub fn init(app: &AppHandle) {
+    // Login screen ticks: "0" (explicitly unticked) for either Save Password or
+    // Auto-Login means don't stay signed in across restarts, so revoke the saved
+    // session token now. Unset (older installs) keeps the old stay-signed-in behaviour.
+    // Only a DPAPI-encrypted session token is ever stored, never the password.
+    let off = |k: &str| setting(app, k).as_deref() == Some("0");
+    if token(app).is_some() && (off("save_password") || off("auto_login")) {
+        log::info!("sync: Save Password/Auto-Login off; forgetting the saved session");
+        sign_out(app);
+        return;
+    }
     if token(app).is_some() {
         start_worker(app.clone());
         crate::friends::start(app);
