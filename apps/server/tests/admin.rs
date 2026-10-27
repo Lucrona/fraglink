@@ -420,18 +420,18 @@ async fn retire_and_unretire_a_game(pool: PgPool) {
     let app = fraglink_server::router(st.clone());
     let owner = signup(&app, "o@example.com", "olive").await;
     set_role(&pool, "olive", Some("owner")).await;
-    let p = "/api/v1/admin/games/wow_forever";
+    let p = "/api/v1/admin/games/hearthstone";
     let r = api(&app, "POST", &format!("{p}/retire"), Some(&owner), None).await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
-    assert_eq!(r.json()["retired"]["successor"], "exe:wowb.exe");
+    assert_eq!(r.json()["retired"]["successor"], "exe:hearthstone.exe");
     assert_eq!(
-        fraglink_server::retire::effective_id(&st, "wow_forever")
+        fraglink_server::retire::effective_id(&st, "hearthstone")
             .await
             .unwrap(),
-        "exe:wowb.exe"
+        "exe:hearthstone.exe"
     );
     let n: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM game_suggestions WHERE exe = 'wowb.exe' AND status = 'new'",
+        "SELECT count(*) FROM game_suggestions WHERE exe = 'hearthstone.exe' AND status = 'new'",
     )
     .fetch_one(&pool)
     .await
@@ -445,13 +445,13 @@ async fn retire_and_unretire_a_game(pool: PgPool) {
     assert_eq!(u.status, StatusCode::OK, "{}", u.text);
     assert!(u.json()["retired"].is_null());
     assert_eq!(
-        fraglink_server::retire::effective_id(&st, "wow_forever")
+        fraglink_server::retire::effective_id(&st, "hearthstone")
             .await
             .unwrap(),
-        "wow_forever"
+        "hearthstone"
     );
     let acts: Vec<String> = sqlx::query_scalar(
-        "SELECT action FROM admin_audit WHERE target = 'wow_forever' ORDER BY id",
+        "SELECT action FROM admin_audit WHERE target = 'hearthstone' ORDER BY id",
     )
     .fetch_all(&pool)
     .await
@@ -462,7 +462,7 @@ async fn retire_and_unretire_a_game(pool: PgPool) {
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn retire_some_programs_and_game_status(pool: PgPool) {
     sqlx::query(
-        "INSERT INTO game_overrides(game_id, extra_exes) VALUES('wow_forever', '{wowf2.exe}')",
+        "INSERT INTO game_overrides(game_id, extra_exes) VALUES('hearthstone', '{hearthstone2.exe}')",
     )
     .execute(&pool)
     .await
@@ -471,11 +471,12 @@ async fn retire_some_programs_and_game_status(pool: PgPool) {
     let app = fraglink_server::router(st.clone());
     let owner = signup(&app, "o@example.com", "olive").await;
     set_role(&pool, "olive", Some("owner")).await;
-    let p = "/api/v1/admin/games/wow_forever";
+    let p = "/api/v1/admin/games/hearthstone";
     let g = api(&app, "GET", p, Some(&owner), None).await.json();
     let exes: Vec<String> = serde_json::from_value(g["exes"].clone()).unwrap();
     assert!(
-        exes.contains(&"wowb.exe".to_string()) && exes.contains(&"wowf2.exe".to_string()),
+        exes.contains(&"hearthstone.exe".to_string())
+            && exes.contains(&"hearthstone2.exe".to_string()),
         "{exes:?}"
     );
     let bad = api(
@@ -492,17 +493,17 @@ async fn retire_some_programs_and_game_status(pool: PgPool) {
         "POST",
         &format!("{p}/retire"),
         Some(&owner),
-        Some(json!({ "exes": ["wowf2.exe"] })),
+        Some(json!({ "exes": ["hearthstone2.exe"] })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     assert_eq!(r.json()["retired"]["partial"], true);
     // the game itself stays live; the program gets a rule of its own
     assert_eq!(
-        fraglink_server::retire::effective_id(&st, "wow_forever")
+        fraglink_server::retire::effective_id(&st, "hearthstone")
             .await
             .unwrap(),
-        "wow_forever"
+        "hearthstone"
     );
     let ov = api(&app, "GET", "/api/v1/games/overrides", None, None)
         .await
@@ -510,13 +511,13 @@ async fn retire_some_programs_and_game_status(pool: PgPool) {
     let rules = ov["rules"].as_array().unwrap();
     assert!(rules
         .iter()
-        .any(|r| r["id"] == "exe:wowf2.exe" && r["exes"][0] == "wowf2.exe"));
-    assert!(!rules.iter().any(|r| r["id"] == "wow_forever"
+        .any(|r| r["id"] == "exe:hearthstone2.exe" && r["exes"][0] == "hearthstone2.exe"));
+    assert!(!rules.iter().any(|r| r["id"] == "hearthstone"
         && r["exes"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|e| e == "wowf2.exe")));
+            .any(|e| e == "hearthstone2.exe")));
     let u = api(&app, "POST", &format!("{p}/unretire"), Some(&owner), None).await;
     assert_eq!(u.status, StatusCode::OK, "{}", u.text);
 
@@ -539,7 +540,7 @@ async fn retire_some_programs_and_game_status(pool: PgPool) {
     // the weekly routine (CLI path): keeps the note, stamps its own name
     let after = fraglink_server::game_status::set(
         &pool,
-        "wow_forever",
+        "hearthstone",
         fraglink_server::game_status::Update {
             lifecycle: Some("Early Access".into()),
             checked_by: Some("Fraglink check".into()),
@@ -552,7 +553,7 @@ async fn retire_some_programs_and_game_status(pool: PgPool) {
     assert_eq!(after["note"], "ends with launch");
     assert_eq!(after["checked_by"], "Fraglink check");
     let acts: Vec<String> = sqlx::query_scalar(
-        "SELECT action FROM admin_audit WHERE target = 'wow_forever' ORDER BY id",
+        "SELECT action FROM admin_audit WHERE target = 'hearthstone' ORDER BY id",
     )
     .fetch_all(&pool)
     .await

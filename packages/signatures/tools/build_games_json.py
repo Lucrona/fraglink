@@ -19,12 +19,12 @@ def g(id, name, exes=(), appids=(), platform="", U=False, path_exes=(), hints=()
 # ---- Blizzard / Battle.net
 # WoW follows Discord's detectable list as-is (0.2.0-dev.14): World of Warcraft (_retail_ /
 # _ptr_ / _beta_ folders), World of Warcraft Classic (WowClassic.exe), World of Warcraft: Forever
-# (Wow.exe in the _forever_ folder since its launch; WowB.exe from its _classic_beta_ test days kept
-# as a fallback). Retail only claims Wow.exe outside the Forever folders: a path hint beats a plain exe
-# name. Public test builds (WowT.exe, WowClassicT.exe) are ignored, not tracked.
+# (only Wow.exe / Wow-64.exe inside the _forever_ folder; the beta's WowB.exe is not Forever, even if
+# Blizzard reuses it). Retail only claims Wow.exe outside the Forever folder: a path hint beats a plain
+# exe name. Public test builds (WowT.exe, WowClassicT.exe) are ignored, not tracked.
 g("wow", "World of Warcraft", ["Wow.exe", "Wow-64.exe"], platform="battlenet", hints=["/_retail_/", "/_ptr_/", "/_beta_/"])
 g("wow_classic", "World of Warcraft Classic", ["WowClassic.exe", "WowClassic-64.exe"], platform="battlenet")
-g("wow_forever", "World of Warcraft: Forever", ["WowB.exe", "WowB-64.exe"], platform="battlenet", path_exes=["Wow.exe", "Wow-64.exe"], hints=["/_forever_/", "/_classic_beta_/"])
+g("wow_forever", "World of Warcraft: Forever", [], platform="battlenet", path_exes=["Wow.exe", "Wow-64.exe"], hints=["/_forever_/"])
 g("star_citizen", "Star Citizen", ["StarCitizen.exe"], platform="rsi")
 g("overwatch2", "Overwatch 2", ["Overwatch.exe"], [2357570], "battlenet")
 g("diablo4", "Diablo IV", ["Diablo IV.exe"], [2344520], "battlenet")

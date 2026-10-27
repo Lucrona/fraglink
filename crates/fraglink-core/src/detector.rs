@@ -732,12 +732,14 @@ mod tests {
                 "wow_classic",
                 "World of Warcraft Classic",
             ),
+            // the Forever beta's WowB.exe is never Forever (retired; Blizzard may reuse it)
             (
                 "_classic_beta_",
                 "WowB.exe",
-                "wow_forever",
-                "World of Warcraft: Forever",
+                "exe:wowb.exe",
+                "Unlisted game",
             ),
+            ("_forever_", "WowB.exe", "exe:wowb.exe", "Unlisted game"),
             // Forever's real client: retail's exe name in its own folder
             (
                 "_forever_",
@@ -791,8 +793,8 @@ mod tests {
                 ),
                 p(
                     2,
-                    "WowB.exe",
-                    Some(r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe"),
+                    "Wow.exe",
+                    Some(r"E:\Battle.net Games\World of Warcraft\_forever_\Wow.exe"),
                 ),
             ],
             None,

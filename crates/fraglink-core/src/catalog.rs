@@ -519,14 +519,19 @@ mod tests {
         let retail = format!(r"{root}\_retail_\Wow.exe");
         assert!(owns_exe(&sigs, fe, &forever) && !owns_exe(&sigs, wow, &forever));
         assert!(owns_exe(&sigs, wow, &retail) && !owns_exe(&sigs, fe, &retail));
-        assert!(owns_exe(&sigs, fe, r"D:\Elsewhere\WowB.exe"));
+        // the retired beta's WowB.exe is no longer Forever's
+        assert!(!owns_exe(
+            &sigs,
+            fe,
+            &format!(r"{root}\_classic_beta_\WowB.exe")
+        ));
     }
 
     #[test]
     fn uninstalled_seen_exe_is_not_installed() {
         let tmp = std::env::temp_dir().join(format!("fl-seen-{}", std::process::id()));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let exe = tmp.join("WowB.exe");
+        std::fs::create_dir_all(tmp.join("_forever_")).unwrap();
+        let exe = tmp.join("_forever_").join("Wow.exe");
         std::fs::write(&exe, b"x").unwrap();
         let row = GameRow {
             id: "wow_forever".into(),

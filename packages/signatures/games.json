@@ -212,17 +212,13 @@
   {
    "id": "wow_forever",
    "name": "World of Warcraft: Forever",
-   "exes": [
-    "WowB.exe",
-    "WowB-64.exe"
-   ],
+   "exes": [],
    "path_exes": [
     "Wow.exe",
     "Wow-64.exe"
    ],
    "path_hints": [
-    "/_forever_/",
-    "/_classic_beta_/"
+    "/_forever_/"
    ],
    "steam_appids": [],
    "platform": "battlenet",
