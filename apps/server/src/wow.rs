@@ -47,7 +47,6 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/hours/wow_played", post(upload))
         .route("/api/v1/hours/wow_played/file", post(upload_file))
-        .route("/api/v1/hours/wow_played/recount", post(recount_mine))
         .route("/api/v1/me/wow", get(mine))
         .route("/api/v1/me/wow/{id}", post(set_hidden))
         .route("/api/v1/wow/verify/fetch", post(verify_fetch))
@@ -633,8 +632,8 @@ async fn record_total(
     Ok((sum, None))
 }
 
-/// Recount a user's WoW total from their characters now, even if lower. For the user
-/// (`/api/v1/hours/wow_played/recount`) and staff (admin user tools).
+/// Recount a user's WoW total from their characters now, dropping the carried menu-time
+/// extra. Staff only (admin user tools, audit-logged).
 pub async fn recount(st: &AppState, uid: Uuid, game_id: &str) -> ApiResult<i64> {
     let Some((gid, _)) = GAMES.iter().find(|(g, _)| *g == game_id) else {
         return Err(AppError::bad_request(
@@ -643,27 +642,6 @@ pub async fn recount(st: &AppState, uid: Uuid, game_id: &str) -> ApiResult<i64> 
         ));
     };
     Ok(record_total(st, uid, gid, Recount::Reset).await?.0)
-}
-
-#[derive(Deserialize)]
-struct RecountReq {
-    game_id: String,
-}
-
-async fn recount_mine(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    a: AuthUser,
-    Json(r): Json<RecountReq>,
-) -> ApiResult<Json<Value>> {
-    api::check_origin(&a, &headers, &st)?;
-    st.rate_limit(
-        format!("wow_recount:{}", a.user.id),
-        10,
-        Duration::from_secs(3600),
-    )?;
-    let total = recount(&st, a.user.id, &r.game_id).await?;
-    Ok(Json(json!({ "total_min": total })))
 }
 
 // ------------------------------------------------------------------ Battle.net

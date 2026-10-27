@@ -402,8 +402,7 @@ async fn shown(pool: &PgPool, handle: &str) -> (i64, i64) {
     .unwrap()
 }
 
-/// A lower WoW upload never lowers the shown total or the board; the user or staff can
-/// recount on purpose.
+/// A lower WoW upload never lowers the shown total or the board; staff can recount.
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
@@ -489,24 +488,10 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
         .unwrap();
     api(&app, "POST", "/api/v1/wow/verify/match", Some(&t), None).await;
     assert_eq!(shown(&pool, "keephigher").await, (6_900, 6_900));
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/wow_played/recount",
-        Some(&t),
-        Some(json!({ "game_id": "wow" })),
-    )
-    .await;
+    let r = staff_recount(&app, &pool, "keephigher", "wow").await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     assert_eq!(shown(&pool, "keephigher").await, (6_840, 6_840));
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/wow_played/recount",
-        Some(&t),
-        Some(json!({ "game_id": "nope" })),
-    )
-    .await;
+    let r = staff_recount(&app, &pool, "keephigher", "nope").await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
 }
 
@@ -585,14 +570,7 @@ async fn menu_time_is_carried_forward(pool: PgPool) {
     assert_eq!(shown(&pool, h).await, (7_010, 7_010));
 
     // a recount drops the carried extra
-    let r = api(
-        &app,
-        "POST",
-        "/api/v1/hours/wow_played/recount",
-        Some(&t),
-        Some(json!({ "game_id": "wow" })),
-    )
-    .await;
+    let r = staff_recount(&app, &pool, "menutime", "wow").await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     assert_eq!(shown(&pool, h).await, (6_910, 6_910));
 }
@@ -872,4 +850,55 @@ async fn forever_uploads_are_closed(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
     assert!(r.text.contains("forever_not_open"), "{}", r.text);
+}
+
+/// Recount is staff-only (audit-logged); the old user endpoint is gone.
+async fn staff_recount(
+    app: &axum::Router,
+    pool: &PgPool,
+    handle: &str,
+    game: &str,
+) -> common::Resp {
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let sh = format!("staff{handle}{n}");
+    let st = signup(app, &format!("{sh}@example.com"), &sh).await;
+    sqlx::query("UPDATE users SET role = 'admin' WHERE handle = $1")
+        .bind(&sh)
+        .execute(pool)
+        .await
+        .unwrap();
+    let id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = $1")
+        .bind(handle)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let mine = api(
+        app,
+        "POST",
+        "/api/v1/hours/wow_played/recount",
+        Some(&st),
+        Some(json!({ "game_id": game })),
+    )
+    .await;
+    assert!(mine.status.is_client_error(), "{}", mine.text);
+    let r = api(
+        app,
+        "POST",
+        &format!("/api/v1/admin/users/{id}/wow_recount"),
+        Some(&st),
+        Some(json!({ "game_id": game })),
+    )
+    .await;
+    if r.status == StatusCode::OK {
+        let n: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM admin_audit WHERE action = 'user.wow_recount' AND target = $1",
+        )
+        .bind(format!("user:{handle}"))
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert!(n >= 1);
+    }
+    r
 }

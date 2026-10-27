@@ -530,16 +530,7 @@ pages.wowupload = async () => {
       .concat(u.rejected.map(r => ({ ...r, game_id: game, st: "r", why: R[r.reason] || r.detail })));
     totals = { verified: mine.filter(c => c.verified).reduce((a, c) => a + c.played_min, 0), unverified: mine.filter(c => !c.verified).reduce((a, c) => a + c.played_min, 0) };
     showAll = false; draw();
-    if (u.kept_min) {
-      res.insertAdjacentHTML("afterbegin", `<div class="alert info">These characters add up to ${hours(u.total_min, { zero: true })}, less than your current ${hours(u.kept_min)}. The difference is time Fraglink tracked in menus and loading screens, which /played leaves out, so we kept it. Deleted characters always keep their hours. If you'd rather count /played only, you can <button class="btn sm" type="button" data-recount>recount without the menu time</button></div>`);
-      const rb = $("[data-recount]", res);
-      rb.addEventListener("click", async () => {
-        if (!confirm(`Recount your ${game === "wow_forever" ? "WoW Forever" : "WoW"} hours from /played only? This drops the menu and loading-screen time Fraglink carried on top and can't be undone. Deleted characters keep their hours.`)) return;
-        rb.disabled = true;
-        try { await api("/hours/wow_played/recount", { method: "POST", body: { game_id: game } }); rb.closest(".alert").textContent = "Done: your hours now count /played only, without the carried menu time."; }
-        catch (x) { rb.disabled = false; alert(x.message || String(x)); }
-      });
-    } btn.disabled = false; form.reset(); form.game.value = game;
+    btn.disabled = false; form.reset(); form.game.value = game;
   });
 };
 
