@@ -1,0 +1,41 @@
+Hi {nickname},
+
+Your account @{username} is ready. Here's how to get the most out of it:
+
+1. Get the desktop app
+The small Windows tray app counts your hours in every game it detects, whatever launcher you use. Hours only count while it's signed in and connected.
+Download for Windows: https://playfraglink.com/download
+
+2. Bring your Steam hours
+Link Steam in Settings > Connections and your playtime is imported, then refreshed daily. Your Steam game details need to be public.
+Link Steam: https://playfraglink.com/settings#connections
+
+3. Playing WoW? Add your /played
+Link Battle.net, install the Fraglink /played addon from CurseForge, type /played in game, then upload it on the WoW page.
+Get the addon: https://www.curseforge.com/wow/addons/fraglink-played
+Upload /played: https://playfraglink.com/connect/wow
+
+4. Add your friends
+See who's online and what they're playing, with a pop-up when they come online or start a game.
+Find friends: https://playfraglink.com/friends
+
+5. Make your profile yours
+Add a picture, an about me and your gaming rig.
+Edit profile: https://playfraglink.com/settings#account
+
+Handy settings
+- Go private or pick what shows: https://playfraglink.com/settings#privacy
+- Hide a game from your profile: https://playfraglink.com/settings#games
+- Hide a WoW character or its guild: https://playfraglink.com/connect/battlenet
+- Choose your emails and app pop-ups: https://playfraglink.com/settings#notifications
+- Turn on two-step sign-in: https://playfraglink.com/settings#security
+
+Stuck? Read the FAQ: https://playfraglink.com/faq
+Or come say hi on Discord: https://discord.gg/QbaYRtvADj
+
+See you online,
+Fraglink
+
+--
+You got this once because you just created a Fraglink account.
+Questions? support@playfraglink.com

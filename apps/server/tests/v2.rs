@@ -601,6 +601,52 @@ async fn email_verification_is_logged_not_blocking(pool: PgPool) {
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
     let me = api(&app, "GET", "/api/v1/me", Some(&t), None).await.json();
     assert_eq!(me["user"]["email_verified"], true);
+    let welcomes = || {
+        fraglink_server::mailer::outbox()
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|m| m.to == "verify-me@example.com" && m.subject == "Welcome to Fraglink")
+            .count()
+    };
+    assert_eq!(welcomes(), 1, "welcome email after confirming");
+    // Confirming again (e.g. after an email change) never re-sends it.
+    sqlx::query("UPDATE users SET email_verified = false WHERE handle = 'verifier'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let r = api(&app, "POST", "/api/v1/me/verify/resend", Some(&t), None).await;
+    assert!(r.status.is_success());
+    let mail = fraglink_server::mailer::outbox()
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|m| m.to == "verify-me@example.com" && m.subject.contains("Confirm"))
+        .cloned()
+        .unwrap();
+    let token2 = mail
+        .body
+        .split("token=")
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string();
+    assert_ne!(token2, token);
+    {
+        let r = api(
+            &app,
+            "POST",
+            "/api/v1/auth/verify",
+            None,
+            Some(json!({"token": token2})),
+        )
+        .await;
+        assert_eq!(r.json()["verified"], true);
+    }
+    assert_eq!(welcomes(), 1, "welcome email only once");
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
