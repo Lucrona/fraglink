@@ -140,6 +140,9 @@ label.stack input[type=text] { width: 100%; }
 .conn-tx { flex: 1; min-width: 0; } .conn-tx b { display: block; } .conn-tx small { display: block; color: #777; }
 body.dark .conn-tx small { color: #8d939c; }
 .conn button { min-width: 70px; }
+/* WoW row: the three buttons sit on their own line under the text and wrap if narrow. */
+.conn.conn-wrap { flex-wrap: wrap; }
+.conn-btns { flex-basis: 100%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .conn .soon { font-size: 9px; color: #c08a1a; text-transform: uppercase; letter-spacing: .5px; width: 72px; }
 body.dark .conn .soon { color: #e0b44a; }
 .hint-link { color: #2a6fdb; cursor: pointer; text-decoration: underline; }
