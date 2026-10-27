@@ -179,3 +179,69 @@ async fn tiers_and_rankings(pool: PgPool) {
     assert_eq!(s["games"][0]["display_min"], 300);
     assert_eq!(s["games"][0]["minutes_7d"], 120);
 }
+
+async fn display_min(pool: &PgPool, handle: &str, game: &str) -> i64 {
+    sqlx::query_scalar(
+        "SELECT g.display_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
+         WHERE u.handle = $1 AND g.game_id = $2",
+    )
+    .bind(handle)
+    .bind(game)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// Import 10h, then play 5h: shows 15h. Only the part of a session after the import counts,
+/// and a fresh import (which already includes that play) replaces the add-on.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn play_after_import_adds_on(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    signup(&app, "w@example.com", "wower").await;
+    let id = seed_imported(&pool, "wower", "wow", "World of Warcraft", 600).await;
+    sqlx::query("UPDATE hours_entries SET captured_at = now() - interval '6 hours' WHERE id = $1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(display_min(&pool, "wower", "wow").await, 600);
+    // 5h played after the import, plus a session straddling it (1h 30m before, 30m after)
+    live_session(&pool, "wower", "wow", now() - 5 * 3600 - 60, 5 * 3600).await;
+    live_session(&pool, "wower", "wow", now() - 7 * 3600 - 1800, 7200).await;
+    assert_eq!(display_min(&pool, "wower", "wow").await, 600 + 300 + 30);
+
+    // re-import: the counter now includes that play, so it replaces the add-on
+    seed_imported(&pool, "wower", "wow", "World of Warcraft", 930).await;
+    assert_eq!(display_min(&pool, "wower", "wow").await, 930);
+    // and later play adds on top again
+    live_session(&pool, "wower", "wow", now() + 10, 3600).await;
+    assert_eq!(display_min(&pool, "wower", "wow").await, 990);
+}
+
+/// Steam is imported by hand: play the app tracks after an import adds on top of Steam's counter, and the
+/// next sync (which already includes it) replaces the add-on. Never counted twice.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn play_after_steam_sync_adds_on(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    signup(&app, "st@example.com", "steamer").await;
+    live_session(&pool, "steamer", "cs2", now() - 30 * 86400, 60).await;
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'steamer'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let sync = |m: i32, ago_h: i32| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query("INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at)
+                VALUES($1, 730, 'cs2', $2, 0, now() - make_interval(hours => $3))
+                ON CONFLICT (user_id, steam_appid) DO UPDATE SET minutes_forever = excluded.minutes_forever, fetched_at = excluded.fetched_at")
+                .bind(uid).bind(m).bind(ago_h).execute(&pool).await.unwrap();
+        }
+    };
+    sync(600, 6).await;
+    assert_eq!(display_min(&pool, "steamer", "cs2").await, 600);
+    live_session(&pool, "steamer", "cs2", now() - 3 * 3600, 2 * 3600).await;
+    assert_eq!(display_min(&pool, "steamer", "cs2").await, 720);
+    sync(720, 0).await;
+    assert_eq!(display_min(&pool, "steamer", "cs2").await, 720);
+}

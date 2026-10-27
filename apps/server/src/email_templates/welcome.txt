@@ -7,7 +7,7 @@ The small Windows tray app counts your hours in every game it detects, whatever 
 Download for Windows: https://playfraglink.com/download
 
 2. Bring your Steam hours
-Link Steam in Settings > Connections and your playtime is imported, then refreshed daily. Your Steam game details need to be public.
+Link Steam in Settings > Connections and import your playtime once. Hours you play after that add on top. Your Steam game details need to be public.
 Link Steam: https://playfraglink.com/settings#connections
 
 3. Playing WoW? Add your /played

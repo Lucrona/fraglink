@@ -511,33 +511,6 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
     })
 }
 
-/// Daily refresh (spec §M2 "daily sync"): import every linked account whose last
-/// sync is older than 24 h. Private profiles are retried too (users may fix the
-/// setting). Returns how many accounts imported successfully.
-pub async fn sync_due(state: &AppState, limit: i64) -> ApiResult<usize> {
-    if !state.steam.configured() {
-        return Ok(0);
-    }
-    let users: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT user_id FROM linked_accounts
-         WHERE provider = 'steam' AND (last_sync_at IS NULL OR last_sync_at < now() - interval '24 hours')
-         ORDER BY last_sync_at NULLS FIRST LIMIT $1",
-    )
-    .bind(limit)
-    .fetch_all(&state.db)
-    .await?;
-    let mut ok = 0;
-    for u in users {
-        match import(state, u).await {
-            Ok(_) => ok += 1,
-            Err(e) => tracing::info!("daily steam sync for {u}: {}", e.code),
-        }
-        // Stay far below the Steam Web API's ~100k calls/day.
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-    }
-    Ok(ok)
-}
-
 /// A valid Steam icon hash (40 lower-case hex chars), or None.
 pub fn icon_hash(s: &str) -> Option<String> {
     let s = s.trim().to_ascii_lowercase();

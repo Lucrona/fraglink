@@ -163,7 +163,7 @@ async function lastUpdated() {
 }
 async function detection() {
   view.innerHTML = `<section class="panel"><h2>Detection fix-ups</h2><div id="dmeta"></div>
-    <div class="note">Sent to every app with the game rules, no app update needed. <b>Steam app id</b>: that Steam game counts as the game you pick (in the app and in the daily Steam sync). <b>Game id</b>: one detected id counts as another. <b>Folder + exe</b>: the end of the program's path, e.g. <span class="mono">world of warcraft/_retail_/wow.exe</span>; checked before the usual exe names.</div>
+    <div class="note">Sent to every app with the game rules, no app update needed. <b>Steam app id</b>: that Steam game counts as the game you pick (in the app and in Steam imports). <b>Game id</b>: one detected id counts as another. <b>Folder + exe</b>: the end of the program's path, e.g. <span class="mono">world of warcraft/_retail_/wow.exe</span>; checked before the usual exe names.</div>
     <div class="tools"><select class="in" id="dk">${Object.entries(DKIND).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
       <input class="in mono" id="dp" placeholder="793460 / old_id / folder/game.exe" size="30" aria-label="Pattern">
       <span class="muted">counts as</span><input class="in mono" id="dg" placeholder="game id" size="16" aria-label="Game id">

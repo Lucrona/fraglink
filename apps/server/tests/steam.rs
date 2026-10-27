@@ -367,38 +367,3 @@ async fn sign_in_through_steam_verifies_link(pool: PgPool) {
         home.text
     );
 }
-
-#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn daily_sync_refreshes_stale_links(pool: PgPool) {
-    let base = mock_steam().await;
-    let b = base.clone();
-    let st = state_with(pool.clone(), move |c| {
-        c.steam_api_key = Some(KEY.into());
-        c.steam_api_base = b.clone();
-    });
-    let app = fraglink_server::router(st.clone());
-    let t = signup(&app, "d@example.com", "daily").await;
-    api(
-        &app,
-        "POST",
-        "/api/v1/steam/link",
-        Some(&t),
-        Some(json!({ "profile": GABEN })),
-    )
-    .await;
-    assert_eq!(
-        fraglink_server::steam::sync_due(&st, 10).await.unwrap(),
-        1,
-        "never synced -> due"
-    );
-    assert_eq!(
-        fraglink_server::steam::sync_due(&st, 10).await.unwrap(),
-        0,
-        "fresh -> not due"
-    );
-    sqlx::query("UPDATE linked_accounts SET last_sync_at = now() - interval '25 hours'")
-        .execute(&pool)
-        .await
-        .unwrap();
-    assert_eq!(fraglink_server::steam::sync_due(&st, 10).await.unwrap(), 1);
-}

@@ -849,9 +849,9 @@ async fn leaderboard(
             wk = crate::hours::WEEK_CTE
         ),
         "all" => format!(
-            "SELECT u.handle, g.display_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
-             WHERE g.game_id = $1 AND g.display_min > 0 AND {who}
-             ORDER BY g.display_min DESC, u.handle LIMIT 50"
+            "SELECT u.handle, g.board_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
+             WHERE g.game_id = $1 AND g.board_min > 0 AND {who}
+             ORDER BY g.board_min DESC, u.handle LIMIT 50"
         ),
         _ => {
             return Err(AppError::bad_request(

@@ -72,7 +72,7 @@ the entries say what changing them would cost.
 
 ## D13. Steam import frequency
 - Manual "Import Steam playtime": at most once per 10 minutes per account.
-- Automatic daily refresh: the server re-imports links older than 24 h, with 1.5 s between users (Steam Web API limit is about 100k calls/day).
+- No automatic refresh (Oct 2026, replaced the daily re-import): imports are one-off and the user presses Import hours to refresh. Shown hours = latest import + tracked minutes played after it (Steam and WoW /played alike, migration 0045); a new import replaces the base.
 - Games with 0 minutes are skipped.
 
 ## D14. Sync is opt-in and offline-first
