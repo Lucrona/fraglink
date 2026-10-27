@@ -531,8 +531,9 @@ fn tray_size() -> u32 {
     32
 }
 
-/// The one corner mark on the tray icon (never stacked): a red dot while friend
-/// requests are waiting, else a blue dot while an update is ready, else the status.
+/// The one corner mark on the tray icon (never stacked): a green download arrow
+/// while an update is ready (highest priority), else a red dot while friend
+/// requests are waiting, else the status dot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayMark {
     Requests,
@@ -546,10 +547,10 @@ pub enum TrayMark {
 /// Pick the tray mark. Offline (greyed logo) while signed out or not connected;
 /// `status` is the effective status ("online", "away", "invisible").
 pub fn tray_mark(connected: bool, status: &str, pending: usize, update_ready: bool) -> TrayMark {
-    if pending > 0 {
-        TrayMark::Requests
-    } else if update_ready {
+    if update_ready {
         TrayMark::Update
+    } else if pending > 0 {
+        TrayMark::Requests
     } else if !connected {
         TrayMark::Offline
     } else {
@@ -629,6 +630,88 @@ fn draw_dot(img: &mut image::RgbaImage, top: [f32; 3], bottom: [f32; 3], hole: f
     }
 }
 
+/// The update arrow polygon (pointing down, like a download) in a unit box.
+const ARROW: [(f32, f32); 7] = [
+    (0.31, 0.0),
+    (0.69, 0.0),
+    (0.69, 0.44),
+    (1.0, 0.44),
+    (0.5, 1.0),
+    (0.0, 0.44),
+    (0.31, 0.44),
+];
+
+fn in_poly(poly: &[(f32, f32)], x: f32, y: f32) -> bool {
+    let mut inside = false;
+    let mut j = poly.len() - 1;
+    for i in 0..poly.len() {
+        let ((xi, yi), (xj, yj)) = (poly[i], poly[j]);
+        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+fn poly_edge_dist(poly: &[(f32, f32)], x: f32, y: f32) -> f32 {
+    let mut best = f32::MAX;
+    let mut j = poly.len() - 1;
+    for i in 0..poly.len() {
+        let ((ax, ay), (bx, by)) = (poly[j], poly[i]);
+        let (dx, dy) = (bx - ax, by - ay);
+        let t = (((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
+        best = best.min(((x - ax - t * dx).powi(2) + (y - ay - t * dy).powi(2)).sqrt());
+        j = i;
+    }
+    best
+}
+
+/// Draw the green download arrow in the corner (update ready): bright green
+/// fill, dark outline so it reads on light and dark taskbars, 4x4 supersampled.
+fn draw_arrow(img: &mut image::RgbaImage) {
+    let (w, h) = img.dimensions();
+    let n = w.min(h) as f32;
+    let ring = (n / 16.0).max(1.0);
+    let s = (n * 0.56).max(8.0) - 2.0 * ring; // arrow box: 7 px at 16, ~16 at 32
+    let (ox, oy) = (w as f32 - ring - s, h as f32 - ring - s);
+    let poly: Vec<(f32, f32)> = ARROW
+        .iter()
+        .map(|(x, y)| (ox + x * s, oy + y * s))
+        .collect();
+    let (fill, dark) = ([70.0, 222.0, 100.0], [12.0, 14.0, 16.0]);
+    let x0 = (ox - ring - 1.0).max(0.0) as u32;
+    let y0 = (oy - ring - 1.0).max(0.0) as u32;
+    for y in y0..h {
+        for x in x0..w {
+            let (mut f, mut o) = (0.0f32, 0.0f32);
+            for sy in 0..4 {
+                for sx in 0..4 {
+                    let (px, py) = (
+                        x as f32 + (sx as f32 + 0.5) / 4.0,
+                        y as f32 + (sy as f32 + 0.5) / 4.0,
+                    );
+                    if in_poly(&poly, px, py) {
+                        f += 1.0 / 16.0;
+                    } else if poly_edge_dist(&poly, px, py) < ring {
+                        o += 1.0 / 16.0;
+                    }
+                }
+            }
+            let cov = f + o;
+            if cov <= 0.0 {
+                continue;
+            }
+            let p = img.get_pixel_mut(x, y);
+            for ((ch, fc), dc) in p.0.iter_mut().take(3).zip(fill).zip(dark) {
+                let c = (fc * f + dc * o) / cov;
+                *ch = (*ch as f32 * (1.0 - cov) + c * cov).round() as u8;
+            }
+            p.0[3] = (p.0[3] as f32 + (255.0 - p.0[3] as f32) * cov).round() as u8;
+        }
+    }
+}
+
 /// The tray image for the current display scale with its corner mark.
 fn tray_image(mark: TrayMark) -> Option<tauri::image::Image<'static>> {
     let want = tray_size();
@@ -649,7 +732,7 @@ fn paint_mark(img: &mut image::RgbaImage, mark: TrayMark) {
     let r = (img.width().min(img.height()) as f32 * 0.2).max(3.0);
     match mark {
         TrayMark::Requests => draw_dot(img, [240.0, 70.0, 74.0], [216.0, 35.0, 42.0], 0.0),
-        TrayMark::Update => draw_dot(img, [96.0, 170.0, 245.0], [52.0, 130.0, 220.0], 0.0),
+        TrayMark::Update => draw_arrow(img),
         TrayMark::Online => draw_dot(img, [96.0, 226.0, 124.0], [52.0, 196.0, 88.0], 0.0),
         TrayMark::Away => draw_dot(img, [252.0, 206.0, 70.0], [240.0, 180.0, 30.0], 0.0),
         TrayMark::Invisible => {
@@ -1119,8 +1202,10 @@ mod tray_mark_tests {
     use super::*;
 
     #[test]
-    fn single_mark_requests_win() {
-        assert_eq!(tray_mark(true, "online", 2, true), TrayMark::Requests);
+    fn single_mark_update_then_requests_win() {
+        assert_eq!(tray_mark(true, "online", 2, true), TrayMark::Update);
+        assert_eq!(tray_mark(false, "away", 3, true), TrayMark::Update);
+        assert_eq!(tray_mark(true, "online", 2, false), TrayMark::Requests);
         assert_eq!(tray_mark(false, "away", 1, false), TrayMark::Requests);
         assert_eq!(tray_mark(true, "online", 0, true), TrayMark::Update);
         assert_eq!(tray_mark(true, "online", 0, false), TrayMark::Online);
@@ -1159,6 +1244,51 @@ mod tray_mark_tests {
                 let br = img.get_pixel(c, c).0;
                 if m == TrayMark::Requests {
                     assert!(br[0] > 150 && br[1] < 90, "red at {n}: {br:?}");
+                }
+                if m == TrayMark::Update {
+                    // arrow shaft centre is green; the corner pixel beside the tip is not
+                    let ring = (f / 16.0).max(1.0);
+                    let s = (f * 0.56).max(8.0) - 2.0 * ring;
+                    let (ox, oy) = (f - ring - s, f - ring - s);
+                    let g = img
+                        .get_pixel((ox + 0.5 * s) as u32, (oy + 0.3 * s) as u32)
+                        .0;
+                    assert!(
+                        g[1] > 150 && g[0] < 140 && g[3] > 200,
+                        "green arrow at {n}: {g:?}"
+                    );
+                    let tip = img
+                        .get_pixel((ox + 0.5 * s) as u32, (oy + 0.85 * s) as u32)
+                        .0;
+                    assert!(tip[1] > 100, "arrow head at {n}: {tip:?}");
+                    let side = img.get_pixel(*n - 1, (oy + 0.1 * s) as u32).0;
+                    assert!(side[1] < 150 || side[0] > 150, "not a dot at {n}: {side:?}");
+                }
+            }
+        }
+        if let Ok(dir) = std::env::var("TRAY_PREVIEW_DIR") {
+            for (n, bytes) in TRAY_PNGS.iter().chain(TRAY_PNGS_LIGHT.iter()) {
+                for (i, m) in [
+                    TrayMark::Update,
+                    TrayMark::Requests,
+                    TrayMark::Online,
+                    TrayMark::Away,
+                    TrayMark::Invisible,
+                    TrayMark::Offline,
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let mut img = image::load_from_memory(bytes).unwrap().to_rgba8();
+                    paint_mark(&mut img, m);
+                    let light = TRAY_PNGS_LIGHT
+                        .iter()
+                        .any(|(_, b)| std::ptr::eq(*b, *bytes));
+                    img.save(format!(
+                        "{dir}/{}-{n}-{i}.png",
+                        if light { "l" } else { "d" }
+                    ))
+                    .unwrap();
                 }
             }
         }
