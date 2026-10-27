@@ -31,10 +31,30 @@ pub fn text_zoom(app: &AppHandle) -> f64 {
         .flatten()
         .as_deref()
     {
-        Some("large") => 1.15,
-        Some("larger") => 1.3,
-        _ => 1.0,
+        Some("small") => 1.0,
+        Some("large") => 1.3,
+        Some("larger") => 1.45,
+        _ => 1.15, // Normal (the default)
     }
+}
+
+/// Text sizes were renamed (0.3.0-beta.9): old Large (1.15) became the default "Normal",
+/// old Normal (1.0) became "Small", old Larger (1.3) became "Large", and a new
+/// "Larger" (1.45) was added. Remap a saved choice once so users keep their size.
+pub fn migrate_text_size(store: &fraglink_core::store::Store) {
+    if store.get_setting("text_size_v").ok().flatten().as_deref() == Some("2") {
+        return;
+    }
+    let new = match store.get_setting("text_size").ok().flatten().as_deref() {
+        Some("normal") => Some("small"),
+        Some("large") => Some("normal"),
+        Some("larger") => Some("large"),
+        _ => None,
+    };
+    if let Some(v) = new {
+        let _ = store.set_setting("text_size", v);
+    }
+    let _ = store.set_setting("text_size_v", "2");
 }
 
 /// Extra window width for the open info panel (panel width minus the nub strip),

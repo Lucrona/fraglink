@@ -1005,6 +1005,7 @@ pub fn run() {
             let data_dir = if fl.sim { base.join("sim") } else { base };
             std::fs::create_dir_all(&data_dir)?;
             let store = Store::open(&data_dir.join("fraglink.db"))?;
+            windows::migrate_text_size(&store);
             let env: Box<dyn Environment> = if fl.sim {
                 log::warn!(
                     "SIMULATION MODE: fake processes, script = {}",
