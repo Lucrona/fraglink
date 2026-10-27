@@ -772,7 +772,7 @@ html[class*=theme-flat] body.skin-dark .xf-tip, html[class*=theme-flat] body.ski
 html[class*=theme-flat] body.skin-dark .xf-dialog { background: var(--f1) !important; border: 1px solid var(--f3) !important; border-radius: 6px; box-shadow: 0 12px 40px rgba(0,0,0,.5) !important; color: var(--ftx); font-family: var(--flat-font); }
 html[class*=theme-flat] body.skin-dark .xf-dialog .dlg-body { background: var(--f1); border: 0; box-shadow: none; color: var(--ftx); }
 html[class*=theme-flat] body.skin-dark .xf-dialog .hw, html[class*=theme-flat] body.skin-dark .lg .hw, html[class*=theme-flat] body.skin-dark .af-btns .hw { height: auto; min-height: 28px; padding: 5px 14px; border: 0; border-radius: 3px; background: var(--f3); color: var(--ftx); box-shadow: none; font: 600 13px/17px var(--flat-font); }
-html[class*=theme-flat] body.skin-dark .xf-dialog .dlg-foot .hw:last-child, html[class*=theme-flat] body.skin-dark .lg .hw[data-action$=go], html[class*=theme-flat] body.skin-dark .lg .hw[data-action=login] { background: var(--facc); color: #fff; }
+html[class*=theme-flat] body.skin-dark .xf-dialog .dlg-foot .hw.primary, html[class*=theme-flat] body.skin-dark .lg .hw[data-action$=go], html[class*=theme-flat] body.skin-dark .lg .hw[data-action=login] { background: var(--facc); color: #fff; }
 html[class*=theme-flat] body.skin-dark .xf-dialog .hw:hover, html[class*=theme-flat] body.skin-dark .lg .hw:hover { filter: brightness(1.15); }
 /* login: flat card like the mock */
 html[class*=theme-flat] body.skin-dark .lg { background: var(--f2); border: 1px solid var(--f3); border-radius: 3px; padding: 16px; font: 13px/1.35 var(--flat-font); color: var(--ftx); box-shadow: none; }
@@ -820,3 +820,4 @@ html[class*=theme-flat] body.dark .detect .bar { background: var(--facc); }
 html[class*=theme-flat] body.dark input[type=checkbox], html[class*=theme-flat] body.dark input[type=radio] { accent-color: var(--facc); }
 html[class*=theme-flat] body.dark ::-webkit-scrollbar { background: transparent; width: 8px; height: 8px; }
 html[class*=theme-flat] body.dark ::-webkit-scrollbar-thumb { background: var(--f3); border: 0; border-radius: 4px; }
+html[class*=theme-flat] .af-b.primary { background: var(--facc, #2f63c4); color: #fff; }

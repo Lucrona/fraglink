@@ -243,7 +243,7 @@
         <button type="button" data-tip="Games" data-action="games" class="dk-games"><svg viewBox="0 0 20 12"><path d="M5 1.5h10c2.5 0 4 2 4 4.5s-1.5 4.5-3.5 4.5c-1.4 0-2.2-1-3-2H7.5c-.8 1-1.6 2-3 2C2.5 10.5 1 8.5 1 6s1.5-4.5 4-4.5z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="5.6" r="1"/><circle cx="10" cy="5.6" r="1"/><circle cx="12.5" cy="5.6" r="1"/></svg></button>
         <button type="button" data-tip="Options" data-action="options"><svg viewBox="0 0 16 16"><path d="M6.6 1h2.8l.4 2 1.4.8 1.9-.8 1.4 2.4-1.5 1.4v1.6l1.5 1.4-1.4 2.4-1.9-.8-1.4.8-.4 2H6.6l-.4-2-1.4-.8-1.9.8L1.5 10l1.5-1.4V7L1.5 5.6l1.4-2.4 1.9.8 1.4-.8zM8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z"/></svg></button>
       </div>
-      <div class="dk-grip only-dark" data-resize="SouthEast" data-tip="Resize"></div>
+      <div class="dk-grip only-dark" data-resize="SouthEast" data-tip="Resize" data-tip-left></div>
 
       <!-- Phoenix bottom -->
     </div>
@@ -318,14 +318,14 @@
         <div class="g-list" id="known-list"></div>
       </fieldset>
     </div>
-    <div class="dlg-foot"><button class="hw" data-action="games-refresh" type="button">Refresh</button><button class="hw" data-action="games-close" type="button">Close</button></div>
+    <div class="dlg-foot"><button class="hw" data-action="games-refresh" type="button">Refresh</button><button class="hw primary" data-action="games-close" type="button">Close</button></div>
   </div>
 
   <!-- ===================== NOTICE DIALOG ===================== -->
   <div class="xf-dialog" id="notice" hidden>
     <div class="dlg-title" data-drag="notice"><svg class="xf-logo-mark" viewBox="0 0 32 22"><use href="#fl-mark" fill="url(#flBlue)"/></svg><span id="notice-title">Fraglink</span><button class="xf-min xf-close" data-action="notice-close" type="button" data-tip="Close"><i></i></button></div>
     <div class="dlg-body" id="notice-body"></div>
-    <div class="dlg-foot"><button class="hw" data-action="notice-close" type="button">OK</button></div>
+    <div class="dlg-foot"><button class="hw primary" data-action="notice-close" type="button">OK</button></div>
   </div>
 
   <!-- ===================== WEBSITE (browser window) ===================== -->

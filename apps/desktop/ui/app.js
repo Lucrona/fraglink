@@ -432,12 +432,12 @@
       <label for="add-handle">Search by nickname, username or email:</label>
       <input id="add-handle" maxlength="60" autocomplete="off" spellcheck="false" value="${esc(A.q)}" />
       <div class="af-ex">(Example: Jo, Jo Doe, or jo@doe.com)</div>
-      <div class="af-btns"><button class="af-b" type="button" data-action="add-cancel">Cancel</button><button class="af-b" type="button" id="add-search" data-action="add-friend-go"${A.q.trim() ? '' : ' disabled'}>Search</button></div>
+      <div class="af-btns"><button class="af-b" type="button" data-action="add-cancel">Cancel</button><button class="af-b primary" type="button" id="add-search" data-action="add-friend-go"${A.q.trim() ? '' : ' disabled'}>Search</button></div>
       <div class="af-h"><span>Search Results (select one):</span><span>${us ? `${n} User${n === 1 ? '' : 's'} Found` : ''}</span></div>
       <div class="af-tw"><table class="af-t"><tr><th>Username</th><th>Nickname</th></tr>${rows}</table></div>
       <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">${esc(A.msg)}</textarea>
       <div id="add-msg" class="${A.bad ? 'bad' : ''}">${esc(A.out || '')}</div>
-      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${canAdd ? '' : ' disabled'}${rel === 'friend' || rel === 'out' ? ` data-tip="${REL_TAG[rel]}"` : ''}>${A.busy ? 'Adding…' : rel === 'in' ? 'Accept' : 'Add Friend'}</button></div>
+      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b primary" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${canAdd ? '' : ' disabled'}${rel === 'friend' || rel === 'out' ? ` data-tip="${REL_TAG[rel]}"` : ''}>${A.busy ? 'Adding…' : rel === 'in' ? 'Accept' : 'Add Friend'}</button></div>
     </div></div>`;
   }
   function renderAddFriend() {
@@ -984,8 +984,8 @@
     notice('Change Nickname', `<div class="nick-dlg"><p>Your nickname is the name friends see in Fraglink and on the website. Your username <b>@${esc(me)}</b> stays the same.</p>
       <label>Nickname <input type="text" id="nick-in" maxlength="32" value="${esc(cur)}" spellcheck="false"></label>
       <small>Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave it empty to use your username.</small>
-      <div class="nick-foot"><span id="nick-msg" class="msg"></span></div></div>`);
-    $('#notice .dlg-foot').innerHTML = `<button class="hw" type="button" id="nick-save">Save</button> <button class="hw" data-action="notice-close" type="button">Cancel</button>`;
+      <div class="nick-foot"><span id="nick-msg" class="msg"></span></div></div>`,
+      [{ label: 'Cancel', action: 'notice-close' }, { label: 'Save', id: 'nick-save', primary: true }]);
     const inp = $('#nick-in'); inp.focus(); inp.select();
     const save = async () => {
       const b = $('#nick-save'), m = $('#nick-msg'); b.disabled = true; m.className = 'msg'; m.textContent = 'Saving…';
@@ -1057,8 +1057,10 @@
     const items = WHATS_NEW[v] || [];
     notice('Fraglink updated', `<p><b>Fraglink updated to ${esc(v)}</b></p>${items.length ? `<ul class="wn-list">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}<p><a data-action="changelog-web">See full changelog</a></p>`);
   }
-  function notice(title, html) {
-    const foot = $('#notice .dlg-foot'); foot.innerHTML = `<button class="hw" data-action="notice-close" type="button">OK</button>`;
+  // Footer buttons: secondary ones first, the primary (blue) action last. Default is a single primary OK.
+  function notice(title, html, btns = [{ label: 'OK', action: 'notice-close', primary: true }]) {
+    const foot = $('#notice .dlg-foot');
+    foot.innerHTML = btns.map(b => `<button class="hw${b.primary ? ' primary' : ''}" type="button"${b.id ? ` id="${b.id}"` : ''}${b.action ? ` data-action="${b.action}"` : ''}>${esc(b.label)}</button>`).join('');
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false; placeDlg($('#notice'));
   }
   // In-window dialogs open centred near the top and can then be dragged by their title bar.
@@ -1405,7 +1407,9 @@
     stipTimer = setTimeout(() => {
       if (!el.isConnected || stipEl !== el) return;
       stip.textContent = el.dataset.tip; stip.hidden = false;
-      placeTip(stip, mx + 4, my + 20, my - 6);
+      // data-tip-left (the corner resize grip): open to the left so it stays over the main window, not the side panel
+      const tx = el.hasAttribute('data-tip-left') ? Math.max(4, mx - stip.getBoundingClientRect().width - 4) : mx + 4;
+      placeTip(stip, tx, my + 20, my - 6);
     }, 450);
   }, true);
   document.addEventListener('mousedown', hideSTip, true);
@@ -1476,7 +1480,7 @@
   });
   function addGroup(moveKey) {
     state.moveAfterAdd = moveKey || null;
-    notice('Add Custom Group', `Group name:<br><input id="group-name" maxlength="30" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="add-group-go">Add</button></div>`);
+    notice('Add Custom Group', `Group name:<br><input id="group-name" maxlength="30" autocomplete="off" />`, [{ label: 'Cancel', action: 'notice-close' }, { label: 'Add', action: 'add-group-go', primary: true }]);
     setTimeout(() => $('#group-name') && $('#group-name').focus(), 0);
   }
   // Join Game only when we know a joinable address (e.g. a Source server IP → steam://connect)
@@ -1563,7 +1567,7 @@
     const r = btn.getBoundingClientRect(); // viewport px (already includes the text-size zoom)
     showMenu(items, r.left, r.bottom, id => {
       if (id === 'custom') {
-        notice('Set Custom Status', `Shown under your name in this window. <em>(Friends see it in a later update.)</em><br><input id="custom-status" maxlength="60" value="${esc(SET().custom_status || '')}" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="custom-status-go">OK</button></div>`);
+        notice('Set Custom Status', `Shown under your name in this window. <em>(Friends see it in a later update.)</em><br><input id="custom-status" maxlength="60" value="${esc(SET().custom_status || '')}" autocomplete="off" />`, [{ label: 'Cancel', action: 'notice-close' }, { label: 'OK', action: 'custom-status-go', primary: true }]);
         setTimeout(() => $('#custom-status') && $('#custom-status').focus(), 0);
       } else if (id === 'looking') useCustom(LOOKING);
       else if (id.startsWith('h:')) useCustom(hist[+id.slice(2)]);

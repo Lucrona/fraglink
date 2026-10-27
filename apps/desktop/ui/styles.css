@@ -653,3 +653,10 @@ body.col-dragging, body.col-dragging * { cursor: col-resize !important; user-sel
 
 /* flat themes float the side-panel avatar here (themes-flat.css); hidden elsewhere */
 .side-float { display: none; }
+
+/* beta.9: in-window dialogs fit a minimum-size window; footer buttons size to their label and wrap */
+.xf-dialog { box-sizing: border-box; max-width: calc(100% - 8px); }
+.xf-dialog .dlg-body { box-sizing: border-box; max-width: 100%; overflow-wrap: anywhere; }
+.xf-dialog .dlg-body input:not([type=checkbox]):not([type=radio]) { box-sizing: border-box; max-width: 100%; }
+.dlg-foot { flex-wrap: wrap; }
+.dlg-foot .hw { width: auto; min-width: 52px; max-width: 100%; padding: 0 10px; white-space: nowrap; }
