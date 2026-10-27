@@ -1030,7 +1030,7 @@
       'New Help menu with FAQ and Changelog',
       'Hours imported dates for Steam and Battle.net in Connections',
       'New Flat Navy and Flat Grey themes',
-      'New Steam-style pop-ups, with Accept / Ignore on friend requests and an Update ready pop-up',
+      'New pop-up design, with Accept / Ignore on friend requests and an Update ready pop-up',
       'Get the Fraglink WoW addon from Connections; /played is uploaded on the website',
     ],
   };
