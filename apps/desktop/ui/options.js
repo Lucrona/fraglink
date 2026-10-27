@@ -296,9 +296,12 @@
         : '<button type="button" disabled>Connect</button><span class="soon">coming soon</span>';
       const extra = p === 'bnet' && l ? (v.needs_reconnect
         ? '<div class="conn-sub"><span class="warn">Reconnect Battle.net to verify characters.</span> <button type="button" data-link="bnet">Reconnect</button></div>'
-        : '<div class="conn-sub"><button type="button" data-web="connect/battlenet/verify">&#128274; Verify WoW characters</button></div>') : '';
+        : '') : '';
       return `<div class="conn"><i class="conn-ic" style="--c:${col}"><img src="brand/brand-${ic}.svg" alt=""></i><div class="conn-tx"><b>${name}</b>${who}${hrs}</div>${right}</div>${extra}`;
     }).join('');
+    // Verify WoW characters sits in the World of Warcraft row; only while Battle.net is linked and doesn't need a reconnect.
+    const bn = c.bnet || {};
+    $('#wow-verify').hidden = !(signed && bn.linked && !bn.needs_reconnect);
   }
   /* ---- the WoW /played addon (installed from CurseForge) ---- */
   const WOW_ADDON_URL = 'https://www.curseforge.com/projects/1766775';
