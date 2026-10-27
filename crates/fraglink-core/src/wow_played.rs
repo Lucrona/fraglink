@@ -11,7 +11,6 @@
 //! Battle.net (server side).
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
 
 /// Addon folder name (also the SavedVariables file stem).
 pub const ADDON: &str = "FraglinkPlayed";
@@ -346,102 +345,6 @@ pub fn entries_from_saved(text: &str) -> Vec<CharEntry> {
         .collect()
 }
 
-// ---- files on disk -------------------------------------------------------------
-
-/// The flavour folder (`..\_retail_`) and its game id for a WoW exe path or a
-/// flavour / WoW root folder. Roots give every flavour under them that exists.
-pub fn flavour_dirs(paths: &[PathBuf]) -> Vec<(String, PathBuf)> {
-    let mut out: Vec<(String, PathBuf)> = Vec::new();
-    let mut add = |id: &str, d: PathBuf| {
-        if !out.iter().any(|(_, x)| x == &d) {
-            out.push((id.to_string(), d));
-        }
-    };
-    for p in paths {
-        let dir = if p.is_file() || p.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe")) {
-            p.parent().map(Path::to_path_buf)
-        } else {
-            Some(p.clone())
-        };
-        let Some(dir) = dir else { continue };
-        let leaf = dir
-            .file_name()
-            .map(|n| n.to_string_lossy().to_lowercase())
-            .unwrap_or_default();
-        if let Some((_, id)) = FLAVOURS.iter().find(|(f, _)| *f == leaf) {
-            add(id, dir);
-            continue;
-        }
-        for (f, id) in FLAVOURS {
-            let d = dir.join(f);
-            if d.is_dir() {
-                add(id, d);
-            }
-        }
-    }
-    out
-}
-
-/// Every `FraglinkPlayed.lua` under a flavour's `WTF\Account\*\SavedVariables`.
-pub fn saved_files(flavour: &Path) -> Vec<PathBuf> {
-    let Ok(rd) = std::fs::read_dir(flavour.join("WTF").join("Account")) else {
-        return Vec::new();
-    };
-    rd.flatten()
-        .map(|a| a.path().join("SavedVariables").join(format!("{ADDON}.lua")))
-        .filter(|p| p.is_file())
-        .collect()
-}
-
-/// All character entries of one flavour (newest entry wins per character).
-pub fn read_flavour(flavour: &Path) -> Vec<CharEntry> {
-    let mut by: BTreeMap<String, CharEntry> = BTreeMap::new();
-    for f in saved_files(flavour) {
-        let Ok(b) = std::fs::read(&f) else { continue };
-        if b.len() > 4_000_000 {
-            continue;
-        }
-        for e in entries_from_saved(&String::from_utf8_lossy(&b)) {
-            let k = format!(
-                "{}/{}/{}",
-                e.region,
-                e.realm.to_lowercase(),
-                e.name.to_lowercase()
-            );
-            if by.get(&k).is_none_or(|o| o.at < e.at) {
-                by.insert(k, e);
-            }
-        }
-    }
-    by.into_values().collect()
-}
-
-/// Newest modification time (unix seconds) of a flavour's addon files, for "changed since".
-pub fn saved_stamp(flavour: &Path) -> i64 {
-    saved_files(flavour)
-        .iter()
-        .filter_map(|f| f.metadata().ok()?.modified().ok())
-        .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .max()
-        .unwrap_or(0)
-}
-
-/// The addon version installed in a flavour (from its TOC), if any.
-pub fn installed_version(flavour: &Path) -> Option<String> {
-    let toc = std::fs::read_to_string(
-        flavour
-            .join("Interface")
-            .join("AddOns")
-            .join(ADDON)
-            .join(format!("{ADDON}.toc")),
-    )
-    .ok()?;
-    toc.lines()
-        .find_map(|l| l.strip_prefix("## Version:"))
-        .map(|v| v.trim().to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,41 +431,5 @@ mod tests {
         assert!(entries_from_saved("FraglinkPlayedDB = { os.exit() }").is_empty());
         assert!(entries_from_saved("garbage").is_empty());
         assert!(entries_from_saved(&"{".repeat(100)).is_empty());
-    }
-
-    #[test]
-    fn flavours_from_paths() {
-        let t = std::env::temp_dir().join(format!("flp-{}", std::process::id()));
-        let retail = t.join("World of Warcraft").join("_retail_");
-        std::fs::create_dir_all(&retail).unwrap();
-        std::fs::create_dir_all(t.join("World of Warcraft").join("_classic_")).unwrap();
-        let got = flavour_dirs(&[
-            retail.join("Wow.exe"),
-            t.join("World of Warcraft"),
-            t.join("World of Warcraft")
-                .join("_forever_")
-                .join("Wow.exe"),
-        ]);
-        assert_eq!(got[0], ("wow".to_string(), retail.clone()));
-        assert_eq!(got.len(), 2, "{got:?}");
-        assert_eq!(got[1].0, "wow_forever");
-        assert_eq!(installed_version(&retail), None);
-        // installed from CurseForge: detected by its TOC
-        let dir = retail.join("Interface/AddOns/FraglinkPlayed");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("FraglinkPlayed.toc"), ADDON_TOC).unwrap();
-        assert_eq!(installed_version(&retail).as_deref(), Some(ADDON_VERSION));
-        let sv = retail.join("WTF/Account/ABC/SavedVariables");
-        std::fs::create_dir_all(&sv).unwrap();
-        let mut e = entry();
-        e.sig = sign_with(SIG_KEYS[0].1, &e);
-        std::fs::write(
-            sv.join("FraglinkPlayed.lua"),
-            format!("FraglinkPlayedDB = {{ chars = {{ x = {{ region = \"us\", realm = \"Area 52\", name = \"Thrallé\", class = \"SHAMAN\", level = 80, played = 1234567, at = 1793000000, sv = 1, battletag = \"Thrall#1234\", sig = \"{}\" }} }} }}", e.sig),
-        )
-        .unwrap();
-        assert_eq!(read_flavour(&retail), vec![e]);
-        assert!(saved_stamp(&retail) > 0);
-        let _ = std::fs::remove_dir_all(&t);
     }
 }

@@ -47,7 +47,6 @@
       announcement: () => inv('announcement'),
       openUrl: (url) => inv('open_link', { url }),
       connectStart: (provider) => inv('connect_start', { provider }),
-      wowAddonStatus: () => inv('wow_addon_status'),
       connectUnlink: (provider) => inv('connect_unlink', { provider }),
       changePassword: (current, next) => inv('account_change_password', { current, new: next }),
       changeEmail: (current, email) => inv('account_change_email', { current, email }),
@@ -197,7 +196,6 @@
     announcement: () => ok({ announcement: new URLSearchParams(location.search).get('news') ? { id: 7, message: new URLSearchParams(location.search).get('news'), style: 'info', link: 'https://playfraglink.com/' } : null }),
     connectStart: (p) => { mockConn[p].linked = { uid: '765', display: p === 'steam' ? 'Lucrona' : 'Lucrona#1234', verified: true }; return ok(); },
     connectUnlink: (p) => { mockConn[p].linked = null; return ok(); },
-    wowAddonStatus: () => ok(mockWow),
     joinGame: () => ok(),
     popup: null, // the page draws its own menu in the preview
     sideWidth: () => ok(),
@@ -249,7 +247,6 @@
   };
   const hist = h => { const x = HIST[h.toLowerCase()] || { week: (h.length * 7919 % 20 + 3), total: h.length * 37, top: 'Dota 2', games: [['steam:570', 'Dota 2', h.length * 30, 0]] }; return { shares: true, ...x }; };
   const mockPriv = { public_profile: true, share_activity: true, show_friends: true, privacy: { real_name: false, age: false } };
-  const mockWow = [{ game_id: 'wow', path: 'C:\\Program Files (x86)\\World of Warcraft\\_retail_', installed: null }, { game_id: 'wow_forever', path: 'C:\\Program Files (x86)\\World of Warcraft\\_forever_', installed: null }];
   const mockConn = { steam: { available: true, linked: { uid: '7656119', display: 'Lucrona', verified: true } }, discord: { available: false, linked: null }, bnet: { available: true, linked: null } };
   const mockFriends = {
     friends: [

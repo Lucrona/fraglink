@@ -13,7 +13,6 @@ mod icons;
 mod sync;
 mod updater;
 mod windows;
-mod wowaddon;
 
 use fraglink_core::engine::{keys, Engine, DEFAULT_POLL_SECS};
 use fraglink_core::env::{Environment, SystemEnv};
@@ -1112,7 +1111,6 @@ pub fn run() {
         .on_window_event(windows::on_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::get_glance,
-            commands::wow_addon_status,
             commands::get_activity,
             commands::get_games,
             commands::get_candidates,

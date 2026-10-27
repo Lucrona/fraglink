@@ -299,20 +299,9 @@
         : '<div class="conn-sub"><button type="button" data-web="connect/battlenet/verify">&#128274; Verify WoW characters</button></div>') : '';
       return `<div class="conn"><i class="conn-ic" style="--c:${col}"><img src="brand/brand-${ic}.svg" alt=""></i><div class="conn-tx"><b>${name}</b>${who}${hrs}</div>${right}</div>${extra}`;
     }).join('');
-    renderWow();
   }
   /* ---- the WoW /played addon (installed from CurseForge) ---- */
   const WOW_ADDON_URL = 'https://www.curseforge.com/projects/1766775';
-  async function renderWow() {
-    const st = $('#wow-state'), btn = $('#wow-get');
-    if (!FLB.wowAddonStatus) return;
-    try {
-      const f = await FLB.wowAddonStatus();
-      const found = f.some(x => x.installed);
-      if (!f.length) { st.textContent = 'Not found. No WoW install seen yet: start WoW once with Fraglink running.'; return; }
-      st.textContent = f.map(x => `${x.game_id === 'wow_forever' ? 'WoW Forever' : 'WoW'}: ${x.installed ? 'Detected (v' + x.installed + ')' : 'Not found'}`).join(' · ') + (found ? ' · Log in to each of your characters once so the addon saves its /played. Skipped characters keep their last hours.' : '');
-    } catch (x) { st.textContent = String(x); }
-  }
   const WOW_UPLOAD_URL = 'https://playfraglink.com/connect/wow';
   $('#wow-up').addEventListener('click', () => { FLB.openUrl ? FLB.openUrl(WOW_UPLOAD_URL) : window.open(WOW_UPLOAD_URL); });
   $('#wow-get').addEventListener('click', () => { FLB.openUrl ? FLB.openUrl(WOW_ADDON_URL) : window.open(WOW_ADDON_URL); });

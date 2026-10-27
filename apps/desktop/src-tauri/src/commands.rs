@@ -1160,14 +1160,3 @@ pub async fn join_game(address: String) -> CmdResult<()> {
     }
     tauri_plugin_opener::open_url(format!("steam://connect/{address}"), None::<&str>).map_err(err)
 }
-
-/// Options > Connections: WoW folders found and whether the CurseForge addon is in each.
-#[tauri::command]
-pub async fn wow_addon_status(app: AppHandle) -> CmdResult<serde_json::Value> {
-    tauri::async_runtime::spawn_blocking(move || {
-        serde_json::to_value(crate::wowaddon::status(&app))
-    })
-    .await
-    .map_err(err)?
-    .map_err(err)
-}
