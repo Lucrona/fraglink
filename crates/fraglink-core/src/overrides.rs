@@ -186,6 +186,25 @@ mod tests {
         }
     }
 
+    /// The Admin > Detection path rule the server sends (`_forever_/wow.exe`): checked
+    /// before the signatures, so it fixes Forever on apps that predate the games.json fix.
+    #[test]
+    fn server_path_rule_claims_forever_wow_exe() {
+        let o = Overrides::from_json(
+            r#"{"schema":1,"version":"t","rules":[{"id":"wow_forever","name":"World of Warcraft: Forever","exes":["_forever_/wow.exe"]}]}"#,
+        )
+        .unwrap();
+        let root = r"E:\Battle.net Games\World of Warcraft";
+        let hit = |exe: &str, dir: &str| {
+            o.match_process(exe, Some(&format!(r"{root}\{dir}\{exe}")))
+                .map(|r| r.id.clone())
+        };
+        assert_eq!(hit("Wow.exe", "_forever_").as_deref(), Some("wow_forever"));
+        assert_eq!(hit("WOW.EXE", "_forever_").as_deref(), Some("wow_forever"));
+        assert_eq!(hit("Wow.exe", "_retail_"), None);
+        assert_eq!(hit("Wow-64.exe", "_forever_"), None);
+    }
+
     #[test]
     fn star_citizen_channels_are_one_game() {
         let root = r"C:\Program Files\Roberts Space Industries\StarCitizen";

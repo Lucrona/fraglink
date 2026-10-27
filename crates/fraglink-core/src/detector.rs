@@ -738,6 +738,19 @@ mod tests {
                 "wow_forever",
                 "World of Warcraft: Forever",
             ),
+            // Forever's real client: retail's exe name in its own folder
+            (
+                "_forever_",
+                "Wow.exe",
+                "wow_forever",
+                "World of Warcraft: Forever",
+            ),
+            (
+                "_forever_",
+                "Wow-64.exe",
+                "wow_forever",
+                "World of Warcraft: Forever",
+            ),
         ];
         for (dir, exe, id, name) in cases {
             assert_eq!(
@@ -786,6 +799,21 @@ mod tests {
         );
         assert_eq!(
             both.iter().map(|d| d.game_id.as_str()).collect::<Vec<_>>(),
+            vec!["wow", "wow_forever"]
+        );
+        // retail and Forever both run as Wow.exe: still two games
+        let same_exe = d.detect(
+            &[
+                p(1, "Wow.exe", Some(&format!(r"{wow}\_retail_\Wow.exe"))),
+                p(2, "Wow.exe", Some(&format!(r"{wow}\_forever_\Wow.exe"))),
+            ],
+            None,
+        );
+        assert_eq!(
+            same_exe
+                .iter()
+                .map(|d| d.game_id.as_str())
+                .collect::<Vec<_>>(),
             vec!["wow", "wow_forever"]
         );
     }

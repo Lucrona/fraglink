@@ -165,11 +165,26 @@ async fn staff_renames_reach_the_overrides_list(pool: PgPool) {
     let rule = o
         .match_process(
             "WowB.exe",
-            Some(r"E:\Games\World of Warcraft\_beta_\WowB.exe"),
+            Some(r"E:\Games\World of Warcraft\_classic_beta_\WowB.exe"),
         )
         .expect("renamed game gets a rule");
     assert_eq!(rule.id, "wow_forever");
     assert_eq!(rule.name, "World of Warcraft: Forever - Beta");
+    // Forever's real client is Wow.exe in `_forever_`: the rename's rules keep the
+    // flavour folders, so they claim that path and leave retail's to the signatures
+    let fe = o
+        .match_process(
+            "Wow.exe",
+            Some(r"E:\Games\World of Warcraft\_forever_\Wow.exe"),
+        )
+        .expect("forever's Wow.exe");
+    assert_eq!(fe.id, "wow_forever");
+    assert!(o
+        .match_process(
+            "Wow.exe",
+            Some(r"E:\Games\World of Warcraft\_retail_\Wow.exe")
+        )
+        .is_none());
     let odd = o
         .match_process("OddGame.exe", None)
         .expect("approved program rule");
