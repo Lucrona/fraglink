@@ -739,8 +739,9 @@ html[class*=theme-flat] body.skin-dark .side-scroll .sf-foot .sf-small:hover { c
 html[class*=theme-flat] body.skin-dark .side-grip { background: none; }
 /* beta.9: no Cobalt leftovers in any side-panel view (own, friend, group): no solid blue cover strip,
    section headers are muted labels on a flat fill instead of solid blue bars, offline/away status text muted. */
-html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp::before { height: 44px; background: none; }
-html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp:not(:has(.sf-head))::before { height: 12px; }
+/* the avatar half-floats over a neutral strip (a flat shade, not the old blue cover) */
+html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp::before { height: 64px; background: var(--f2); border-bottom: 1px solid var(--f3); }
+html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp:not(:has(.sf-head))::before { height: 12px; background: none; border: 0; }
 html[class*=theme-flat] body.skin-dark .side-scroll .side-sec, html[class*=theme-flat] body.skin-dark .side-scroll * + .side-sec, html[class*=theme-flat] body.skin-dark .side-scroll .sf-head + .side-sec { background: var(--f0) padding-box; color: var(--fmut); }
 html[class*=theme-flat] body.skin-dark .side-scroll .side-sec h4 { font: 700 11px/15px var(--flat-font); color: var(--fmut); text-transform: uppercase; letter-spacing: .6px; }
 html[class*=theme-flat] body.skin-dark .side-scroll .side-sec .side-more, html[class*=theme-flat] body.skin-dark .side-scroll .side-sec .side-detect { color: var(--facc2); text-decoration: none; }
