@@ -749,6 +749,9 @@ html[class*=theme-flat] body.skin-dark .side-scroll .sf-head .sf-av.fav-av { mar
 html[class*=theme-flat] body.skin-dark .side-float { display: block; position: absolute; left: 14px; top: -41px; z-index: 3; pointer-events: none; }
 html[class*=theme-flat] body.skin-dark .side-float .sf-av.fav-av { display: block; width: 72px !important; height: 72px !important; box-sizing: content-box; border: 5px solid var(--f1); border-radius: 6px; overflow: hidden; background: #c0563a; box-shadow: none; }
 html[class*=theme-flat] body.skin-dark .side-float .sf-av img { width: 72px; height: 72px; display: block; }
+/* Mask band behind the floating avatar: full panel width from the top edge to the avatar's bottom (41px),
+   so scrolled content never shows beside it. */
+html[class*=theme-flat] body.skin-dark .xf-side-inner:has(.side-float:not(:empty))::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 41px; background: var(--f1); border-radius: 6px 6px 0 0; z-index: 2; pointer-events: none; }
 html[class*=theme-flat] body.skin-dark .side-scroll .side-sec, html[class*=theme-flat] body.skin-dark .side-scroll * + .side-sec, html[class*=theme-flat] body.skin-dark .side-scroll .sf-head + .side-sec { background: var(--f0) padding-box; color: var(--fmut); }
 html[class*=theme-flat] body.skin-dark .side-scroll .side-sec h4 { font: 700 11px/15px var(--flat-font); color: var(--fmut); text-transform: uppercase; letter-spacing: .6px; }
 html[class*=theme-flat] body.skin-dark .side-scroll .side-sec .side-more, html[class*=theme-flat] body.skin-dark .side-scroll .side-sec .side-detect { color: var(--facc2); text-decoration: none; }
