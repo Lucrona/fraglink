@@ -31,6 +31,14 @@ const WH = (() => {
   let t = 0; const later = () => { clearTimeout(t); t = setTimeout(scan, 300); };
   const mine = n => n.nodeType !== 1 || !!(n.closest && n.closest(".wowhead-tooltip,[class^=wowhead]"));
   if (ok) addEventListener("load", () => { later(); new MutationObserver(ms => { if (ms.some(m => [...m.addedNodes].some(n => !mine(n)))) later(); }).observe(document.body, { childList: true, subtree: true }); });
+  // Keep the tooltip beside the cursor (Wowhead places it once per link); flip left/up near viewport edges.
+  let mx = 0, my = 0, raf = 0;
+  const place = () => { raf = 0; const t = document.querySelector(".wowhead-tooltip"); if (!t || t.offsetParent === null && getComputedStyle(t).position !== "fixed") return;
+    const w = t.offsetWidth, h = t.offsetHeight, vw = document.documentElement.clientWidth, vh = innerHeight, g = 16;
+    let x = mx + g, y = my + g; if (x + w > vw - 4) x = Math.max(4, mx - g - w); if (y + h > vh - 4) y = Math.max(4, my - g - h);
+    const fx = getComputedStyle(t).position === "fixed"; t.style.left = (x + (fx ? 0 : scrollX)) + "px"; t.style.top = (y + (fx ? 0 : scrollY)) + "px"; };
+  if (ok) document.addEventListener("mousemove", e => { if (!e.target.closest || !e.target.closest('a[href*="wowhead.com/"]')) return; mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(place); }, true);
+  if (ok) addEventListener("load", () => new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(place); }).observe(document.body, { childList: true }));
   return { ok, scan };
 })();
 const me = () => { try { return JSON.parse(localStorage.getItem(UK)); } catch (e) { return null; } };
@@ -1747,7 +1755,7 @@ const WOWPOP = (() => {
   const key = e => { if (e.key === "Escape") close(); };
   addEventListener("popstate", () => { if (box) close(true); });
   const whp = it => [it.ilvl && "ilvl=" + it.ilvl, it.bonus && it.bonus.length && "bonus=" + it.bonus.join(":"), it.ench && "ench=" + it.ench, it.gems && it.gems.length && "gems=" + it.gems.join(":"), it.pcs && it.pcs.length && "pcs=" + it.pcs.join(":")].filter(Boolean).join("&");
-  const slot = (g, k) => { const it = g[k]; const lk = it && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
+  const slot = (g, k) => { const it = g[k]; const lk = it && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : it.id ? ` data-whi="${Number(it.id)}" data-whp="${esc(whp(it))}" role="button" tabindex="0" aria-expanded="false"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
   const raid = r => r.instances.map(i => `<div class="cp-raid"><b>${esc(i.name)}</b><div class="cp-modes">${[...i.modes].sort((a, b) => DO.indexOf(a.difficulty) - DO.indexOf(b.difficulty)).map(m => `<span class="${m.done >= m.total ? "full" : ""}">${esc(m.label)} <b>${m.done}/${m.total}</b></span>`).join("")}</div></div>`).join("");
   const body = (d, c) => {
     if (d.status === "missing") return `<div class="cp-hd"><div><h2>${esc(c.name)}</h2><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}</div></div></div><p class="empty cp-pad">Profile private or not found on Blizzard.</p>`;
@@ -1755,7 +1763,7 @@ const WOWPOP = (() => {
     const col = CC[d.class_id] || "#eef2f6", mp = d.mplus || {}, pv = d.pvp || {}, rd = d.raids || {}, co = d.collections || {}, pr = d.professions || [];
     const stat = (l, v) => `<div class="cp-st"><small>${l}</small><b>${v}</b></div>`;
     const rr = rd.current && rd.current.instances.length ? { t: rd.current.expansion, r: rd.current } : rd.recent && rd.recent.instances.length ? { t: "Most recent progress · " + rd.recent.expansion, r: rd.recent } : null;
-    return `<div class="cp-hd" style="--cc:${col}">${d.render ? `<img class="cp-rd" alt="" hidden>` : ""}<div class="cp-who">
+    return `<div class="cp-hd${d.render ? " has-rd" : ""}" style="--cc:${col}">${d.render ? `<div class="cp-rw" aria-hidden="true"><img class="cp-rd" alt="" hidden></div>` : ""}<div class="cp-who">
       ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
       <div class="sub">Level ${d.level} ${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
       <div class="sub">${esc(d.realm)} ${esc(d.region.toUpperCase())}${d.faction ? ` · <span class="cp-f ${esc(d.faction.toLowerCase())}">${esc(d.faction)}</span>` : ""}</div>
@@ -1769,12 +1777,31 @@ const WOWPOP = (() => {
       <section><h3>Professions</h3>${pr.length ? `<table class="cp-tb">${pr.map(x => `<tr><td>${esc(x.name)}${x.tier ? `<small class="sub"> ${esc(x.tier)}</small>` : ""}</td><td class="n">${x.max ? `${x.skill}/${x.max}` : x.skill != null ? x.skill : ""}</td></tr>`).join("")}</table>` : `<p class="empty">No professions.</p>`}</section></div></div>
       <div class="cp-ft"><span class="sub">${d.updated_at ? "Updated " + ago(d.updated_at) : ""}</span><a href="${esc(d.armory)}" target="_blank" rel="noopener">View on Armory ↗</a></div>`;
   };
+  // Touch devices: tap a gear row to show Wowhead's tooltip for it inline (sanitised), tap again/elsewhere to hide.
+  const TT = new Map(), OKT = new Set(["TABLE", "TBODY", "TR", "TD", "TH", "B", "BR", "SPAN", "DIV", "SMALL", "I", "UL", "LI"]);
+  const clean = html => { const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html"), out = document.createElement("div");
+    const walk = (src, dst) => src.childNodes.forEach(n => { if (n.nodeType === 3) dst.appendChild(document.createTextNode(n.nodeValue));
+      else if (n.nodeType === 1) { const t = OKT.has(n.tagName) ? n.tagName : n.tagName === "A" ? "SPAN" : null; if (!t) return; const e = document.createElement(t);
+        const c = n.getAttribute("class"); if (c && /^[\w -]+$/.test(c)) e.className = c; if (/^(TD|TH|TABLE)$/.test(t) && n.getAttribute("width") === "100%") e.setAttribute("width", "100%");
+        walk(n, e); dst.appendChild(e); } });
+    walk(doc.body.firstChild, out); return out; };
+  const tipOff = () => { $$(".cp-tip", box).forEach(t => t.remove()); $$(".cp-slot[aria-expanded=true]", box).forEach(r => r.setAttribute("aria-expanded", "false")); };
+  const tip = async row => {
+    const was = row.getAttribute("aria-expanded") === "true"; tipOff(); if (was) return;
+    row.setAttribute("aria-expanded", "true");
+    const t = document.createElement("div"); t.className = "cp-tip"; t.textContent = "Loading…"; row.after(t);
+    const k = row.dataset.whi + "?" + row.dataset.whp;
+    try { if (!TT.has(k)) TT.set(k, fetch(`https://nether.wowhead.com/tooltip/item/${row.dataset.whi}?dataEnv=1&locale=0${row.dataset.whp ? "&" + row.dataset.whp : ""}`).then(r => { if (!r.ok) throw 0; return r.json(); }));
+      const j = await TT.get(k); if (!t.isConnected) return; t.textContent = ""; t.appendChild(clean(j.tooltip || "")); }
+    catch (e) { TT.delete(k); if (t.isConnected) t.textContent = "Couldn't load this item's tooltip."; }
+  };
   const open = async (handle, c) => {
     if (!c) return; close(true);
     box = document.createElement("div"); box.className = "cp-bg";
     box.innerHTML = `<div class="cp" role="dialog" aria-modal="true" aria-label="${esc(c.name)}"><button class="cp-x" type="button" aria-label="Close">×</button><div class="cp-in"><p class="empty cp-pad">Loading ${esc(c.name)}…</p></div></div>`;
     document.body.appendChild(box); document.body.classList.add("cp-lock");
-    box.onclick = e => { if (e.target === box || e.target.closest(".cp-x")) close(); };
+    box.onclick = e => { if (e.target === box || e.target.closest(".cp-x")) return close(); const r = e.target.closest(".cp-slot[data-whi]"); if (r) return tip(r); if (!e.target.closest(".cp-tip")) tipOff(); };
+    box.onkeydown = e => { const r = (e.key === "Enter" || e.key === " ") && e.target.closest && e.target.closest(".cp-slot[data-whi]"); if (r) { e.preventDefault(); tip(r); } };
     document.addEventListener("keydown", key); history.pushState({ wowpop: 1 }, ""); pushed = true;
     $(".cp-x", box).focus();
     const me = box;
