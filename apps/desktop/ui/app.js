@@ -1023,7 +1023,7 @@
   /* "What's new" after an update. Edit WHATS_NEW for each release (keyed by the
      app version as devVer() shows it); versions without an entry just get the link. */
   const WHATS_NEW = {
-    '0.3.0-beta.9': [
+    '0.3.0-beta.8': [
       'Tray icon shows one mark: update ready, friend requests, or your status',
       'Friend requests badge on the Friends tab',
       'Session time in the friend side panel',
@@ -1031,6 +1031,7 @@
       'Hours imported dates for Steam and Battle.net in Connections',
       'New Flat Navy and Flat Grey themes',
       'New Steam-style pop-ups, with Accept / Ignore on friend requests and an Update ready pop-up',
+      'Get the Fraglink WoW addon from Connections; /played is uploaded on the website',
     ],
   };
   function whatsNew() {

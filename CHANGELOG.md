@@ -5,11 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Added (0.3.0-beta.8, not released)
-- World of Warcraft /played: the Fraglink /played addon is bundled in the app (Options › Connections › Install WoW addon) for Retail and WoW Forever. The app reads the addon's file after WoW closes and sends only characters whose /played changed.
-- Entries are signed by the addon and carry the BattleTag; edited entries and entries from another Battle.net account are refused and flagged in Admin › Hours review.
-- Verify WoW characters (/connect/battlenet/verify): Battle.net (wow.profile) confirms which characters are yours. Only verified characters count on leaderboards; others show as self-reported.
-- Profile: WoW character cards with a privacy switch and per-character hiding. Exports include WoW characters and their /played history.
+## [0.3.0-beta.8] - 2026-10-27
+
+### Added
+- New themes: Flat Navy and Flat Grey. Crimson, Emerald and Graphite are removed; anyone using one moves to Cobalt.
+- Steam-style pop-ups: friend request pop-ups have Accept and Ignore, and an Update ready pop-up appears when a new version is downloaded.
+- Tray icon shows one corner mark: your status, a red dot for waiting friend requests, or a green arrow when an update is ready. The tooltip shows "N friend requests".
+- Friend side panel: a "This session" row (the old "Playing for" clock is gone).
+- Connections: real Steam, Discord and Battle.net logos, "Hours imported" dates for Steam and Battle.net, and a note when Steam game details were private.
+- Connections: "Get the Fraglink addon" button (CurseForge) and a reminder to log in to each WoW character once. WoW /played is uploaded on the website.
+- What's New notice after an update. Help menu with FAQ, Changelog and Contact Us.
+
+### Changed
+- The title bar above each tab is removed in all themes; flat themes show draggable column dividers.
+- Text sizes are now Small, Normal, Large and Larger (Normal is the old Large; saved settings carry over).
+- Red Friends badge and highlighted waiting friend requests.
+- The app no longer installs or detects the WoW addon.
+
+### Fixed
+- Unticking Save Password or Auto-Login is respected; turning on Auto-Login also turns on Save Password.
 
 ## [0.3.0-beta.7] - 2026-10-26
 
