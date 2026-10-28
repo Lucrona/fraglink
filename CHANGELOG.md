@@ -5,6 +5,77 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.9.1] - 2026-10-27
+
+(╯°□°)╯︵ ┻━┻ One more pass.
+
+### Pop-up boxes
+- Every pop-up box fits inside the window, even at its smallest size
+- Change Nickname fits, and Save is blue and on the right
+- Set Custom Status and Add Custom Group lose the extra button inside the box
+- Add Friend buttons are blue
+
+### Window
+- The resize grip sits in the true bottom-right corner
+- Its tooltip no longer covers the side panel
+
+## [0.3.0-beta.9] - 2026-10-27
+
+Missed a few spots in beta.8 - here they are.
+
+### Side panel (Flat Navy and Flat Grey)
+- No more blue banner or solid blue section bars
+- Quieter section headers
+- Offline friends no longer show as green
+- The friend's avatar now sits half above the top of the panel
+
+### Connections and WoW
+- New Manage WoW button that opens your Battle.net page on the website
+- Verify WoW characters moved into the World of Warcraft button row
+- The Spotify "coming soon" row is hidden for now
+
+### Fixes
+- The arrow next to your status opens the status menu again in the flat themes
+
+## [0.3.0-beta.8] - 2026-10-27
+
+### Look and themes
+- Two new themes: Flat Navy and Flat Grey
+- Crimson, Emerald and Graphite are removed; anyone using one moves to Cobalt
+- The title bar is gone from every tab, in all themes
+- Flat themes have visible column dividers between Name and Status that turn blue on hover, so you can drag them
+- Text sizes are now Small, Normal, Large and Larger
+  - Normal is the old Large, and saved settings carry over
+
+### Pop-ups
+- New pop-up design in Fraglink navy
+- Friend request pop-ups have Accept and Ignore
+- An Update ready pop-up when a new version is downloaded
+
+### Tray icon
+- One corner mark shows your status
+  - Green: online or Looking to Play. Yellow: away. Hollow ring: invisible. Greyed out: offline
+- A red dot while friend requests are waiting
+- A green download arrow when an update is ready (it wins over the others)
+- The tooltip shows "N friend requests"
+
+### Friends
+- The side panel has a "This session" row; the old "Playing for" clock is gone
+- Red Friends badge with white text, and waiting requests are highlighted
+
+### Connections and WoW
+- Real Steam, Discord and Battle.net logos
+- Battle.net shows when your /played was last imported, and Steam shows its line too
+- A note when your Steam game details were private
+- A "Get the Fraglink addon" button (CurseForge)
+- A reminder to log in to each WoW character once so the addon saves its /played
+- /played is uploaded on the website
+
+### Other
+- A What's New notice after updating
+- Unticking Save Password or Auto-Login is respected, and turning on Auto-Login also turns on Save Password
+- Help menu with FAQ, Changelog and Contact Us
+
 ## [0.3.0-beta.7] - 2026-10-26
 
 ### Fixed

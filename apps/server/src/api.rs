@@ -849,9 +849,9 @@ async fn leaderboard(
             wk = crate::hours::WEEK_CTE
         ),
         "all" => format!(
-            "SELECT u.handle, g.display_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
-             WHERE g.game_id = $1 AND g.display_min > 0 AND {who}
-             ORDER BY g.display_min DESC, u.handle LIMIT 50"
+            "SELECT u.handle, g.board_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
+             WHERE g.game_id = $1 AND g.board_min > 0 AND {who}
+             ORDER BY g.board_min DESC, u.handle LIMIT 50"
         ),
         _ => {
             return Err(AppError::bad_request(
@@ -1145,6 +1145,7 @@ pub async fn export_json(st: &AppState, user: &User) -> ApiResult<Value> {
         "sessions": q("SELECT coalesce(jsonb_agg(to_jsonb(s) - 'user_id' ORDER BY started_at), '[]'::jsonb) FROM sessions s WHERE user_id = $1").await?,
         "steam_playtime": q("SELECT coalesce(jsonb_agg(to_jsonb(p) - 'user_id'), '[]'::jsonb) FROM steam_playtime p WHERE user_id = $1").await?,
         "hours_entries": q("SELECT coalesce(jsonb_agg(to_jsonb(h) - 'user_id' ORDER BY captured_at), '[]'::jsonb) FROM hours_entries h WHERE user_id = $1").await?,
+        "wow_characters": q("SELECT coalesce(jsonb_agg(to_jsonb(c) - 'user_id' || jsonb_build_object('played_history', (SELECT coalesce(jsonb_agg(jsonb_build_object('played_s', p.played_s, 'at', p.at) ORDER BY p.at), '[]'::jsonb) FROM wow_played_snaps p WHERE p.char_id = c.id)) ORDER BY c.game_id, c.played_s DESC), '[]'::jsonb) FROM wow_characters c WHERE c.user_id = $1").await?,
         "game_stats": q("SELECT coalesce(jsonb_agg(to_jsonb(g) - 'user_id'), '[]'::jsonb) FROM user_game_stats g WHERE user_id = $1").await?,
         "devices": q("SELECT coalesce(jsonb_agg(jsonb_build_object('device_name', device_name, 'created_at', created_at, 'last_used_at', last_used_at, 'revoked_at', revoked_at)), '[]'::jsonb) FROM auth_tokens WHERE user_id = $1 AND kind = 'device'").await?,
         "friends": crate::friends::export(st, user.id).await?,
@@ -1162,13 +1163,16 @@ const ZIP_README: &str = "Fraglink account export\n\n\
 profile.json         your account, linked accounts and paired devices\n\
 sessions.csv         every session uploaded by the Fraglink app (tier: tracked)\n\
 games.csv            per-game minutes by tier: tracked, imported (self-reported), and what is displayed\n\
-hours_entries.json   game counters you added yourself (imported). Entries from the old history\n\
-                     estimator, if you ever saved one, are included as stored but never counted.\n\
+hours_entries.json   game counters (imported): WoW /played totals from the Fraglink addon and any\n\
+                     you added yourself. Entries from the old history estimator, if you ever\n\
+                     saved one, are included as stored but never counted.\n\
+wow_characters.json  your WoW characters from the addon, with their /played history\n\
 steam_playtime.csv   Steam's own playtime counters (tracked tier)\n\
 friends.json         friends, pending requests and blocks\n\
 fraglink-account.json  everything above in one JSON document\n\n\
 Times are UTC (RFC 3339). Minutes are whole minutes; seconds where the column says _s.\n\
-Leaderboards count a game like your profile does: the largest of Fraglink sessions, Steam and imported hours.\n";
+Leaderboards count the last 7 days: the larger of Fraglink sessions and a game's own counter growth.\n\
+WoW addon /played counts there only for characters verified on your Battle.net account.\n";
 
 fn csv_line(fields: &[String]) -> String {
     let mut l = fields
@@ -1262,6 +1266,7 @@ async fn export_zip(
         ("sessions.csv", sessions.into_bytes()),
         ("games.csv", games.into_bytes()),
         ("hours_entries.json", pretty(&full["hours_entries"])),
+        ("wow_characters.json", pretty(&full["wow_characters"])),
         ("steam_playtime.csv", steam_csv.into_bytes()),
         ("friends.json", pretty(&full["friends"])),
         ("fraglink-account.json", pretty(&full)),

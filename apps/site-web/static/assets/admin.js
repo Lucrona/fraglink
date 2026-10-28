@@ -163,7 +163,7 @@ async function lastUpdated() {
 }
 async function detection() {
   view.innerHTML = `<section class="panel"><h2>Detection fix-ups</h2><div id="dmeta"></div>
-    <div class="note">Sent to every app with the game rules, no app update needed. <b>Steam app id</b>: that Steam game counts as the game you pick (in the app and in the daily Steam sync). <b>Game id</b>: one detected id counts as another. <b>Folder + exe</b>: the end of the program's path, e.g. <span class="mono">world of warcraft/_retail_/wow.exe</span>; checked before the usual exe names.</div>
+    <div class="note">Sent to every app with the game rules, no app update needed. <b>Steam app id</b>: that Steam game counts as the game you pick (in the app and in Steam imports). <b>Game id</b>: one detected id counts as another. <b>Folder + exe</b>: the end of the program's path, e.g. <span class="mono">world of warcraft/_retail_/wow.exe</span>; checked before the usual exe names.</div>
     <div class="tools"><select class="in" id="dk">${Object.entries(DKIND).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
       <input class="in mono" id="dp" placeholder="793460 / old_id / folder/game.exe" size="30" aria-label="Pattern">
       <span class="muted">counts as</span><input class="in mono" id="dg" placeholder="game id" size="16" aria-label="Game id">
@@ -428,6 +428,7 @@ async function userDetail(id) {
       ${can.reset_password ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><label>Date of birth (YYYY-MM-DD)<input type="date" id="newdob" min="1900-01-01" max="2099-12-31" value="${esc(u.birth_date || "")}"></label><div class="row"><button class="btn" id="chdob">Save date of birth</button></div><small>Only staff can change this. Under 13 is refused and not stored. 13–17 forces a private profile; turning 18 clears the under-18 flag but leaves the profile private.</small>` : ""}
       ${can.change_handle ? `<hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><label>Username<input type="text" id="newhandle" maxlength="20" value="${esc(u.handle)}"></label><div class="row"><button class="btn" id="chhandle">Change username</button></div><small>Users can't change their username themselves. The old one keeps redirecting to them and can't be taken by anyone else. Logged in the audit log.</small>` : ""}
       <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="rmav">Remove picture</button>${can.mfa_reset ? ` <button class="btn" id="mfareset">Reset two-step sign-in</button>` : ""}</div><small>Removing a picture resets it to the default and blocks that exact image. Resetting two-step sign-in lets them sign in with just their password (check it's really them first).</small>
+      <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div><b>WoW hours</b></div><div class="row"><button class="btn" data-wowrc="wow" data-gname="WoW">Recount WoW</button><button class="btn" data-wowrc="wow_forever" data-gname="WoW Forever">Recount WoW Forever</button></div><small>Recounts from their characters' /played only: drops the menu-time extra carried on top. Deleted characters keep their hours. Logged in the audit log.</small>
       <div class="alert" id="amsg" hidden></div></div></section>
     <section class="panel"><h2>Signed-in devices</h2>${u.devices.length ? u.devices.map(d => `<div class="fr"><div class="who"><div class="nm">${esc(d.name || (d.kind === "web" ? "Web browser" : "Fraglink desktop"))} <small>${esc(d.kind)}</small></div><div class="gm">signed in ${day(d.created_at)} · last used ${when(d.last_used_at)}</div></div></div>`).join("") : `<div class="body empty">None.</div>`}</section>
   </div></div>`;
@@ -447,6 +448,7 @@ async function userDetail(id) {
   const vs = $("#vset"); if (vs) vs.addEventListener("click", () => { const v = vs.dataset.v === "1"; if (confirm(`${v ? "Mark" : "Unmark"} ${u.handle}'s email as confirmed?`)) act(vs, async () => { await api(uid + "/verify/set", { method: "POST", body: { value: v } }); userDetail(u.id); }).catch(x => msg(am, x.message)); });
   const rl = $("#resetlink"); if (rl) rl.addEventListener("click", () => { if (confirm(`Email a password reset link to ${u.email}?`)) act(rl, async () => { await api(uid + "/reset_link", { method: "POST" }); msg(am, "Reset link sent to " + u.email + ".", true); }).catch(x => msg(am, x.message)); });
   const it = $("#istest"); if (it) it.addEventListener("change", async () => { const v = it.checked; if (!confirm(`${v ? "Hide" : "Unhide"} ${u.handle} as a test account?`)) { it.checked = !v; return; } try { await api(uid + "/test", { method: "POST", body: { value: v } }); msg(am, v ? "Hidden as a test account." : "No longer a test account.", true); } catch (x) { it.checked = !v; msg(am, x.message); } });
+  $$("[data-wowrc]").forEach(b => b.addEventListener("click", () => { const g = u.games.find(x => x.game_id === b.dataset.wowrc); if (confirm(`Recount ${u.handle}'s ${b.dataset.gname} hours from /played only?\nCurrent total: ${g ? hrs(g.display_min) : "none"}. The carried menu-time extra is dropped; deleted characters keep their hours. Logged in the audit log.`)) act(b, async () => { const r = await api(`/admin/users/${id}/wow_recount`, { method: "POST", body: { game_id: b.dataset.wowrc } }); msg(amsg, `Recounted: ${hrs(r.total_min)}`, true); }); }));
   if (ban) ban.addEventListener("click", () => { if (confirm("Ban " + u.handle + "?")) act(ban, async () => { await api(`/admin/users/${id}/ban`, { method: "POST", body: { reason: $("#reason").value } }); userDetail(id); }).catch(x => msg(amsg, x.message)); });
   const hcl = $("#hoursclear");
   if (hcl) hcl.addEventListener("click", () => act(hcl, async () => { await api(`/admin/users/${id}/hours_flag/clear`, { method: "POST" }); userDetail(id); }).catch(x => msg(amsg, x.message)));
@@ -481,7 +483,9 @@ async function userDetail(id) {
 }
 
 /* ---------- 4. hours review ---------- */
-const FLAG = { day_over_20h: "Over 20 h in a day", session_over_18h: "Session over 18 h", overlapping_sessions: "Overlapping sessions", faster_than_real_time: "Faster than real time" };
+const FLAG = { day_over_20h: "Over 20 h in a day", session_over_18h: "Session over 18 h", overlapping_sessions: "Overlapping sessions", faster_than_real_time: "Faster than real time",
+  wow_checksum: "WoW: entry edited (bad checksum)", wow_battletag: "WoW: BattleTag doesn't match link", wow_decrease: "WoW: /played went down",
+  wow_impossible: "WoW: /played grew faster than real time", wow_bnet_mismatch: "WoW: level doesn't match Battle.net", wow_clock: "WoW: timestamp in the future", wow_old_addon: "WoW: retired addon version" };
 async function hoursReview(days) {
   days = Number(days) || 30;
   const d = await api("/admin/hours/flags?days=" + days);
@@ -587,7 +591,13 @@ async function announcements() {
     <form method="post" action="/api/v1/form-fallback" class="f" id="af"><label>Message<input type="text" name="message" maxlength="300" required placeholder="Servers restart at 10 pm AEDT for an update."></label>
       <div class="row"><label>Style<select class="in" name="style"><option value="info">Info (blue)</option><option value="warning">Warning (amber)</option></select></label>
       <label>Ends (optional)<input class="in" type="datetime-local" name="ends"></label></div>
-      <label>Link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+      <label>Cover image (optional)<input type="text" name="image" placeholder="https://… or upload below"></label>
+      <div class="row" style="align-items:center"><input type="file" id="nf-file" accept="image/jpeg,image/png,image/webp,image/gif"><button type="button" class="btn sm" id="nf-up">Upload</button><button type="button" class="btn sm danger" id="nf-rm" hidden>Remove image</button></div>
+      <p class="dimt">JPG, PNG, WebP or GIF up to 5 MB. Shows beside the post in lists and full width at the top of the post.</p>
+      <img id="nf-prev" alt="" hidden style="max-width:100%;max-height:180px;border-radius:4px;object-fit:contain;align-self:flex-start">
+      <div class="row"><label>Button link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+        <label>Button label<input type="text" name="link_label" maxlength="40" placeholder="Read more"></label></div>
+      <p class="dimt">Adds a button under the post. Links typed in the post itself are already clickable.</p>
       <div class="row"><button class="btn dl">Publish</button><span class="dimt">Replaces the current announcement.</span></div>
       <div class="alert" id="anmsg" hidden></div></form></div></section>
     <section class="panel"><h2>Recent</h2>${d.recent.length ? d.recent.map(r => `<div class="fr"><div class="who"><div class="nm"><span>${esc(r.message)}</span></div><div class="gm"><span class="pill ${r.style === "warning" ? "warn" : ""}">${esc(r.style)}</span> ${when(r.created_at)}${r.cleared_at ? " · cleared " + when(r.cleared_at) : r.ends_at ? " · ends " + when(r.ends_at) : ""}</div></div></div>`).join("") : `<div class="body empty">None yet.</div>`}</section></div>`;
@@ -612,7 +622,13 @@ async function news(arg) {
     <form method="post" action="/api/v1/form-fallback" class="f" id="nf"><input type="hidden" name="id">
       <label>Title<input type="text" name="title" maxlength="140" required placeholder="Fraglink 0.3.0 beta 1 is out"></label>
       <label>Post<textarea class="in" name="body" rows="10" maxlength="20000" placeholder="Blank line = new paragraph. https:// links become clickable."></textarea></label>
-      <label>Link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+      <label>Cover image (optional)<input type="text" name="image" placeholder="https://… or upload below"></label>
+      <div class="row" style="align-items:center"><input type="file" id="nf-file" accept="image/jpeg,image/png,image/webp,image/gif"><button type="button" class="btn sm" id="nf-up">Upload</button><button type="button" class="btn sm danger" id="nf-rm" hidden>Remove image</button></div>
+      <p class="dimt">JPG, PNG, WebP or GIF up to 5 MB. Shows beside the post in lists and full width at the top of the post.</p>
+      <img id="nf-prev" alt="" hidden style="max-width:100%;max-height:180px;border-radius:4px;object-fit:contain;align-self:flex-start">
+      <div class="row"><label>Button link (optional)<input type="text" name="link" placeholder="https://discord.gg/… or /download"></label>
+        <label>Button label<input type="text" name="link_label" maxlength="40" placeholder="Read more"></label></div>
+      <p class="dimt">Adds a button under the post. Links typed in the post itself are already clickable.</p>
       <div class="row"><label>Date<input class="in" type="datetime-local" name="at"></label>
         <label style="display:flex;flex-direction:row;align-items:center;gap:6px;align-self:flex-end;padding-bottom:8px"><input type="checkbox" name="pinned"> Pin to top</label>
         <label style="display:flex;flex-direction:row;align-items:center;gap:6px;align-self:flex-end;padding-bottom:8px" id="nf-ban"><input type="checkbox" name="banner"> Also show as banner</label></div>
@@ -622,11 +638,23 @@ async function news(arg) {
     <section class="panel"><h2>Posts <span class="dimt" id="n-count"></span></h2><div class="body" style="padding-bottom:4px"><input class="in" type="search" id="n-q" placeholder="Search posts" style="width:100%"></div><div id="n-list"></div></section></div>`;
   const f = $("#nf"), local = iso => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
   let items = [];
-  const reset = () => { f.reset(); f.id.value = ""; $("#nf-h").textContent = "New post"; $("#nf-go").textContent = "Publish"; $("#nf-cancel").hidden = true; $("#nf-ban").hidden = false; };
+  const reset = () => { f.reset(); f.id.value = ""; $("#nf-h").textContent = "New post"; $("#nf-go").textContent = "Publish"; $("#nf-cancel").hidden = true; $("#nf-ban").hidden = false; prev(); };
   const fill = p => {
-    f.id.value = p.id; f.title.value = p.title; f.body.value = p.body || ""; f.link.value = p.link || ""; f.at.value = local(p.at); f.pinned.checked = p.pinned;
+    f.id.value = p.id; f.title.value = p.title; f.body.value = p.body || ""; f.link.value = p.link || ""; f.link_label.value = p.link_label || ""; f.image.value = p.image || ""; prev(); f.at.value = local(p.at); f.pinned.checked = p.pinned;
     $("#nf-h").textContent = "Edit post"; $("#nf-go").textContent = "Save changes"; $("#nf-cancel").hidden = false; $("#nf-ban").hidden = true; f.title.focus(); window.scrollTo(0, 0);
   };
+  function prev() { const u = f.image.value.trim(), im = $("#nf-prev"); im.hidden = !u; $("#nf-rm").hidden = !u; if (u) im.src = u; else im.removeAttribute("src"); }
+  f.image.addEventListener("input", prev);
+  $("#nf-prev").addEventListener("error", () => { if (f.image.value.trim()) msg($("#nfmsg"), "That image couldn't be loaded."); });
+  $("#nf-rm").addEventListener("click", () => { f.image.value = ""; $("#nf-file").value = ""; prev(); });
+  $("#nf-up").addEventListener("click", e => act(e.target, async () => {
+    const file = $("#nf-file").files[0]; if (!file) throw new Error("Pick an image first.");
+    if (file.size > 5 * 1024 * 1024) throw new Error("That image is over 5 MB.");
+    const r = await fetch(window.FL.API + "/admin/news-image", { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream" }, body: file });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || "Upload failed (HTTP " + r.status + ").");
+    f.image.value = j.url; prev();
+  }).catch(x => msg($("#nfmsg"), x.message)));
   const load = async () => {
     const d = await api(`/admin/news?page=${pg}&per=${PER}${q ? "&q=" + encodeURIComponent(q) : ""}`);
     items = d.items; $("#n-count").textContent = d.total ? `(${d.total.toLocaleString("en")})` : "";
@@ -648,7 +676,7 @@ async function news(arg) {
   });
   f.addEventListener("submit", async e => {
     e.preventDefault();
-    const body = { title: f.title.value.trim(), body: f.body.value, link: f.link.value.trim(), pinned: f.pinned.checked };
+    const body = { title: f.title.value.trim(), body: f.body.value, link: f.link.value.trim(), link_label: f.link_label.value.trim(), image: f.image.value.trim(), pinned: f.pinned.checked };
     if (f.at.value) body.published_at = new Date(f.at.value).toISOString();
     try {
       const r = f.id.value ? await api(`/admin/news/${f.id.value}`, { method: "POST", body }) : await api("/admin/news", { method: "POST", body });

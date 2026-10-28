@@ -102,3 +102,13 @@ pub async fn detached_exes(st: &AppState) -> ApiResult<Vec<(String, String)>> {
         .flat_map(|(g, es)| es.into_iter().map(move |e| (g.clone(), e)))
         .collect())
 }
+
+/// Fully retired games (not merged): `(game id, successor id, the programs detached)`.
+pub async fn fully_retired(st: &AppState) -> ApiResult<Vec<(String, String, Vec<String>)>> {
+    Ok(sqlx::query_as(
+        "SELECT game_id, successor_id, exes FROM game_retirements
+         WHERE NOT partial AND NOT merged ORDER BY game_id",
+    )
+    .fetch_all(&st.db)
+    .await?)
+}

@@ -5,6 +5,7 @@
 <title>Fraglink Options</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
 <link rel="stylesheet" href="options.css" />
+<link rel="stylesheet" href="themes-flat.css" />
 </head>
 <body>
 <header class="op-title" id="op-title">
@@ -116,10 +117,10 @@
 
     <section data-page="appearance" hidden>
       <fieldset><legend>Theme</legend>
-        <label class="row">Accent colour <select data-key="theme"><option value="blue">Cobalt</option><option value="crimson">Crimson</option><option value="emerald">Emerald</option><option value="graphite">Graphite</option></select></label>
+        <label class="row">Theme <select data-key="theme"><option value="blue">Cobalt</option><option value="flat-navy">Flat Navy</option><option value="flat-grey">Flat Grey</option></select></label>
       </fieldset>
       <fieldset><legend>Text size</legend>
-        <label class="row">Text size <select data-key="text_size"><option value="normal">Normal</option><option value="large">Large</option><option value="larger">Larger</option></select></label>
+        <label class="row">Text size <select data-key="text_size"><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option><option value="larger">Larger</option></select></label>
         <span class="hint">Scales the whole main window.</span>
       </fieldset>
       <fieldset><legend>Window</legend>
@@ -130,8 +131,13 @@
     <section data-page="connections" hidden>
       <fieldset><legend>Connections</legend>
         <div id="conn-list"></div>
-        <div class="conn"><i class="conn-ic" style="--c:#1db954">&#9835;</i><div class="conn-tx"><b>Spotify</b><small>Show what you are listening to</small></div><button type="button" disabled>Connect</button><span class="soon">coming soon</span></div>
+        <!-- Spotify: hidden for beta.9, re-enable by removing the hidden attribute below. -->
+        <div class="conn" hidden><i class="conn-ic" style="--c:#1db954">&#9835;</i><div class="conn-tx"><b>Spotify</b><small>Show what you are listening to</small></div><button type="button" disabled>Connect</button><span class="soon">coming soon</span></div>
         <div id="conn-msg" class="hint">Connect opens your browser to the service's own sign-in page; Fraglink never sees your password there.</div>
+      </fieldset>
+      <fieldset><legend>World of Warcraft</legend>
+        <div class="conn conn-wrap"><i class="conn-ic" style="--c:#c69b3a">W</i><div class="conn-tx"><b>Fraglink /played addon</b><small>Install and update it from CurseForge. Log in to each of your characters once so the addon saves its /played; skipped characters keep their last hours.</small></div><div class="conn-btns"><button type="button" id="wow-get">Get the Fraglink addon</button><button type="button" id="wow-up">Upload on the website</button><button type="button" id="wow-manage" data-web="connect/battlenet">Manage WoW</button><button type="button" id="wow-verify" data-web="connect/battlenet/verify" hidden>&#128274; Verify WoW characters</button></div></div>
+        <div id="wow-msg" class="hint">Install and update the addon from CurseForge, then upload its FraglinkPlayed.lua on playfraglink.com to bring in your past WoW playtime. After that, Fraglink tracks your hours while it's running; upload again any time to catch up on time played while Fraglink was closed. Only characters Battle.net confirms are on your account count toward your hours.</div>
       </fieldset>
       <fieldset><legend>Tracking</legend>
         <div class="line"><button type="button" data-do="export">Export my data…</button><button type="button" data-do="open-data">Open data folder</button><button type="button" class="acct-web" data-web="settings#account">Download account data…</button></div>

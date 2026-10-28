@@ -433,15 +433,21 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
             .fetch_all(&st.db)
             .await?;
     let ov = crate::game_overrides::current(st).await?;
+    // a fully retired game is frozen: no rules of its own (its programs go to the
+    // successor below), so a later program in its old folders isn't sent its way
+    let retired = crate::retire::fully_retired(st).await?;
+    let is_retired = |id: &str| retired.iter().any(|(g, _, _)| g == id);
     let extra: Vec<&crate::game_overrides::GameOverride> =
         ov.values().filter(|o| !o.extra_exes.is_empty()).collect();
     let renamed: Vec<(&String, &String)> = ov
         .values()
-        .filter(|o| !o.hidden)
+        .filter(|o| !o.hidden && !is_retired(&o.game_id))
         .filter_map(|o| o.name.as_ref().map(|n| (&o.game_id, n)))
         .collect();
-    let hinted: Vec<&crate::game_overrides::GameOverride> =
-        ov.values().filter(|o| !o.path_hints.is_empty()).collect();
+    let hinted: Vec<&crate::game_overrides::GameOverride> = ov
+        .values()
+        .filter(|o| !o.path_hints.is_empty() && !is_retired(&o.game_id))
+        .collect();
     let detached = crate::retire::detached_exes(st).await?;
     let merged = crate::detection_aliases::merged(st).await?;
     let fixups = crate::detection_aliases::load(st).await?;
@@ -452,6 +458,7 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
         && merged.is_empty()
         && fixups.is_empty()
         && hinted.is_empty()
+        && retired.is_empty()
     {
         return Ok(s);
     }
@@ -553,6 +560,39 @@ pub async fn overrides_with_approved(st: &AppState) -> ApiResult<String> {
                     paths: vec![],
                     channel: None,
                     note: Some(format!("detached from {game}")),
+                },
+            );
+        }
+    }
+    // fully retired games: their own programs are detected as the successor entry, so
+    // apps stop showing the frozen game. Only exes no other game in the signatures uses
+    // (a shared exe is left to that game's folder rules).
+    for (game, successor, exes) in &retired {
+        f.rules.retain(|r| &r.id != game);
+        for exe in exes {
+            let shared = st.sigs.games().iter().any(|g| {
+                g.id != *game
+                    && g.exes
+                        .iter()
+                        .chain(&g.path_exes)
+                        .any(|e| e.eq_ignore_ascii_case(exe))
+            });
+            if shared || !valid_exe(exe) {
+                continue;
+            }
+            let name = ov
+                .get(successor)
+                .and_then(|o| o.name.clone())
+                .unwrap_or_else(|| crate::names::UNLISTED_TITLE.into());
+            f.rules.insert(
+                0,
+                overrides::Rule {
+                    id: successor.clone(),
+                    name,
+                    exes: vec![exe.to_lowercase()],
+                    paths: vec![],
+                    channel: None,
+                    note: Some(format!("retired from {game}")),
                 },
             );
         }

@@ -9,8 +9,11 @@
 # The updater compares versions as semver: 0.3.0-beta.2 > 0.3.0-beta.1 > 0.2.0-21.
 set -euo pipefail
 V=${1:?usage: bump-version.sh <major.minor.patch-beta.N | major.minor.patch>}
-[[ "$V" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.([0-9]+))?$ ]] || { echo "version must look like 0.3.0-beta.1 or 0.3.0" >&2; exit 1; }
-MSI="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}.${BASH_REMATCH[5]:-0}"
+[[ "$V" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.([0-9]+)(\.([0-9]+))?)?$ ]] || { echo "version must look like 0.3.0-beta.1, 0.3.0-beta.9.1 or 0.3.0" >&2; exit 1; }
+# MSI 4th field: beta.1-9 -> N; point releases and beta.10+ -> N*10+M (beta.9.1 -> 91, beta.10 -> 100), so it keeps rising.
+N=${BASH_REMATCH[5]:-0}; M=${BASH_REMATCH[7]:-}
+B=$N; { [[ -n "$M" ]] || (( N >= 10 )); } && B=$(( N * 10 + ${M:-0} ))
+MSI="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}.$B"
 # final releases need a higher MSI build than any beta of the same version
 [[ -z "${BASH_REMATCH[4]}" ]] && MSI="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}.65535"
 ROOT=$(cd "$(dirname "$0")/.." && pwd)

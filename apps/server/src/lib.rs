@@ -45,6 +45,9 @@ pub mod status;
 pub mod steam;
 pub mod turnstile;
 pub mod web;
+pub mod wow;
+pub mod wowchar;
+pub mod wowpage;
 
 use axum::Router;
 use sqlx::PgPool;
@@ -167,6 +170,9 @@ pub fn router(state: AppState) -> Router {
         .merge(home::routes())
         .merge(art::routes())
         .merge(connect::routes())
+        .merge(wow::routes())
+        .merge(wowpage::routes())
+        .merge(wowchar::routes())
         .merge(seo::routes())
         .route("/api/v1/features", axum::routing::get(features::public))
         .layer(axum::middleware::from_fn_with_state(

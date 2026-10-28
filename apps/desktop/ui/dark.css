@@ -70,7 +70,8 @@ body.skin-dark .dk-vtabs { position: absolute; left: 6px; top: 131px; bottom: 44
 .dk-vtabs button.active { color: #fff; background: linear-gradient(90deg, var(--dk-blue1), var(--dk-blue2, #1f4f9e)); border-color: #0b2553; box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
 body.skin-dark .dk-sechead { position: absolute; left: 38px; right: 6px; top: 131px; height: 18px; padding-left: 6px; line-height: 17px; color: #fff; font-weight: bold;
   background: linear-gradient(var(--dk-blue1), var(--dk-blue2, #1f4f9e) 60%, var(--dk-blue3)); border: 1px solid #000; border-bottom: 0; text-shadow: 0 1px 0 rgba(0,0,0,.5); }
-body.skin-dark .xf-list { left: 38px; right: 6px; top: 149px; bottom: 44px; width: auto; height: auto; background: var(--dk-list); border: 1px solid #000; color: #fff; }
+body.skin-dark .dk-sechead { display: none !important; } /* no Friends header bar: column headers sit at the top */
+body.skin-dark .xf-list { left: 38px; right: 6px; top: 131px; bottom: 44px; width: auto; height: auto; background: var(--dk-list); border: 1px solid #000; color: #fff; }
 body.skin-dark .xf-grid { min-width: 0; width: 100%; }
 body.skin-dark .xf-head { background: linear-gradient(#2a2e36, #1b1e24); border-bottom: 1px solid #000; color: #dfe3ea; text-shadow: none; }
 body.skin-dark .xf-head span + span { border-left: 1px solid #3a3e46; box-shadow: none; }
@@ -280,7 +281,7 @@ body.skin-dark .xf-banner { top: 51px; }
 body.skin-dark .xf-identity { top: 111px; }
 body.skin-dark .xf-status { top: 112px; }
 body.skin-dark .dk-vtabs, body.skin-dark .dk-sechead { top: 135px; }
-body.skin-dark .xf-list { top: 153px; }
+body.skin-dark .xf-list { top: 135px; }
 /* update ready (dev.10): a small bright green download arrow left of the window
    buttons, like Discord's. Click = restart and install. */
 body.skin-dark .xf-upd { left: auto; right: 62px; top: 4px; width: 22px; height: 20px; padding: 0; display: flex; align-items: center; justify-content: center;
@@ -453,7 +454,7 @@ body.skin-dark .xf-app.side-open .side-grip { top: 0; bottom: 0; }
 body.skin-dark .xf-app.side-open .dk-edges [data-resize=East] { top: var(--side-top); bottom: var(--side-bot); }
 body.skin-dark .xf-app.side-open .dk-edges [data-resize=NorthEast] { display: none; }
 body.skin-dark .xf-app.side-open .dk-edges [data-resize=SouthEast] { bottom: var(--side-bot); }
-body.skin-dark .xf-app.side-open .dk-grip { bottom: calc(var(--side-bot) + 1px); }
+/* beta.9: the grip stays in the main window frame's bottom-right corner when the side panel is open too */
 
 /* dev.18: roomier Add Friend window (~25-30% larger), friends-list text size, darker dim behind */
 .af-modal { background: rgba(0,0,0,.68); }
@@ -535,7 +536,14 @@ body.skin-dark .fl-news .nw-x:hover { opacity: 1; background: rgba(255,255,255,.
 body.skin-dark.has-news .xf-identity { top: 135px; }
 body.skin-dark.has-news .xf-status { top: 136px; }
 body.skin-dark.has-news .dk-vtabs, body.skin-dark.has-news .dk-sechead { top: 159px; }
-body.skin-dark.has-news .xf-list { top: 177px; }
+body.skin-dark.has-news .xf-list { top: 159px; }
 
 .dk-vtabs button { position: relative; }
-.dk-vtabs .fl-req-badge { position: absolute; top: -2px; right: -2px; min-width: 12px; height: 12px; padding: 0 3px; border-radius: 6px; background: #e07020; color: #1b1006; font-size: 9px; font-weight: 700; line-height: 12px; text-align: center; pointer-events: none; }
+.dk-vtabs .fl-req-badge { position: absolute; top: -2px; right: -2px; min-width: 12px; height: 12px; padding: 0 3px; border-radius: 6px; background: #d8232a; color: #fff; box-shadow: 0 0 0 1px #000; font-size: 9px; font-weight: 700; line-height: 12px; text-align: center; pointer-events: none; }
+body.skin-dark .xf-row.pending:not(.sel) { background: linear-gradient(90deg, rgba(216,35,42,.24), rgba(216,35,42,.05)); }
+
+/* beta.9: the primary dialog action (Save, OK, Add) is blue in Cobalt; the others stay grey */
+body.skin-dark .xf-dialog .dlg-foot .hw.primary { border-color: #0b2a5c; background: linear-gradient(#5d97e6, #2f6ccc 50%, #1f56ad 51%, #2b66c2); }
+body.skin-dark .xf-dialog .dlg-foot .hw.primary:hover { background: linear-gradient(#73a8ef, #3a7ad8 50%, #2862bd 51%, #3573d0); }
+.af-b.primary { background: #2f63c4; color: #fff; border-color: #0b2a5c; }
+.af-b.primary:hover:not(:disabled) { background: #3a73d8; }

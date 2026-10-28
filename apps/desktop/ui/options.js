@@ -42,8 +42,13 @@
   const VTICK = '<i class="vtick" title="Verified by Fraglink" aria-label="Verified by Fraglink" role="img"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="#3b82f6" d="M8 0l1.9 1.4 2.3-.2.8 2.2 2 1.2-.6 2.3.6 2.3-2 1.2-.8 2.2-2.3-.2L8 16l-1.9-1.4-2.3.2-.8-2.2-2-1.2.6-2.3L1 6.8l2-1.2.8-2.2 2.3.2z"/><path fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 8.2l2 2 4-4.2"/></svg></i>';
   const PAGES = { notifications: 'general', advanced: 'general', tracking: 'connections' }; // old page names
 
-  // Options always uses the dark look (Dark is the only skin since 0.2.0-dev.20).
-  const applyTheme = () => document.body.classList.add('dark');
+  // Options always uses the dark look (Dark is the only skin since 0.2.0-dev.20), plus the chosen theme.
+  const THEMES = ['blue', 'flat-navy', 'flat-grey'];
+  const applyTheme = (t) => {
+    document.body.classList.add('dark');
+    const root = document.documentElement;
+    root.classList.toggle('theme-flat-navy', t === 'flat-navy'); root.classList.toggle('theme-flat-grey', t === 'flat-grey');
+  };
 
   function show(page) {
     page = PAGES[page] || page;
@@ -67,8 +72,8 @@
       share_game: on(s, 'share_game'), friend_request_toasts: on(s, 'friend_request_toasts'), share_fof: on(s, 'share_fof'),
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',
       zoom: ['1', '1.5', '2'].includes(s.zoom) ? s.zoom : '1.5',
-      theme: s.theme || 'blue', always_on_top: on(s, 'always_on_top', '0'),
-      text_size: ['normal', 'large', 'larger'].includes(s.text_size) ? s.text_size : 'normal',
+      theme: THEMES.includes(s.theme) ? s.theme : 'blue', always_on_top: on(s, 'always_on_top', '0'),
+      text_size: ['small', 'normal', 'large', 'larger'].includes(s.text_size) ? s.text_size : 'normal',
     };
     $$('[data-key]').forEach(el => {
       const v = cur[el.dataset.key] ?? '';
@@ -92,7 +97,7 @@
     if (t.matches('[data-pv], [data-pv-top]')) { savePrivacy(t); return; }
     const el = t.closest('[data-key]');
     $('#apply').disabled = false;
-    if (el) { pending.set(el.dataset.key, value(el)); return; }
+    if (el) { pending.set(el.dataset.key, value(el)); if (el.dataset.key === 'theme') applyTheme(el.value); return; }
     if (!gsel) return;
     if (t.id === 'gd-path') pending.set('game_path:' + gsel, t.value.trim());
     else if (t.id === 'gd-args') pending.set('launch_args:' + gsel, t.value.trim());
@@ -271,9 +276,9 @@
   }
 
   /* ---- Connections: linked accounts, the same as Settings > Connections on the website ---- */
-  const CONN = [['steam', 'Steam', 'S', '#1b2838', 'Verify your Steam account; it shows as a badge on your profile'],
-    ['bnet', 'Battle.net', 'B', '#148eff', 'Show your BattleTag on your profile'],
-    ['discord', 'Discord', 'D', '#5865f2', 'Show your Discord name on your profile']];
+  const CONN = [['steam', 'Steam', 'steam', '#1b2838', 'Verify your Steam account; it shows as a badge on your profile'],
+    ['bnet', 'Battle.net', 'battlenet', '#148eff', 'Show your BattleTag on your profile'],
+    ['discord', 'Discord', 'discord', '#5865f2', 'Show your Discord name on your profile']];
   async function renderConnections() {
     const box = $('#conn-list'), m = $('#conn-msg');
     const signed = await signedIn();
@@ -282,15 +287,29 @@
     box.innerHTML = CONN.map(([p, name, ic, col, blurb]) => {
       const v = c[p] || {}, l = v.linked;
       const who = l ? `<small class="linked">${esc(l.display || l.uid)}${l.verified ? ' · verified' : ''}</small>` : `<small>${blurb}</small>`;
+      const fmtD = t => new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+      const hrs = !l ? '' : p === 'steam' && l.last_sync_at ? `<small>Hours imported ${fmtD(l.last_sync_at)}${l.sync_status === 'private' ? ' · Steam game details were private' : ''}</small>`
+        : p === 'bnet' ? (v.wow_imported_at ? `<small>Hours imported ${fmtD(v.wow_imported_at)}</small>` : '<small><a role="button" tabindex="0" style="cursor:pointer;text-decoration:underline" data-web="connect/battlenet">No /played upload yet</a></small>') : '';
       const right = !signed ? '<button type="button" disabled>Connect</button><span class="soon">sign in first</span>'
         : l ? `<button type="button" data-unlink="${p}">Disconnect</button><span class="soon ok">linked</span>`
         : v.available ? `<button type="button" data-link="${p}">Connect</button><span class="soon"></span>`
         : '<button type="button" disabled>Connect</button><span class="soon">coming soon</span>';
-      return `<div class="conn"><i class="conn-ic" style="--c:${col}">${ic}</i><div class="conn-tx"><b>${name}</b>${who}</div>${right}</div>`;
+      const extra = p === 'bnet' && l ? (v.needs_reconnect
+        ? '<div class="conn-sub"><span class="warn">Reconnect Battle.net to verify characters.</span> <button type="button" data-link="bnet">Reconnect</button></div>'
+        : '') : '';
+      return `<div class="conn"><i class="conn-ic" style="--c:${col}"><img src="brand/brand-${ic}.svg" alt=""></i><div class="conn-tx"><b>${name}</b>${who}${hrs}</div>${right}</div>${extra}`;
     }).join('');
+    // Verify WoW characters sits in the World of Warcraft row; only while Battle.net is linked and doesn't need a reconnect.
+    const bn = c.bnet || {};
+    $('#wow-verify').hidden = !(signed && bn.linked && !bn.needs_reconnect);
   }
+  /* ---- the WoW /played addon (installed from CurseForge) ---- */
+  const WOW_ADDON_URL = 'https://www.curseforge.com/projects/1766775';
+  const WOW_UPLOAD_URL = 'https://playfraglink.com/connect/wow';
+  $('#wow-up').addEventListener('click', () => { FLB.openUrl ? FLB.openUrl(WOW_UPLOAD_URL) : window.open(WOW_UPLOAD_URL); });
+  $('#wow-get').addEventListener('click', () => { FLB.openUrl ? FLB.openUrl(WOW_ADDON_URL) : window.open(WOW_ADDON_URL); });
   $('#conn-list').addEventListener('click', async e => {
-    const b = e.target.closest('button'); if (!b) return; const m = $('#conn-msg');
+    const b = e.target.closest('button'); if (!b || b.dataset.web) return; const m = $('#conn-msg');
     const p = b.dataset.link || b.dataset.unlink, name = (CONN.find(x => x[0] === p) || [])[1];
     try {
       if (b.dataset.link) { b.disabled = true; await FLB.connectStart(p); m.textContent = `Finish signing in to ${name} in your browser, then come back here.`; setTimeout(() => { b.disabled = false; }, 4000); }
@@ -443,7 +462,7 @@
     }
     if (FLB.tauri) document.body.classList.add('tauri');
     const ts = st && st.settings && st.settings.text_size; if (ts) document.body.style.zoom = { large: 1.1, larger: 1.2 }[ts] || '';
-    applyTheme();
+    applyTheme(st && st.settings && st.settings.theme);
     renderDetail();
     show(params.get('page') || 'general');
     if (FLB.on) {

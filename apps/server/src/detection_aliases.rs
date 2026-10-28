@@ -1,6 +1,6 @@
 //! Detection fix-ups staff edit in Admin > Detection (0.3.0-beta.4): Steam app ids
 //! and game ids that count as another game, and folder + exe rules. The app gets
-//! them with the override rules; the daily Steam sync uses the same list, so a
+//! them with the override rules; Steam imports use the same list, so a
 //! merged game's Steam hours are not split back out.
 
 use crate::admin::{audit, Role, Staff};

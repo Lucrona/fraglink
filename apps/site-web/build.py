@@ -44,7 +44,10 @@ for name in sorted(os.listdir(os.path.join(HERE, "pages"))):
     if meta.get("page") in ("privacy", "terms"):  # published legal pages: no "Private preview" strip, even on beta
         out = re.sub(r'<div class="preview-flag">.*?</div></div>\n?', "", out)
     assert "xfire" not in out.lower(), name
-    open(os.path.join(DIST, name), "w").write(out)
+    # "path:connect/battlenet/verify" -> dist/connect/battlenet/verify.html (Caddy: try_files {path}.html)
+    dest = os.path.join(DIST, meta["path"].strip("/") + ".html") if meta.get("path") else os.path.join(DIST, name)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    open(dest, "w").write(out)
 # playfraglink.com's robots.txt (beta.playfraglink.com answers its own "Disallow: /" in Caddy)
 open(os.path.join(DIST, "robots.txt"), "w").write(open(os.path.join(HERE, "robots.txt")).read())
 for root, _, files in os.walk(DIST):

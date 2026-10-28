@@ -270,7 +270,9 @@
     // classic: the game icon sits before the name while playing, a blank slot otherwise
     const icon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name">${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
+    // data-dot / data-ini: the Flat themes draw a letter avatar with a status dot (themes-flat.css)
+    const dot = f.kind === 'off' ? 'off' : f.away || /away/i.test(f.status || '') ? 'away' : /busy|disturb/i.test(f.status || '') ? 'busy' : 'on';
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name" data-dot="${dot}" data-ini="${esc((f.name || '?').charAt(0).toUpperCase())}">${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
@@ -308,7 +310,7 @@
     const fof = sorted(F.filter(f => f.kind === 'fof')), reqs = F.filter(f => f.kind === 'req' || f.kind === 'out'), off = sorted(F.filter(f => f.kind === 'off'));
     const block = (key, label, cls, rows, rowCls = '', count) => {
       if (hidden.includes(key)) return '';
-      return sec(key, label, cls, count != null ? count : rows.length) + (state.collapsed[key] ? '' : rows.map(f => row(f, rowCls || (f.kind === 'off' ? 'off' : ''))).join(''));
+      return sec(key, label, cls, count != null ? count : rows.length) + (state.collapsed[key] ? '' : rows.map(f => row(f, (rowCls || (f.kind === 'off' ? 'off' : '')) + (f.kind === 'req' ? ' pending' : ''))).join(''));
     };
     const onlineOf = rows => rows.filter(f => f.kind === 'playing' || f.kind === 'online').length;
     let h = note || '';
@@ -430,12 +432,12 @@
       <label for="add-handle">Search by nickname, username or email:</label>
       <input id="add-handle" maxlength="60" autocomplete="off" spellcheck="false" value="${esc(A.q)}" />
       <div class="af-ex">(Example: Jo, Jo Doe, or jo@doe.com)</div>
-      <div class="af-btns"><button class="af-b" type="button" data-action="add-cancel">Cancel</button><button class="af-b" type="button" id="add-search" data-action="add-friend-go"${A.q.trim() ? '' : ' disabled'}>Search</button></div>
+      <div class="af-btns"><button class="af-b" type="button" data-action="add-cancel">Cancel</button><button class="af-b primary" type="button" id="add-search" data-action="add-friend-go"${A.q.trim() ? '' : ' disabled'}>Search</button></div>
       <div class="af-h"><span>Search Results (select one):</span><span>${us ? `${n} User${n === 1 ? '' : 's'} Found` : ''}</span></div>
       <div class="af-tw"><table class="af-t"><tr><th>Username</th><th>Nickname</th></tr>${rows}</table></div>
       <label for="add-msg-text">Personal Message:</label><textarea id="add-msg-text" maxlength="200" rows="3">${esc(A.msg)}</textarea>
       <div id="add-msg" class="${A.bad ? 'bad' : ''}">${esc(A.out || '')}</div>
-      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${canAdd ? '' : ' disabled'}${rel === 'friend' || rel === 'out' ? ` data-tip="${REL_TAG[rel]}"` : ''}>${A.busy ? 'Adding…' : rel === 'in' ? 'Accept' : 'Add Friend'}</button></div>
+      <div class="af-btns"><button class="af-b" type="button" data-action="friend-profile" data-handle="${esc(sel)}"${sel ? '' : ' disabled'}>View Profile</button><button class="af-b primary" type="button" data-action="add-friend-send" data-handle="${esc(sel)}"${canAdd ? '' : ' disabled'}${rel === 'friend' || rel === 'out' ? ` data-tip="${REL_TAG[rel]}"` : ''}>${A.busy ? 'Adding…' : rel === 'in' ? 'Accept' : 'Add Friend'}</button></div>
     </div></div>`;
   }
   function renderAddFriend() {
@@ -605,6 +607,13 @@
 
   /* ---------------- side panel ---------------- */
   function renderSide() {
+    renderSideInner();
+    // Flat themes: a copy of the friend's avatar sits outside the scroller, half above the panel's top edge
+    // (the copy inside the scroller keeps its space but is hidden there). Cobalt hides .side-float.
+    const av = SS.vp.querySelector('.sf-head .sf-av'), fl = $('#side-float');
+    if (fl) fl.innerHTML = av ? av.outerHTML : '';
+  }
+  function renderSideInner() {
     const el = SS.vp; requestAnimationFrame(SS.update);
     if (signedOut() && !state.detectRun) { el.innerHTML = offlineSide(); return; }
     // A selected group heading (not Friends Online): its name and a short description (classic style).
@@ -646,7 +655,7 @@
     return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
   }
   /* Friend info panel (dev.17). Top to bottom: header (avatar, name, username, status),
-     Playing Game (icon, name, Realm and a live "Playing for" timer), Stats (This week, Total), then
+     Playing Game (icon, name, Realm), Stats (This session, This week, Total), then
      the buttons. Empty rows and sections are left out. Real friends use presence plus the
      server's friend summary and profile; sample friends (browser preview) their own fields. */
   const sampleStart = {};
@@ -658,6 +667,8 @@
   // val is HTML (already escaped); plain values also get a title so a clipped value can be read
   const kv = (label, val) => val ? `<div class="sf-kv"><span>${label}</span><b${/</.test(val) ? '' : ` data-tip="${val}"`}>${val}</b></div>` : '';
   const sfSec = title => `<div class="side-sec"><h4>${title}</h4></div>`;
+  // "1h 23m" / "45m": the friend's current game session, ticked each minute by clock()
+  const fmtSess = ms => { const m = Math.max(0, Math.floor(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
   const hrsText = sec => sec == null ? '' : fmtHrs(sec) + 'h';
   /* Profile pictures (dev.19), drawn like the website: an uploaded picture (fetched and
      cached by the app), a preset tile, or the Fraglink mark on one of six muted colours. */
@@ -708,10 +719,8 @@
     if (f.kind === 'req') return h + `<p class="sf-note">Wants to be your friend.</p><div class="sf-foot"><button class="dk-btn" data-action="friend-accept" data-handle="${H}">Accept</button><button class="dk-btn" data-action="friend-decline" data-handle="${H}">Decline</button><a class="sf-small" data-action="friend-block" data-handle="${H}">Block</a></div>`;
     if (f.kind === 'out') return h + `<p class="sf-note">Friend request sent. They'll show up here once they accept.</p><div class="sf-foot"><a class="sf-small" data-action="friend-remove" data-handle="${H}">Cancel request</a></div>`;
     if (playing) {
-      const t0 = sessionStart(f);
       h += sfSec('Playing Game') + `<div class="sf-game"><i class="gi sf-gi">${friendGameIcon(f.game)}</i><div class="sf-gn"><b data-tip="${esc(gameLabel(f))}">${esc(gameLabel(f))}</b></div></div>`;
       if (realmOf(f)) h += kv('Realm', esc(realmOf(f)));
-      h += kv('Playing for', t0 ? `<span class="sf-timer" data-start="${t0}">${fmtT(Date.now() - t0)}</span>` : '');
     }
     if (f.kind === 'off' && f.last) h += kv('Last online', esc(f.last));
     if (f.kind === 'fof') {
@@ -722,7 +731,8 @@
       if (!s) h += sfSec('Stats') + '<p class="sf-note">Loading…</p>';
       else if (s.private) h += sfSec('Stats') + `<p class="sf-note">${esc(f.name)} keeps their play history private.</p>`;
       else if (!s.none) {
-        const rows = kv('This week', hrsText(s.week)) + kv('Total', s.total ? hrsText(s.total) : '');
+        const t0 = playing ? sessionStart(f) : null;
+        const rows = kv('This session', t0 ? `<span class="sf-sess" data-start="${t0}">${fmtSess(Date.now() - t0)}</span>` : '') + kv('This week', hrsText(s.week)) + kv('Total', s.total ? hrsText(s.total) : '');
         if (rows) h += sfSec('Stats') + rows;
       }
     }
@@ -974,8 +984,8 @@
     notice('Change Nickname', `<div class="nick-dlg"><p>Your nickname is the name friends see in Fraglink and on the website. Your username <b>@${esc(me)}</b> stays the same.</p>
       <label>Nickname <input type="text" id="nick-in" maxlength="32" value="${esc(cur)}" spellcheck="false"></label>
       <small>Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave it empty to use your username.</small>
-      <div class="nick-foot"><span id="nick-msg" class="msg"></span></div></div>`);
-    $('#notice .dlg-foot').innerHTML = `<button class="hw" type="button" id="nick-save">Save</button> <button class="hw" data-action="notice-close" type="button">Cancel</button>`;
+      <div class="nick-foot"><span id="nick-msg" class="msg"></span></div></div>`,
+      [{ label: 'Cancel', action: 'notice-close' }, { label: 'Save', id: 'nick-save', primary: true }]);
     const inp = $('#nick-in'); inp.focus(); inp.select();
     const save = async () => {
       const b = $('#nick-save'), m = $('#nick-msg'); b.disabled = true; m.className = 'msg'; m.textContent = 'Saving…';
@@ -1017,8 +1027,44 @@
     if (newsCur.link && /^https:\/\//.test(newsCur.link)) { if (FLB.openUrl) FLB.openUrl(newsCur.link).catch(() => {}); else open(newsCur.link, '_blank'); }
   });
   setTimeout(loadNews, 1500); setInterval(loadNews, 2 * 60 * 1000); addEventListener('focus', () => loadNews());
-  function notice(title, html) {
-    const foot = $('#notice .dlg-foot'); foot.innerHTML = `<button class="hw" data-action="notice-close" type="button">OK</button>`;
+  /* "What's new" after an update. Edit WHATS_NEW for each release (keyed by the
+     app version as devVer() shows it); versions without an entry just get the link. */
+  const WHATS_NEW = {
+    '0.3.0-beta.9.1': [
+      'Pop-up boxes fit the window, with the main button blue and last',
+      'The resize grip sits in the window corner',
+    ],
+    '0.3.0-beta.9': [
+      'Cleaner friend side panel in Flat Navy and Flat Grey',
+      'Manage WoW and Verify WoW characters buttons in Connections',
+      'The status menu arrow works in the flat themes',
+    ],
+    '0.3.0-beta.8': [
+      'Tray icon shows one mark: update ready, friend requests, or your status',
+      'Friend requests badge on the Friends tab',
+      'Session time in the friend side panel',
+      'New Help menu with FAQ and Changelog',
+      'Hours imported dates for Steam and Battle.net in Connections',
+      'New Flat Navy and Flat Grey themes',
+      'New pop-up design, with Accept / Ignore on friend requests and an Update ready pop-up',
+      'Get the Fraglink WoW addon from Connections; /played is uploaded on the website',
+    ],
+  };
+  function whatsNew() {
+    const s = LIVE.settings; if (!s || !s.version) return;
+    const v = devVer(s.version), last = SET().last_run_version;
+    // Not a first install: an earlier version ran (older builds didn't record it, so use other traces).
+    const before = last || SET().login_last || SET().games_detected_once;
+    if (last === v) return;
+    saveSetting('last_run_version', v);
+    if (!before) return;
+    const items = WHATS_NEW[v] || [];
+    notice('Fraglink updated', `<p><b>Fraglink updated to ${esc(v)}</b></p>${items.length ? `<ul class="wn-list">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}<p><a data-action="changelog-web">See full changelog</a></p>`);
+  }
+  // Footer buttons: secondary ones first, the primary (blue) action last. Default is a single primary OK.
+  function notice(title, html, btns = [{ label: 'OK', action: 'notice-close', primary: true }]) {
+    const foot = $('#notice .dlg-foot');
+    foot.innerHTML = btns.map(b => `<button class="hw${b.primary ? ' primary' : ''}" type="button"${b.id ? ` id="${b.id}"` : ''}${b.action ? ` data-action="${b.action}"` : ''}>${esc(b.label)}</button>`).join('');
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false; placeDlg($('#notice'));
   }
   // In-window dialogs open centred near the top and can then be dragged by their title bar.
@@ -1167,6 +1213,7 @@
       else if (r.result === 'installing') m.innerHTML = `Installing Fraglink ${esc(devVer(r.version))}…<br><small>Fraglink restarts when it's done.</small>`;
       else m.innerHTML = `Couldn't check for updates.<br><small>${esc(r.message || '')}</small>`;
     },
+    'changelog-web': () => { const u = 'https://playfraglink.com/changelog'; if (FLB.openUrl) FLB.openUrl(u).catch(() => {}); else open(u, '_blank'); },
     'detect-skip': () => { state.detectRun = false; if (TAURI) saveSetting('games_detected_once', '1'); render(); },
     'activity-more': () => { if (tabOn('activity')) { state.tab = 'activity'; render(); } else notice('Activity Report', 'The full Activity Report (all of your friends\' recent games, with filters) arrives with the Fraglink website. The side panel shows the latest few.'); },
     'status-menu': a => statusMenu(a),
@@ -1251,11 +1298,16 @@
     render();
   }
   const loadCatalog = () => FLB.catalog ? FLB.catalog().then(setCatalog).catch(e => console.warn('catalog', e)) : null;
-  const THEMES = { blue: ['#4b82d6', '#1f4f9e', '#173d7c'], crimson: ['#d65b5b', '#9e1f2a', '#7c1720'], emerald: ['#4bb87a', '#1f7e4a', '#175f38'], graphite: ['#8a9099', '#4f555e', '#3a3f46'] };
-  function applyTheme(t) {
-    if (!THEMES[t]) t = 'blue';
-    const [a, b, c] = THEMES[t], r = document.documentElement.style;
-    r.setProperty('--dk-blue1', a); r.setProperty('--dk-blue2', b); r.setProperty('--dk-blue3', c);
+  /* Themes (0.3.0-beta.9): Cobalt is the classic look; Flat Navy / Flat Grey are flat recolours
+     without the banner (themes-flat.css, scoped by a class on <html>). Crimson, Emerald and
+     Graphite were removed: anyone still on one falls back to Cobalt and the setting is rewritten. */
+  const THEMES = { blue: ['#4b82d6', '#1f4f9e', '#173d7c'], 'flat-navy': null, 'flat-grey': null };
+  function applyTheme(t, migrate) {
+    if (!(t in THEMES)) { if (migrate && t) saveSetting('theme', 'blue'); t = 'blue'; }
+    const root = document.documentElement, r = root.style, pal = THEMES[t];
+    root.classList.toggle('theme-flat-navy', t === 'flat-navy'); root.classList.toggle('theme-flat-grey', t === 'flat-grey');
+    if (pal) { r.setProperty('--dk-blue1', pal[0]); r.setProperty('--dk-blue2', pal[1]); r.setProperty('--dk-blue3', pal[2]); }
+    else ['--dk-blue1', '--dk-blue2', '--dk-blue3'].forEach(k => r.removeProperty(k));
     $$('.theme-opt').forEach(x => x.classList.toggle('checked', x.dataset.theme === t));
   }
   function syncMenus() {
@@ -1359,7 +1411,9 @@
     stipTimer = setTimeout(() => {
       if (!el.isConnected || stipEl !== el) return;
       stip.textContent = el.dataset.tip; stip.hidden = false;
-      placeTip(stip, mx + 4, my + 20, my - 6);
+      // data-tip-left (the corner resize grip): open to the left so it stays over the main window, not the side panel
+      const tx = el.hasAttribute('data-tip-left') ? Math.max(4, mx - stip.getBoundingClientRect().width - 4) : mx + 4;
+      placeTip(stip, tx, my + 20, my - 6);
     }, 450);
   }, true);
   document.addEventListener('mousedown', hideSTip, true);
@@ -1430,7 +1484,7 @@
   });
   function addGroup(moveKey) {
     state.moveAfterAdd = moveKey || null;
-    notice('Add Custom Group', `Group name:<br><input id="group-name" maxlength="30" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="add-group-go">Add</button></div>`);
+    notice('Add Custom Group', `Group name:<br><input id="group-name" maxlength="30" autocomplete="off" />`, [{ label: 'Cancel', action: 'notice-close' }, { label: 'Add', action: 'add-group-go', primary: true }]);
     setTimeout(() => $('#group-name') && $('#group-name').focus(), 0);
   }
   // Join Game only when we know a joinable address (e.g. a Source server IP → steam://connect)
@@ -1517,7 +1571,7 @@
     const r = btn.getBoundingClientRect(); // viewport px (already includes the text-size zoom)
     showMenu(items, r.left, r.bottom, id => {
       if (id === 'custom') {
-        notice('Set Custom Status', `Shown under your name in this window. <em>(Friends see it in a later update.)</em><br><input id="custom-status" maxlength="60" value="${esc(SET().custom_status || '')}" autocomplete="off" /><div class="opt-btns"><button class="hw" type="button" data-action="custom-status-go">OK</button></div>`);
+        notice('Set Custom Status', `Shown under your name in this window. <em>(Friends see it in a later update.)</em><br><input id="custom-status" maxlength="60" value="${esc(SET().custom_status || '')}" autocomplete="off" />`, [{ label: 'Cancel', action: 'notice-close' }, { label: 'OK', action: 'custom-status-go', primary: true }]);
         setTimeout(() => $('#custom-status') && $('#custom-status').focus(), 0);
       } else if (id === 'looking') useCustom(LOOKING);
       else if (id.startsWith('h:')) useCustom(hist[+id.slice(2)]);
@@ -1526,10 +1580,10 @@
     });
   }
 
-  /* Text size (Options > Appearance): Normal / Large / Larger scales the whole dark window. */
-  const TEXT_ZOOM = { normal: 1, large: 1.15, larger: 1.3 };
+  /* Text size (Options > Appearance): Small / Normal (default) / Large / Larger scales the whole dark window. */
+  const TEXT_ZOOM = { small: 1, normal: 1.15, large: 1.3, larger: 1.45 };
   function applyTextSize(v) {
-    const z = TEXT_ZOOM[v] || 1;
+    const z = TEXT_ZOOM[v] || TEXT_ZOOM.normal;
     document.body.style.zoom = z === 1 ? '' : String(z);
     document.body.classList.toggle('ts-big', z !== 1);
     requestAnimationFrame(() => { LS.update(); SS.update(); });
@@ -1592,12 +1646,19 @@
     }
     placeChat();
   }
+  // Auto-Login needs a saved session: ticking it ticks Save Password; unticking Save Password unticks Auto-Login.
+  document.addEventListener('change', e => {
+    const t = e.target; if (!t || !t.id) return;
+    if (t.id === 'lg-auto' && t.checked && $('#lg-save')) $('#lg-save').checked = true;
+    if (t.id === 'lg-save' && !t.checked && $('#lg-auto')) $('#lg-auto').checked = false;
+  });
   $('#zoom').addEventListener('change', e => setZoom(e.target.value));
   window.addEventListener('resize', layout);
   function clock() {
     $('#clock').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const s = $('#session'); if (s) s.textContent = fmtT(liveSeconds() * 1000);
     $$('.sf-timer').forEach(t => { t.textContent = fmtT(Date.now() - +t.dataset.start); });
+    $$('.sf-sess').forEach(t => { const v = fmtSess(Date.now() - +t.dataset.start); if (t.textContent !== v) t.textContent = v; });
   }
   setInterval(clock, 1000);
   document.addEventListener('input', e => { if (!state.addFriend) return; if (e.target.id === 'add-handle') { state.addFriend.q = e.target.value; $('#add-search').disabled = !e.target.value.trim(); } else if (e.target.id === 'add-msg-text') state.addFriend.msg = e.target.value; });
@@ -1610,7 +1671,7 @@
     try { st = await FLB.settings(); LIVE.settings = st; } catch (e) {}
     const saved = st && st.settings || {};
     if (['online', 'away', 'invisible'].includes(saved.status)) myStatus = saved.status;
-    applyTheme(saved.theme); syncMenus(); syncStatus();
+    applyTheme(saved.theme, true); syncMenus(); syncStatus();
     for (const k of jsonList('collapsed_groups')) state.collapsed[k] = true;
     setZoom(params.get('zoom') || (TAURI ? (saved.zoom || '1.5') : (document.body.classList.contains('compare') ? 1 : 2)));
     applySkin();
@@ -1635,6 +1696,7 @@
     }
     await refreshFriends();
     await refresh();
+    whatsNew();
     loadCatalog();
     FLB.on('fraglink://events', () => { for (const k in ICONS) if (ICONS[k] === null && !k.startsWith('f:')) delete ICONS[k]; refreshSoon(); }); // a newly detected game may now have an exe icon
     FLB.on('fraglink://friends', refreshFriends);

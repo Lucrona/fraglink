@@ -98,6 +98,17 @@ fn found_exe_hinted(folder: Option<&str>, names: &[String], hints: &[String]) ->
     found_exe(Some(folder), names).filter(|x| hint_ok(hints, x))
 }
 
+/// A remembered exe belongs to this game when detection would give it this game
+/// (Forever's `_forever_\Wow.exe` is not retail's, a `WowB.exe` anywhere is
+/// Forever's); exes the signatures don't know fall back to the flavour folders.
+fn owns_exe(sigs: &SignatureDb, g: &crate::signatures::GameSig, p: &str) -> bool {
+    let name = p.rsplit(['\\', '/']).next().unwrap_or(p);
+    match sigs.match_process(name, Some(p)) {
+        Some(m) => m.id == g.id,
+        None => hint_ok(&g.path_hints, p),
+    }
+}
+
 /// beta.5: the exe remembered from a run (`exe_path:` setting) is never forgotten, so
 /// an uninstalled game kept showing as installed. Check it is still there.
 fn exe_exists(p: &str) -> bool {
@@ -134,7 +145,7 @@ pub fn build(
         });
         // a saved exe outside the game's flavour folder (e.g. WoW retail's
         // `_retail_` vs Forever's `_forever_\Wow.exe`) belongs to another entry
-        let exe = set(EXE_KEY, &g.id).filter(|p| hint_ok(&g.path_hints, p));
+        let exe = set(EXE_KEY, &g.id).filter(|p| owns_exe(sigs, g, p));
         let (installed, source, path) = if let Some(a) = app {
             (true, "steam", Some(a.dir.clone()))
         } else if let Some(l) = lib {
@@ -500,10 +511,27 @@ mod tests {
     }
 
     #[test]
+    fn forever_wow_exe_is_forevers_not_retails() {
+        let sigs = SignatureDb::builtin();
+        let (wow, fe) = (sigs.get("wow").unwrap(), sigs.get("wow_forever").unwrap());
+        let root = r"E:\Battle.net Games\World of Warcraft";
+        let forever = format!(r"{root}\_forever_\Wow.exe");
+        let retail = format!(r"{root}\_retail_\Wow.exe");
+        assert!(owns_exe(&sigs, fe, &forever) && !owns_exe(&sigs, wow, &forever));
+        assert!(owns_exe(&sigs, wow, &retail) && !owns_exe(&sigs, fe, &retail));
+        // the retired beta's WowB.exe is no longer Forever's
+        assert!(!owns_exe(
+            &sigs,
+            fe,
+            &format!(r"{root}\_classic_beta_\WowB.exe")
+        ));
+    }
+
+    #[test]
     fn uninstalled_seen_exe_is_not_installed() {
         let tmp = std::env::temp_dir().join(format!("fl-seen-{}", std::process::id()));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let exe = tmp.join("WowB.exe");
+        std::fs::create_dir_all(tmp.join("_forever_")).unwrap();
+        let exe = tmp.join("_forever_").join("Wow.exe");
         std::fs::write(&exe, b"x").unwrap();
         let row = GameRow {
             id: "wow_forever".into(),

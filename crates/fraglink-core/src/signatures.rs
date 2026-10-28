@@ -141,8 +141,11 @@ impl SignatureDb {
 
     /// Match a running process by exe name and (optionally) full path.
     ///
-    /// Rules: entries whose path hint matches win; generic `path_exes` only
-    /// match with a hint; otherwise the first plain `exes` entry wins.
+    /// Rules (as Discord does): a game with path hints only matches when the path contains
+    /// one of them, for its plain `exes` too, so e.g. Wow.exe in an unknown folder is no
+    /// game at all (and offered as "Add it"). Entries whose hint matches win; otherwise the
+    /// first plain `exes` entry of a game without hints. With no path known, a plain exe
+    /// still matches (nothing to check it against); `path_exes` never do.
     pub fn match_process(&self, exe: &str, path: Option<&str>) -> Option<&GameSig> {
         let exe_l = exe.to_lowercase();
         if self.ignore.contains(&exe_l) {
@@ -158,10 +161,12 @@ impl SignatureDb {
         if let Some(&(i, _)) = cands.iter().find(|(i, _)| hint_hit(&self.games[*i])) {
             return Some(&self.games[i]);
         }
-        // 2. first unconditional candidate
+        // 2. first unconditional candidate: hints are required when the path is known
         cands
             .iter()
-            .find(|(_, needs_hint)| !needs_hint)
+            .find(|(i, needs_hint)| {
+                !needs_hint && (path_n.is_none() || self.games[*i].path_hints.is_empty())
+            })
             .map(|&(i, _)| &self.games[i])
     }
 }
@@ -172,6 +177,42 @@ mod tests {
 
     fn db() -> SignatureDb {
         SignatureDb::builtin()
+    }
+
+    /// Like Discord: a game with path hints only counts inside them, plain exes too.
+    #[test]
+    fn path_hints_are_required() {
+        let d = db();
+        let m = |exe: &str, p: Option<&str>| d.match_process(exe, p).map(|g| g.id.clone());
+        for (exe, p, want) in [
+            ("Wow.exe", r"C:\WoW\_retail_\Wow.exe", Some("wow")),
+            ("Wow.exe", r"C:\WoW\_forever_\Wow.exe", Some("wow_forever")),
+            ("Wow.exe", r"C:\WoW\_someday_\Wow.exe", None),
+            ("Wow.exe", r"D:\Wow.exe", None),
+            (
+                "Diablo II.exe",
+                r"C:\Games\Diablo II\Diablo II.exe",
+                Some("diablo2"),
+            ),
+            ("Diablo II.exe", r"C:\Games\D2\Diablo II.exe", None),
+            (
+                "tf_win64.exe",
+                r"C:\Steam\steamapps\common\Team Fortress 2\tf_win64.exe",
+                Some("tf2"),
+            ),
+            ("hl2.exe", r"C:\Elsewhere\hl2.exe", None),
+            // no hints: any folder
+            (
+                "Hearthstone.exe",
+                r"X:\Any\Hearthstone.exe",
+                Some("hearthstone"),
+            ),
+        ] {
+            assert_eq!(m(exe, Some(p)).as_deref(), want, "{p}");
+        }
+        // no path known: a plain exe still matches, a path_exe never does
+        assert_eq!(m("Wow.exe", None).as_deref(), Some("wow"));
+        assert_eq!(m("hl2.exe", None), None);
     }
 
     #[test]

@@ -175,15 +175,38 @@ mod tests {
                 "Wow.exe",
                 r"E:\Battle.net Games\World of Warcraft\_retail_\Wow.exe",
             ),
-            (
-                "WowB.exe",
-                r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe",
-            ),
             ("WowClassic.exe", r"C:\WoW\_classic_era_\WowClassic.exe"),
             ("WowT.exe", r"C:\WoW\_ptr_\WowT.exe"),
         ] {
             assert!(o.match_process(exe, Some(p)).is_none(), "{p}");
         }
+        // the retired Forever beta's program is its own unlisted entry, wherever it runs
+        for p in [
+            r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe",
+            r"E:\Battle.net Games\World of Warcraft\_forever_\WowB-64.exe",
+        ] {
+            let exe = p.rsplit('\\').next().unwrap();
+            assert_eq!(id(exe, p), Some(("exe:wowb.exe".into(), None)), "{p}");
+        }
+    }
+
+    /// The Admin > Detection path rule the server sends (`_forever_/wow.exe`): checked
+    /// before the signatures, so it fixes Forever on apps that predate the games.json fix.
+    #[test]
+    fn server_path_rule_claims_forever_wow_exe() {
+        let o = Overrides::from_json(
+            r#"{"schema":1,"version":"t","rules":[{"id":"wow_forever","name":"World of Warcraft: Forever","exes":["_forever_/wow.exe"]}]}"#,
+        )
+        .unwrap();
+        let root = r"E:\Battle.net Games\World of Warcraft";
+        let hit = |exe: &str, dir: &str| {
+            o.match_process(exe, Some(&format!(r"{root}\{dir}\{exe}")))
+                .map(|r| r.id.clone())
+        };
+        assert_eq!(hit("Wow.exe", "_forever_").as_deref(), Some("wow_forever"));
+        assert_eq!(hit("WOW.EXE", "_forever_").as_deref(), Some("wow_forever"));
+        assert_eq!(hit("Wow.exe", "_retail_"), None);
+        assert_eq!(hit("Wow-64.exe", "_forever_"), None);
     }
 
     #[test]

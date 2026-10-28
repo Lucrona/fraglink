@@ -29,18 +29,40 @@
       return;
     }
     if (/^track:/.test(p.kind || '')) return ask(p, icon);
+    if (/^update:/.test(p.kind || '')) return update(p);
     const friend = /^(friend|request):/.test(p.kind || '');
     // icon (game, or a letter avatar for a friend with no game), bold name, one line, then a dim line (realm / @username)
     // playing: the game icon with the friend's picture in its corner; otherwise the picture
-    const lead = !friend ? `<i class="gi">${icon}</i>` : p.game_id ? `<i class="gi lead-g">${icon}${avatar(p, 'mini')}</i>` : avatar(p);
+    // 0.3.0-beta.9 (option J): Steam 2024 layout. Friend's picture + a thin status bar
+    // (Fraglink blue in game, light blue online / request); the game icon rides in its corner.
     const req = /^request:/.test(p.kind || '');
+    const st = req ? 'st-req' : p.game_id ? 'st-game' : 'st-on';
+    const lead = !friend ? `<i class="gi">${icon}</i>` : `<span class="jl">${avatar(p)}${p.game_id && p.icon ? `<i class="jg">${icon}</i>` : ''}<i class="jb ${st}"></i></span>`;
     const sub = req ? p.game : (SHOW_REALM ? p.detail || '' : '');
     // Steam-style: bold name / action ("is now playing", "played 1h 33m of") / game name
     // on its own accent line (wraps to 2 lines, then …)
     body.innerHTML = `${lead}<div class="tx"><b>${esc(p.title)}</b><span class="ln">${esc(p.line)}</span>` +
-      `${!req && p.game ? `<span class="g">${esc(p.game)}</span>` : ''}${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+      `${!req && p.game ? `<span class="g">${esc(p.game)}</span>` : ''}${req ? '<span class="jq"><button type="button" class="ok" data-acc="1">Accept</button><button type="button" data-acc="0">Ignore</button></span>' : sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+    // beta.9: Accept / Ignore right on the request toast (the rest of the toast still opens the app)
+    body.querySelectorAll('button[data-acc]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!T) return close();
+      b.parentNode.querySelectorAll('button').forEach(x => { x.disabled = true; });
+      T.core.invoke('friend_respond', { handle: p.kind.slice(8), accept: b.dataset.acc === '1' }).catch(() => {}).finally(close);
+    }));
     el.hidden = false; el.classList.remove('out');
     clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 6000);
+  }
+  // beta.9: "Update ready" (green bar and arrow, like the tray). Later just dismisses.
+  const ARROW = '<svg viewBox="0 0 20 20"><rect width="20" height="20" rx="3" fill="#1f8a3c"/><path d="M10 4v8M6 9l4 4 4-4M5 15.5h10" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
+  function update(p) {
+    body.innerHTML = `<span class="jl"><i class="gi ju">${ARROW}</i><i class="jb st-up"></i></span><div class="tx"><b>${esc(p.title)}</b><span class="ln">${esc(p.game)} ${esc(p.line)}</span><span class="jq"><button type="button" class="ok up" data-up="1">Restart now</button><button type="button" data-up="0">Later</button></span></div>`;
+    body.querySelectorAll('button[data-up]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (b.dataset.up === '1' && T) { b.disabled = true; T.core.invoke('install_update').catch(close); } else close();
+    }));
+    el.hidden = false; el.classList.remove('out');
+    clearTimeout(timer); timer = setTimeout(() => { el.classList.add('out'); setTimeout(close, 300); }, 30000);
   }
   // beta.5, Discord-style: "Playing <name>?" with Add it! (and a quiet Not a game).
   // The close button only hides it; the question also waits in the main window.
@@ -63,6 +85,7 @@
       show(({ played: { kind: 'friend:you', title: 'You', line: 'played 1h 33m of', game_id: 'wow', game: 'World of Warcraft: Forever - Beta', icon: q.get('icon') || '' },
         long: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'x', game: 'The Elder Scrolls V: Skyrim Special Edition Anniversary Upgrade Bundle Deluxe', icon: '' },
         online: { kind: 'friend:nova', title: 'Nova', line: 'logged on', game_id: '', game: '', avatar_color: 3 },
+        update: { kind: 'update:0.3.0-beta.9', title: 'Update ready', line: 'is ready to install', game: 'v0.3.0-beta.9' },
         request: { kind: 'request:riftwalker', title: 'Riftwalker', line: 'wants to be your friend', game_id: '', game: '@riftwalker', avatar_preset: 3, avatar_color: 2 },
         playing: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'wow', game: 'World of Warcraft', detail: 'Frostmourne', avatar_color: 0, avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#b0632a"/><circle cx="32" cy="25" r="12" fill="#f1d9c0"/><path d="M10 64c2-15 12-22 22-22s20 7 22 22z" fill="#2b2f3a"/></svg>'), icon: q.get('icon') || '' } })[t]); return; }
     try {

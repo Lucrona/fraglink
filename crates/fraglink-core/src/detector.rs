@@ -732,9 +732,24 @@ mod tests {
                 "wow_classic",
                 "World of Warcraft Classic",
             ),
+            // the Forever beta's WowB.exe is never Forever (retired; Blizzard may reuse it)
             (
                 "_classic_beta_",
                 "WowB.exe",
+                "exe:wowb.exe",
+                "Unlisted game",
+            ),
+            ("_forever_", "WowB.exe", "exe:wowb.exe", "Unlisted game"),
+            // Forever's real client: retail's exe name in its own folder
+            (
+                "_forever_",
+                "Wow.exe",
+                "wow_forever",
+                "World of Warcraft: Forever",
+            ),
+            (
+                "_forever_",
+                "Wow-64.exe",
                 "wow_forever",
                 "World of Warcraft: Forever",
             ),
@@ -778,14 +793,29 @@ mod tests {
                 ),
                 p(
                     2,
-                    "WowB.exe",
-                    Some(r"E:\Battle.net Games\World of Warcraft\_classic_beta_\WowB.exe"),
+                    "Wow.exe",
+                    Some(r"E:\Battle.net Games\World of Warcraft\_forever_\Wow.exe"),
                 ),
             ],
             None,
         );
         assert_eq!(
             both.iter().map(|d| d.game_id.as_str()).collect::<Vec<_>>(),
+            vec!["wow", "wow_forever"]
+        );
+        // retail and Forever both run as Wow.exe: still two games
+        let same_exe = d.detect(
+            &[
+                p(1, "Wow.exe", Some(&format!(r"{wow}\_retail_\Wow.exe"))),
+                p(2, "Wow.exe", Some(&format!(r"{wow}\_forever_\Wow.exe"))),
+            ],
+            None,
+        );
+        assert_eq!(
+            same_exe
+                .iter()
+                .map(|d| d.game_id.as_str())
+                .collect::<Vec<_>>(),
             vec!["wow", "wow_forever"]
         );
     }

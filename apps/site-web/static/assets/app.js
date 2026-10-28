@@ -12,6 +12,35 @@ const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const token = () => localStorage.getItem(TK);
+// Wowhead tooltips: hover-capable devices only; script loaded the first time a wowhead.com link is on the page.
+const WH = (() => {
+  const ok = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  let st = 0; // 0 none, 1 loading, 2 ready
+  const seen = new WeakSet();
+  const has = () => { let n = false; document.querySelectorAll('a[href^="https://www.wowhead.com/"],a[href^="https://wowhead.com/"]').forEach(a => { if (!seen.has(a)) { seen.add(a); n = true; } }); return n; };
+  const refresh = () => { try { window.$WowheadPower && window.$WowheadPower.refreshLinks(); } catch (e) {} };
+  const scan = () => {
+    if (!ok || !has()) return;
+    if (st === 2) return refresh();
+    if (st) return; st = 1;
+    window.whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false };
+    const s = document.createElement("script"); s.src = "https://wow.zamimg.com/js/tooltips.js"; s.async = true;
+    s.onload = () => { st = 2; refresh(); }; s.onerror = () => { st = 0; };
+    document.head.appendChild(s);
+  };
+  let t = 0; const later = () => { clearTimeout(t); t = setTimeout(scan, 300); };
+  const mine = n => n.nodeType !== 1 || !!(n.closest && n.closest(".wowhead-tooltip,[class^=wowhead]"));
+  if (ok) addEventListener("load", () => { later(); new MutationObserver(ms => { if (ms.some(m => [...m.addedNodes].some(n => !mine(n)))) later(); }).observe(document.body, { childList: true, subtree: true }); });
+  // Keep the tooltip beside the cursor (Wowhead places it once per link); flip left/up near viewport edges.
+  let mx = 0, my = 0, raf = 0;
+  const place = () => { raf = 0; const t = document.querySelector(".wowhead-tooltip"); if (!t || t.offsetParent === null && getComputedStyle(t).position !== "fixed") return;
+    const w = t.offsetWidth, h = t.offsetHeight, vw = document.documentElement.clientWidth, vh = innerHeight, g = 16;
+    let x = mx + g, y = my + g; if (x + w > vw - 4) x = Math.max(4, mx - g - w); if (y + h > vh - 4) y = Math.max(4, my - g - h);
+    const fx = getComputedStyle(t).position === "fixed"; t.style.left = (x + (fx ? 0 : scrollX)) + "px"; t.style.top = (y + (fx ? 0 : scrollY)) + "px"; };
+  if (ok) document.addEventListener("mousemove", e => { if (!e.target.closest || !e.target.closest('a[href*="wowhead.com/"]')) return; mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(place); }, true);
+  if (ok) addEventListener("load", () => new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(place); }).observe(document.body, { childList: true }));
+  return { ok, scan };
+})();
 const me = () => { try { return JSON.parse(localStorage.getItem(UK)); } catch (e) { return null; } };
 function setSession(t, u) { localStorage.setItem(TK, t); localStorage.setItem(UK, JSON.stringify(u)); }
 function clearSession() { localStorage.removeItem(TK); localStorage.removeItem(UK); }
@@ -393,7 +422,332 @@ function startFriendsLive() {
 }
 
 /* ---------- pages ---------- */
+/* provider logos (Simple Icons paths): profile badges and the Battle.net verify page */
+const BRAND = { steam: ["Steam", "#66c0f4", "M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"], bnet: ["Battle.net", "#148eff", "M18.94 8.296C15.9 6.892 11.534 6 7.426 6.332c.206-1.36.714-2.308 1.548-2.508 1.148-.275 2.4.48 3.594 1.854.782.102 1.71.28 2.355.429C12.747 2.013 9.828-.282 7.607.565c-1.688.644-2.553 2.97-2.448 6.094-2.2.468-3.915 1.3-5.013 2.495-.056.065-.181.227-.137.305.034.058.146-.008.194-.04 1.274-.89 2.904-1.373 5.027-1.676.303 3.333 1.713 7.56 4.055 10.952-1.28.502-2.356.536-2.946-.087-.812-.856-.784-2.318-.19-4.04a26.764 26.764 0 0 1-.807-2.254c-2.459 3.934-2.986 7.61-1.143 9.11 1.402 1.14 3.847.725 6.502-.926 1.505 1.672 3.083 2.74 4.667 3.094.084.015.287.043.332-.034.034-.06-.08-.124-.131-.149-1.408-.657-2.64-1.828-3.964-3.515 2.735-1.929 5.691-5.263 7.457-8.988 1.076.86 1.64 1.773 1.398 2.595-.336 1.131-1.615 1.84-3.403 2.185a27.697 27.697 0 0 1-1.548 1.826c4.634.16 8.08-1.22 8.458-3.565.286-1.786-1.295-3.696-4.053-5.17.696-2.139.832-4.04.346-5.588-.029-.08-.106-.27-.196-.27-.068 0-.067.13-.063.187.135 1.547-.263 3.2-1.062 5.19zm-8.533 9.869c-1.96-3.145-3.09-6.849-3.082-10.594 3.702-.124 7.474.748 10.714 2.627-1.743 3.269-4.385 6.1-7.633 7.966h.001z"], discord: ["Discord", "#5865f2", "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"] };
 const pages = {};
+
+/* ---------- /changelog: All / App / Website tabs, 8 entries a page ---------- */
+pages.changelog = () => {
+  const PER = 8, secs = $$(".changelog section[data-k]"), tabs = $$(".cl-tabs button"), pager = $(".cl-pager");
+  if (!pager) return;
+  let f = "All", p = 1;
+  const render = () => {
+    const shown = secs.filter(s => { s.hidden = true; return f === "All" || s.dataset.k === f; });
+    const n = Math.ceil(shown.length / PER); if (p > n) p = n || 1;
+    shown.slice((p - 1) * PER, p * PER).forEach(s => { s.hidden = false; });
+    pager.innerHTML = "";
+    if (n > 1) for (let i = 1; i <= n; i++) {
+      const a = document.createElement("a"); a.href = "#"; a.textContent = i;
+      if (i === p) { a.className = "on"; a.setAttribute("aria-current", "page"); }
+      a.addEventListener("click", e => { e.preventDefault(); p = i; render(); $(".changelog").scrollIntoView({ block: "start" }); });
+      pager.appendChild(a);
+    }
+  };
+  tabs.forEach(b => b.addEventListener("click", () => { f = b.dataset.f; p = 1; tabs.forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); }); render(); }));
+  render();
+};
+
+/* ---------- /connect/wow: upload FraglinkPlayed.lua by hand, same checks as the app ---------- */
+pages.wowupload = async () => {
+  const el = $("#wu");
+  if (!token()) { location.href = "/login?next=" + encodeURIComponent(location.pathname); return; }
+  const b = BRAND.bnet, logo = `<svg viewBox="0 0 24 24" width="34" height="34" fill="${b[1]}" aria-hidden="true"><path d="${b[2]}"/></svg>`;
+  const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
+  const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
+  el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
+    <p class="sub">Upload once to bring in your past WoW playtime. Hours Fraglink tracks after that add on top. Uploading again is optional: it catches up time played while Fraglink was closed, the higher total is always kept, and time tracked in menus and loading screens (which /played leaves out) stays. Each character counts once, even after a rename or realm transfer.</p></div></div>
+    <form class="wu-form" data-form>
+      <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label class="sub" title="Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app."><input type="radio" name="game" value="wow_forever" disabled> World of Warcraft: Forever</label></div>
+      <p class="sub">Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app.</p>
+      <div class="alert info"><b>Before you upload: log in to every character.</b> The addon only saves a character's /played when you log in to it (then log out or <code>/reload</code>). Characters you skip keep the hours from their last upload, and Fraglink always keeps your higher total, so a partial upload never lowers your hours.</div>
+      <label class="check wu-row"><input type="checkbox" name="all" required> I've logged in to each of my characters with the addon on since my last upload</label>
+      <div class="wu-row"><span class="wu-l">File</span><input type="file" name="f" accept=".lua" required> <button class="btn blue" type="submit">Upload and check</button></div>
+      <details class="wu-help"><summary>Where is FraglinkPlayed.lua?</summary>
+        <p>Log out of WoW (or type <code>/reload</code>) first so the game saves it, then open:</p>
+        <p><code>World of Warcraft\\_retail_\\WTF\\Account\\&lt;ACCOUNT&gt;\\SavedVariables\\FraglinkPlayed.lua</code></p>
+        <p class="sub">If you have several WoW accounts there (WoW1, WoW2, or a family member's), upload each account's file. Characters from a Battle.net account other than the one you linked are refused.</p></details>
+    </form>
+    <ol class="bv-steps" data-steps hidden>${STEPS.map(([k, t]) => `<li data-s="${k}"><span class="bv-ic"></span><b>${t}</b><small></small></li>`).join("")}</ol>
+    <div data-res></div>`;
+  const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
+  const res = $("[data-res]", el), form = $("[data-form]", el), steps = $("[data-steps]", el);
+  const R = { wow_checksum: "Edited after the game saved it", wow_battletag: "From a different Battle.net account", wow_old_addon: "Addon too old, update it",
+    wow_decrease: "/played went down", wow_impossible: "/played grew faster than real time", wow_clock: "Saved with a wrong clock" };
+  let rows = [], sortBy = "played", dir = -1, showAll = false, totals = null;
+  const CAP = 25;
+  const STATUS = { v: [0, "vbadge", "✓ Verified via Battle.net"], s: [1, "srbadge", "◆ Not verified, not counted"], r: [2, "badbadge", "✕ Rejected"] };
+  const draw = () => {
+    if (!totals) return;
+    const key = { name: r => r.name.toLowerCase(), realm: r => r.realm.toLowerCase(), level: r => r.level || 0, played: r => r.played_min, status: r => STATUS[r.st][0] }[sortBy];
+    const list = rows.slice().sort((a, c) => { const x = key(a), y = key(c); return (x < y ? -1 : x > y ? 1 : 0) * dir || c.played_min - a.played_min; });
+    const shown = showAll ? list : list.slice(0, CAP);
+    const th = (k, t) => `<th><button type="button" data-sort="${k}" class="wu-sort${sortBy === k ? " on" : ""}">${t}${sortBy === k ? (dir < 0 ? " ▾" : " ▴") : ""}</button></th>`;
+    const cls = c => c ? c.charAt(0) + c.slice(1).toLowerCase().replace(/knight$/, " Knight").replace(/hunter$/, " Hunter") : "";
+    res.innerHTML = `<h3>Results</h3>
+      <div class="wu-tot"><div><b>${hours(totals.verified, { zero: true })}</b><small>Counted: verified via Battle.net</small></div>${totals.unverified ? `<div class="wu-nc"><b>${hours(totals.unverified)}</b><small>Not counted until verified</small></div>` : ""}</div>
+      ${rows.length ? `<div class="wu-scroll"><table class="wu-t"><thead><tr>${th("name", "Character")}${th("realm", "Realm")}${th("level", "Class / level")}${th("played", "Hours played")}${th("status", "Status")}</tr></thead><tbody>
+      ${shown.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.realm)} <span class="sub">${esc(r.region.toUpperCase())}${r.game_id === "wow_forever" ? " · Forever" : ""}</span></td>
+        <td>${esc([cls(r.class), r.level ? "level " + r.level : ""].filter(Boolean).join(" · ")) || `<span class="sub">–</span>`}</td>
+        <td class="num">${hours(r.played_min)}${r.chg ? `<br><small class="sub">${esc(r.chg)}</small>` : ""}</td><td><span class="${STATUS[r.st][1]}">${STATUS[r.st][2]}</span>${r.why ? `<br><small class="sub">${esc(r.why)}</small>` : r.st === "s" ? `<br><small class="sub"><a href="/connect/battlenet/verify">Verify WoW characters</a></small>` : ""}</td></tr>`).join("")}</tbody></table></div>
+      ${list.length > CAP ? `<p><button class="btn sm" type="button" data-more>${showAll ? "Show fewer" : `Show all ${plural(list.length, "character")}`}</button></p>` : ""}` : `<p class="sub">No characters uploaded yet.</p>`}
+      <p class="sub">Only characters Battle.net confirms are on your account count toward your hours. Unverified ones are kept and start counting once they verify: Battle.net has to list the character on your linked account, and the file has to be saved under that account's BattleTag.</p>
+      <p><a class="btn" href="/connect/battlenet/verify">🔒 Verify WoW characters</a> <a class="btn" href="/connect/battlenet">Back to Battle.net</a></p>`;
+  };
+  res.addEventListener("click", e => {
+    const s = e.target.closest("[data-sort]");
+    if (s) { const k = s.dataset.sort; dir = sortBy === k ? -dir : (k === "played" || k === "level" ? -1 : 1); sortBy = k; draw(); return; }
+    if (e.target.closest("[data-more]")) { showAll = !showAll; draw(); }
+  });
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = form.f.files[0]; if (!f) return;
+    const btn = $("button[type=submit]", form); btn.disabled = true;
+    steps.hidden = false; res.innerHTML = ""; STEPS.forEach(([k]) => step(k, "", ""));
+    const fail = (k, x) => { step(k, "bad", x.message || String(x)); btn.disabled = false; };
+    step("read", "run");
+    if (f.size > 1024 * 1024) return fail("read", new Error("That file is over 1 MB. Pick FraglinkPlayed.lua from SavedVariables."));
+    let text;
+    try { text = await f.text(); } catch (x) { return fail("read", new Error("Couldn't read that file.")); }
+    if (!/FraglinkPlayedDB/.test(text)) return fail("read", new Error("That isn't a FraglinkPlayed.lua file."));
+    step("read", "ok", `${f.name} · ${nf.format(Math.ceil(f.size / 1024))} KB`);
+    step("send", "run");
+    let u;
+    try { u = await api("/hours/wow_played/file", { method: "POST", body: { game_id: form.game.value, text } }); }
+    catch (x) { return fail(x.code === "no_characters" || x.code === "too_big" ? "read" : "send", x); }
+    step("send", "ok", "Received");
+    const rej = u.rejected.length, unch = u.unchanged.length;
+    const gained = (u.changes || []).reduce((a, c) => a + (c.delta_s || 0), 0);
+    step("check", rej ? "warn" : "ok", [plural(u.found, "character") + " in the file", u.accepted ? `${nf.format(u.accepted)} updated` : "", gained > 0 ? `+${(gained / 3600).toFixed(1)} hours since last upload` : u.accepted && u.changes && u.changes.length && !u.changes.some(c => c.first) ? "no new hours since last upload" : "", unch ? `${nf.format(unch)} already up to date` : "", rej ? `${nf.format(rej)} rejected` : ""].filter(Boolean).join(" · "));
+    step("match", "run");
+    let m;
+    try { m = await api("/me/wow"); } catch (x) { return fail("match", x); }
+    const game = form.game.value, mine = m.characters.filter(c => c.game_id === game);
+    const nv = mine.filter(c => c.verified).length;
+    step("match", m.bnet === "linked" ? "ok" : "warn", m.bnet === "none" ? "Battle.net isn't linked, so these aren't counted yet" : m.bnet === "reconnect" ? "Reconnect Battle.net to verify characters" : `${nf.format(nv)} of ${plural(mine.length, "character")} verified`);
+    const ck = c => [c.region, c.realm, c.name].join("|").toLowerCase();
+    const chg = new Map((u.changes || []).map(c => [ck(c), c.first ? "First upload" : c.delta_s > 0 ? `+${(c.delta_s / 3600).toFixed(1)} hours since last upload` : "No change since last upload"]));
+    rows = mine.map(c => ({ ...c, st: c.verified ? "v" : "s", chg: chg.get(ck(c)) }))
+      .concat(u.rejected.map(r => ({ ...r, game_id: game, st: "r", why: R[r.reason] || r.detail })));
+    totals = { verified: mine.filter(c => c.verified).reduce((a, c) => a + c.played_min, 0), unverified: mine.filter(c => !c.verified).reduce((a, c) => a + c.played_min, 0) };
+    showAll = false; draw();
+    btn.disabled = false; form.reset(); form.game.value = game;
+  });
+};
+
+/* ---------- /connect/battlenet/verify: the real verification steps, shown as they run ---------- */
+/* ---------- WoW icons (Blizzard render CDN through /api/v1/wow/icons, cached by the server) ---------- */
+const WOW = (() => {
+  const S = { WARRIOR: [["Arms", "ability_warrior_savageblow"], ["Fury", "ability_warrior_innerrage"], ["Protection", "ability_warrior_defensivestance"]],
+    PALADIN: [["Holy", "spell_holy_holybolt"], ["Protection", "ability_paladin_shieldofthetemplar"], ["Retribution", "spell_holy_auraoflight"]],
+    HUNTER: [["Beast Mastery", "ability_hunter_bestialdiscipline"], ["Marksmanship", "ability_hunter_focusedaim"], ["Survival", "ability_hunter_camouflage"]],
+    ROGUE: [["Assassination", "ability_rogue_deadlybrew"], ["Outlaw", "ability_rogue_waylay"], ["Subtlety", "ability_stealth"]],
+    PRIEST: [["Discipline", "spell_holy_powerwordshield"], ["Holy", "spell_holy_guardianspirit"], ["Shadow", "spell_shadow_shadowwordpain"]],
+    DEATHKNIGHT: [["Blood", "spell_deathknight_bloodpresence"], ["Frost", "spell_deathknight_frostpresence"], ["Unholy", "spell_deathknight_unholypresence"]],
+    SHAMAN: [["Elemental", "spell_nature_lightning"], ["Enhancement", "spell_shaman_improvedstormstrike"], ["Restoration", "spell_nature_magicimmunity"]],
+    MAGE: [["Arcane", "spell_holy_magicalsentry"], ["Fire", "spell_fire_firebolt02"], ["Frost", "spell_frost_frostbolt02"]],
+    WARLOCK: [["Affliction", "spell_shadow_deathcoil"], ["Demonology", "spell_shadow_metamorphosis"], ["Destruction", "spell_shadow_rainoffire"]],
+    MONK: [["Brewmaster", "spell_monk_brewmaster_spec"], ["Mistweaver", "spell_monk_mistweaver_spec"], ["Windwalker", "spell_monk_windwalker_spec"]],
+    DRUID: [["Balance", "spell_nature_starfall"], ["Feral", "ability_druid_catform"], ["Guardian", "ability_racial_bearform"], ["Restoration", "spell_nature_healingtouch"]],
+    DEMONHUNTER: [["Havoc", "ability_demonhunter_specdps"], ["Vengeance", "ability_demonhunter_spectank"], ["Devourer", "classicon_demonhunter"]],
+    EVOKER: [["Devastation", "classicon_evoker_devastation"], ["Preservation", "classicon_evoker_preservation"], ["Augmentation", "classicon_evoker_augmentation"]] };
+  const NAMES = { DEATHKNIGHT: "Death Knight", DEMONHUNTER: "Demon Hunter" };
+  const RACE = { "Human": "c:human", "Dwarf": "c:dwarf", "Night Elf": "c:nightelf", "Gnome": "c:gnome", "Draenei": "c:draenei", "Pandaren": "c:pandaren",
+    "Orc": "c:orc", "Undead": "c:undead", "Tauren": "c:tauren", "Troll": "c:troll", "Blood Elf": "c:bloodelf", "Goblin": "r:goblin", "Worgen": "r:worgen",
+    "Void Elf": "a:voidelf", "Lightforged Draenei": "a:lightforgeddraenei", "Dark Iron Dwarf": "a:darkirondwarf", "Mechagnome": "a:mechagnome",
+    "Nightborne": "a:nightborne", "Highmountain Tauren": "a:highmountaintauren", "Mag'har Orc": "a:magharorc", "Zandalari Troll": "a:zandalaritroll",
+    "Vulpera": "a:vulpera", "Kul Tiran": "x:ability_racial_childofthesea", "Dracthyr": "x:ability_racial_wingbuffet" };
+  const url = n => `/api/v1/wow/icons/${n}.jpg`;
+  const key = c => String(c || "").toUpperCase().replace(/[^A-Z]/g, "");
+  return {
+    url, specs: c => S[key(c)] || [],
+    cls: c => NAMES[key(c)] || (c ? key(c).charAt(0) + key(c).slice(1).toLowerCase() : ""),
+    clsIcon: c => key(c) ? url("classicon_" + key(c).toLowerCase()) : "",
+    specIcon: (c, s) => { const x = (S[key(c)] || []).find(p => p[0] === s); return x ? url(x[1]) : ""; },
+    raceIcon: (race, gender, c) => {
+      const g = gender === "female" ? "female" : "male", r = race === "Pandaren" && g === "male" ? "x:pandarenracial_quiveringpain" : RACE[race];
+      if (!r) return key(c) ? url("classicon_" + key(c).toLowerCase()) : "";
+      const [t, n] = r.split(":");
+      return url(t === "c" ? `achievement_character_${n}_${g}` : t === "r" ? `race_${n}_${g}` : t === "a" ? `achievement_alliedrace_${n}` : n);
+    },
+  };
+})();
+const imgOk = "onerror=\"this.style.visibility='hidden'\"";
+
+/* ---------- /connect/battlenet: the Battle.net account, verified WoW characters, spec picks, hide toggles ---------- */
+pages.bnet = async () => {
+  const el = $("#bn");
+  if (!token()) { location.href = "/login?next=" + encodeURIComponent(location.pathname); return; }
+  const b = BRAND.bnet, logo = s => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="${b[1]}" aria-hidden="true"><path d="${b[2]}"/></svg>`;
+  let s;
+  try { s = await api("/me/bnet"); } catch (x) { el.innerHTML = `<p class="empty" style="padding:30px 0">${esc(x.message)}</p>`; return; }
+  const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? "just now" : m < 60 ? plural(m, "minute") + " ago" : m < 1440 ? plural(Math.round(m / 60), "hour") + " ago" : plural(Math.round(m / 1440), "day") + " ago"; };
+  const head = s.linked
+    ? `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">${esc(s.battletag)} ${s.needs_reconnect ? `<span class="srbadge">Reconnect to verify</span>` : `<span class="vbadge">✓ Verified</span>`}</div>
+        <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") + (s.regions.length === 1 ? " region" : " regions") : "", s.last_verified ? "last verified " + ago(s.last_verified) : "not verified yet"].filter(Boolean).join(" · ")}</div></div>
+        <div class="bn-acts"><a class="btn blue" href="/connect/battlenet/verify">🔒 Verify WoW characters</a><a class="btn" href="/connect/wow">Upload /played</a><button class="btn bn-unlink" type="button" data-unlink>Unlink</button></div></div>
+       <p class="sub bn-note">Verify asks Battle.net which characters are on your account. Upload /played once to bring in past hours; hours Fraglink tracks after that add on top.</p>`
+    : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify your WoW characters. Only verified characters count toward your hours.${s.unverified ? ` You have ${plural(s.unverified, "uploaded character")} waiting.` : ""}</div></div>
+        <div class="bn-acts"><button class="btn blue" type="button" data-link>Link Battle.net</button><a class="btn" href="/connect/wow">Upload /played</a></div></div>`;
+  el.innerHTML = `<section class="panel bn-box"><h2>Battle.net</h2><div data-msg></div>${head}</section>
+    ${s.linked ? `<section class="panel bn-box" data-feat><h2>Featured on profile</h2><p class="sub" style="padding:0 14px">Pick up to 3 characters to show first on your profile, in this order. Leave empty to show your most played. Hidden characters can't be featured.</p><div data-fbox><p class="empty" style="padding:12px">Loading…</p></div></section>` : ""}
+    <section class="panel bn-box"><h2><span data-ttl>Verified characters</span><label class="bn-sw bn-hd"><span>Hide all from profile</span><input type="checkbox" data-hideall ${s.hide_all ? "checked" : ""}><i class="bn-tg"></i></label></h2>
+      <div class="bn-tools"><input type="search" data-q placeholder="Search name or realm" aria-label="Search name or realm" maxlength="64">
+        <select data-sort aria-label="Sort"><option value="hours">Sort: Hours played</option><option value="level">Sort: Level</option><option value="name">Sort: Name</option><option value="realm">Sort: Realm</option></select>
+        <select data-class aria-label="Class"><option value="">All classes</option></select>
+        <select data-vis aria-label="Shown or hidden"><option value="">Shown + hidden</option><option value="shown">Shown only</option><option value="hidden">Hidden only</option></select></div>
+      <div data-list><p class="empty" style="padding:20px 12px">Loading…</p></div>
+      <div class="bn-more"><span class="sub" data-cnt></span><button class="btn" type="button" data-more hidden>Show 25 more</button></div></section>
+    <p class="sub">Only characters Battle.net confirms are listed and counted.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} ${s.unverified === 1 ? "isn't" : "aren't"} verified yet, so ${s.unverified === 1 ? "it doesn't" : "they don't"} count.` : ""} Hidden characters still count toward your WoW hours total; they're just not shown on your profile.${FEATURES.wow_characters ? "" : " Character details aren't shown on profiles right now; your profile shows only your WoW hours."}</p>`;
+  const msgBox = $("[data-msg]", el), list = $("[data-list]", el), more = $("[data-more]", el), cnt = $("[data-cnt]", el);
+  const st = { q: "", sort: "hours", class: "", vis: "", items: [], data: null, seq: 0 };
+  const row = c => {
+    const hid = c.hidden, specs = WOW.specs(c.class);
+    return `<div class="bn-ch${hid ? " hid" : ""}" data-id="${c.id}"><div class="bn-port"><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" title="${esc(c.race || "")}" loading="lazy" ${imgOk}>${c.class ? `<img class="c" src="${WOW.clsIcon(c.class)}" alt="" title="${esc(WOW.cls(c.class))}" loading="lazy" ${imgOk}>` : ""}</div>
+      <div class="bn-who"><div class="bn-nm">${esc(c.name)} <span class="vbadge" title="Battle.net confirmed this character">✓</span></div><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · Level ${c.level}${c.spec || c.class ? " " + esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" ")) : ""}</div></div>
+      <div class="bn-specs" role="group" aria-label="Spec">${specs.map(p => `<button type="button" class="${p[0] === c.spec ? "sel" : ""}" data-spec="${esc(p[0])}" title="${esc(p[0])}${p[0] === c.active_spec ? " (active on Battle.net)" : ""}" aria-pressed="${p[0] === c.spec}"><img src="${WOW.url(p[1])}" alt="${esc(p[0])}" loading="lazy" ${imgOk}></button>`).join("")}</div>
+      <div class="bn-hrs">${hours(c.played_min, { zero: true })}<small>/played</small></div>
+      ${c.game_id === "wow" ? `<label class="bn-sw bn-gsw" title="Show this character's guild on your profile"><span>Guild</span><input type="checkbox" data-guild ${c.show_guild ? "checked" : ""}><i class="bn-tg"></i></label>` : ""}
+      <label class="bn-sw"><span>${hid ? "Hidden" : "Shown"}</span><input type="checkbox" data-hide ${hid ? "" : "checked"} ${st.data && st.data.hide_all ? "disabled title=\"Hide all is on\"" : ""}><i class="bn-tg"></i></label></div>`;
+  };
+  const render = () => {
+    const d = st.data;
+    $("[data-ttl]", el).textContent = `Verified characters (${nf.format(d.total)})`;
+    list.innerHTML = st.items.length ? st.items.map(row).join("")
+      : `<p class="empty" style="padding:20px 12px">${d.total ? "No characters match." : s.linked ? "No verified characters yet. Verify your WoW characters, or upload /played if you haven't." : "Link Battle.net to verify your characters."}</p>`;
+    cnt.textContent = d.total && !d.matched ? `No characters match (${nf.format(d.total)} in all) · ${hours(d.total_min, { zero: true })} total` : d.total ? `Showing ${nf.format(st.items.length)} of ${plural(d.matched, "character")}${d.matched === d.total ? "" : ` (${nf.format(d.total)} in all)`} · ${hours(d.total_min, { zero: true })} total` : "";
+    const left = d.matched - st.items.length;
+    more.hidden = left <= 0; more.textContent = `Show ${nf.format(Math.min(25, left))} more`;
+  };
+  const load = async append => {
+    const seq = ++st.seq, p = new URLSearchParams({ q: st.q, sort: st.sort, class: st.class, vis: st.vis, offset: append ? st.items.length : 0, limit: 25 });
+    let d; try { d = await api("/me/wow/list?" + p); } catch (x) { if (seq === st.seq) showErr(msgBox, x); return; }
+    if (seq !== st.seq) return;
+    if (!st.data) { const cs = $("[data-class]", el); d.classes.slice().sort((a, b) => WOW.cls(a).localeCompare(WOW.cls(b))).forEach(c => cs.insertAdjacentHTML("beforeend", `<option value="${esc(c)}">${esc(WOW.cls(c))}</option>`)); }
+    st.data = d; st.items = append ? st.items.concat(d.items) : d.items; render();
+  };
+  let tq; $("[data-q]", el).oninput = e => { clearTimeout(tq); tq = setTimeout(() => { st.q = e.target.value.trim(); load(false); }, 250); };
+  [["sort", "[data-sort]"], ["class", "[data-class]"], ["vis", "[data-vis]"]].forEach(([k, sel]) => { $(sel, el).onchange = e => { st[k] = e.target.value; load(false); }; });
+  more.onclick = () => load(true);
+  $("[data-hideall]", el).onchange = async e => {
+    const on = e.target.checked; e.target.disabled = true;
+    try { await api("/me/wow/hide_all", { method: "POST", body: { hide_all: on } }); await load(false); }
+    catch (x) { e.target.checked = !on; showErr(msgBox, x); } finally { e.target.disabled = false; }
+  };
+  list.addEventListener("change", async e => {
+    const gb = e.target.closest("[data-guild]");
+    if (gb) { const c = st.items.find(x => x.id === gb.closest(".bn-ch").dataset.id), on = gb.checked; gb.disabled = true;
+      try { await api(`/me/wow/${c.id}/guild`, { method: "POST", body: { show_guild: on } }); c.show_guild = on; }
+      catch (x) { gb.checked = !on; showErr(msgBox, x); } finally { gb.disabled = false; } return; }
+    const cb = e.target.closest("[data-hide]"); if (!cb) return;
+    const r = cb.closest(".bn-ch"), c = st.items.find(x => x.id === r.dataset.id), hidden = !cb.checked; cb.disabled = true;
+    try { await api("/me/wow/" + c.id, { method: "POST", body: { hidden } }); c.hidden = c.own_hidden = hidden;
+      if (hidden) el.dispatchEvent(new CustomEvent("wowhid", { detail: c.id }));
+      if (st.vis) await load(false); else { r.outerHTML = row(c); } }
+    catch (x) { cb.checked = !cb.checked; showErr(msgBox, x); cb.disabled = false; }
+  });
+  list.addEventListener("click", async e => {
+    const bt = e.target.closest("[data-spec]"); if (!bt) return;
+    const r = bt.closest(".bn-ch"), c = st.items.find(x => x.id === r.dataset.id); bt.disabled = true;
+    try { const x = await api(`/me/wow/${c.id}/spec`, { method: "POST", body: { spec: bt.dataset.spec } }); c.spec = x.spec; c.spec_picked = true; r.outerHTML = row(c); }
+    catch (x) { bt.disabled = false; showErr(msgBox, x); }
+  });
+  el.addEventListener("click", async e => {
+    const t = e.target.closest("[data-unlink],[data-link]"); if (!t) return;
+    try {
+      if (t.matches("[data-link]")) { t.disabled = true; const r = await api("/connect/bnet/start", { method: "POST" }); location.href = r.url; return; }
+      if (!confirm("Unlink Battle.net? Your characters stop counting toward your hours until you link it again. Their data is kept.")) return;
+      t.disabled = true; await api("/connect/bnet", { method: "DELETE" }); location.reload();
+    } catch (x) { t.disabled = false; showErr(msgBox, x); }
+  });
+  load(false);
+  // Featured top 3 per WoW version: search picker (fine with 1000+ characters), up/down, remove
+  const fbox = $("[data-fbox]", el);
+  if (fbox) {
+    const FL = [["wow", "World of Warcraft"]]; // Forever: once its /played uploads open
+    let F; try { F = await api("/me/wow/featured"); } catch (x) { fbox.innerHTML = `<p class="empty">${esc(x.message)}</p>`; return; }
+    const lbl = c => `${esc(c.name)} <span class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())} · ${hours(c.played_min, { zero: true })}</span>`;
+    const draw = () => { fbox.innerHTML = FL.map(([g, nm]) => `<div class="bn-feat" data-g="${g}" style="padding:6px 14px 12px"><b>${nm}</b>
+      <ol style="margin:6px 0 6px 20px">${F[g].map((c, i) => `<li data-i="${i}">${lbl(c)} <button class="btn sm" type="button" data-up ${i ? "" : "disabled"} aria-label="Move up">↑</button><button class="btn sm" type="button" data-dn ${i < F[g].length - 1 ? "" : "disabled"} aria-label="Move down">↓</button><button class="btn sm" type="button" data-rm aria-label="Remove">✕</button></li>`).join("") || `<li class="empty" style="list-style:none;margin-left:-20px">None picked: your most played show first.</li>`}</ol>
+      ${F[g].length < 3 ? `<input type="search" data-fq placeholder="Search a character to add #${F[g].length + 1}" aria-label="Search a character to feature" maxlength="64"><div data-fr></div>` : ""}</div>`).join(""); };
+    const save = async (g, next) => {
+      try { await api("/me/wow/featured", { method: "POST", body: { game_id: g, ids: next.map(c => c.id) } }); F[g] = next; draw(); }
+      catch (x) { showErr(msgBox, x); }
+    };
+    draw();
+    el.addEventListener("wowhid", e => { FL.forEach(([g]) => { F[g] = F[g].filter(c => c.id !== e.detail); }); draw(); });
+    let tf;
+    fbox.addEventListener("input", e => {
+      const q = e.target.closest("[data-fq]"); if (!q) return;
+      const box = q.closest("[data-g]"), g = box.dataset.g, out = $("[data-fr]", box);
+      clearTimeout(tf); tf = setTimeout(async () => {
+        if (!q.value.trim()) { out.innerHTML = ""; return; }
+        const p = new URLSearchParams({ q: q.value.trim(), vis: "shown", sort: "hours", limit: 50 });
+        let d; try { d = await api("/me/wow/list?" + p); } catch (x) { showErr(msgBox, x); return; }
+        const have = new Set(F[g].map(c => c.id)), hits = d.items.filter(c => c.game_id === g && !have.has(c.id)).slice(0, 8);
+        out._hits = hits;
+        out.innerHTML = hits.length ? hits.map((c, i) => `<button class="btn sm" type="button" data-add="${i}" style="display:block;margin:4px 0;text-align:left">${lbl(c)}</button>`).join("") : `<p class="sub">No shown characters match.</p>`;
+      }, 250);
+    });
+    fbox.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      const box = b.closest("[data-g]"), g = box.dataset.g, cur = F[g].slice();
+      if (b.matches("[data-add]")) { const c = $("[data-fr]", box)._hits[+b.dataset.add]; return save(g, cur.concat([c]).slice(0, 3)); }
+      const i = +b.closest("li").dataset.i;
+      if (b.matches("[data-rm]")) cur.splice(i, 1);
+      else { const j = b.matches("[data-up]") ? i - 1 : i + 1; [cur[i], cur[j]] = [cur[j], cur[i]]; }
+      save(g, cur);
+    });
+  }
+};
+
+pages.bnetverify = async () => {
+  const el = $("#bv");
+  if (!token()) { location.href = "/login?next=" + encodeURIComponent(location.pathname); return; }
+  const b = BRAND.bnet, logo = `<svg viewBox="0 0 24 24" width="34" height="34" fill="${b[1]}" aria-hidden="true"><path d="${b[2]}"/></svg>`;
+  const STEPS = [["connect", "Connecting to Battle.net"], ["fetch", "Fetching your characters"], ["match", "Matching /played data"], ["sig", "Checking signatures"]];
+  el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Verify WoW characters</h2>
+    <p class="sub">Fraglink asks Battle.net which characters are yours, then checks each one against the signed /played data from the Fraglink addon. Only verified characters count on leaderboards.</p></div></div>
+    <ol class="bv-steps">${STEPS.map(([k, t]) => `<li data-s="${k}"><span class="bv-ic"></span><b>${t}</b><small></small></li>`).join("")}</ol>
+    <div data-res></div><div data-act class="bv-act"></div>`;
+  const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
+  const act = $("[data-act]", el), res = $("[data-res]", el);
+  const fail = (k, x) => { step(k, "bad", x.message || String(x)); act.innerHTML = `<button class="btn blue" type="button" data-again>Try again</button> <a class="btn" href="/connect/battlenet">Back to Battle.net</a>`; };
+  const reconnect = (why) => {
+    step("connect", "bad", why);
+    act.innerHTML = `<button class="btn blue" type="button" data-go>${logo.replace(/34/g, "16")} Connect Battle.net</button><p class="sub">You'll sign in on Battle.net's own page and allow “World of Warcraft profile”. Fraglink never sees your password.</p>`;
+  };
+  act.onclick = async e => {
+    if (e.target.closest("[data-again]")) { location.href = location.pathname; return; }
+    const g = e.target.closest("[data-go]"); if (!g) return; g.disabled = true;
+    try { const r = await api("/connect/bnet/start", { method: "POST" }); location.href = r.url; } catch (x) { g.disabled = false; fail("connect", x); }
+  };
+  // 1. a fresh Battle.net sign-in (with wow.profile) leaves a short-lived token for this
+  step("connect", "run");
+  let f;
+  try { f = await api("/wow/verify/fetch", { method: "POST" }); } catch (x) { return fail("connect", x); }
+  if (f.need_connect) return reconnect(new URLSearchParams(location.search).get("connected") ? "Battle.net didn't grant access to your WoW characters." : "Sign in to Battle.net to start.");
+  history.replaceState(null, "", location.pathname);
+  step("connect", "ok", "Connected");
+  // 2. the character list came back with the fetch call
+  step("fetch", "ok", `${f.characters} character${f.characters === 1 ? "" : "s"} on your account`);
+  // 3. match against the uploaded /played entries
+  step("match", "run");
+  let m;
+  try { m = await api("/wow/verify/match", { method: "POST" }); } catch (x) { return fail("match", x); }
+  step("match", "ok", m.uploaded ? `${m.verified} of ${m.uploaded} uploaded characters matched` : "No /played data yet. Install the Fraglink /played addon from CurseForge (curseforge.com/projects/1766775).");
+  // 4. signatures
+  step("sig", "run");
+  let s;
+  try { s = await api("/wow/verify/signatures"); } catch (x) { return fail("sig", x); }
+  step("sig", s.refused.length ? "warn" : "ok", `${s.signed_ok} signed entr${s.signed_ok === 1 ? "y" : "ies"} valid${s.refused.length ? ` · ${s.refused.length} refused` : ""}`);
+  const me_ = await api("/me/wow");
+  const R = { wow_checksum: "edited after the game wrote it", wow_battletag: "from a different Battle.net account", wow_old_addon: "addon too old" };
+  res.innerHTML = `<h3>Results</h3><ul class="bv-res">${me_.characters.map(c => `<li><span class="${c.verified ? "vbadge" : "srbadge"}">${c.verified ? "✓ Verified" : "◆ Not verified, not counted"}</span>
+      <b>${esc(c.name)}</b> <span class="sub">${esc(c.realm)} · ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · ${Math.floor(c.played_min / 60)}h</span></li>`).join("") || `<li class="sub">No characters uploaded yet.</li>`}
+    ${s.refused.map(r => `<li><span class="badbadge">✕ Refused</span> <b>${esc(r.character)}</b> <span class="sub">${esc(R[r.reason] || r.reason)}</span></li>`).join("")}</ul>
+    <p class="sub">Only characters Battle.net confirms are on your account count toward your hours. A character verifies when Battle.net lists it on the same account as the BattleTag saved by the addon.</p>`;
+  act.innerHTML = `<a class="btn" href="/connect/battlenet">Done</a>`;
+};
 
 pages.home = async () => {
   fillDownload();
@@ -443,7 +797,7 @@ pages.home = async () => {
     actBody = `<div class="day">Right now</div>` + h.now_playing.slice(0, 8).map(n => `<div class="act">${avatar(n.avatar, 22)}<span><a href="${prof(n)}">${nm(n)}</a> is playing ${icon(n.game_id, n.game_name)} ${esc(n.game_name)}</span>${n.since ? `<span class="w">${since(n.since)}</span>` : ""}</div>`).join("");
   }
   const actP = actBody ? panel(u && act && act.items.length ? "Friends' activity" : "Activity report", actBody) : "";
-  const news = panel("News", h.news.length ? h.news.map(n => `<div class="ni"><h4><a href="${esc(n.url)}">${esc(n.title)}</a></h4><div class="d">${fullDate.format(new Date(n.at))}${n.pinned ? " · Pinned" : ""}</div></div>`).join("") : `<div class="in empty">No news yet.</div>`, ` <a class="more" href="/news">More news »</a>`);
+  const news = panel("News", h.news.length ? h.news.map(n => `<div class="ni${n.image ? " has-img" : ""}">${n.image ? `<a class="nimg" href="${esc(n.url)}" tabindex="-1"><img src="${esc(n.image)}" alt="" loading="lazy"></a>` : ""}<div><h4><a href="${esc(n.url)}">${esc(n.title)}</a></h4><div class="d">${fullDate.format(new Date(n.at))}${n.pinned ? " · Pinned" : ""}</div></div></div>`).join("") : `<div class="in empty">No news yet.</div>`, ` <a class="more" href="/news">More news »</a>`);
   $("#f2-mid").innerHTML = tick + trend + actP + news;
   // ---- right column
   const c2 = cs === "c2" ? panel("Community stats", `<table class="t2"><tr><td>Registered players</td><td class="n">${nf.format(s.registered)}</td></tr><tr><td><span class="dot online"></span> Online now</td><td class="n">${nf.format(s.online)}</td></tr><tr><td>Playing a game now</td><td class="n">${nf.format(s.in_game)}</td></tr><tr><td>Hours tracked this week</td><td class="n">${nf.format(Math.round(s.minutes_7d / 60))}</td></tr></table>`) : "";
@@ -725,7 +1079,6 @@ pages.profile = async () => {
   let sub = pres ? `<span class="status"><span class="dot ${esc(st)}"></span>${statusText(pres)}</span>` : "";
   if (p.member_since) sub += (sub ? " · " : "") + `member since ${fullDate.format(new Date(p.member_since))}`;
   if (p.location) sub += " · " + esc(p.location);
-  const BRAND = { steam: ["Steam", "#66c0f4", "M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"], bnet: ["Battle.net", "#148eff", "M18.94 8.296C15.9 6.892 11.534 6 7.426 6.332c.206-1.36.714-2.308 1.548-2.508 1.148-.275 2.4.48 3.594 1.854.782.102 1.71.28 2.355.429C12.747 2.013 9.828-.282 7.607.565c-1.688.644-2.553 2.97-2.448 6.094-2.2.468-3.915 1.3-5.013 2.495-.056.065-.181.227-.137.305.034.058.146-.008.194-.04 1.274-.89 2.904-1.373 5.027-1.676.303 3.333 1.713 7.56 4.055 10.952-1.28.502-2.356.536-2.946-.087-.812-.856-.784-2.318-.19-4.04a26.764 26.764 0 0 1-.807-2.254c-2.459 3.934-2.986 7.61-1.143 9.11 1.402 1.14 3.847.725 6.502-.926 1.505 1.672 3.083 2.74 4.667 3.094.084.015.287.043.332-.034.034-.06-.08-.124-.131-.149-1.408-.657-2.64-1.828-3.964-3.515 2.735-1.929 5.691-5.263 7.457-8.988 1.076.86 1.64 1.773 1.398 2.595-.336 1.131-1.615 1.84-3.403 2.185a27.697 27.697 0 0 1-1.548 1.826c4.634.16 8.08-1.22 8.458-3.565.286-1.786-1.295-3.696-4.053-5.17.696-2.139.832-4.04.346-5.588-.029-.08-.106-.27-.196-.27-.068 0-.067.13-.063.187.135 1.547-.263 3.2-1.062 5.19zm-8.533 9.869c-1.96-3.145-3.09-6.849-3.082-10.594 3.702-.124 7.474.748 10.714 2.627-1.743 3.269-4.385 6.1-7.633 7.966h.001z"], discord: ["Discord", "#5865f2", "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"] };
   const badges = (p.linked || []).filter(l => BRAND[l.provider]).length ? `<div class="lbadges">${p.linked.filter(l => BRAND[l.provider]).map(l => {
     const [nm, col, path] = BRAND[l.provider], tip = esc(nm + (l.display ? ": " + l.display : " (verified)"));
     const inner = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg><i class="vt" aria-hidden="true">✓</i>`;
@@ -773,7 +1126,7 @@ pages.profile = async () => {
   } else if (!p.games || !p.games.length) {
     games = sec("Games", `<div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div>`);
   } else {
-    const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
+    const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" && g.tier !== "imported" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
       <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const many = (p.games_total || p.games.length) > GPAGE;
     games = sec("Games", `
@@ -782,6 +1135,17 @@ pages.profile = async () => {
       <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
       <div data-gpager>${many ? pagerHtml(0, GPAGE, p.games_total) : ""}</div>`);
     gamesRow = row;
+  }
+
+  // WoW characters from the Fraglink addon: the server sends only Battle.net-verified ones
+  let wowc = "";
+  const WC = (p.wow_characters || []).filter(c => !c.hidden); // hidden ones never show here, even to the owner; unhide on /connect/battlenet
+  if (WC && WC.length) {
+    const pop = c => FEATURES.wow_characters && c.game_id === "wow" && !c.hidden;
+    const card = c => `<div class="wc${c.hidden ? " wc-hid" : ""}${pop(c) ? " wc-click" : ""}"${pop(c) ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}><span class="wc-ic">${c.class ? `<img src="${WOW.clsIcon(c.class)}" alt="" title="${esc(WOW.cls(c.class))}" loading="lazy" ${imgOk}>` : ""}${c.spec && WOW.specIcon(c.class, c.spec) ? `<img src="${WOW.specIcon(c.class, c.spec)}" alt="" title="${esc(c.spec)}" loading="lazy" ${imgOk}>` : ""}</span></div>
+      <div class="wc-t"><b>${esc(c.name)}</b><div class="sub">${c.level} ${esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" "))} · ${esc(c.realm)} ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""}</div>${c.show_guild && c.guild ? `<div class="sub wc-g">&lt;${esc(c.guild)}&gt;</div>` : ""}</div></div>`;
+    const WS = [...WC].sort((a, b) => (a.featured || 9) - (b.featured || 9) || (b.played_min || 0) - (a.played_min || 0)), WMAX = 3; // featured picks first, in order
+    wowc = sec("WoW characters", `<div class="wcs">${WS.slice(0, WMAX).map(card).join("")}</div>${WS.length > WMAX ? `<div class="wcs" data-wmore hidden>${WS.slice(WMAX).map(card).join("")}</div><p style="padding:0 14px 10px"><button class="btn sm" type="button" data-wall onclick="this.closest('section,div').parentNode.querySelector('[data-wmore]').hidden=false;this.parentNode.remove()">Show all ${WS.length} characters</button></p>` : ""}${self ? `<p class="sub" style="padding:0 14px 10px">Only you see hidden characters. <a href="/connect/battlenet">Manage on your Battle.net page</a></p>` : ""}`);
   }
 
   // Achievements
@@ -829,7 +1193,8 @@ pages.profile = async () => {
     : self ? sec("Gaming rig", `<div class="body empty">Show off your setup. <a href="/settings#rig">Add your gaming rig</a>.</div>`) : "";
   const discord = sec("Discord server", `<div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div>`);
 
-  root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${ach}${miniprofile}</div><aside class="col">${mini}${rig}${fr}${discord}</aside></div></div>`;
+  setTimeout(() => { const w = root.querySelectorAll("[data-wcid]"); w.forEach(n => { const go = () => WOWPOP.open(p.handle, WC.find(c => c.id === n.dataset.wcid)); n.onclick = go; n.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }; }); });
+  root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${wowc}${ach}${miniprofile}</div><aside class="col">${mini}${rig}${fr}${discord}</aside></div></div>`;
   $$('a[href="#friends"]', root).forEach(a => a.addEventListener("click", e => { const f = $("#friends", root); if (!f) return; e.preventDefault(); f.scrollIntoView({ behavior: "smooth", block: "center" }); f.classList.add("flash"); setTimeout(() => f.classList.remove("flash"), 1200); }));
   const sm = $("[data-seemore]", root);
   if (sm) sm.addEventListener("click", e => { e.preventDefault(); $$(".olda", root).forEach(x => x.hidden = false); sm.parentNode.remove(); });
@@ -1079,6 +1444,7 @@ pages.settings = async () => {
       ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}${sw("name_history", "Previous nicknames (\"Previously known as\")")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
       ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location &amp; country")}${sw("gaming_style", "Gaming style")}${sw("real_name", "Real name")}${sw("gender", "Gender")}${sw("age", "Age")}`)}
       ${row("Achievements", `${sw("achievements", "Show my achievements")}`, "Needs Games &amp; hours shown.")}
+      ${FEATURES.wow_characters ? row("WoW characters", `${sw("wow_characters", "Show my WoW characters and /played")}`, "Cards for each character from the Fraglink WoW addon. You can also hide single characters on your profile.") : ""}
       ${row("Connected accounts", `${sw("connection_names", "Show connected account names")}`, "Off: visitors still see your Steam, Battle.net and Discord icons with the verified tick, but not your account names or links. You always see your own.")}
       ${row("In the app", `<span class="sub">Whether friends see the game you're in right now (and friends of friends) is set per PC in the desktop app: Options &gt; Privacy. The switches on this page show there too.</span>`)}
       ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
@@ -1104,16 +1470,17 @@ pages.settings = async () => {
       const v = c[p] || {}, l = v.linked;
       if (!l && !v.off && !v.available) return ""; // not built yet: hide rather than show a "Coming soon" stub
       const right = l
-        ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
+        ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}${p === "bnet" ? `<a class="btn sm" href="/connect/battlenet">Manage WoW</a> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
         : v.off ? `<span class="btn sm" aria-disabled="true">Turned off for now</span>` : v.available ? `<button class="btn sm blue" type="button" data-link="${p}">${p === "steam" ? "Sign in through Steam" : "Link " + NAMES[p]}</button>` : `<span class="btn sm" aria-disabled="true">Coming soon</span>`;
-      const who = l ? `${p === "steam" ? `<a href="https://steamcommunity.com/profiles/${esc(l.uid)}" rel="noopener">${esc(l.display || l.uid)}</a>` : `<b>${esc(l.display || l.uid)}</b>`} ${l.verified ? `<span class="vbadge">✓ Verified</span>` : `<span class="sub">(not verified)</span>`}${l.last_sync_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(l.last_sync_at))}${l.sync_status && l.sync_status !== "ok" ? " · " + esc(l.sync_status) : ""}</div>` : ""}`
+      const who = l ? `${p === "steam" ? `<a href="https://steamcommunity.com/profiles/${esc(l.uid)}" rel="noopener">${esc(l.display || l.uid)}</a>` : `<b>${esc(l.display || l.uid)}</b>`} ${l.verified ? `<span class="vbadge">✓ Verified</span>` : `<span class="sub">(not verified)</span>`}${l.last_sync_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(l.last_sync_at))}${l.sync_status === "private" ? " · Steam game details were private" : ""}</div>` : ""}${p === "bnet" ? (v.wow_imported_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(v.wow_imported_at))}</div>` : `<div class="sub"><a href="/connect/battlenet">No /played upload yet</a></div>`) : ""}`
         : `<span class="sub">${blurb}</span>`;
-      return `<div class="conn"><span class="cl">${logo}</span><div style="flex:1"><b style="display:block">${NAMES[p]}</b>${who}</div><div>${right}</div></div>`;
+      return `<div class="conn"><span class="cl cl-${p}">${logo}</span><div style="flex:1"><b style="display:block">${NAMES[p]}</b>${who}</div><div>${right}</div></div>`;
     };
     box.innerHTML = msg + `<div style="padding:0 14px">
-      ${card("steam", "S", c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
-      ${card("discord", "D", "Show your Discord name on your profile.")}
-      ${card("bnet", "B", "Show your BattleTag on your profile.")}
+      ${card("steam", `<img src="/assets/brand-steam.svg" alt="" width="22" height="22">`, c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
+      ${card("discord", `<img src="/assets/brand-discord.svg" alt="" width="22" height="22">`, "Show your Discord name on your profile.")}
+      ${card("bnet", `<img src="/assets/brand-battlenet.svg" alt="" width="22" height="22">`, "Show your BattleTag on your profile.")}
+      ${c.bnet && c.bnet.needs_reconnect ? `<div class="conn-sub"><span class="sub warn">Reconnect Battle.net to verify characters.</span> <a href="/connect/battlenet">Manage WoW</a></div>` : ""}
       <p class="sub" style="padding:8px 0">Verified accounts show as badges on your profile. You're sent to the provider's own sign-in page; Fraglink never sees your password there.</p></div>`;
     if (q.get("connected")) { ok(box, `${NAMES[q.get("connected")] || "Account"} linked.`); history.replaceState(null, "", "/settings#connections"); }
     else if (q.get("connect_error")) { bad(box, new Error(q.get("connect_error") === "expired" ? "That link expired. Try again." : q.get("connect_error") === "cancelled" ? "Linking was cancelled." : q.get("connect_error"))); history.replaceState(null, "", "/settings#connections"); }
@@ -1314,10 +1681,10 @@ pages.news = async () => {
       document.title = p.title + " · Fraglink";
       window.flCrumb([[p.title]]);
       if (p.slug !== slug) history.replaceState(null, "", p.url);
-      root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><article class="panel post"><div class="body">
+      root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><article class="panel post">${p.image ? `<img class="post-img" src="${esc(p.image)}" alt="">` : ""}<div class="body">
         <h1>${esc(p.title)}</h1><div class="sub">${fullDate.format(new Date(p.at))}${p.pinned ? ' · <span class="pin">Pinned</span>' : ""}</div>
         <div class="txt">${newsBody(p.body) || `<p class="muted">${esc(p.summary)}</p>`}</div>
-        ${p.link ? `<p><a class="btn blue" href="${esc(p.link)}"${p.link.startsWith("http") ? ' rel="noopener"' : ""}>Read more</a></p>` : ""}</div></article>
+        ${p.link ? `<p><a class="btn blue" href="${esc(p.link)}"${p.link.startsWith("http") ? ' rel="noopener"' : ""}>${esc(p.link_label || "Read more")}</a></p>` : ""}</div></article>
         <div class="post-nav">${d.newer ? `<a href="${esc(d.newer.url)}">‹ Newer: ${esc(d.newer.title)}</a>` : "<span></span>"}${d.older ? `<a href="${esc(d.older.url)}">Older: ${esc(d.older.title)} ›</a>` : ""}</div>`;
     } catch (x) {
       root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><div class="panel"><div class="body empty">${x.status === 404 ? "That post doesn't exist or was removed." : esc(x.message)}</div></div>`;
@@ -1328,7 +1695,7 @@ pages.news = async () => {
   const load = async pg => {
     const d = await api(`/news?page=${pg}&per=${PER}`);
     root.innerHTML = `<section class="head"><div><h1>News</h1><div class="sub">Updates from the Fraglink team.</div></div></section>
-      <div class="panel"><div class="body nlist">${d.items.length ? d.items.map(n => `<a class="nrow" href="${esc(n.url)}"><small>${fullDate.format(new Date(n.at))}${n.pinned ? ' · <span class="pin">Pinned</span>' : ""}</small><b>${esc(n.title)}</b>${n.summary ? `<p>${esc(n.summary)}</p>` : ""}</a>`).join("") : `<p class="empty">No news yet.</p>`}</div></div>
+      <div class="panel"><div class="body nlist">${d.items.length ? d.items.map(n => `<a class="nrow${n.image ? " has-img" : ""}" href="${esc(n.url)}">${n.image ? `<img src="${esc(n.image)}" alt="" loading="lazy">` : ""}<div><small>${fullDate.format(new Date(n.at))}${n.pinned ? ' · <span class="pin">Pinned</span>' : ""}</small><b>${esc(n.title)}</b>${n.summary ? `<p>${esc(n.summary)}</p>` : ""}</div></a>`).join("") : `<p class="empty">No news yet.</p>`}</div></div>
       ${d.total > PER ? pagerHtml((d.page - 1) * PER, PER, d.total) : ""}`;
     $$(".pager [data-off]", root).forEach(b => b.addEventListener("click", () => { const p = Number(b.dataset.off) / PER + 1; history.replaceState(null, "", p > 1 ? "?page=" + p : "/news"); load(p); window.scrollTo(0, 0); }));
   };
@@ -1349,7 +1716,7 @@ pages.admin = async () => {
 };
 
 /* ---------- feature switches (Admin > Site settings; the server enforces them too) ---------- */
-const FEATURES = { signups: true, announcement: true, connect_steam: true, connect_bnet: true, connect_discord: true, friend_requests: true, public_profiles: true, maintenance: false };
+const FEATURES = { signups: true, announcement: true, connect_steam: true, connect_bnet: true, connect_discord: true, friend_requests: true, public_profiles: true, wow_characters: false, maintenance: false };
 const featuresReady = fetch(API + "/features", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => { if (d && d.features) Object.assign(FEATURES, d.features); }).catch(() => {});
 function applyFeatures() {
   document.body.classList.toggle("ff-no-friendreq", !FEATURES.friend_requests);
@@ -1370,7 +1737,7 @@ function applyFeatures() {
 const CRUMBS = { download: [["Download", "/download"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
   login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
   settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
-  verify: [["Confirm your email"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
+  verify: [["Confirm your email"]], wowupload: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Battle.net", "/connect/battlenet"], ["Upload WoW /played"]], bnetverify: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Battle.net", "/connect/battlenet"], ["Verify WoW characters"]], bnet: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Battle.net"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
 function setCrumb(parts) {
   const nav = document.getElementById("ycrumb"); if (!nav || !parts) return;
   const all = [["Home", "/"], ...parts];
@@ -1437,6 +1804,81 @@ async function loadPoll(d) {
   };
 }
 
+
+// WoW character popup (public profile)
+const WOWPOP = (() => {
+  const CC = { 1: "#C69B6D", 2: "#F48CBA", 3: "#AAD372", 4: "#FFF468", 5: "#FFFFFF", 6: "#C41E3A", 7: "#0070DD", 8: "#3FC7EB", 9: "#8788EE", 10: "#00FF98", 11: "#FF7C0A", 12: "#A330C9", 13: "#33937F" };
+  const L = ["HEAD", "NECK", "SHOULDER", "BACK", "CHEST", "SHIRT", "TABARD", "WRIST"], R = ["HANDS", "WAIST", "LEGS", "FEET", "FINGER_1", "FINGER_2", "TRINKET_1", "TRINKET_2"], W = ["MAIN_HAND", "OFF_HAND"];
+  const SN = { HEAD: "Head", NECK: "Neck", SHOULDER: "Shoulder", BACK: "Back", CHEST: "Chest", SHIRT: "Shirt", TABARD: "Tabard", WRIST: "Wrist", HANDS: "Hands", WAIST: "Waist", LEGS: "Legs", FEET: "Feet", FINGER_1: "Ring", FINGER_2: "Ring", TRINKET_1: "Trinket", TRINKET_2: "Trinket", MAIN_HAND: "Main hand", OFF_HAND: "Off hand" };
+  const DO = ["LFR", "NORMAL", "HEROIC", "MYTHIC"];
+  const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? "just now" : m < 60 ? plural(m, "minute") + " ago" : m < 1440 ? plural(Math.round(m / 60), "hour") + " ago" : plural(Math.round(m / 1440), "day") + " ago"; };
+  let box = null, pushed = false;
+  const close = fromPop => {
+    if (!box) return; box.remove(); box = null; document.body.classList.remove("cp-lock"); document.removeEventListener("keydown", key);
+    if (pushed && !fromPop) { pushed = false; history.back(); } pushed = false;
+  };
+  const key = e => { if (e.key === "Escape") close(); };
+  addEventListener("popstate", () => { if (box) close(true); });
+  const whp = it => [it.ilvl && "ilvl=" + it.ilvl, it.bonus && it.bonus.length && "bonus=" + it.bonus.join(":"), it.ench && "ench=" + it.ench, it.gems && it.gems.length && "gems=" + it.gems.join(":"), it.pcs && it.pcs.length && "pcs=" + it.pcs.join(":")].filter(Boolean).join("&");
+  const slot = (g, k) => { const it = g[k]; const lk = it && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : it.id ? ` data-whi="${Number(it.id)}" data-whp="${esc(whp(it))}" role="button" tabindex="0" aria-expanded="false"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
+  const raid = r => r.instances.map(i => `<div class="cp-raid"><b>${esc(i.name)}</b><div class="cp-modes">${[...i.modes].sort((a, b) => DO.indexOf(a.difficulty) - DO.indexOf(b.difficulty)).map(m => `<span class="${m.done >= m.total ? "full" : ""}">${esc(m.label)} <b>${m.done}/${m.total}</b></span>`).join("")}</div></div>`).join("");
+  const body = (d, c) => {
+    if (d.status === "missing") return `<div class="cp-hd"><div><h2>${esc(c.name)}</h2><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}</div></div></div><p class="empty cp-pad">Profile private or not found on Blizzard.</p>`;
+    const g = {}; (d.gear || []).forEach(x => g[x.slot] = x);
+    const col = CC[d.class_id] || "#eef2f6", mp = d.mplus || {}, pv = d.pvp || {}, rd = d.raids || {}, co = d.collections || {}, pr = d.professions || [];
+    const stat = (l, v) => `<div class="cp-st"><small>${l}</small><b>${v}</b></div>`;
+    const rr = rd.current && rd.current.instances.length ? { t: rd.current.expansion, r: rd.current } : rd.recent && rd.recent.instances.length ? { t: "Most recent progress · " + rd.recent.expansion, r: rd.recent } : null;
+    return `<div class="cp-hd${d.render ? " has-rd" : ""}" style="--cc:${col}">${d.render ? `<div class="cp-rw" aria-hidden="true"><img class="cp-rd" alt="" hidden></div>` : ""}<div class="cp-who">
+      ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
+      <div class="sub">Level ${d.level} ${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
+      <div class="sub">${esc(d.realm)} ${esc(d.region.toUpperCase())}${d.faction ? ` · <span class="cp-f ${esc(d.faction.toLowerCase())}">${esc(d.faction)}</span>` : ""}</div>
+      ${d.guild ? `<div class="cp-gu">&lt;${esc(d.guild.name)}&gt;${d.guild.rank != null ? ` · ${d.guild.rank === 0 ? "Guild Master" : "Rank " + d.guild.rank}` : ""}</div>` : ""}
+      <div class="cp-sts">${stat("Item level", d.ilvl ? nf.format(d.ilvl) : "—")}${stat("Achievements", d.achievement_points ? nf.format(d.achievement_points) : "—")}${stat("M+ rating", mp.rating ? nf.format(Math.round(mp.rating)) : "—")}</div></div></div>
+      <div class="cp-bd"><section><h3>Gear</h3>${d.gear && d.gear.length ? `<div class="cp-gear"><div>${L.map(k => slot(g, k)).join("")}</div><div>${R.map(k => slot(g, k)).join("")}</div></div><div class="cp-gear cp-w">${W.map(k => slot(g, k)).join("")}</div>` : `<p class="empty">No gear equipped.</p>`}</section>
+      <section><h3>Raid progress</h3>${rr ? `<div class="sub cp-rt">${esc(rr.t)}</div>${raid(rr.r)}` : `<p class="empty">No raid progress yet.</p>`}</section>
+      <div class="cp-two"><section><h3>Mythic+</h3>${mp.runs && mp.runs.length ? `<table class="cp-tb">${mp.runs.map(r => `<tr><td>${esc(r.dungeon)}</td><td class="n">+${r.level}</td><td class="n ${r.timed ? "ok" : "dim"}">${r.timed ? "Timed" : "Overtime"}</td></tr>`).join("")}</table>` : `<p class="empty">No Mythic+ runs this season.</p>`}</section>
+      <section><h3>PvP</h3>${pv.honor_level || pv.honorable_kills || (pv.rated && pv.rated.length) ? `<table class="cp-tb"><tr><td>Honor level</td><td class="n">${nf.format(pv.honor_level || 0)}</td></tr><tr><td>Honorable kills</td><td class="n">${nf.format(pv.honorable_kills || 0)}</td></tr>${(pv.rated || []).map(b => `<tr><td>${esc(b.bracket)}</td><td class="n">${nf.format(b.rating)}</td></tr>`).join("")}</table>` : `<p class="empty">No PvP activity.</p>`}</section></div>
+      <div class="cp-two"><section><h3>Collections</h3><table class="cp-tb"><tr><td>Mounts</td><td class="n">${co.mounts != null ? nf.format(co.mounts) : "—"}</td></tr><tr><td>Pets</td><td class="n">${co.pets != null ? nf.format(co.pets) : "—"}</td></tr></table></section>
+      <section><h3>Professions</h3>${pr.length ? `<table class="cp-tb">${pr.map(x => `<tr><td>${esc(x.name)}${x.tier ? `<small class="sub"> ${esc(x.tier)}</small>` : ""}</td><td class="n">${x.max ? `${x.skill}/${x.max}` : x.skill != null ? x.skill : ""}</td></tr>`).join("")}</table>` : `<p class="empty">No professions.</p>`}</section></div></div>
+      <div class="cp-ft"><span class="sub">${d.updated_at ? "Updated " + ago(d.updated_at) : ""}</span><a href="${esc(d.armory)}" target="_blank" rel="noopener">View on Armory ↗</a></div>`;
+  };
+  // Touch devices: tap a gear row to show Wowhead's tooltip for it inline (sanitised), tap again/elsewhere to hide.
+  const TT = new Map(), OKT = new Set(["TABLE", "TBODY", "TR", "TD", "TH", "B", "BR", "SPAN", "DIV", "SMALL", "I", "UL", "LI"]);
+  const clean = html => { const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html"), out = document.createElement("div");
+    const walk = (src, dst) => src.childNodes.forEach(n => { if (n.nodeType === 3) dst.appendChild(document.createTextNode(n.nodeValue));
+      else if (n.nodeType === 1) { const t = OKT.has(n.tagName) ? n.tagName : n.tagName === "A" ? "SPAN" : null; if (!t) return; const e = document.createElement(t);
+        const c = n.getAttribute("class"); if (c && /^[\w -]+$/.test(c)) e.className = c; if (/^(TD|TH|TABLE)$/.test(t) && n.getAttribute("width") === "100%") e.setAttribute("width", "100%");
+        walk(n, e); dst.appendChild(e); } });
+    walk(doc.body.firstChild, out); return out; };
+  const tipOff = () => { $$(".cp-tip", box).forEach(t => t.remove()); $$(".cp-slot[aria-expanded=true]", box).forEach(r => r.setAttribute("aria-expanded", "false")); };
+  const tip = async row => {
+    const was = row.getAttribute("aria-expanded") === "true"; tipOff(); if (was) return;
+    row.setAttribute("aria-expanded", "true");
+    const t = document.createElement("div"); t.className = "cp-tip"; t.textContent = "Loading…"; row.after(t);
+    const k = row.dataset.whi + "?" + row.dataset.whp;
+    try { if (!TT.has(k)) TT.set(k, fetch(`https://nether.wowhead.com/tooltip/item/${row.dataset.whi}?dataEnv=1&locale=0${row.dataset.whp ? "&" + row.dataset.whp : ""}`).then(r => { if (!r.ok) throw 0; return r.json(); }));
+      const j = await TT.get(k); if (!t.isConnected) return; t.textContent = ""; t.appendChild(clean(j.tooltip || "")); }
+    catch (e) { TT.delete(k); if (t.isConnected) t.textContent = "Couldn't load this item's tooltip."; }
+  };
+  const open = async (handle, c) => {
+    if (!c) return; close(true);
+    box = document.createElement("div"); box.className = "cp-bg";
+    box.innerHTML = `<div class="cp" role="dialog" aria-modal="true" aria-label="${esc(c.name)}"><button class="cp-x" type="button" aria-label="Close">×</button><div class="cp-in"><p class="empty cp-pad">Loading ${esc(c.name)}…</p></div></div>`;
+    document.body.appendChild(box); document.body.classList.add("cp-lock");
+    box.onclick = e => { if (e.target === box || e.target.closest(".cp-x")) return close(); const r = e.target.closest(".cp-slot[data-whi]"); if (r) return tip(r); if (!e.target.closest(".cp-tip")) tipOff(); };
+    box.onkeydown = e => { const r = (e.key === "Enter" || e.key === " ") && e.target.closest && e.target.closest(".cp-slot[data-whi]"); if (r) { e.preventDefault(); tip(r); } };
+    document.addEventListener("keydown", key); history.pushState({ wowpop: 1 }, ""); pushed = true;
+    $(".cp-x", box).focus();
+    const me = box;
+    try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box !== me) return; $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WH.scan();
+      const im = $(".cp-rd", box);
+      if (im) { const t = localStorage.getItem(TK), r = await fetch(`${API}/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}/render.png`, { headers: t ? { authorization: "Bearer " + t } : {} });
+        if (r.ok && box === me) { im.src = URL.createObjectURL(await r.blob()); im.onload = () => URL.revokeObjectURL(im.src); im.hidden = false; } } }
+    catch (x) { if (box === me) $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load character details right now. Try again in a minute.</p>`; }
+  };
+  return { open, close };
+})();
+
 })();
 
 // Home screenshot carousel: auto-advance 5s, pause on hover/focus, arrows, dots, swipe.
@@ -1457,4 +1899,3 @@ async function loadPoll(d) {
   c.addEventListener("touchend", e => { if (x0 !== null) { const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1)); } x0 = null; play(); });
   go(0); play();
 })();
-

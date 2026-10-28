@@ -156,6 +156,26 @@ pub async fn send_verification(st: &AppState, user: &User) -> ApiResult<()> {
     Ok(())
 }
 
+/// Welcome email, once per account (claimed atomically via `welcome_sent_at`). Errors are
+/// logged and never fail the confirmation.
+async fn send_welcome(st: &AppState, uid: Uuid) {
+    let row: Result<Option<(String, String, String)>, _> = sqlx::query_as(
+        "UPDATE users SET welcome_sent_at = now()
+         WHERE id = $1 AND welcome_sent_at IS NULL AND email_verified AND deleted_at IS NULL
+         RETURNING email, display_name, handle",
+    )
+    .bind(uid)
+    .fetch_optional(&st.db)
+    .await;
+    match row {
+        Ok(Some((email, name, handle))) => {
+            mailer::send_email(st, &email, &crate::emails::welcome(&name, &handle));
+        }
+        Ok(None) => {}
+        Err(e) => tracing::warn!(user = %uid, error = %e, "welcome email: claim failed; skipped"),
+    }
+}
+
 #[derive(Deserialize)]
 struct TokenReq {
     token: String,
@@ -190,6 +210,9 @@ async fn verify_email(
     .execute(&st.db)
     .await?
     .rows_affected();
+    if n == 1 {
+        send_welcome(&st, uid).await;
+    }
     Ok(Json(json!({ "verified": n == 1 })))
 }
 
@@ -946,8 +969,9 @@ pub async fn details_json(st: &AppState, uid: Uuid) -> ApiResult<Value> {
 // ------------------------------------------------------------------ per-feature privacy
 
 /// Per-feature visibility switches stored in `users.privacy` (missing key = shown).
-pub const PRIVACY_KEYS: [&str; 13] = [
+pub const PRIVACY_KEYS: [&str; 14] = [
     "now_playing",
+    "wow_characters",
     "games",
     "rig",
     "about",

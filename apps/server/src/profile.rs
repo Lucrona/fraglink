@@ -469,6 +469,28 @@ async fn profile(
     } else {
         Value::Null
     };
+    // WoW characters from the addon: only Battle.net-verified ones are shown and counted
+    let wow_characters = if can_see_games
+        && show("wow_characters")
+        && crate::features::on(&st, "wow_characters").await
+    {
+        let mut c = crate::wow::characters(&st, p.id, is_self, true).await?;
+        crate::wowchar::warm_guilds(
+            &st,
+            c.iter()
+                .filter(|x| x["show_guild"] == true && x["guild"].is_null() && x["hidden"] == false)
+                .filter_map(|x| x["id"].as_str().and_then(|i| i.parse().ok()))
+                .collect(),
+        );
+        c.retain(|x| {
+            !x["game_id"]
+                .as_str()
+                .is_some_and(|g| hidden.iter().any(|h| h == g))
+        });
+        json!(c)
+    } else {
+        Value::Null
+    };
     if can_see_history {
         recent = recent_sessions(&st, p.id, is_self).await?;
         recent.retain(|r| {
@@ -577,6 +599,7 @@ async fn profile(
         "country": if show("location") { country } else { None },
         "events": events,
         "achievements": achievements,
+        "wow_characters": wow_characters,
         "rig": if has_rig && show("rig") { rig } else { Value::Null },
         "friends": friend_grid,
         "linked": linked,

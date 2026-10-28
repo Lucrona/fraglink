@@ -262,7 +262,7 @@ async fn home(
     let verified: i64 = games.iter().map(|g| g.display_min).sum();
     b += r#"<div class="card"><h2>Your hours</h2><table><tr><th>Game</th><th class="n">Past 7 days</th><th class="n">Total</th></tr>"#;
     if games.is_empty() {
-        b += r#"<tr><td colspan="3"><small class="m">Nothing yet. Pair the tray app, sync Steam or add hours below.</small></td></tr>"#;
+        b += r#"<tr><td colspan="3"><small class="m">Nothing yet. Pair the tray app, import Steam hours or add hours below.</small></td></tr>"#;
     }
     for g in &games {
         let GameStat {
@@ -289,7 +289,7 @@ async fn home(
         );
     }
     b += &format!(
-        r#"</table><p><b>{}</b> verified<br><small class="m"><span class="t-tracked">● Tracked</span> = Fraglink sessions or Steam's own playtime · <span class="t-imported">◆ Imported</span> = a game's own counter you entered (self-reported), never used for ranks.</small></p></div>"#,
+        r#"</table><p><b>{}</b> verified<br><small class="m"><span class="t-tracked">● Tracked</span> = Fraglink sessions or Steam's own playtime · <span class="t-imported">◆ Imported</span> = a game's own counter (self-reported, e.g. WoW /played from the Fraglink addon). Leaderboards count WoW /played only for characters verified through Battle.net.</small></p></div>"#,
         hrs(verified)
     );
     // steam
@@ -301,7 +301,7 @@ async fn home(
         }
         Some((sid, verified, last, status)) => {
             b += &format!(
-                "<p>Linked: <a href=\"https://steamcommunity.com/profiles/{sid}\">{sid}</a> {} · last sync: {} {}</p>",
+                "<p>Linked: <a href=\"https://steamcommunity.com/profiles/{sid}\">{sid}</a> {} · hours imported: {} {}</p>",
                 if *verified { "<span class=\"t-tracked\">✓ Verified</span>" } else { "(unverified: <a href=\"/auth/steam/start\">verify by signing in through Steam</a>)" },
                 last.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_else(|| "never".into()),
                 match status.as_deref() { Some("private") => "· <b>game details are private</b>", _ => "" },
