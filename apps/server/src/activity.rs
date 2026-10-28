@@ -188,11 +188,12 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
     let (mut week, mut d7, mut top) = (None, None, None);
     if shares || p.id == me {
         let now = Utc::now();
+        // The game running now counts too (play_sessions).
         // Clip sessions to the window so a session that started before it only counts its tail.
         let secs = |from: DateTime<Utc>| {
             sqlx::query_scalar::<_, Option<i64>>(
                 "SELECT sum(LEAST(duration_s, GREATEST(0, EXTRACT(EPOCH FROM (ended_at - $2))::bigint)))::bigint
-                 FROM sessions WHERE user_id = $1 AND ended_at > $2",
+                 FROM play_sessions WHERE user_id = $1 AND ended_at > $2",
             )
             .bind(p.id)
             .bind(from)
@@ -201,7 +202,7 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
         week = Some(secs(week_start(now)).await?.unwrap_or(0));
         d7 = Some(secs(now - Duration::days(7)).await?.unwrap_or(0));
         let top_id: Option<String> = sqlx::query_scalar(
-            "SELECT s.game_id FROM sessions s
+            "SELECT s.game_id FROM play_sessions s
              WHERE s.user_id = $1 AND s.ended_at > $2
              GROUP BY 1 ORDER BY sum(s.duration_s) DESC LIMIT 1",
         )

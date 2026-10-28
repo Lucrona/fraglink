@@ -491,7 +491,8 @@ pub enum Recount {
 }
 
 /// The game's latest imported entry: (minutes, carried extra, tracked minutes after it).
-/// The shown imported total is their sum (the same rule as `user_game_stats`).
+/// The shown imported total is their sum (the same rule as `user_game_stats`). The tracked
+/// minutes include the game running now (`play_sessions`).
 pub(crate) async fn last_import(
     st: &AppState,
     uid: Uuid,
@@ -504,7 +505,7 @@ pub(crate) async fn last_import(
          SELECT i.minutes::bigint, i.carry_min::bigint,
                 coalesce((SELECT (sum(LEAST(x.duration_s::numeric,
                     extract(epoch FROM x.ended_at - GREATEST(x.started_at, i.captured_at)))) / 60)::bigint
-                  FROM sessions x WHERE x.user_id = $1 AND x.game_id = $2 AND x.ended_at > i.captured_at), 0)::bigint
+                  FROM play_sessions x WHERE x.user_id = $1 AND x.game_id = $2 AND x.ended_at > i.captured_at), 0)::bigint
          FROM i",
     )
     .bind(uid)

@@ -14,7 +14,7 @@ pub enum Tier {
 
 /// 12345 -> "12,345"
 /// Leaderboard week: a CTE `wk(user_id, game_id, m)` with each user's minutes per game over the
-/// last 7 days. Like a profile's total, it takes the larger of the app's sessions and the game's
+/// last 7 days (open sessions included: `play_sessions`). Like a profile's total, it takes the larger of the app's sessions and the game's
 /// own counter (Imported: manual hours, WoW /played), never the sum, so the same play isn't counted
 /// twice. Imported counts only what the counter grew by within the 7 days. Its baseline is the
 /// newest entry from before the 7 days, else the first entry inside them, so a first import never
@@ -26,7 +26,7 @@ pub enum Tier {
 /// /played grew (same baseline rule, per character), summed per game and capped at 7 days.
 pub const WEEK_CTE: &str = "wk AS NOT MATERIALIZED (
     SELECT user_id, game_id, max(m)::bigint AS m FROM (
-        SELECT s.user_id, s.game_id, sum(s.duration_s) / 60 AS m FROM sessions s
+        SELECT s.user_id, s.game_id, sum(s.duration_s) / 60 AS m FROM play_sessions s
          WHERE s.started_at >= now() - interval '7 days' GROUP BY 1, 2
         UNION ALL
         SELECT e.user_id, e.game_id,

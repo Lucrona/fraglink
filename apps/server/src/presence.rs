@@ -392,6 +392,10 @@ fn session_end(now: DateTime<Utc>, heartbeat: DateTime<Utc>) -> DateTime<Utc> {
 }
 
 /// Keep `start..end` of play the server watched live (split into <= 24 h rows).
+///
+/// Live hours: while it runs, the session already counts through the `play_sessions` view
+/// (presence's open session). The rows are written and presence's `session_started_at`
+/// cleared in one transaction, so no query ever sees the time twice (or not at all).
 pub async fn record_live_session(
     st: &AppState,
     user: Uuid,
@@ -399,14 +403,15 @@ pub async fn record_live_session(
     start: DateTime<Utc>,
     end: DateTime<Utc>,
 ) -> ApiResult<()> {
-    if (end - start).num_seconds() < MIN_LIVE_SECS {
-        return Ok(());
-    }
+    let keep = (end - start).num_seconds() >= MIN_LIVE_SECS;
     let game_id = &crate::names::list_id_for_exe(st, game_id);
     let game_id = &crate::names::resolve_alias(st, game_id).await?;
-    crate::names::ensure_game_row(st, game_id).await?;
+    if keep {
+        crate::names::ensure_game_row(st, game_id).await?;
+    }
+    let mut tx = st.db.begin().await?;
     let mut from = start;
-    while from < end {
+    while keep && from < end {
         let to = end.min(from + chrono::Duration::seconds(MAX_SESSION_SECS));
         sqlx::query(
             "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source)
@@ -418,10 +423,18 @@ pub async fn record_live_session(
         .bind(from)
         .bind(to)
         .bind((to - from).num_seconds() as i32)
-        .execute(&st.db)
+        .execute(&mut *tx)
         .await?;
         from = to;
     }
+    sqlx::query(
+        "UPDATE presence SET session_started_at = NULL WHERE user_id = $1 AND session_started_at = $2",
+    )
+    .bind(user)
+    .bind(start)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -575,6 +588,18 @@ pub async fn set_from(
         (Some(_), false) => Some(now),
         (None, _) => None,
     };
+    // Live hours: the open session counts in totals (which join `games`) from the start.
+    if let (Some(id), false) = (&new_id, continuing) {
+        let id = crate::names::resolve_alias(st, id).await?;
+        // ids nobody knows yet are queued in Game approvals only once a session is kept
+        let known = crate::names::list_name(st, &id).is_some()
+            || ["steam:", "exe:", "manual:"]
+                .iter()
+                .any(|p| id.starts_with(p));
+        if known {
+            crate::names::ensure_game_row(st, &id).await?;
+        }
+    }
     let public = match &new_id {
         Some(id) => {
             let n = crate::names::public_name(st, id).await?;

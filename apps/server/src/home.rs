@@ -81,7 +81,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         "SELECT (SELECT count(*) FROM users u WHERE {LIVE_USER}),
                 (SELECT count(*) FROM presence p JOIN users u ON u.id = p.user_id WHERE {LIVE_USER} AND p.status IN ('online','away')),
                 (SELECT count(*) FROM presence p JOIN users u ON u.id = p.user_id WHERE {LIVE_USER} AND p.status IN ('online','away') AND p.game_id IS NOT NULL),
-                (SELECT coalesce(sum(s.duration_s), 0)::bigint FROM sessions s WHERE s.started_at >= now() - interval '7 days' AND {NO_TEST_SESSIONS})"
+                (SELECT coalesce(sum(s.duration_s), 0)::bigint FROM play_sessions s WHERE s.started_at >= now() - interval '7 days' AND {NO_TEST_SESSIONS})"
     )))
     .fetch_one(&st.db)
     .await?;
@@ -251,7 +251,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
 
     // ---- bottom stats strip: all-time hours (no test accounts)
     let (total_s,): (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT coalesce(sum(s.duration_s), 0)::bigint FROM sessions s WHERE {NO_TEST_SESSIONS}"
+        "SELECT coalesce(sum(s.duration_s), 0)::bigint FROM play_sessions s WHERE {NO_TEST_SESSIONS}"
     )))
     .fetch_one(&st.db)
     .await?;

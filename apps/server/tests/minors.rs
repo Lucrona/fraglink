@@ -468,15 +468,15 @@ async fn private_and_minor_count_in_anonymous_aggregates(pool: PgPool) {
     // presence strip counts private + minor, not test
     assert_eq!(h["stats"]["online"], 3, "{}", home.text);
     assert_eq!(h["stats"]["in_game"], 3, "{}", home.text);
-    // week minutes: 3 × 60 (test excluded)
-    assert_eq!(h["stats"]["minutes_7d"], 180, "{}", home.text);
+    // week minutes: 3 × (60 stored + 30 live), test excluded
+    assert_eq!(h["stats"]["minutes_7d"], 270, "{}", home.text);
 
     let most = h["most_played"].as_array().unwrap();
     let wow = most
         .iter()
         .find(|g| g["game_id"] == "wow")
         .expect("wow in most_played");
-    assert_eq!(wow["minutes"], 180, "{wow}");
+    assert_eq!(wow["minutes"], 270, "{wow}");
     assert_eq!(wow["players"], 3, "{wow}"); // anonymous player count includes private+minor
 
     // named lists never name private (incl. default-private minors) / test
