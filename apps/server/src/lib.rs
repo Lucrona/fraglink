@@ -117,7 +117,7 @@ impl AppState {
         max: usize,
         window: std::time::Duration,
     ) -> error::ApiResult<()> {
-        let mut m = self.limits.lock().unwrap();
+        let mut m = self.limits.lock().unwrap_or_else(|e| e.into_inner());
         if m.len() > 50_000 {
             m.retain(|_, v| {
                 v.last()

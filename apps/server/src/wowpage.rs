@@ -275,7 +275,8 @@ pub async fn after_sync(st: &AppState, uid: Uuid) {
     )
     .bind(uid)
     .execute(&st.db)
-    .await;
+    .await
+    .inspect_err(|e| tracing::warn!("wowpage: race/gender copy for {uid}: {e}"));
     let st = st.clone();
     tokio::spawn(async move { fill_specs(&st, uid).await });
 }
@@ -351,7 +352,8 @@ async fn fill_specs(st: &AppState, uid: Uuid) {
         .bind(name_of(&v["race"]))
         .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
         .execute(&st.db)
-        .await;
+        .await
+        .inspect_err(|e| tracing::warn!("wowpage: spec for {id}: {e}"));
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
     tracing::info!("wow backfill: {ok}/{total} characters for {uid}");

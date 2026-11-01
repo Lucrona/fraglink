@@ -66,11 +66,14 @@ fn cache() -> &'static Mutex<HashMap<Uuid, (Instant, Value)>> {
 }
 
 pub fn clear_all() {
-    cache().lock().unwrap().clear();
+    cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
 pub fn forget(user: Uuid) {
-    cache().lock().unwrap().remove(&user);
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&user);
 }
 
 /// Longest run of consecutive days in a sorted, de-duplicated list.
@@ -138,7 +141,7 @@ pub fn table(values: &HashMap<&str, f64>) -> Value {
 }
 
 pub async fn for_user(st: &AppState, user: Uuid, hidden: &[String]) -> ApiResult<Value> {
-    if let Some((at, v)) = cache().lock().unwrap().get(&user) {
+    if let Some((at, v)) = cache().lock().unwrap_or_else(|e| e.into_inner()).get(&user) {
         if at.elapsed() < TTL {
             return Ok(v.clone());
         }
@@ -171,7 +174,7 @@ pub async fn for_user(st: &AppState, user: Uuid, hidden: &[String]) -> ApiResult
     vals.insert("one_more_round", longest_s.unwrap_or(0) as f64 / 3600.0);
     vals.insert("night_owl", late as f64);
     let v = table(&vals);
-    let mut c = cache().lock().unwrap();
+    let mut c = cache().lock().unwrap_or_else(|e| e.into_inner());
     if c.len() > 5000 {
         c.clear();
     }

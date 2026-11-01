@@ -138,7 +138,7 @@ async fn start(
     rand::thread_rng().fill_bytes(&mut b);
     let state: String = b.iter().map(|x| format!("{x:02x}")).collect();
     {
-        let mut p = pending().lock().unwrap();
+        let mut p = pending().lock().unwrap_or_else(|e| e.into_inner());
         p.retain(|_, v| v.2.elapsed() < STATE_TTL);
         p.insert(state.clone(), (a.user.id, provider.clone(), Instant::now()));
     }
@@ -178,9 +178,12 @@ async fn finish(
     Query(q): Query<HashMap<String, String>>,
 ) -> Response {
     let enc = |s: &str| url::form_urlencoded::byte_serialize(s.as_bytes()).collect::<String>();
-    let taken = q
-        .get("state")
-        .and_then(|s| pending().lock().unwrap().remove(s));
+    let taken = q.get("state").and_then(|s| {
+        pending()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(s)
+    });
     let Some((uid, p, at)) = taken.filter(|t| t.1 == provider && t.2.elapsed() < STATE_TTL) else {
         return back(&st, "connect_error=expired");
     };
@@ -224,7 +227,8 @@ async fn finish(
                     .bind(uid)
                     .bind(&scopes)
                     .execute(&st.db)
-                    .await;
+                    .await
+                    .inspect_err(|e| tracing::warn!("bnet connect: save scopes for {uid}: {e}"));
                     if scopes.split(' ').any(|x| x == "wow.profile") {
                         // the verify page fetches the characters as its next shown step
                         crate::wow::stash_token(uid, &token);

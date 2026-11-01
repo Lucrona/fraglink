@@ -55,7 +55,7 @@ fn cache() -> &'static Mutex<Option<(Instant, BTreeMap<String, bool>)>> {
 }
 
 pub fn forget() {
-    *cache().lock().unwrap() = None;
+    *cache().lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 pub fn is_key(k: &str) -> bool {
@@ -64,7 +64,7 @@ pub fn is_key(k: &str) -> bool {
 
 /// Every switch with its current value.
 pub async fn all(st: &AppState) -> ApiResult<BTreeMap<String, bool>> {
-    if let Some((at, m)) = cache().lock().unwrap().as_ref() {
+    if let Some((at, m)) = cache().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
         if at.elapsed() < TTL {
             return Ok(m.clone());
         }
@@ -78,7 +78,7 @@ pub async fn all(st: &AppState) -> ApiResult<BTreeMap<String, bool>> {
             m.insert(k, v);
         }
     }
-    *cache().lock().unwrap() = Some((Instant::now(), m.clone()));
+    *cache().lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), m.clone()));
     Ok(m)
 }
 

@@ -3578,7 +3578,7 @@ async fn settings_set(
         let v = r.value.as_deref().unwrap_or("");
         let before = crate::features::home_counts(&st).await;
         crate::features::set_home_counts(&st, v, s.user.id).await?;
-        *st.home_public.lock().unwrap() = None;
+        *st.home_public.lock().unwrap_or_else(|e| e.into_inner()) = None;
         audit(
             &st,
             &s,

@@ -12,6 +12,19 @@ import /etc/caddy/beta-gate.caddy
 	reverse_proxy 127.0.0.1:8787
 }
 
+# Website security headers (playfraglink.com and beta). HSTS: one year, this host only, no preload
+# (raise or preload later once it's been fine for a while). CSP: scripts only from us, Cloudflare
+# Turnstile and Wowhead tooltips, plus the one inline script in apps/site-web/layout.html (its
+# sha256 below: change the hash if that line changes). No inline event handlers anywhere; app.js
+# handles broken images and those buttons by data attributes. Images from any https host (Discord,
+# Steam, Battle.net avatars, news images); inline styles allowed.
+(site_security) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-YbuIS4nuLvY/KMK82ZtaZogzewZbja9ix1WEc5yfD8o=' https://challenges.cloudflare.com https://wow.zamimg.com; style-src 'self' 'unsafe-inline' https://wow.zamimg.com https://use.typekit.net https://p.typekit.net; img-src 'self' data: blob: https:; font-src 'self' data: https://use.typekit.net https://wow.zamimg.com; connect-src 'self' wss://{host} https://nether.wowhead.com https://www.wowhead.com https://wow.zamimg.com https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; worker-src 'self' blob:; media-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self' https://steamcommunity.com; frame-ancestors 'none'"
+	}
+}
+
 # Access log for update downloads only (everything else is skipped).
 (updates_log) {
 	@not_updates not path /updates/*
@@ -31,6 +44,7 @@ import /etc/caddy/beta-gate.caddy
 # Steam sign-in (/auth/*) and the old form posts (/web/*, /logout); Caddy serves the site files.
 playfraglink.com {
 	encode gzip
+	import site_security
 	header {
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Content-Type-Options "nosniff"
@@ -133,6 +147,7 @@ playfraglink.com {
 # The gate snippet with the key lives in /etc/caddy/beta-gate.caddy (root:caddy 0640, not in git).
 beta.playfraglink.com {
 	encode gzip
+	import site_security
 	header {
 		X-Robots-Tag "noindex, nofollow, noarchive"
 		Referrer-Policy "no-referrer"

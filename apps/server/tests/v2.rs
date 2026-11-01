@@ -298,7 +298,10 @@ async fn sessions_list_and_revoke(pool: PgPool) {
         .expect("ua parsed");
     assert_eq!(win["ip"], "203.0.x.x");
     // new sign-in email logged (mail off)
-    let o = fraglink_server::mailer::outbox().lock().unwrap().clone();
+    let o = fraglink_server::mailer::outbox()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     assert!(o
         .iter()
         .any(|m| m.to == "s@example.com" && m.subject == "New sign-in from Windows · Chrome"));
@@ -563,7 +566,7 @@ async fn email_verification_is_logged_not_blocking(pool: PgPool) {
     let t = signup(&app, "verify-me@example.com", "verifier").await;
     let mail = fraglink_server::mailer::outbox()
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .iter()
         .rev()
         .find(|m| m.to == "verify-me@example.com" && m.subject.contains("Confirm"))
@@ -604,7 +607,7 @@ async fn email_verification_is_logged_not_blocking(pool: PgPool) {
     let welcomes = || {
         fraglink_server::mailer::outbox()
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|m| m.to == "verify-me@example.com" && m.subject == "Welcome to Fraglink")
             .count()
@@ -619,7 +622,7 @@ async fn email_verification_is_logged_not_blocking(pool: PgPool) {
     assert!(r.status.is_success());
     let mail = fraglink_server::mailer::outbox()
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .iter()
         .rev()
         .find(|m| m.to == "verify-me@example.com" && m.subject.contains("Confirm"))
@@ -736,7 +739,7 @@ async fn forgot_and_reset_password(pool: PgPool) {
     assert_eq!(r.json()["mail_live"], false);
     let mail = fraglink_server::mailer::outbox()
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .iter()
         .rev()
         .find(|m| m.to == "forgot-me@example.com" && m.subject.contains("Reset"))

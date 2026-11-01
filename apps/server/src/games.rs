@@ -198,16 +198,16 @@ fn bundled() -> Option<Built> {
 
 impl GameLists {
     pub fn current(&self) -> Option<Built> {
-        if let Some(b) = self.built.read().unwrap().clone() {
+        if let Some(b) = self.built.read().unwrap_or_else(|e| e.into_inner()).clone() {
             return Some(b);
         }
         let b = bundled()?;
-        let mut w = self.built.write().unwrap();
+        let mut w = self.built.write().unwrap_or_else(|e| e.into_inner());
         Some(w.get_or_insert(b).clone())
     }
 
     pub fn install(&self, b: Built) {
-        *self.built.write().unwrap() = Some(b);
+        *self.built.write().unwrap_or_else(|e| e.into_inner()) = Some(b);
     }
 
     /// Discord's name for a Fraglink game id, if it is on the detectable list.
@@ -223,7 +223,12 @@ impl GameLists {
     /// Name of an override rule (`star_citizen`), from the server's file or the bundled one.
     pub fn override_name(&self, data: &Path, id: &str) -> Option<String> {
         let fresh = |t: &std::time::Instant| t.elapsed() < Duration::from_secs(300);
-        if let Some((t, m)) = self.override_names.read().unwrap().as_ref() {
+        if let Some((t, m)) = self
+            .override_names
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+        {
             if fresh(t) {
                 return m.get(id).cloned();
             }
@@ -238,7 +243,10 @@ impl GameLists {
                 })
                 .unwrap_or_default();
         let m = Arc::new(m);
-        *self.override_names.write().unwrap() = Some((std::time::Instant::now(), m.clone()));
+        *self
+            .override_names
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), m.clone()));
         m.get(id).cloned()
     }
 }
@@ -714,7 +722,10 @@ pub fn detectable_db(st: &AppState) -> Option<Arc<DetectableDb>> {
     use std::sync::{Mutex, OnceLock};
     static CACHE: OnceLock<Mutex<Option<(String, Arc<DetectableDb>)>>> = OnceLock::new();
     let b = st.games.current()?;
-    let mut c = CACHE.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let mut c = CACHE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if c.as_ref().map(|(t, _)| t != &b.etag).unwrap_or(true) {
         *c = Some((
             b.etag.clone(),

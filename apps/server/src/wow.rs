@@ -80,7 +80,7 @@ fn stash() -> &'static Stash {
 }
 
 pub fn stash_token(uid: Uuid, token: &str) {
-    let mut m = stash().lock().unwrap();
+    let mut m = stash().lock().unwrap_or_else(|e| e.into_inner());
     m.retain(|_, v| v.1.elapsed() < Duration::from_secs(900));
     m.insert(uid, (token.to_string(), std::time::Instant::now()));
 }
@@ -93,7 +93,7 @@ async fn verify_fetch(
     api::check_origin(&a, &headers, &st)?;
     let tok = stash()
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .remove(&a.user.id)
         .filter(|t| t.1.elapsed() < Duration::from_secs(900));
     let Some((tok, _)) = tok else {
@@ -291,7 +291,8 @@ async fn flag(st: &AppState, uid: Uuid, game: &str, who: &str, r: &Reject, playe
     .bind(played)
     .bind(&r.detail)
     .execute(&st.db)
-    .await;
+    .await
+    .inspect_err(|e| tracing::warn!("wow flags: insert for {uid}: {e}"));
 }
 
 /// The linked Battle.net account: (BattleTag, has the `wow.profile` scope).
@@ -806,7 +807,8 @@ pub async fn sync_characters(
     let _ = sqlx::query("DELETE FROM bnet_characters WHERE user_id = $1")
         .bind(uid)
         .execute(&st.db)
-        .await;
+        .await
+        .inspect_err(|e| tracing::warn!("bnet characters: clear for {uid}: {e}"));
     for (g, r, slug, rn, name, lvl, [race, gender, class], bid) in &rows {
         let _ = sqlx::query(
             "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, realm_name, name, level,
@@ -825,7 +827,8 @@ pub async fn sync_characters(
         .bind(class)
         .bind(bid)
         .execute(&st.db)
-        .await;
+        .await
+        .inspect_err(|e| tracing::warn!("bnet characters: insert for {uid}: {e}"));
     }
     copy_bnet_levels(&st.db, uid).await;
     tracing::info!("bnet characters: {} for {uid}", rows.len());
@@ -866,7 +869,8 @@ async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
     )
     .bind(uid)
     .execute(&st.db)
-    .await;
+    .await
+    .inspect_err(|e| tracing::warn!("bnet characters: id copy for {uid}: {e}"));
     let mut users: Vec<Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT o.user_id FROM wow_characters o JOIN wow_characters c
            ON c.user_id = $1 AND o.game_id = c.game_id AND o.region = c.region AND o.bnet_id = c.bnet_id
@@ -894,14 +898,16 @@ async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
     )
     .bind(&users)
     .execute(&st.db)
-    .await;
+    .await
+    .inspect_err(|e| tracing::warn!("bnet characters: verified update: {e}"));
     let _ = sqlx::query(
         "UPDATE wow_characters SET ever_verified = true
          WHERE user_id = ANY($1) AND verified AND NOT ever_verified",
     )
     .bind(&users)
     .execute(&st.db)
-    .await;
+    .await
+    .inspect_err(|e| tracing::warn!("bnet characters: ever_verified update: {e}"));
     // Verification decides what counts, so refresh the stored totals.
     for (i, u) in users.iter().enumerate() {
         let m = match (i, mode) {
@@ -927,7 +933,8 @@ pub async fn on_unlink(st: &AppState, uid: Uuid) {
     let _ = sqlx::query("DELETE FROM bnet_characters WHERE user_id = $1")
         .bind(uid)
         .execute(&st.db)
-        .await;
+        .await
+        .inspect_err(|e| tracing::warn!("bnet characters: clear on unlink for {uid}: {e}"));
     // Unverified characters must stop counting, so store the exact (lower) sum here.
     set_verified(st, uid, Some(Recount::Exact)).await;
 }
@@ -1014,7 +1021,8 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
     .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
     .bind(v["id"].as_i64())
     .execute(&st.db)
-    .await;
+    .await
+    .inspect_err(|e| tracing::warn!("wow armory: update character {id}: {e}"));
     if let (Some(l), Some(t)) = (level, last) {
         if t.timestamp() > e.at && e.level > l {
             let r = rej(
@@ -1202,7 +1210,8 @@ pub async fn backfill_ids(st: AppState) {
         .bind(id)
         .bind(bid)
         .execute(&st.db)
-        .await;
+        .await
+        .inspect_err(|e| tracing::warn!("wow armory: bnet id for {id}: {e}"));
         if let Some(b) = bid {
             found += 1;
             let _ = sqlx::query(
@@ -1216,7 +1225,8 @@ pub async fn backfill_ids(st: AppState) {
             .bind(b)
             .bind(name)
             .execute(&st.db)
-            .await;
+            .await
+            .inspect_err(|e| tracing::warn!("bnet characters: bnet id for {uid}: {e}"));
             users.insert(*uid);
         }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;

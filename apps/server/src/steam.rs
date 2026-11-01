@@ -360,7 +360,8 @@ pub async fn refresh_persona(state: &AppState, user_id: Uuid, steamid: u64) {
         .bind(steamid.to_string())
         .bind(n)
         .execute(&state.db)
-        .await;
+        .await
+        .inspect_err(|e| tracing::warn!("steam: display name for {user_id}: {e}"));
     }
 }
 

@@ -179,7 +179,7 @@ impl Hub {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         self.conns
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .entry(user)
             .or_default()
             .push((id, tx, kill));
@@ -187,7 +187,7 @@ impl Hub {
     }
     /// Remove a connection; returns true if it was the user's last one.
     fn remove(&self, user: Uuid, id: u64) -> bool {
-        let mut c = self.conns.lock().unwrap();
+        let mut c = self.conns.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(v) = c.get_mut(&user) {
             v.retain(|(i, _, _)| *i != id);
             if v.is_empty() {
@@ -199,7 +199,12 @@ impl Hub {
         true
     }
     pub fn send(&self, user: Uuid, msg: ServerMsg) {
-        if let Some(v) = self.conns.lock().unwrap().get(&user) {
+        if let Some(v) = self
+            .conns
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&user)
+        {
             for (_, tx, _) in v {
                 let _ = tx.send(msg.clone());
             }
@@ -208,7 +213,12 @@ impl Hub {
     /// Drop every socket of `user` (banned, password reset): their writers end and
     /// close the sockets.
     pub fn kick(&self, user: Uuid) {
-        if let Some(v) = self.conns.lock().unwrap().get(&user) {
+        if let Some(v) = self
+            .conns
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&user)
+        {
             for (_, _, kill) in v {
                 kill.notify_one();
             }
@@ -216,13 +226,21 @@ impl Hub {
     }
     /// Users with at least one live socket.
     pub fn online_users(&self) -> usize {
-        self.conns.lock().unwrap().len()
+        self.conns.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
     pub fn is_online(&self, user: Uuid) -> bool {
-        self.conns.lock().unwrap().contains_key(&user)
+        self.conns
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(&user)
     }
     pub fn connection_count(&self) -> usize {
-        self.conns.lock().unwrap().values().map(Vec::len).sum()
+        self.conns
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .map(Vec::len)
+            .sum()
     }
 }
 

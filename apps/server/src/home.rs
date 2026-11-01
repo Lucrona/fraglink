@@ -50,7 +50,12 @@ pub async fn appids(st: &AppState, ids: &[String]) -> ApiResult<HashMap<String, 
 async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>> {
     let viewer = m.0.as_ref().map(|a| a.user.id);
     if viewer.is_none() {
-        if let Some((t, v)) = st.home_public.lock().unwrap().as_ref() {
+        if let Some((t, v)) = st
+            .home_public
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+        {
             if t.elapsed() < Duration::from_secs(60) {
                 return Ok(Json(v.clone()));
             }
@@ -58,7 +63,8 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
     }
     let v = build(&st, viewer).await?;
     if viewer.is_none() {
-        *st.home_public.lock().unwrap() = Some((Instant::now(), v.clone()));
+        *st.home_public.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some((Instant::now(), v.clone()));
     }
     Ok(Json(v))
 }

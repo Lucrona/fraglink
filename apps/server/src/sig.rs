@@ -46,14 +46,18 @@ pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Resp
     if !crate::features::on(&st, "public_profiles").await {
         return StatusCode::NOT_FOUND.into_response();
     }
-    if let Some((t, b)) = cache().lock().unwrap().get(&handle) {
+    if let Some((t, b)) = cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&handle)
+    {
         if t.elapsed() < Duration::from_secs(CACHE_SECS) {
             return png(b.clone());
         }
     }
     match render_for(&st, &handle).await {
         Ok(Some(b)) => {
-            let mut c = cache().lock().unwrap();
+            let mut c = cache().lock().unwrap_or_else(|e| e.into_inner());
             if c.len() > 2000 {
                 c.clear();
             }
@@ -67,7 +71,10 @@ pub async fn serve(State(st): State<AppState>, Path(file): Path<String>) -> Resp
 
 /// Drop a cached card (privacy changed).
 pub fn forget(handle: &str) {
-    cache().lock().unwrap().remove(&handle.to_lowercase());
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&handle.to_lowercase());
 }
 
 fn png(b: Vec<u8>) -> Response {

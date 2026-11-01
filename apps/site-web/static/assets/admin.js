@@ -251,7 +251,7 @@ async function listGames(q) {
         (g.retired ? `<span class="pill bad">${g.retired.partial ? "exe retired" : "retired"}</span>` : "") +
         (g.status && g.status.lifecycle !== "live" ? `<span class="pill ${g.status.lifecycle === "ended" ? "bad" : "warn"}">${esc(LIFE[g.status.lifecycle] || g.status.lifecycle)}</span>` : "");
       const bd = [["tracked", g.tracked_min], ["imported", g.imported_min]].filter(x => x[1] > 0).map(([k, m]) => `${k} ${hrs(m)}`).join(" · ");
-      return `<tr class="click" data-id="${esc(g.id)}"><td class="ic"><img src="${esc(g.icon)}" width="20" height="20" alt="" onerror="this.style.visibility='hidden'"></td>
+      return `<tr class="click" data-id="${esc(g.id)}"><td class="ic"><img src="${esc(g.icon)}" width="20" height="20" alt="" data-hide-broken></td>
         <td>${esc(g.public_name || g.name)}${flags}</td><td class="mono dimt">${esc(g.id)}</td><td>${srcChips(g)}</td>
         <td class="num">${g.players}</td><td class="num" title="${esc(bd || "no hours")}">${hrs(g.total_min)}${bd ? `<div class="dimt" style="font-size:10.5px;white-space:nowrap">${esc(bd)}</div>` : ""}</td><td class="num dimt">${g.last_played_at ? day(g.last_played_at) : "-"}</td><td class="num dimt">${g.updated_at ? day(g.updated_at) : "-"}</td></tr>`;
     }).join("")}</tbody></table>
@@ -765,7 +765,7 @@ async function renderMedia(id, g) {
   try { m = await api(gid + "/media"); } catch (x) { box.innerHTML = `<div class="alert">${esc(x.message)}</div>`; return; }
   const own = { icon: g.icon64 + t, art: `/api/v1/game-art/${encodeURIComponent(id)}.jpg${t}` };
   const ph = k => `<span class="mtile-none ${k}">none</span>`;
-  const img = (k, src) => src ? `<img class="${k}" src="${esc(src)}" alt="" onerror="this.outerHTML='<span class=&quot;mtile-none ${k}&quot;>none</span>'">` : ph(k);
+  const img = (k, src) => src ? `<img class="${k}" src="${esc(src)}" alt="" data-broken-swap="${k}">` : ph(k);
   const tile = (k, v, label, src, note) => {
     const on = m[k].pref === v, dis = v !== "auto" && v !== "custom" && !src;
     return `<label class="mtile${on ? " on" : ""}${dis ? " dis" : ""}"><input type="radio" name="${k}src" value="${v}" ${on ? "checked" : ""} ${dis ? "disabled" : ""}>${img(k, src)}<b>${label}</b><small>${note}</small></label>`;

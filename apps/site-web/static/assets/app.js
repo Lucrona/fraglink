@@ -12,6 +12,24 @@ const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const token = () => localStorage.getItem(TK);
+/* No inline handlers (the site's Content-Security-Policy blocks them): broken images and a couple
+   of buttons are handled here instead, by data attributes. */
+document.addEventListener("error", e => {
+  const t = e.target;
+  if (!t || t.tagName !== "IMG") return;
+  if (t.hasAttribute("data-hide-broken")) t.style.visibility = "hidden";
+  else if (t.hasAttribute("data-broken-remove")) t.remove();
+  else if (t.hasAttribute("data-broken-parent")) { if (t.parentNode) t.parentNode.classList.add("is-broken"); }
+  else if (t.hasAttribute("data-broken-swap")) { const s = document.createElement("span"); s.className = ("mtile-none " + t.getAttribute("data-broken-swap")).trim(); s.textContent = "none"; t.replaceWith(s); }
+}, true);
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-wall],[data-reload]");
+  if (!b) return;
+  if (b.hasAttribute("data-reload")) { location.reload(); return; }
+  const m = b.closest("section,div").parentNode.querySelector("[data-wmore]");
+  if (m) m.hidden = false;
+  b.parentNode.remove();
+});
 // Wowhead tooltips: hover-capable devices only; script loaded the first time a wowhead.com link is on the page.
 const WH = (() => {
   const ok = matchMedia("(hover: hover) and (pointer: fine)").matches;
@@ -167,7 +185,7 @@ async function loadIcons(ids) {
 }
 function icon(id, name, cls) {
   const src = iconCache[id];
-  if (src) return `<img class="${cls || ""}" src="${esc(src)}" alt="" loading="lazy" width="20" height="20" onerror="this.style.visibility='hidden'">`;
+  if (src) return `<img class="${cls || ""}" src="${esc(src)}" alt="" loading="lazy" width="20" height="20" data-hide-broken>`;
   return `<span class="gi ${cls || ""}">${isUnlisted(id) ? "?" : initial(name)}</span>`;
 }
 
@@ -241,7 +259,7 @@ const sigUrl = h => siteBase() + "/api/v1/sig/" + encodeURIComponent(h) + ".png"
 /** Signature <img> with a friendly placeholder if the PNG 404s (private, test, or network). */
 const sigPreview = (handle, cls = "sigimg") => {
   const src = "/api/v1/sig/" + encodeURIComponent(handle) + ".png" + sigBust();
-  return `<span class="sigprev"><img class="${cls}" src="${src}" alt="" width="460" height="100" onerror="this.parentNode.classList.add('is-broken')"><span class="sigph">Signature preview will show here for public profiles. New accounts get a default card straight away.</span></span>`;
+  return `<span class="sigprev"><img class="${cls}" src="${src}" alt="" width="460" height="100" data-broken-parent><span class="sigph">Signature preview will show here for public profiles. New accounts get a default card straight away.</span></span>`;
 };
 const sigBust = () => "?t=" + Math.floor(Date.now() / 30000);
 function avatar(a, size, extra) {
@@ -263,7 +281,7 @@ const artGrad = name => { const [a, b] = ART_GRAD[artHue(name)].split(","); retu
 /* Art with a tasteful fallback: gradient + the game's icon, covered by the picture when it loads. */
 function gameArt(id, name, cls) {
   const u = gartUrl(id);
-  return `<div class="artbox ${cls || ""}" style="background:${artGrad(name)}"><span class="ai">${iconCache[id] ? icon(id, name) : `<img src="/assets/mark.svg" alt="" style="opacity:.35">`}</span>${u ? `<img class="ov" src="${u}" alt="" loading="lazy" onerror="this.remove()">` : ""}</div>`;
+  return `<div class="artbox ${cls || ""}" style="background:${artGrad(name)}"><span class="ai">${iconCache[id] ? icon(id, name) : `<img src="/assets/mark.svg" alt="" style="opacity:.35">`}</span>${u ? `<img class="ov" src="${u}" alt="" loading="lazy" data-broken-remove>` : ""}</div>`;
 }
 const artBg = (id, name) => { const u = gartUrl(id); return `${u ? `url(${u}) center/cover no-repeat, ` : ""}${artGrad(name)}`; };
 function turnstileToken(form) {
@@ -571,7 +589,7 @@ const WOW = (() => {
     },
   };
 })();
-const imgOk = "onerror=\"this.style.visibility='hidden'\"";
+const imgOk = "data-hide-broken";
 
 /* ---------- /connect/battlenet: the Battle.net account, verified WoW characters, spec picks, hide toggles ---------- */
 pages.bnet = async () => {
@@ -1144,7 +1162,7 @@ pages.profile = async () => {
     const card = c => `<div class="wc${c.hidden ? " wc-hid" : ""}${pop(c) ? " wc-click" : ""}"${pop(c) ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}><span class="wc-ic">${c.class ? `<img src="${WOW.clsIcon(c.class)}" alt="" title="${esc(WOW.cls(c.class))}" loading="lazy" ${imgOk}>` : ""}${c.spec && WOW.specIcon(c.class, c.spec) ? `<img src="${WOW.specIcon(c.class, c.spec)}" alt="" title="${esc(c.spec)}" loading="lazy" ${imgOk}>` : ""}</span></div>
       <div class="wc-t"><b>${esc(c.name)}</b><div class="sub">${c.level} ${esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" "))} · ${esc(c.realm)} ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""}</div>${c.show_guild && c.guild ? `<div class="sub wc-g">&lt;${esc(c.guild)}&gt;</div>` : ""}</div></div>`;
     const WS = [...WC].sort((a, b) => (a.featured || 9) - (b.featured || 9) || (b.played_min || 0) - (a.played_min || 0)), WMAX = 3; // featured picks first, in order
-    wowc = sec("WoW characters", `<div class="wcs">${WS.slice(0, WMAX).map(card).join("")}</div>${WS.length > WMAX ? `<div class="wcs" data-wmore hidden>${WS.slice(WMAX).map(card).join("")}</div><p style="padding:0 14px 10px"><button class="btn sm" type="button" data-wall onclick="this.closest('section,div').parentNode.querySelector('[data-wmore]').hidden=false;this.parentNode.remove()">Show all ${WS.length} characters</button></p>` : ""}${self ? `<p class="sub" style="padding:0 14px 10px">Only you see hidden characters. <a href="/connect/battlenet">Manage on your Battle.net page</a></p>` : ""}`);
+    wowc = sec("WoW characters", `<div class="wcs">${WS.slice(0, WMAX).map(card).join("")}</div>${WS.length > WMAX ? `<div class="wcs" data-wmore hidden>${WS.slice(WMAX).map(card).join("")}</div><p style="padding:0 14px 10px"><button class="btn sm" type="button" data-wall>Show all ${WS.length} characters</button></p>` : ""}${self ? `<p class="sub" style="padding:0 14px 10px">Only you see hidden characters. <a href="/connect/battlenet">Manage on your Battle.net page</a></p>` : ""}`);
   }
 
   // Achievements
@@ -1618,7 +1636,7 @@ pages.settings = async () => {
       else if (b.matches("[data-mfa-enable]")) {
         const r = await api("/me/mfa/enable", { method: "POST", body: { code: $('[name="enable_code"]').value.trim() } });
         await refresh();
-        $("[data-mfa]").innerHTML = `${msg}<div class="frm">${row("Status", `<b style="color:var(--online)">On</b>`)}${row("Backup codes", `<div class="mpcodes">${r.backup_codes.map(c => `<span>${esc(c)}</span>`).join("")}</div>`, "Save these somewhere safe. Each one signs you in once if you lose your phone. They won't be shown again.")}${row("", `<button class="btn" type="button" onclick="location.reload()">Done</button>`)}</div>`;
+        $("[data-mfa]").innerHTML = `${msg}<div class="frm">${row("Status", `<b style="color:var(--online)">On</b>`)}${row("Backup codes", `<div class="mpcodes">${r.backup_codes.map(c => `<span>${esc(c)}</span>`).join("")}</div>`, "Save these somewhere safe. Each one signs you in once if you lose your phone. They won't be shown again.")}${row("", `<button class="btn" type="button" data-reload>Done</button>`)}</div>`;
       }
       else if (b.matches("[data-mfa-off]") || b.matches("[data-mfa-codes]")) {
         const body = { password: $('[data-mfa] [name="password"]').value, code: $('[data-mfa] [name="code"]').value.trim() };

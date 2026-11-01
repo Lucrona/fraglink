@@ -182,7 +182,7 @@ pub fn lookup_steam_name(st: &AppState, id: &str) {
     if !TRIED
         .get_or_init(Default::default)
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .insert(appid)
     {
         return;

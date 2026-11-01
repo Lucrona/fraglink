@@ -384,7 +384,8 @@ pub async fn refresh(st: &AppState, id: Uuid) -> Result<(), ()> {
             )
             .bind(id)
             .execute(&st.db)
-            .await;
+            .await
+            .inspect_err(|e| tracing::warn!("wowchar: mark missing {id}: {e}"));
             return Ok(());
         }
         Err(_) => return Err(()),
@@ -528,7 +529,8 @@ pub async fn refresh(st: &AppState, id: Uuid) -> Result<(), ()> {
                         .bind(mid)
                         .bind(&ic)
                         .execute(&st.db)
-                        .await;
+                        .await
+                        .inspect_err(|e| tracing::warn!("wowchar: item icon {mid}: {e}"));
                     icons.insert(mid, ic);
                 }
             }

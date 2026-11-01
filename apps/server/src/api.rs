@@ -1190,7 +1190,7 @@ async fn export_zip(
 ) -> ApiResult<axum::response::Response> {
     use axum::response::IntoResponse;
     {
-        let mut log = st.export_log.lock().unwrap();
+        let mut log = st.export_log.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(t) = log.get(&a.user.id) {
             let age = t.elapsed().as_secs();
             if age < EXPORT_ZIP_INTERVAL_SECS {

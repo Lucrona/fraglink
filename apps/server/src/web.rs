@@ -592,7 +592,8 @@ async fn logout_post(
             let _ = sqlx::query("UPDATE auth_tokens SET revoked_at = now() WHERE id = $1")
                 .bind(a.token_id)
                 .execute(&st.db)
-                .await;
+                .await
+                .inspect_err(|e| tracing::warn!("web logout: revoke token: {e}"));
         }
     }
     let mut r = Redirect::to("/").into_response();
