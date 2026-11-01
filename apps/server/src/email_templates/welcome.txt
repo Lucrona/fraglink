@@ -1,6 +1,6 @@
 Hi {nickname},
 
-Your account @{username} is ready. Here's how to get the most out of it:
+Your account @{username} is ready. Here's how to get set up:
 
 1. Get the desktop app
 The small Windows tray app counts your hours in every game it detects, whatever launcher you use. Hours only count while it's signed in and connected.

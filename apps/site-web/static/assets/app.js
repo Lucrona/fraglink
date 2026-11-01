@@ -342,7 +342,7 @@ async function fillDownload() {
     btns.forEach(b => { if (l.url) b.href = l.url; b.removeAttribute("aria-disabled"); });
     vers.forEach(v => { v.textContent = "Version " + l.version + (l.date ? " · " + fullDate.format(new Date(l.date)) : "") + " · Windows 10/11, 64-bit"; });
   } catch (e) {
-    vers.forEach(v => { v.textContent = "The download is unavailable right now. Try again in a few minutes."; });
+    vers.forEach(v => { v.textContent = "Download's not available right now. Try again in a few minutes."; });
   }
 }
 
@@ -455,7 +455,7 @@ pages.wowupload = async () => {
   const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
   const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
   el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
-    <p class="sub">Upload once to bring in your past WoW playtime. Hours Fraglink tracks after that add on top. Uploading again is optional: it catches up time played while Fraglink was closed, the higher total is always kept, and time tracked in menus and loading screens (which /played leaves out) stays. Each character counts once, even after a rename or realm transfer.</p></div></div>
+    <p class="sub">Upload once to bring in your past WoW hours, and anything Fraglink tracks after that adds on top. You don't need to upload again, but it'll catch up time you played with Fraglink closed. The higher total always wins, and menu and loading screen time (which /played leaves out) is kept. Each character counts once, even after a rename or realm transfer.</p></div></div>
     <form class="wu-form" data-form>
       <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label class="sub" title="Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app."><input type="radio" name="game" value="wow_forever" disabled> World of Warcraft: Forever</label></div>
       <p class="sub">Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app.</p>
@@ -893,7 +893,7 @@ pages.forgot = () => {
     e.preventDefault(); err.hidden = true; const b = $("button", f); b.disabled = true;
     try {
       const r = await api("/auth/forgot", { method: "POST", body: { email: f.email.value.trim(), turnstile: turnstileToken(f) } });
-      showOk(err, r.mail_live ? "If that email is on a Fraglink account, a reset link is on its way. It works for 1 hour. Can't find it? Check your junk or spam folder." : "Thanks. Reset emails aren't being delivered yet, so please contact support (below) to get back in.");
+      showOk(err, r.mail_live ? "If that email is on a Fraglink account, a reset link is on its way. It works for 1 hour. Can't find it? Check your junk or spam folder." : "Reset emails aren't working yet, sorry. Contact support (below) and we'll get you back in.");
     } catch (x) { showErr(err, x); turnstileReset(); }
     b.disabled = false;
   });
@@ -906,7 +906,7 @@ pages.contact = () => {
     e.preventDefault(); err.hidden = true; const b = $("button", f); b.disabled = true;
     try {
       await api("/contact", { method: "POST", body: { name: f.name.value.trim(), email: f.email.value.trim(), topic: f.topic.value, message: f.message.value.trim(), turnstile: turnstileToken(f) } });
-      f.reset(); showOk(err, "Thanks, your message is on its way. We'll reply to your email.");
+      f.reset(); showOk(err, "Sent! We'll get back to you by email.");
     } catch (x) { showErr(err, x); }
     turnstileReset(); b.disabled = false;
   });
@@ -1339,7 +1339,7 @@ pages.settings = async () => {
     return `<h3>Profile picture</h3>${msg}<div class="frm">
       ${row("Current", `<div class="avsizes"><div>${avatar(u.avatar, 184)}<small>184 profile</small></div><div>${avatar(u.avatar, 64)}<small>64 panels</small></div><div>${avatar(u.avatar, 32)}<small>32 lists</small></div></div>`)}
       ${row("Upload", `<div class="row"><input type="file" id="av-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><button class="btn blue" type="button" data-upload ${canUp ? "" : "disabled"}>Upload a picture…</button><button class="btn" type="button" data-avreset>Reset to default</button></div>`,
-        canUp ? "PNG, JPEG, WebP or GIF (first frame), up to 2 MB. Cropped to a square. Keep it friendly: pictures can be reported and removed. 5 changes a day." : esc(u.avatar_upload_block || "Uploads aren't available right now."))}
+        canUp ? "PNG, JPEG, WebP or GIF (first frame), up to 2 MB. Cropped to a square. Keep it clean, pictures can be reported and taken down. 5 changes a day." : esc(u.avatar_upload_block || "Uploads aren't available right now."))}
       ${row("Or pick a preset", `<div class="presets">${PRESET_GLYPHS.map((g, i) => `<button type="button" data-preset="${i}" class="${u.avatar.kind === "preset" && u.avatar.preset === i ? "on" : ""}" title="Preset ${i + 1}">${avatar({ kind: "preset", preset: i }, 48)}</button>`).join("")}</div>`, "Your default colour comes from your account.")}
     </div>
     <h3>Account</h3><form ${FA} data-f="name">${msg}<div class="frm">
@@ -1514,7 +1514,7 @@ pages.settings = async () => {
     let s; try { s = await api("/me/sessions"); } catch (e) { bad(box, e); return; }
     box.innerHTML = `${msg}${s.sessions.map(x => `<div class="sess" data-id="${esc(x.id)}"><div class="d"><b>${esc(x.device)}</b>${x.current ? `<span class="cur">This browser</span>` : ""}<small>${x.kind === "device" ? "Desktop app" : "Website"} · ${x.location ? esc(x.location) + " · " : ""}${x.ip ? esc(x.ip) + " · " : ""}signed in ${fullDate.format(new Date(x.created_at))} · last active ${since(x.last_used_at)} ago</small></div>${x.current ? "" : `<button class="btn sm" type="button" data-revoke>Sign out</button>`}</div>`).join("")}
       <div style="padding:10px 14px"><button class="btn red" type="button" data-revoke-all>Log out of all other devices</button></div>
-      <div class="note" style="padding:0 14px 10px">Countries are approximate, worked out on our own server. <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Signed-out sign-ins are removed after 30 days, and desktop apps unused for 180 days are signed out.</div>`;
+      <div class="note" style="padding:0 14px 10px">Countries are a rough guess, looked up on our own server. <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Signed-out sign-ins are removed after 30 days, and desktop apps unused for 180 days are signed out.</div>`;
   }
 
   function render() {
@@ -1723,11 +1723,11 @@ function applyFeatures() {
   document.body.classList.toggle("ff-no-search", !FEATURES.public_profiles);
   const page = document.body.dataset.page, staff = !!(me() && me().staff_role);
   if (FEATURES.maintenance && !staff && page !== "login" && page !== "admin") {
-    $("main").innerHTML = `<div class="maint panel"><div class="body"><h1>Down for maintenance</h1><p>Fraglink is getting some work done. We'll be back soon.</p><p class="muted">News and updates: <a href="https://discord.gg/QbaYRtvADj" rel="noopener">our Discord</a>.</p></div></div>`;
+    $("main").innerHTML = `<div class="maint panel"><div class="body"><h1>Down for maintenance</h1><p>We're doing some work on Fraglink. Back soon.</p><p class="muted">News and updates: <a href="https://discord.gg/QbaYRtvADj" rel="noopener">our Discord</a>.</p></div></div>`;
     return false;
   }
   if (!FEATURES.signups && page === "signup") {
-    const f = $("#signup"); if (f) f.outerHTML = `<p>Sign-ups are closed right now. Please check back soon.</p><p><a href="/login">Already have an account? Sign in</a></p>`;
+    const f = $("#signup"); if (f) f.outerHTML = `<p>Sign-ups are closed for now. Check back soon.</p><p><a href="/login">Already have an account? Sign in</a></p>`;
     return false;
   }
   return true;

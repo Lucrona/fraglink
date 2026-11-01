@@ -15,7 +15,7 @@ layout = open(os.path.join(HERE, "layout.html")).read()
 SITEKEY = os.environ.get("FRAGLINK_TURNSTILE_SITEKEY", "0x4AAAAAAFUF0sKGuaUYzQ8H")
 # Search engines. Production is playfraglink.com; beta sends noindex headers and Disallow: / (Caddy).
 CANON = "https://playfraglink.com"
-DESC = "Fraglink: a lightweight Windows tray app that tracks your gaming hours and shows what your friends are playing."
+DESC = "Fraglink: a small Windows tray app. You play, it tracks your hours, and your friends see what you're playing."
 # pages search engines may index -> their one canonical address (also in the server's sitemap)
 INDEXABLE = {"home": "/", "download": "/download", "news": None, "privacy": "/privacy", "terms": "/terms", "faq": "/faq", "changelog": "/changelog", "contact": "/contact", "status": "/status", "media": "/media"}
 OG_IMG = CANON + "/assets/og-card.png"
