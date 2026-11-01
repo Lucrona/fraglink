@@ -499,3 +499,83 @@ async fn private_and_minor_count_in_anonymous_aggregates(pool: PgPool) {
         .collect();
     assert_eq!(ranks, ["pubby"], "{}", lb.text);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn trending_needs_three_real_players(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let viewer = signup(&app, "viewer@example.com", "viewer").await;
+    let private = signup(&app, "pb@example.com", "pbxpb").await;
+    for (e, h) in [
+        ("pa@example.com", "paxpa"),
+        ("bn@example.com", "bnxbn"),
+        ("dl@example.com", "dlxdl"),
+        ("pd@example.com", "pdxpd"),
+        ("ts@example.com", "tsxts"),
+        ("hd@example.com", "hdxhd"),
+        ("pc@example.com", "pcxpc"),
+    ] {
+        signup(&app, e, h).await;
+    }
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&private),
+        Some(json!({"public_profile": false})),
+    )
+    .await;
+    for q in [
+        "UPDATE users SET banned_at = now() WHERE handle = 'bnxbn'",
+        "UPDATE users SET deleted_at = now() WHERE handle = 'dlxdl'",
+        "UPDATE users SET delete_after = now() + interval '7 days' WHERE handle = 'pdxpd'",
+        "UPDATE users SET is_test = true WHERE handle = 'tsxts'",
+        "INSERT INTO hidden_games(user_id, game_id) SELECT id, 'trio' FROM users WHERE handle = 'hdxhd'",
+        "INSERT INTO games (id, name, verified) VALUES ('trio', 'Trio Game', true) ON CONFLICT DO NOTHING",
+    ] {
+        sqlx::query(q).execute(&pool).await.unwrap();
+    }
+    let play = |h: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source)
+                 SELECT gen_random_uuid(), id, 'trio', now() - interval '2 hours', now() - interval '1 hour', 3600, 'tracked'
+                 FROM users WHERE handle = $1",
+            )
+            .bind(h)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    };
+    // public + private count; banned, deleted, pending-delete, test and hidden-by-player don't
+    for h in [
+        "paxpa", "pbxpb", "bnxbn", "dlxdl", "pdxpd", "tsxts", "hdxhd",
+    ] {
+        play(h).await;
+    }
+    let trio = |h: serde_json::Value| {
+        h["most_played"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["game_id"] == "trio")
+            .cloned()
+    };
+    let h = api(&app, "GET", "/api/v1/home", Some(&viewer), None)
+        .await
+        .json();
+    assert!(
+        trio(h.clone()).is_none(),
+        "2 real players must not trend: {h}"
+    );
+
+    // a third real player: now it shows, counting only the three
+    play("pcxpc").await;
+    let h = api(&app, "GET", "/api/v1/home", Some(&viewer), None)
+        .await
+        .json();
+    let g = trio(h.clone()).unwrap_or_else(|| panic!("3 players should trend: {h}"));
+    assert_eq!(g["players"], 3, "{g}");
+    assert_eq!(g["minutes"], 180, "{g}");
+}

@@ -66,6 +66,8 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
 
 const LIVE_USER: &str =
     "u.deleted_at IS NULL AND u.banned_at IS NULL AND u.delete_after IS NULL AND NOT u.is_test";
+/// A game shows in "most played this week" only with at least this many different players.
+pub const TRENDING_MIN_PLAYERS: i64 = 3;
 /// Sessions of test accounts never count in public totals.
 const NO_TEST_SESSIONS: &str = "s.user_id NOT IN (SELECT id FROM users WHERE is_test)";
 
@@ -88,12 +90,18 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
 
     // ---- most played this week (aggregate; unlisted/hidden games never shown)
     // (app sessions or Imported counter growth, whichever is larger per player: hours::WEEK_CTE)
+    // Private profiles still count (it's an anonymous total), but deleted, banned, pending-delete
+    // and test accounts don't, and a game needs TRENDING_MIN_PLAYERS different players that week,
+    // so no tile can single one person out ("1 player, 30 h").
     let rows: Vec<(String, i64, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "WITH {wk}
          SELECT s.game_id, sum(s.m)::bigint, count(DISTINCT s.user_id)
-         FROM wk s WHERE {NO_TEST_SESSIONS}
+         FROM wk s JOIN users u ON u.id = s.user_id
+         WHERE {LIVE_USER}
            AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
-         GROUP BY s.game_id HAVING sum(s.m) >= 1 ORDER BY 2 DESC LIMIT 40",
+         GROUP BY s.game_id
+         HAVING sum(s.m) >= 1 AND count(DISTINCT s.user_id) >= {TRENDING_MIN_PLAYERS}
+         ORDER BY 2 DESC LIMIT 40",
         wk = crate::hours::WEEK_CTE
     )))
     .fetch_all(&st.db)
