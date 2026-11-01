@@ -526,6 +526,28 @@ pub(crate) async fn last_import(
     .await?)
 }
 
+/// Tracked minutes of the game in `[from, to]` (sessions clipped to the window).
+async fn tracked_between(
+    st: &AppState,
+    uid: Uuid,
+    gid: &str,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> ApiResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT coalesce((sum(GREATEST(0, LEAST(x.duration_s::numeric,
+                    extract(epoch FROM LEAST(x.ended_at, $4) - GREATEST(x.started_at, $3))))) / 60)::bigint, 0)::bigint
+         FROM play_sessions x
+         WHERE x.user_id = $1 AND x.game_id = $2 AND x.ended_at > $3 AND x.started_at < $4",
+    )
+    .bind(uid)
+    .bind(gid)
+    .bind(from)
+    .bind(to)
+    .fetch_one(&st.db)
+    .await?)
+}
+
 /// The shown imported total: latest import + carried extra + tracked play after it.
 pub(crate) async fn imported_floor(st: &AppState, uid: Uuid, gid: &str) -> ApiResult<Option<i64>> {
     Ok(last_import(st, uid, gid).await?.map(|(m, c, a)| m + c + a))
@@ -592,6 +614,24 @@ async fn record_total(
     let prev_map: Option<std::collections::BTreeMap<String, i64>> = last
         .as_ref()
         .and_then(|(_, i)| serde_json::from_value(i["chars"].clone()).ok());
+    // The time this total is "as of": the newest snapshot among the counted characters,
+    // never before the last stored total and never in the future. Not the upload time:
+    // after a WoW crash the addon's file still holds the /played from before that
+    // session, so play between the snapshot and the upload would be carried as menu
+    // time and then counted again once a later snapshot's /played includes it.
+    let ids: Vec<&String> = now_map.keys().collect();
+    let (as_of, prev_at): (DateTime<Utc>, Option<DateTime<Utc>>) = sqlx::query_as(
+        "WITH p AS (SELECT max(captured_at) AS at FROM hours_entries
+                    WHERE user_id = $1 AND game_id = $2 AND tier = 'imported')
+         SELECT LEAST(now(), GREATEST(p.at, (SELECT max(played_at) FROM wow_characters
+                    WHERE user_id = $1 AND game_id = $2 AND id::text = ANY($3)))), p.at
+         FROM p",
+    )
+    .bind(uid)
+    .bind(gid)
+    .bind(&ids)
+    .fetch_one(&st.db)
+    .await?;
     let mut carry = 0i64;
     let store = match mode {
         Recount::Reset => last.is_some() || sum > 0,
@@ -600,7 +640,9 @@ async fn record_total(
         }
         Recount::KeepHigher => match last_import(st, uid, gid).await? {
             None => sum > 0,
-            Some((m0, c0, after)) => {
+            Some((m0, c0, _)) => {
+                // tracked play between the last total and this one's snapshot only
+                let after = tracked_between(st, uid, gid, prev_at.unwrap_or(as_of), as_of).await?;
                 // /played gained by the counted characters (None: one stopped counting)
                 let gain = match &prev_map {
                     Some(p) if p.keys().any(|k| !now_map.contains_key(k)) => None,
@@ -629,8 +671,9 @@ async fn record_total(
             "WoW /played (Fraglink addon)"
         };
         sqlx::query(
-            "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, inputs, note, carry_min)
-             VALUES($1, $2, $3, 'imported', 'wow_addon', $4, $5, $6, $7)",
+            "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, inputs, note, carry_min,
+                                       captured_at)
+             VALUES($1, $2, $3, 'imported', 'wow_addon', $4, $5, $6, $7, $8)",
         )
         .bind(Uuid::new_v4())
         .bind(uid)
@@ -639,6 +682,7 @@ async fn record_total(
         .bind(json!({ "characters": n, "verified": v, "reset": mode == Recount::Reset, "chars": now_map }))
         .bind(note)
         .bind(carry.min(i32::MAX as i64) as i32)
+        .bind(as_of)
         .execute(&st.db)
         .await?;
     }

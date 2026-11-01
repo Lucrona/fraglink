@@ -217,9 +217,9 @@ async fn download_with_progress(app: &AppHandle, up: Update, to_splash: bool) ->
     let mut last_pct = u32::MAX;
     let fut = up.download(
         move |chunk, total| {
-            got += chunk as u64;
+            got = got.saturating_add(chunk as u64);
             if let Some(t) = total.filter(|t| *t > 0) {
-                let pct = ((got * 100) / t).min(100) as u32;
+                let pct = (got.saturating_mul(100) / t).min(100) as u32;
                 if pct != last_pct {
                     last_pct = pct;
                     if to_splash {

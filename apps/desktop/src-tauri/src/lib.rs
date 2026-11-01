@@ -642,7 +642,9 @@ const ARROW: [(f32, f32); 7] = [
 
 fn in_poly(poly: &[(f32, f32)], x: f32, y: f32) -> bool {
     let mut inside = false;
-    let mut j = poly.len() - 1;
+    let Some(mut j) = poly.len().checked_sub(1) else {
+        return false;
+    };
     for i in 0..poly.len() {
         let ((xi, yi), (xj, yj)) = (poly[i], poly[j]);
         if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
@@ -655,7 +657,9 @@ fn in_poly(poly: &[(f32, f32)], x: f32, y: f32) -> bool {
 
 fn poly_edge_dist(poly: &[(f32, f32)], x: f32, y: f32) -> f32 {
     let mut best = f32::MAX;
-    let mut j = poly.len() - 1;
+    let Some(mut j) = poly.len().checked_sub(1) else {
+        return best;
+    };
     for i in 0..poly.len() {
         let ((ax, ay), (bx, by)) = (poly[j], poly[i]);
         let (dx, dy) = (bx - ax, by - ay);
@@ -840,7 +844,10 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         // native popup menus from the main window (friend right-click, status)
         s if s.starts_with("pm:") => {
-            let _ = app.emit("fraglink://menu-pick", &s[3..]);
+            let _ = app.emit(
+                "fraglink://menu-pick",
+                s.strip_prefix("pm:").unwrap_or_default(),
+            );
         }
         "update" => updater::install_from_tray(app),
         "check_updates" => updater::check_from_tray(app),
@@ -864,14 +871,17 @@ fn on_menu(app: &AppHandle, id: &str) {
             let hist: Vec<String> = get_setting(app, "status_history")
                 .and_then(|v| serde_json::from_str(&v).ok())
                 .unwrap_or_default();
-            if let Some(h) = s[5..].parse::<usize>().ok().and_then(|i| hist.get(i)) {
+            let pick = s
+                .strip_prefix("st:h:")
+                .and_then(|n| n.parse::<usize>().ok());
+            if let Some(h) = pick.and_then(|i| hist.get(i)) {
                 put_setting(app, "custom_status", h);
                 put_setting(app, "custom_on", "1");
                 set_status(app, "online");
             }
         }
         s if s.starts_with("launch:") => {
-            let id = s[7..].to_string();
+            let id = s.strip_prefix("launch:").unwrap_or_default().to_string();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = commands::launch_game(app2, id).await {
                     log::warn!("tray launch: {e}");
@@ -946,7 +956,7 @@ fn tracker_poll(app: &AppHandle) {
 }
 
 fn start_tracker(app: AppHandle) {
-    std::thread::Builder::new()
+    let spawned = std::thread::Builder::new()
         .name("fraglink-tracker".into())
         .spawn(move || loop {
             health::beat_tracker("poll");
@@ -958,8 +968,12 @@ fn start_tracker(app: AppHandle) {
             }
             health::beat_tracker("sleep");
             std::thread::sleep(Duration::from_secs(DEFAULT_POLL_SECS));
-        })
-        .expect("spawn tracker thread");
+        });
+    if let Err(e) = spawned {
+        // No tracker thread means nothing gets detected; say so loudly rather than
+        // taking the whole app (friends, chat, tray) down with it.
+        log::error!("could not start the tracker thread: {e}");
+    }
 }
 
 pub fn run() {
@@ -1023,7 +1037,12 @@ pub fn run() {
             {
                 engine.prompt_after_secs = s;
             }
-            let recovered = engine.tracker.recover()?;
+            // Closing out a session left open by a crash is best effort: if it fails the
+            // app still starts (the server keeps the hours; this is local history only).
+            let recovered = engine.tracker.recover().unwrap_or_else(|e| {
+                log::error!("could not recover the last session after a crash: {e:#}");
+                Vec::new()
+            });
             // dev.14: nothing is tracked until the presence socket connects (friends.rs).
             engine.set_live(false)?;
             log::info!(
@@ -1181,8 +1200,16 @@ pub fn run() {
             commands::track_prompt_answer,
             commands::get_prompted,
         ])
-        .build(tauri::generate_context!())
-        .expect("error while building Fraglink");
+        .build(tauri::generate_context!());
+    let app = match app {
+        Ok(app) => app,
+        Err(e) => {
+            // Nothing to show a window with yet: log it and quit with an error code.
+            log::error!("Fraglink could not start: {e}");
+            eprintln!("Fraglink could not start: {e}");
+            std::process::exit(1);
+        }
+    };
 
     app.run(|app, event| {
         if let RunEvent::ExitRequested {
@@ -1199,6 +1226,15 @@ pub fn run() {
 #[cfg(test)]
 mod tray_mark_tests {
     use super::*;
+
+    #[test]
+    fn empty_polygon_is_not_a_panic() {
+        assert!(!in_poly(&[], 1.0, 1.0));
+        assert_eq!(poly_edge_dist(&[], 1.0, 1.0), f32::MAX);
+        let sq = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
+        assert!(in_poly(&sq, 2.0, 2.0));
+        assert!((poly_edge_dist(&sq, 2.0, 1.0) - 1.0).abs() < 1e-5);
+    }
 
     #[test]
     fn single_mark_update_then_requests_win() {

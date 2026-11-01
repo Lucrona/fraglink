@@ -444,12 +444,12 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
         .execute(&pool).await.unwrap();
     assert_eq!(shown(&pool, "keephigher").await, (6_720, 6_720));
 
-    // partial upload (only Thrall, +1 h): Alt keeps its hours. /played rose 1 h against 2 h
+    // partial upload (only Thrall, +1 h, snapshot just after the session): Alt keeps its hours. /played rose 1 h against 2 h
     // tracked, so the extra hour (menus etc.) is carried forward: 6 660 + 60
     let r = up(
         &app,
         &t,
-        &[entry("Thrall", 363_600, now - 1800, "Thrall#1234")],
+        &[entry("Thrall", 363_600, now - 1710, "Thrall#1234")],
     )
     .await;
     assert_eq!(r["total_min"], 6_660, "{r}");
@@ -464,7 +464,7 @@ async fn lower_uploads_keep_the_higher_total(pool: PgPool) {
     let r = up(
         &app,
         &t,
-        &[entry("Thrall", 363_600, now - 1800, "Thrall#1234")],
+        &[entry("Thrall", 363_600, now - 1710, "Thrall#1234")],
     )
     .await;
     assert!(r["kept_min"].is_null() || r["kept_min"] == 6_720, "{r}");
@@ -590,6 +590,55 @@ async fn played_more_than_tracked_carries_nothing(pool: PgPool) {
     .await;
     assert_eq!(r["total_min"], 6_900, "{r}");
     assert_eq!(shown(&pool, h).await, (6_900, 6_900));
+    let c: i32 =
+        sqlx::query_scalar("SELECT carry_min FROM hours_entries ORDER BY created_at DESC LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(c, 0);
+}
+
+/// WoW crashed: the addon's file kept the /played from before that session, so the upload
+/// after it is stale. The crashed session is shown once from tracking, and once a later
+/// snapshot's /played includes it, it isn't also kept as carried menu time.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn a_crashed_session_is_counted_once(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let h = "crashed";
+    let (t, now) = two_chars(&app, &pool, h).await;
+    // 7-6 h ago: 1 h, clean logout (snapshot 5 h 53 min ago)
+    track(&pool, h, 7.0, 3600).await;
+    // 5-3 h ago: 2 h, then WoW crashes (no new snapshot)
+    track(&pool, h, 5.0, 2 * 3600).await;
+    let r = up(
+        &app,
+        &t,
+        &[entry(
+            "Thrall",
+            360_000 + 3600,
+            now + 60 - 353 * 60,
+            "Thrall#1234",
+        )],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_660, "{r}");
+    assert_eq!(shown(&pool, h).await, (6_780, 6_780));
+
+    // 2-1 h ago: 1 h, clean logout; /played now has all 4 h (the crashed 2 h included)
+    track(&pool, h, 2.0, 3600).await;
+    let r = up(
+        &app,
+        &t,
+        &[entry(
+            "Thrall",
+            360_000 + 4 * 3600,
+            now + 60 - 50 * 60,
+            "Thrall#1234",
+        )],
+    )
+    .await;
+    assert_eq!(r["total_min"], 6_840, "{r}");
+    assert_eq!(shown(&pool, h).await, (6_840, 6_840));
     let c: i32 =
         sqlx::query_scalar("SELECT carry_min FROM hours_entries ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&pool)
@@ -820,7 +869,8 @@ async fn a_sold_character_moves_to_its_new_owner(pool: PgPool) {
     )
     .await;
     assert_eq!(r["total_min"], 6_600, "{r}");
-    track(&pool, "seller", 1.0, 3600).await;
+    // an hour on the sold character before its snapshot (its /played has it)
+    track(&pool, "seller", 3.1, 3600).await;
 
     let tb = link(&app, &pool, "buyer", "61", "Buy#1").await;
     listing(&pool, "buyer", &[("area-52", "Zqxsold", 9002)], 0).await;

@@ -15,6 +15,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - New option: Options > Appearance > Show avatars in friends list (on by default)
 - This session also shows while a friend's history is private or still loading
 
+### Fixes
+- WoW: after a WoW crash, the session it cut short is no longer counted twice once your next /played upload includes it (server fix)
+- The app no longer crashes on a few rare errors (startup, crash recovery, a bad server retry time, update progress); it writes them to the log and carries on
+- Names and text with an apostrophe (') show correctly everywhere in the app
+
 ## [0.3.0-beta.9.1] - 2026-10-27
 
 (╯°□°)╯︵ ┻━┻ One more pass.

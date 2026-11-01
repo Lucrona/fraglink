@@ -352,9 +352,11 @@ fn backoff_delay(attempt: u32, retry_after: Option<u64>) -> Duration {
     let cap = (BACKOFF_MIN * 2f64.powi(attempt.min(10) as i32)).min(BACKOFF_MAX);
     let mut secs = cap / 2.0 + rand01() * cap / 2.0;
     if let Some(ra) = retry_after {
-        secs = secs.max(ra as f64 + rand01() * 10.0);
+        // A server Retry-After is trusted only up to an hour, so a bogus huge value
+        // can't stall reconnects for good (or overflow the Duration).
+        secs = secs.max(ra.min(3600) as f64 + rand01() * 10.0);
     }
-    Duration::from_secs_f64(secs)
+    Duration::try_from_secs_f64(secs).unwrap_or(Duration::from_secs_f64(BACKOFF_MAX))
 }
 
 fn run(app: &AppHandle) {
@@ -589,6 +591,15 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backoff_survives_a_huge_retry_after() {
+        // A bogus Retry-After used to overflow Duration and panic the presence thread.
+        let d = backoff_delay(3, Some(u64::MAX));
+        assert!(d <= Duration::from_secs(3600 + 10), "{d:?}");
+        assert!(d >= Duration::from_secs(3600));
+        assert!(backoff_delay(u32::MAX, None) <= Duration::from_secs_f64(BACKOFF_MAX));
+    }
 
     #[test]
     fn tagged_programs_are_sent_by_exe_only() {

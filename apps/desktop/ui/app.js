@@ -6,7 +6,8 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const params = new URLSearchParams(location.search);
-  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // HTML-escape for text and attribute values (double- or single-quoted): & < > " '
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const FLB = window.FL; const TAURI = !!(FLB && FLB.tauri);
   document.body.classList.add('app-mode'); if (TAURI) document.body.classList.add('tauri');
   // `win`: the page IS the window (Tauri, or ?win=1 for browser previews/screenshots)
@@ -274,7 +275,7 @@
     const dot = f.kind === 'off' ? 'off' : f.away || /away/i.test(f.status || '') ? 'away' : /busy|disturb/i.test(f.status || '') ? 'busy' : 'on';
     // Flat themes only (hidden in classic): their own picture or preset tile over the letter box
     const av = rowAvatar(f);
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name" data-dot="${dot}" data-ini="${esc((f.name || '?').charAt(0).toUpperCase())}"${av ? ' data-av' : ''}>${av}${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${esc(f.id)}"><span class="c-name" data-dot="${dot}" data-ini="${esc((f.name || '?').charAt(0).toUpperCase())}"${av ? ' data-av' : ''}>${av}${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
