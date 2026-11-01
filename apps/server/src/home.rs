@@ -15,7 +15,6 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -66,8 +65,6 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
 
 const LIVE_USER: &str =
     "u.deleted_at IS NULL AND u.banned_at IS NULL AND u.delete_after IS NULL AND NOT u.is_test";
-/// A game shows in "most played this week" only with at least this many different players.
-pub const TRENDING_MIN_PLAYERS: i64 = 3;
 /// Sessions of test accounts never count in public totals.
 const NO_TEST_SESSIONS: &str = "s.user_id NOT IN (SELECT id FROM users WHERE is_test)";
 
@@ -91,16 +88,15 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     // ---- most played this week (aggregate; unlisted/hidden games never shown)
     // (app sessions or Imported counter growth, whichever is larger per player: hours::WEEK_CTE)
     // Private profiles still count (it's an anonymous total), but deleted, banned, pending-delete
-    // and test accounts don't, and a game needs TRENDING_MIN_PLAYERS different players that week,
-    // so no tile can single one person out ("1 player, 30 h").
-    let rows: Vec<(String, i64, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+    // and test accounts don't. No player count is shown, so a tile can't point at one person.
+    let rows: Vec<(String, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "WITH {wk}
-         SELECT s.game_id, sum(s.m)::bigint, count(DISTINCT s.user_id)
+         SELECT s.game_id, sum(s.m)::bigint
          FROM wk s JOIN users u ON u.id = s.user_id
          WHERE {LIVE_USER}
            AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
          GROUP BY s.game_id
-         HAVING sum(s.m) >= 1 AND count(DISTINCT s.user_id) >= {TRENDING_MIN_PLAYERS}
+         HAVING sum(s.m) >= 1
          ORDER BY 2 DESC LIMIT 40",
         wk = crate::hours::WEEK_CTE
     )))
@@ -113,8 +109,8 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         .iter()
         .filter(|r| named.contains_key(&r.0))
         .take(10)
-        .map(|(id, min, players)| {
-            json!({ "game_id": id, "name": named[id], "minutes": min, "players": players,
+        .map(|(id, min)| {
+            json!({ "game_id": id, "name": named[id], "minutes": min,
                     "steam_appid": apps.get(id), "icon_path": crate::icons::icon_path(id, 64) })
         })
         .collect();
@@ -205,21 +201,6 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         })
         .collect();
 
-    // ---- newest members
-    let newest_q = "u.public_profile";
-    let newest: Vec<(Uuid, String, String, DateTime<Utc>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT u.id, u.handle, u.display_name, u.created_at FROM users u WHERE {LIVE_USER} AND {newest_q}
-         ORDER BY u.created_at DESC LIMIT 12"
-    )))
-    .fetch_all(&st.db)
-    .await?;
-    let nids: Vec<Uuid> = newest.iter().map(|n| n.0).collect();
-    let nav = avatars::many(st, &nids).await?;
-    let newest: Vec<Value> = newest
-        .iter()
-        .map(|(id, h, dn, at)| json!({ "handle": h, "display_name": dn, "joined": at, "avatar": nav.get(id) }))
-        .collect();
-
     // ---- news (Admin > News posts; pinned first)
     let news = crate::news::latest(st, 4).await?;
 
@@ -272,7 +253,6 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         "most_played": most,
         "now_playing": now_playing,
         "top_players": top_players,
-        "newest": newest,
         "news": news,
         "me": mine,
     }))

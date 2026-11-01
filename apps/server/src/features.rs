@@ -41,7 +41,7 @@ pub const SWITCHES: [(&str, bool, &str, &str); 10] = [
     ("connect_discord", true, "Discord connect", "Players can link their Discord account."),
     ("friend_requests", true, "Friend requests", "Players can send new friend requests. Answering ones already sent still works."),
     ("public_profiles", true, "Public profiles and search", "Profiles can be seen by anyone allowed by the player's privacy settings, and players can be searched. Off: only yourself and friends see a profile, and search is off."),
-    ("home_stats", true, "Home page stats strip", "The strip of community numbers at the bottom of the home page (hours tracked, players, online, newest member)."),
+    ("home_stats", true, "Home page stats strip", "The strip of community numbers at the bottom of the home page (hours tracked, players, online)."),
     ("wow_characters", false, "Show WoW character details", "WoW character cards (name, class, level, realm) on profiles and the matching privacy switch. Off: only the WoW hours total shows; owners still see per-character results on the upload and verify pages."),
     ("maintenance", false, "Maintenance mode", "Everyone except staff sees a maintenance page and the app can't sync. Staff can still sign in and use everything."),
 ];

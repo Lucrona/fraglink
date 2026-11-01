@@ -487,7 +487,7 @@ async fn home_profile_and_signature(pool: PgPool) {
         .await
         .json();
     assert_eq!(h["stats"]["registered"], 2);
-    assert_eq!(h["newest"].as_array().unwrap().len(), 2);
+    assert!(h["newest"].is_null(), "{h}");
     assert!(h["me"]["minutes_7d"].is_number());
     assert_eq!(
         api(&app, "GET", "/api/v1/sig/alpha.png", None, None)

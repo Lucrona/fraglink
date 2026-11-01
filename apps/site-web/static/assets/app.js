@@ -768,7 +768,7 @@ pages.home = async () => {
   // ---- top: user counts (Admin > Site settings: C1 header counters, C2 panel, C4 bar, off)
   const cs = h.counts_style || "c1";
   let top = `<div class="crumb"><div class="wrap"><span>You are here: <a href="/">Home</a> » Welcome to Fraglink</span><span class="sp"></span>${cs === "c1" ? `<span class="odo"><span class="l">Registered<br>players</span>${dg(s.registered)}<span class="l">Online<br>now</span>${dg(s.online, "g")}</span>` : ""}</div></div>`;
-  if (cs === "c4") top = `<div class="hbar"><div class="wrap"><span>⚡ <b>${nf.format(s.registered)}</b> registered player${s.registered === 1 ? "" : "s"}</span><span class="on">● <b>${nf.format(s.online)}</b> online now</span><span>🎮 <b>${nf.format(s.in_game)}</b> in game</span><span>⏱ <b>${nf.format(Math.round(s.minutes_7d / 60))}</b> h tracked this week</span>${h.newest[0] ? `<span>Newest: <a href="${prof(h.newest[0])}">${nm(h.newest[0])}</a></span>` : ""}</div></div>` + top;
+  if (cs === "c4") top = `<div class="hbar"><div class="wrap"><span>⚡ <b>${nf.format(s.registered)}</b> registered player${s.registered === 1 ? "" : "s"}</span><span class="on">● <b>${nf.format(s.online)}</b> online now</span><span>🎮 <b>${nf.format(s.in_game)}</b> in game</span><span>⏱ <b>${nf.format(Math.round(s.minutes_7d / 60))}</b> h tracked this week</span></div></div>` + top;
   $("#f2-top").innerHTML = top;
   // ---- featured: app window with real people playing (signed out) or your week (signed in)
   const np = h.now_playing.slice(0, 4);
@@ -787,7 +787,7 @@ pages.home = async () => {
     ${winRows.length ? winRows.map(r => `<div class="r"><span class="dot ${r.away ? "away" : "online"}"></span><b>${nm(r.n)}</b><small>${r.g ? esc(r.g) : r.away ? "Away" : "Online"}</small></div>`).join("") : `<div class="r"><small style="margin:0;color:var(--dim)">${u ? "No friends online right now." : "Nobody in a game right now."}</small></div>`}`;
   // ---- live ticker
   const tick = h.now_playing.length ? (() => { const it = h.now_playing.map(n => `<span><a href="${prof(n)}"><b>${nm(n)}</b></a> is playing ${esc(n.game_name)}</span>`).join(""); return `<div class="tick"><span class="live">LIVE »</span><div class="run"><div class="t">${it}${it}</div></div></div>`; })() : "";
-  const trend = h.most_played.length ? panel("Trending games this week", `<div class="tr">${h.most_played.slice(0, 4).map((g, i) => `<div class="tile2"><div class="art">${gameArt(g.game_id, g.name)}<span class="rk">#${i + 1}</span><span class="nmx">${esc(g.name)}</span></div><div class="st"><b>${hrsShort(g.minutes)} h</b> this week<br>${plural(g.players, "player")}</div></div>`).join("")}</div>`) : "";
+  const trend = h.most_played.length ? panel("Trending games this week", `<div class="tr">${h.most_played.slice(0, 4).map((g, i) => `<div class="tile2"><div class="art">${gameArt(g.game_id, g.name)}<span class="rk">#${i + 1}</span><span class="nmx">${esc(g.name)}</span></div><div class="st"><b>${hrsShort(g.minutes)} h</b> this week</div></div>`).join("")}</div>`) : "";
   let actBody = "";
   if (act && act.items.length) {
     let last = "";
@@ -807,10 +807,9 @@ pages.home = async () => {
     return on.length ? `<table class="t2 f2np">${on.slice(0, 10).map(f => `<tr><td><span class="dot ${f.presence.status === "away" ? "away" : "online"}"></span> <a href="${prof(f)}">${nm(f)}</a><small>${f.presence.game_name ? (isUnlisted(f.presence.game_id) ? "Playing a game" : esc(f.presence.game_name)) : "Online"}</small></td></tr>`).join("")}</table>${extra > 0 ? `<div class="in" style="padding-top:2px"><a href="/friends">+${extra} more »</a></div>` : ""}` : `<div class="in empty">${fl.all ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</div>`; })(), ` <a class="more" href="/friends">All »</a>`) : "";
   const tops = h.top_players.length ? panel("Top players this week", `<table class="t2">${h.top_players.slice(0, 5).map((p, i) => `<tr><td class="rk">${i + 1}</td><td><a href="${prof(p)}">${nm(p)}</a></td><td class="n">${hrsShort(p.minutes)} h</td></tr>`).join("")}</table>`) : "";
   const who = h.now_playing.length ? panel("Who's playing now", `<table class="t2 f2np">${h.now_playing.slice(0, 6).map(n => `<tr><td><span class="dot online"></span> <a href="${prof(n)}">${nm(n)}</a><small>${esc(n.game_name)}</small></td></tr>`).join("")}</table>`) : "";
-  const mem = h.newest.length ? panel("Newest members", `<div class="in mem4">${h.newest.slice(0, 8).map(m => `<a href="${prof(m)}">${avatar(m.avatar, 48)}<span>${nm(m)}</span></a>`).join("")}</div>`) : "";
   const poll = panel("Quick poll", `<div class="in poll" id="f2-poll"><span class="dimt">Loading…</span></div>`);
   const comm = panel("Community", `<div class="in" style="line-height:2"><a href="https://discord.gg/QbaYRtvADj" rel="noopener">» Discord server</a><br><a href="/news">» News</a><br><a href="/download">» Download the app</a></div>`);
-  $("#f2-right").innerHTML = c2 + friendsP + tops + who + mem + poll + comm;
+  $("#f2-right").innerHTML = c2 + friendsP + tops + who + poll + comm;
   loadPoll();
   // ---- bottom stats strip (C3; Admin switch "Home page stats strip")
   if (h.stats_strip !== false) {
@@ -821,7 +820,7 @@ pages.home = async () => {
     const jokes = [[2, "can of energy drink consumed", "cans of energy drink consumed"], [6, "pizza devoured", "pizzas devoured"], [10, "rage-quit", "rage-quits"], [3, "“one more game”", "“one more game”s"], [8, "headset hair day", "headset hair days"]]
       .map(j => ({ n: est(j[0]), one: j[1], many: j[2] })).sort(() => Math.random() - .5).slice(0, 3);
     const fun = rawH > 0 ? `<div class="fun">${jokes.map(j => `~<b>${nf.format(j.n)}</b> ${j.n === 1 ? j.one : j.many}*`).join(" · ")}<small>*estimated, very scientifically</small></div>` : "";
-    $("#f2-strip").innerHTML = `<div class="fstat"><div class="wrap">Our members have tracked ${pl(hrs, "hour", "hours")} · ${pl(s.registered, "registered player", "registered players")} · <b>${nf.format(s.online)}</b> online now (<b>${nf.format(s.in_game)}</b> in game)${h.newest[0] ? ` · Newest member: <a href="${prof(h.newest[0])}">${nm(h.newest[0])}</a>` : ""}${fun}</div></div>`;
+    $("#f2-strip").innerHTML = `<div class="fstat"><div class="wrap">Our members have tracked ${pl(hrs, "hour", "hours")} · ${pl(s.registered, "registered player", "registered players")} · <b>${nf.format(s.online)}</b> online now (<b>${nf.format(s.in_game)}</b> in game)${fun}</div></div>`;
   }
 };
 pages.download = () => fillDownload();

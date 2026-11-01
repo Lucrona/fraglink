@@ -104,16 +104,8 @@ async fn under_18_start_private_but_may_go_public(pool: PgPool) {
     .await;
     assert_eq!(p.json()["private"], true, "{}", p.text);
     let home = api(&app, "GET", "/api/v1/home", None, None).await;
-    let newest: Vec<String> = home.json()["newest"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|u| u["handle"].as_str().unwrap().to_string())
-        .collect();
-    assert!(
-        newest.contains(&"alice".to_string()) && !newest.contains(&"teen".to_string()),
-        "{newest:?}"
-    );
+    assert!(home.json()["newest"].is_null(), "{}", home.text); // no newest-members list
+    assert!(!home.text.contains("\"teen\""), "{}", home.text);
 
     sqlx::query("INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true) ON CONFLICT DO NOTHING")
         .execute(&pool)
@@ -477,17 +469,13 @@ async fn private_and_minor_count_in_anonymous_aggregates(pool: PgPool) {
         .find(|g| g["game_id"] == "wow")
         .expect("wow in most_played");
     assert_eq!(wow["minutes"], 270, "{wow}");
-    assert_eq!(wow["players"], 3, "{wow}"); // anonymous player count includes private+minor
+    assert!(wow.get("players").is_none(), "no player count: {wow}"); // hours include private+minor
 
     // named lists never name private (incl. default-private minors) / test
     let blob = home.text;
     assert!(!blob.contains("\"privy\""), "private named: {blob}");
     assert!(!blob.contains("\"teeny\""), "private minor named: {blob}");
     assert!(!blob.contains("\"testy\""), "test named: {blob}");
-    assert!(
-        blob.contains("\"pubby\""),
-        "public should appear in newest: {blob}"
-    );
 
     // named game leaderboard: only the public adult (private minor excluded)
     let lb = api(&app, "GET", "/api/v1/leaderboard/wow", Some(&pub_tok), None).await;
@@ -501,7 +489,7 @@ async fn private_and_minor_count_in_anonymous_aggregates(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn trending_needs_three_real_players(pool: PgPool) {
+async fn trending_counts_only_real_players_and_shows_no_count(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let viewer = signup(&app, "viewer@example.com", "viewer").await;
     let private = signup(&app, "pb@example.com", "pbxpb").await;
@@ -549,6 +537,7 @@ async fn trending_needs_three_real_players(pool: PgPool) {
         }
     };
     // public + private count; banned, deleted, pending-delete, test and hidden-by-player don't
+    // (pcxpc never plays)
     for h in [
         "paxpa", "pbxpb", "bnxbn", "dlxdl", "pdxpd", "tsxts", "hdxhd",
     ] {
@@ -565,17 +554,7 @@ async fn trending_needs_three_real_players(pool: PgPool) {
     let h = api(&app, "GET", "/api/v1/home", Some(&viewer), None)
         .await
         .json();
-    assert!(
-        trio(h.clone()).is_none(),
-        "2 real players must not trend: {h}"
-    );
-
-    // a third real player: now it shows, counting only the three
-    play("pcxpc").await;
-    let h = api(&app, "GET", "/api/v1/home", Some(&viewer), None)
-        .await
-        .json();
-    let g = trio(h.clone()).unwrap_or_else(|| panic!("3 players should trend: {h}"));
-    assert_eq!(g["players"], 3, "{g}");
-    assert_eq!(g["minutes"], 180, "{g}");
+    let g = trio(h.clone()).unwrap_or_else(|| panic!("trio should trend: {h}"));
+    assert_eq!(g["minutes"], 120, "only pa + pb count: {g}");
+    assert!(g.get("players").is_none(), "no player count: {g}");
 }
