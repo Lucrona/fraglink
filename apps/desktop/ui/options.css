@@ -136,9 +136,13 @@ label.stack input[type=text] { width: 100%; }
 .conn { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid rgba(128,140,160,.2); }
 .conn:last-child { border-bottom: 0; }
 .conn-ic { width: 26px; height: 26px; flex: none; border-radius: 5px; background: var(--c); color: #fff; font: bold 14px/26px Tahoma, sans-serif; text-align: center; font-style: normal; box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 0 1px #000; }
-.conn-tx { flex: 1; min-width: 0; } .conn-tx b { display: block; } .conn-tx small { color: #777; }
+.conn-ic img { width: 16px; height: 16px; margin: 5px; display: block; }
+.conn-tx { flex: 1; min-width: 0; } .conn-tx b { display: block; } .conn-tx small { display: block; color: #777; }
 body.dark .conn-tx small { color: #8d939c; }
 .conn button { min-width: 70px; }
+/* WoW row: the three buttons sit on their own line under the text and wrap if narrow. */
+.conn.conn-wrap { flex-wrap: wrap; }
+.conn-btns { flex-basis: 100%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .conn .soon { font-size: 9px; color: #c08a1a; text-transform: uppercase; letter-spacing: .5px; width: 72px; }
 body.dark .conn .soon { color: #e0b44a; }
 .hint-link { color: #2a6fdb; cursor: pointer; text-decoration: underline; }
@@ -180,3 +184,6 @@ body.dark .conn .soon.ok { color: #6fd27b; }
   padding: 3px 6px; background: #ffffe1; color: #000; border: 1px solid #767676; box-shadow: 1px 1px 3px rgba(0,0,0,.35);
   font: 11px Tahoma, Verdana, sans-serif; line-height: 15px; pointer-events: none; white-space: pre-line; }
 .op-tip[hidden] { display: none; }
+
+.conn-sub{margin:-2px 0 8px 40px;display:flex;gap:8px;align-items:center}
+.conn-sub .warn{color:#e0a040}

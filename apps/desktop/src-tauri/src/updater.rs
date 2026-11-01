@@ -217,9 +217,9 @@ async fn download_with_progress(app: &AppHandle, up: Update, to_splash: bool) ->
     let mut last_pct = u32::MAX;
     let fut = up.download(
         move |chunk, total| {
-            got += chunk as u64;
+            got = got.saturating_add(chunk as u64);
             if let Some(t) = total.filter(|t| *t > 0) {
-                let pct = ((got * 100) / t).min(100) as u32;
+                let pct = (got.saturating_mul(100) / t).min(100) as u32;
                 if pct != last_pct {
                     last_pct = pct;
                     if to_splash {
@@ -302,6 +302,24 @@ fn announce_ready(app: &AppHandle) {
     crate::refresh_tray(app);
     crate::set_tray_update_dot(app, true);
     let _ = app.emit(UPDATE_EVENT, &version);
+    // beta.9: one "Update ready" toast per version (not affected by friend pop-up mutes).
+    static TOASTED: Mutex<Option<String>> = Mutex::new(None);
+    let mut last = TOASTED.lock_ok();
+    if last.as_deref() != Some(version.as_str()) {
+        *last = Some(version.clone());
+        drop(last);
+        crate::windows::show_toast(
+            app,
+            crate::ToastPayload {
+                kind: format!("update:{version}"),
+                title: "Update ready".into(),
+                line: "is ready to install".into(),
+                game: format!("v{}", crate::dev_version(&version)),
+                icon: Some(String::new()),
+                ..Default::default()
+            },
+        );
+    }
 }
 
 async fn install(app: &AppHandle) -> Result<(), String> {
@@ -457,6 +475,9 @@ mod tests {
         assert!(is_newer(&v("0.2.0-9"), &v("0.3.0-beta.1")));
         assert!(is_newer(&v("0.3.0-beta.1"), &v("0.3.0-beta.2")));
         assert!(is_newer(&v("0.3.0-beta.9"), &v("0.3.0-beta.10")));
+        assert!(is_newer(&v("0.3.0-beta.9"), &v("0.3.0-beta.9.1")));
+        assert!(is_newer(&v("0.3.0-beta.9.1"), &v("0.3.0-beta.10")));
+        assert!(!is_newer(&v("0.3.0-beta.9.1"), &v("0.3.0-beta.9")));
         assert!(is_newer(&v("0.3.0-beta.12"), &v("0.3.0")));
         assert!(!is_newer(&v("0.3.0-beta.1"), &v("0.2.0-21")));
         assert!(!is_newer(&v("0.3.0-beta.2"), &v("0.3.0-beta.2")));

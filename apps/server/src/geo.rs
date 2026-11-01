@@ -82,7 +82,7 @@ fn reader(st: &AppState) -> Option<GeoDb> {
     static R: Mutex<Option<(std::path::PathBuf, SystemTime, GeoDb)>> = Mutex::new(None);
     let p = st.cfg.data_dir.join("geo").join("country.mmdb");
     let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok()?;
-    let mut cur = R.lock().unwrap();
+    let mut cur = R.lock().unwrap_or_else(|e| e.into_inner());
     if let Some((path, t, r)) = cur.as_ref() {
         if *path == p && *t == mtime {
             return Some(r.clone());

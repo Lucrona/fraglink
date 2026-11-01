@@ -104,16 +104,8 @@ async fn under_18_start_private_but_may_go_public(pool: PgPool) {
     .await;
     assert_eq!(p.json()["private"], true, "{}", p.text);
     let home = api(&app, "GET", "/api/v1/home", None, None).await;
-    let newest: Vec<String> = home.json()["newest"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|u| u["handle"].as_str().unwrap().to_string())
-        .collect();
-    assert!(
-        newest.contains(&"alice".to_string()) && !newest.contains(&"teen".to_string()),
-        "{newest:?}"
-    );
+    assert!(home.json()["newest"].is_null(), "{}", home.text); // no newest-members list
+    assert!(!home.text.contains("\"teen\""), "{}", home.text);
 
     sqlx::query("INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true) ON CONFLICT DO NOTHING")
         .execute(&pool)
@@ -468,26 +460,22 @@ async fn private_and_minor_count_in_anonymous_aggregates(pool: PgPool) {
     // presence strip counts private + minor, not test
     assert_eq!(h["stats"]["online"], 3, "{}", home.text);
     assert_eq!(h["stats"]["in_game"], 3, "{}", home.text);
-    // week minutes: 3 × 60 (test excluded)
-    assert_eq!(h["stats"]["minutes_7d"], 180, "{}", home.text);
+    // week minutes: 3 × (60 stored + 30 live), test excluded
+    assert_eq!(h["stats"]["minutes_7d"], 270, "{}", home.text);
 
     let most = h["most_played"].as_array().unwrap();
     let wow = most
         .iter()
         .find(|g| g["game_id"] == "wow")
         .expect("wow in most_played");
-    assert_eq!(wow["minutes"], 180, "{wow}");
-    assert_eq!(wow["players"], 3, "{wow}"); // anonymous player count includes private+minor
+    assert_eq!(wow["minutes"], 270, "{wow}");
+    assert!(wow.get("players").is_none(), "no player count: {wow}"); // hours include private+minor
 
     // named lists never name private (incl. default-private minors) / test
     let blob = home.text;
     assert!(!blob.contains("\"privy\""), "private named: {blob}");
     assert!(!blob.contains("\"teeny\""), "private minor named: {blob}");
     assert!(!blob.contains("\"testy\""), "test named: {blob}");
-    assert!(
-        blob.contains("\"pubby\""),
-        "public should appear in newest: {blob}"
-    );
 
     // named game leaderboard: only the public adult (private minor excluded)
     let lb = api(&app, "GET", "/api/v1/leaderboard/wow", Some(&pub_tok), None).await;
@@ -498,4 +486,75 @@ async fn private_and_minor_count_in_anonymous_aggregates(pool: PgPool) {
         .map(|r| r["handle"].as_str().unwrap().to_string())
         .collect();
     assert_eq!(ranks, ["pubby"], "{}", lb.text);
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn trending_counts_only_real_players_and_shows_no_count(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let viewer = signup(&app, "viewer@example.com", "viewer").await;
+    let private = signup(&app, "pb@example.com", "pbxpb").await;
+    for (e, h) in [
+        ("pa@example.com", "paxpa"),
+        ("bn@example.com", "bnxbn"),
+        ("dl@example.com", "dlxdl"),
+        ("pd@example.com", "pdxpd"),
+        ("ts@example.com", "tsxts"),
+        ("hd@example.com", "hdxhd"),
+        ("pc@example.com", "pcxpc"),
+    ] {
+        signup(&app, e, h).await;
+    }
+    api(
+        &app,
+        "POST",
+        "/api/v1/me/privacy",
+        Some(&private),
+        Some(json!({"public_profile": false})),
+    )
+    .await;
+    for q in [
+        "UPDATE users SET banned_at = now() WHERE handle = 'bnxbn'",
+        "UPDATE users SET deleted_at = now() WHERE handle = 'dlxdl'",
+        "UPDATE users SET delete_after = now() + interval '7 days' WHERE handle = 'pdxpd'",
+        "UPDATE users SET is_test = true WHERE handle = 'tsxts'",
+        "INSERT INTO hidden_games(user_id, game_id) SELECT id, 'trio' FROM users WHERE handle = 'hdxhd'",
+        "INSERT INTO games (id, name, verified) VALUES ('trio', 'Trio Game', true) ON CONFLICT DO NOTHING",
+    ] {
+        sqlx::query(q).execute(&pool).await.unwrap();
+    }
+    let play = |h: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s, source)
+                 SELECT gen_random_uuid(), id, 'trio', now() - interval '2 hours', now() - interval '1 hour', 3600, 'tracked'
+                 FROM users WHERE handle = $1",
+            )
+            .bind(h)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    };
+    // public + private count; banned, deleted, pending-delete, test and hidden-by-player don't
+    // (pcxpc never plays)
+    for h in [
+        "paxpa", "pbxpb", "bnxbn", "dlxdl", "pdxpd", "tsxts", "hdxhd",
+    ] {
+        play(h).await;
+    }
+    let trio = |h: serde_json::Value| {
+        h["most_played"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["game_id"] == "trio")
+            .cloned()
+    };
+    let h = api(&app, "GET", "/api/v1/home", Some(&viewer), None)
+        .await
+        .json();
+    let g = trio(h.clone()).unwrap_or_else(|| panic!("trio should trend: {h}"));
+    assert_eq!(g["minutes"], 120, "only pa + pb count: {g}");
+    assert!(g.get("players").is_none(), "no player count: {g}");
 }

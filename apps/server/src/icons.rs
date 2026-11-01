@@ -275,7 +275,11 @@ fn semaphore() -> &'static tokio::sync::Semaphore {
 /// Fetch and store all sizes. True when an icon is now cached.
 async fn refresh(st: &AppState, id: &str, s: &Sources) -> bool {
     let k = key(id);
-    if !in_flight().lock().unwrap().insert(k.clone()) {
+    if !in_flight()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(k.clone())
+    {
         return false;
     }
     let _permit = semaphore().acquire().await;
@@ -303,7 +307,10 @@ async fn refresh(st: &AppState, id: &str, s: &Sources) -> bool {
             false
         }
     };
-    in_flight().lock().unwrap().remove(&k);
+    in_flight()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&k);
     if ok {
         tracing::info!("icons: cached {id}");
     } else {

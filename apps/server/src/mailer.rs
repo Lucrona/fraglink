@@ -130,7 +130,7 @@ fn deliver_mail_with(
         reply_to,
     };
     {
-        let mut o = outbox().lock().unwrap();
+        let mut o = outbox().lock().unwrap_or_else(|e| e.into_inner());
         o.push(m.clone());
         let n = o.len();
         if n > 50 {

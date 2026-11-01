@@ -162,14 +162,32 @@ async fn staff_renames_reach_the_overrides_list(pool: PgPool) {
     assert_eq!(r.status, StatusCode::OK);
     assert_ne!(r.text, fraglink_core::overrides::BUILTIN_JSON);
     let o = fraglink_core::overrides::Overrides::from_json(&r.text).unwrap();
-    let rule = o
+    // Forever's real client is Wow.exe in `_forever_`: the rename's rules keep the
+    // flavour folder, so they claim that path and leave retail's to the signatures
+    let fe = o
         .match_process(
-            "WowB.exe",
-            Some(r"E:\Games\World of Warcraft\_beta_\WowB.exe"),
+            "Wow.exe",
+            Some(r"E:\Games\World of Warcraft\_forever_\Wow.exe"),
         )
-        .expect("renamed game gets a rule");
-    assert_eq!(rule.id, "wow_forever");
-    assert_eq!(rule.name, "World of Warcraft: Forever - Beta");
+        .expect("forever's Wow.exe");
+    assert_eq!(
+        (fe.id.as_str(), fe.name.as_str()),
+        ("wow_forever", "World of Warcraft: Forever - Beta")
+    );
+    assert!(o
+        .match_process(
+            "Wow.exe",
+            Some(r"E:\Games\World of Warcraft\_retail_\Wow.exe")
+        )
+        .is_none());
+    // the Forever beta's WowB.exe is never Forever, whatever its folder
+    for p in [
+        r"E:\Games\World of Warcraft\_classic_beta_\WowB.exe",
+        r"E:\Games\World of Warcraft\_forever_\WowB.exe",
+    ] {
+        let r = o.match_process("WowB.exe", Some(p)).expect("bundled rule");
+        assert_eq!(r.id, "exe:wowb.exe", "{p}");
+    }
     let odd = o
         .match_process("OddGame.exe", None)
         .expect("approved program rule");
@@ -206,4 +224,131 @@ async fn wow_realms_are_served_from_the_cache_with_an_etag(pool: PgPool) {
     )
     .await;
     assert_eq!(again.status, StatusCode::NOT_MODIFIED);
+}
+
+/// Live since 2026-10-28: the WoW Forever beta (`wow_forever_beta`, WowB.exe) is fully retired
+/// and its hours frozen. After a redeploy the overrides must not send anything to it (no
+/// rename rule for its old folders) and its WowB.exe goes to the successor entry.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn fully_retired_game_publishes_no_rules_of_its_own(pool: PgPool) {
+    sqlx::query("INSERT INTO game_overrides(game_id, name) VALUES('wow_forever_beta', 'World of Warcraft: Forever Beta')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO game_retirements(game_id, successor_id, exes) VALUES('wow_forever_beta', 'exe:wowb.exe', '{wowb.exe,wowb-64.exe,wow.exe}')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path().to_path_buf();
+    let app = fraglink_server::router(state_with(pool, |c| c.data_dir = d.clone()));
+    let r = send(&app, get("/api/v1/games/overrides", &[])).await;
+    assert_eq!(r.status, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_str(&r.text).unwrap();
+    let rules = v["rules"].as_array().unwrap();
+    assert!(
+        !rules
+            .iter()
+            .any(|r| r["id"] == "wow_forever_beta" || r["id"] == "wow_forever"),
+        "{rules:?}"
+    );
+    let o = fraglink_core::overrides::Overrides::from_json(&r.text).unwrap();
+    for exe in ["WowB.exe", "WowB-64.exe"] {
+        let p = format!(r"E:\Games\World of Warcraft\_forever_\{exe}");
+        assert_eq!(o.match_process(exe, Some(&p)).unwrap().id, "exe:wowb.exe");
+    }
+    // Wow.exe is retail's too: left to the signatures, never the successor's
+    for f in ["_forever_", "_retail_"] {
+        let p = format!(r"E:\Games\World of Warcraft\{f}\Wow.exe");
+        assert!(o.match_process("Wow.exe", Some(&p)).is_none(), "{p}");
+    }
+}
+
+/// Migration 0050 on production data: the retired beta that held the `wow_forever` id moves
+/// to `wow_forever_beta` with every session and record, and `wow_forever` is left free (live
+/// Forever, no hours, not retired). Running it again changes nothing.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn forever_beta_moves_to_its_own_id(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    signup(&app, "fb@example.com", "fbeta").await;
+    for q in [
+        "INSERT INTO games(id, name) VALUES('wow_forever', 'World of Warcraft: Forever'), ('exe:wowb.exe', 'Unlisted game') ON CONFLICT (id) DO NOTHING",
+        "INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s)
+         SELECT gen_random_uuid(), id, 'wow_forever', now() - interval '3 hours', now() - interval '1 hour', 7200
+         FROM users WHERE handle = 'fbeta'",
+        "INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s)
+         SELECT gen_random_uuid(), id, 'wow_forever', now() - interval '30 hours', now() - interval '29 hours', 1234
+         FROM users WHERE handle = 'fbeta'",
+        "INSERT INTO game_overrides(game_id, name) VALUES('wow_forever', 'World of Warcraft: Forever - Beta')",
+        "INSERT INTO game_status(game_id, lifecycle) VALUES('wow_forever', 'ended')",
+        "INSERT INTO game_retirements(game_id, successor_id, exes) VALUES('wow_forever', 'exe:wowb.exe', '{wowb.exe,wowb-64.exe}')",
+    ] {
+        sqlx::query(q).execute(&pool).await.unwrap();
+    }
+    let sql = include_str!("../migrations/0050_wow_forever_beta.sql");
+    for _ in 0..2 {
+        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+    }
+    let hours = |id: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_as::<_, (i64, Option<i64>)>(
+                "SELECT count(*), sum(duration_s)::bigint FROM sessions WHERE game_id = $1",
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        }
+    };
+    assert_eq!(hours("wow_forever_beta").await, (2, Some(8434)));
+    assert_eq!(hours("wow_forever").await, (0, None));
+    let one = |q: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, String>(q)
+                .fetch_optional(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(
+        one("SELECT name FROM games WHERE id = 'wow_forever_beta'")
+            .await
+            .as_deref(),
+        Some("World of Warcraft: Forever Beta")
+    );
+    assert_eq!(
+        one("SELECT name FROM games WHERE id = 'wow_forever'")
+            .await
+            .as_deref(),
+        Some("World of Warcraft: Forever")
+    );
+    assert_eq!(
+        one("SELECT name FROM game_overrides WHERE game_id = 'wow_forever_beta'")
+            .await
+            .as_deref(),
+        Some("World of Warcraft: Forever Beta")
+    );
+    assert_eq!(
+        one("SELECT successor_id FROM game_retirements WHERE game_id = 'wow_forever_beta' AND NOT partial AND NOT merged").await.as_deref(),
+        Some("exe:wowb.exe")
+    );
+    assert_eq!(
+        one("SELECT lifecycle FROM game_status WHERE game_id = 'wow_forever_beta'")
+            .await
+            .as_deref(),
+        Some("ended")
+    );
+    let left: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM game_overrides WHERE game_id = 'wow_forever')
+              + (SELECT count(*) FROM game_status WHERE game_id = 'wow_forever')
+              + (SELECT count(*) FROM game_retirements WHERE game_id = 'wow_forever')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
 }

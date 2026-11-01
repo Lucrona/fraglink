@@ -5,7 +5,7 @@
 use crate::detector::{DetectSource, Detection};
 use crate::store::Store;
 use anyhow::Result;
-use chrono::{FixedOffset, Local, TimeZone};
+use chrono::{FixedOffset, Local, Offset, TimeZone};
 use serde::Serialize;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -21,7 +21,11 @@ pub fn local_day_fn() -> DayFn {
 }
 
 pub fn fixed_offset_day_fn(offset_secs: i32) -> DayFn {
-    let off = FixedOffset::east_opt(offset_secs).expect("valid offset");
+    // An out-of-range offset (24h or more) falls back to UTC instead of panicking.
+    let off = FixedOffset::east_opt(offset_secs).unwrap_or_else(|| {
+        log::warn!("day offset {offset_secs}s is out of range; using UTC");
+        chrono::Utc.fix()
+    });
     Box::new(move |ts| {
         off.timestamp_opt(ts, 0)
             .single()
@@ -273,7 +277,9 @@ impl Tracker {
         let mut ev = Vec::new();
         let thr = self.cfg.idle_threshold_s;
         let today = self.day_of(now);
-        let c = self.cur.as_mut().expect("open session");
+        let Some(c) = self.cur.as_mut() else {
+            return Ok(ev);
+        };
         let before = c.base_total + c.active;
         c.last_seen = now;
         if idle > thr {
@@ -523,6 +529,12 @@ impl Tracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn out_of_range_day_offset_falls_back_to_utc() {
+        let f = fixed_offset_day_fn(i32::MAX);
+        assert_eq!(f(0), "1970-01-01");
+    }
 
     const T0: i64 = 1_790_000_000; // 2026-09-22 (Tue) ~00:13 AEST
 

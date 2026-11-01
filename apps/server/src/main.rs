@@ -37,34 +37,11 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(fraglink_server::games::refresh_loop(state.clone()));
     tokio::spawn(fraglink_server::account::purge_loop(state.clone()));
     tokio::spawn(fraglink_server::alerts::run(state.clone()));
+    tokio::spawn(fraglink_server::wow::backfill_ids(state.clone()));
     // WoW realm lists: on the back burner (dev.18), not fetched.
     // tokio::spawn(fraglink_server::realms::refresh_loop(state.clone()));
-    let bg = state.clone();
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
-        loop {
-            tick.tick().await;
-            let r = fraglink_server::steam::sync_due(&bg, 200).await;
-            fraglink_server::admin::record_job(
-                &bg,
-                "steam_sync",
-                r.as_ref()
-                    .ok()
-                    .map(|n| format!("{n} account(s) refreshed"))
-                    .as_deref(),
-                r.is_ok(),
-            )
-            .await;
-            match r {
-                Ok(n) if n > 0 => tracing::info!("daily Steam sync: refreshed {n} account(s)"),
-                Ok(_) => {}
-                Err(e) => {
-                    tracing::warn!("daily Steam sync failed: {}", e.message);
-                    fraglink_server::alerts::job_failed("Daily Steam sync", &e.message);
-                }
-            }
-        }
-    });
+    // Steam hours are imported by hand only (Oct 2026): imports are one-off, and play the app
+    // tracks afterwards adds on top (see migration 0045). No scheduled Steam refresh.
     axum::serve(listener, router(state))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;

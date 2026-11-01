@@ -36,10 +36,10 @@ pub struct OverrideCache {
 
 impl OverrideCache {
     pub fn snapshot(&self) -> Option<Map> {
-        self.map.read().unwrap().clone()
+        self.map.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
     fn set(&self, m: Map) {
-        *self.map.write().unwrap() = Some(m);
+        *self.map.write().unwrap_or_else(|e| e.into_inner()) = Some(m);
     }
 }
 

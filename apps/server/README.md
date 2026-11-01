@@ -45,7 +45,7 @@ See `.env.example`. Keep real values out of git (`.env` is ignored).
 - Uses `IPlayerService/GetOwnedGames` (with `include_appinfo` and `include_played_free_games`) and `ISteamUser/ResolveVanityURL`.
 - Get a key at <https://steamcommunity.com/dev/apikey>. **Users must set Steam → Profile → Edit Profile → Privacy Settings → "Game details" to Public** (and not tick "Always keep my total playtime private"). Otherwise Steam returns an empty list; Fraglink reports that with instructions and marks the link `private`.
 - Imported minutes are the **Tracked** tier (Steam's own counter), matched to Fraglink's game ids (e.g. app 730 → `cs2`), so they merge with desktop sessions as `max(sessions, steam)`.
-- Manual import at most every 10 minutes. The server also refreshes every linked account once a day.
+- Manual import at most every 10 minutes. No automatic refresh: imports are one-off and tracked time adds on top (see docs/decisions.md D13).
 - "Sign in through Steam" (OpenID) verifies ownership of the Steam account.
 
 ## API (JSON, `/api/v1`)

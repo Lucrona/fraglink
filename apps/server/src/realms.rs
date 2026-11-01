@@ -257,7 +257,7 @@ fn cache_age(data: &Path) -> Option<Duration> {
 /// Load the cached copy (if any) into memory.
 pub fn load(st: &AppState) -> Option<Built> {
     let b = build(std::fs::read(cache_file(&st.cfg.data_dir)).ok()?).ok()?;
-    *st.realms.built.write().unwrap() = Some(b.clone());
+    *st.realms.built.write().unwrap_or_else(|e| e.into_inner()) = Some(b.clone());
     Some(b)
 }
 
@@ -279,7 +279,12 @@ pub async fn refresh_loop(st: AppState) {
 }
 
 pub async fn serve(State(st): State<AppState>, headers: HeaderMap) -> ApiResult<Response<Body>> {
-    let cur = st.realms.built.read().unwrap().clone();
+    let cur = st
+        .realms
+        .built
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     let b = cur.or_else(|| load(&st)).ok_or_else(|| {
         AppError::new(
             StatusCode::SERVICE_UNAVAILABLE,

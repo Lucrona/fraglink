@@ -505,3 +505,80 @@ async fn form_fallback_never_echoes(pool: PgPool) {
         assert!(!r.text.contains("hunter2"));
     }
 }
+
+/// Wrong passwords count per account across email and username, on web and device
+/// sign-in, and the lockout message is the same for real and unknown accounts.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn per_account_login_limit(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    signup(&app, "lock@example.com", "locky").await;
+    for i in 0..10 {
+        let (path, body) = if i % 2 == 0 {
+            (
+                "/api/v1/auth/login",
+                json!({"email": "lock@example.com", "password": "wrong password"}),
+            )
+        } else {
+            (
+                "/api/v1/device/login",
+                json!({"login": "LOCKY", "password": "wrong password"}),
+            )
+        };
+        let r = api(&app, "POST", path, None, Some(body)).await;
+        assert_eq!(r.status, StatusCode::UNAUTHORIZED, "{i}: {}", r.text);
+    }
+    // even the right password is refused now, through either name
+    for login in ["locky", "lock@example.com"] {
+        let r = api(
+            &app,
+            "POST",
+            "/api/v1/device/login",
+            None,
+            Some(json!({"login": login, "password": "correct horse battery"})),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::TOO_MANY_REQUESTS, "{}", r.text);
+        assert_eq!(r.json()["error"], "rate_limited", "{}", r.text);
+    }
+    let locked = api(
+        &app,
+        "POST",
+        "/api/v1/auth/login",
+        None,
+        Some(json!({"email": "locky", "password": "correct horse battery"})),
+    )
+    .await
+    .json();
+    // an unknown name hits the same wall after 10 tries, with the same message
+    for _ in 0..10 {
+        api(
+            &app,
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            Some(json!({"email": "ghost@example.com", "password": "x"})),
+        )
+        .await;
+    }
+    let ghost = api(
+        &app,
+        "POST",
+        "/api/v1/auth/login",
+        None,
+        Some(json!({"email": "ghost@example.com", "password": "x"})),
+    )
+    .await;
+    assert_eq!(ghost.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(ghost.json(), locked);
+    // other accounts are unaffected
+    signup(&app, "free@example.com", "free_one").await;
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/auth/login",
+        None,
+        Some(json!({"email": "free_one", "password": "correct horse battery"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+}

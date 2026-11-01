@@ -23,12 +23,17 @@ pub async fn reload(st: &AppState) -> ApiResult<Map> {
             .fetch_all(&st.db)
             .await?;
     let m: Map = Arc::new(rows.into_iter().collect());
-    *st.retired.map.write().unwrap() = Some(m.clone());
+    *st.retired.map.write().unwrap_or_else(|e| e.into_inner()) = Some(m.clone());
     Ok(m)
 }
 
 pub async fn current(st: &AppState) -> ApiResult<Map> {
-    let snap = st.retired.map.read().unwrap().clone();
+    let snap = st
+        .retired
+        .map
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     match snap {
         Some(m) => Ok(m),
         None => reload(st).await,
@@ -101,4 +106,14 @@ pub async fn detached_exes(st: &AppState) -> ApiResult<Vec<(String, String)>> {
         .into_iter()
         .flat_map(|(g, es)| es.into_iter().map(move |e| (g.clone(), e)))
         .collect())
+}
+
+/// Fully retired games (not merged): `(game id, successor id, the programs detached)`.
+pub async fn fully_retired(st: &AppState) -> ApiResult<Vec<(String, String, Vec<String>)>> {
+    Ok(sqlx::query_as(
+        "SELECT game_id, successor_id, exes FROM game_retirements
+         WHERE NOT partial AND NOT merged ORDER BY game_id",
+    )
+    .fetch_all(&st.db)
+    .await?)
 }

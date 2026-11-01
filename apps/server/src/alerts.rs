@@ -83,7 +83,7 @@ pub async fn track(req: Request, next: Next) -> Response {
     let s = res.status();
     let maintenance = s.as_u16() == 503 && res.headers().contains_key("retry-after");
     if s.is_server_error() && !maintenance {
-        let mut e = errs().lock().unwrap();
+        let mut e = errs().lock().unwrap_or_else(|e| e.into_inner());
         e.recent.push_back((Instant::now(), s.as_u16(), what));
         while e.recent.len() > 200 {
             e.recent.pop_front();
@@ -95,7 +95,7 @@ pub async fn track(req: Request, next: Next) -> Response {
 
 /// A background job failed (games list refresh, account purge, Steam sync...).
 pub fn job_failed(job: &str, error: &str) {
-    let mut e = errs().lock().unwrap();
+    let mut e = errs().lock().unwrap_or_else(|e| e.into_inner());
     if e.jobs.len() < 50 {
         e.jobs.push((
             Utc::now(),
@@ -528,7 +528,7 @@ pub async fn check_hours(st: &AppState) -> ApiResult<()> {
 async fn check_errors(st: &AppState) -> ApiResult<()> {
     // Save counters for the daily summary first (survives restarts).
     let (n5, nj) = {
-        let mut e = errs().lock().unwrap();
+        let mut e = errs().lock().unwrap_or_else(|e| e.into_inner());
         let v = (e.unsaved_5xx, e.unsaved_jobs);
         e.unsaved_5xx = 0;
         e.unsaved_jobs = 0;
@@ -541,11 +541,15 @@ async fn check_errors(st: &AppState) -> ApiResult<()> {
         add_n(st, "errors_jobs", nj).await?;
     }
     if !enabled(st, "alert_errors").await {
-        errs().lock().unwrap().jobs.clear();
+        errs()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .jobs
+            .clear();
         return Ok(());
     }
     let (recent, jobs) = {
-        let mut e = errs().lock().unwrap();
+        let mut e = errs().lock().unwrap_or_else(|e| e.into_inner());
         while e
             .recent
             .front()
@@ -568,7 +572,7 @@ async fn check_errors(st: &AppState) -> ApiResult<()> {
         return Ok(());
     }
     {
-        let mut e = errs().lock().unwrap();
+        let mut e = errs().lock().unwrap_or_else(|e| e.into_inner());
         e.recent.clear();
         e.jobs.clear();
     }
@@ -658,7 +662,7 @@ pub async fn daily_email(st: &AppState) -> ApiResult<crate::emails::Email> {
     .fetch_one(&st.db)
     .await?;
     let (e5, ej) = {
-        let e = errs().lock().unwrap();
+        let e = errs().lock().unwrap_or_else(|e| e.into_inner());
         (e.unsaved_5xx, e.unsaved_jobs)
     };
     let s5 = state(st, "errors_5xx").await?.map(|s| s.1).unwrap_or(0) + e5;

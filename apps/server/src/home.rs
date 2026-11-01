@@ -15,7 +15,6 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -51,7 +50,12 @@ pub async fn appids(st: &AppState, ids: &[String]) -> ApiResult<HashMap<String, 
 async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>> {
     let viewer = m.0.as_ref().map(|a| a.user.id);
     if viewer.is_none() {
-        if let Some((t, v)) = st.home_public.lock().unwrap().as_ref() {
+        if let Some((t, v)) = st
+            .home_public
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+        {
             if t.elapsed() < Duration::from_secs(60) {
                 return Ok(Json(v.clone()));
             }
@@ -59,7 +63,8 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
     }
     let v = build(&st, viewer).await?;
     if viewer.is_none() {
-        *st.home_public.lock().unwrap() = Some((Instant::now(), v.clone()));
+        *st.home_public.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some((Instant::now(), v.clone()));
     }
     Ok(Json(v))
 }
@@ -81,19 +86,24 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         "SELECT (SELECT count(*) FROM users u WHERE {LIVE_USER}),
                 (SELECT count(*) FROM presence p JOIN users u ON u.id = p.user_id WHERE {LIVE_USER} AND p.status IN ('online','away')),
                 (SELECT count(*) FROM presence p JOIN users u ON u.id = p.user_id WHERE {LIVE_USER} AND p.status IN ('online','away') AND p.game_id IS NOT NULL),
-                (SELECT coalesce(sum(s.duration_s), 0)::bigint FROM sessions s WHERE s.started_at >= now() - interval '7 days' AND {NO_TEST_SESSIONS})"
+                (SELECT coalesce(sum(s.duration_s), 0)::bigint FROM play_sessions s WHERE s.started_at >= now() - interval '7 days' AND {NO_TEST_SESSIONS})"
     )))
     .fetch_one(&st.db)
     .await?;
 
     // ---- most played this week (aggregate; unlisted/hidden games never shown)
     // (app sessions or Imported counter growth, whichever is larger per player: hours::WEEK_CTE)
-    let rows: Vec<(String, i64, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+    // Private profiles still count (it's an anonymous total), but deleted, banned, pending-delete
+    // and test accounts don't. No player count is shown, so a tile can't point at one person.
+    let rows: Vec<(String, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "WITH {wk}
-         SELECT s.game_id, sum(s.m)::bigint, count(DISTINCT s.user_id)
-         FROM wk s WHERE {NO_TEST_SESSIONS}
+         SELECT s.game_id, sum(s.m)::bigint
+         FROM wk s JOIN users u ON u.id = s.user_id
+         WHERE {LIVE_USER}
            AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
-         GROUP BY s.game_id HAVING sum(s.m) >= 1 ORDER BY 2 DESC LIMIT 40",
+         GROUP BY s.game_id
+         HAVING sum(s.m) >= 1
+         ORDER BY 2 DESC LIMIT 40",
         wk = crate::hours::WEEK_CTE
     )))
     .fetch_all(&st.db)
@@ -105,8 +115,8 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         .iter()
         .filter(|r| named.contains_key(&r.0))
         .take(10)
-        .map(|(id, min, players)| {
-            json!({ "game_id": id, "name": named[id], "minutes": min, "players": players,
+        .map(|(id, min)| {
+            json!({ "game_id": id, "name": named[id], "minutes": min,
                     "steam_appid": apps.get(id), "icon_path": crate::icons::icon_path(id, 64) })
         })
         .collect();
@@ -197,21 +207,6 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         })
         .collect();
 
-    // ---- newest members
-    let newest_q = "u.public_profile";
-    let newest: Vec<(Uuid, String, String, DateTime<Utc>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT u.id, u.handle, u.display_name, u.created_at FROM users u WHERE {LIVE_USER} AND {newest_q}
-         ORDER BY u.created_at DESC LIMIT 12"
-    )))
-    .fetch_all(&st.db)
-    .await?;
-    let nids: Vec<Uuid> = newest.iter().map(|n| n.0).collect();
-    let nav = avatars::many(st, &nids).await?;
-    let newest: Vec<Value> = newest
-        .iter()
-        .map(|(id, h, dn, at)| json!({ "handle": h, "display_name": dn, "joined": at, "avatar": nav.get(id) }))
-        .collect();
-
     // ---- news (Admin > News posts; pinned first)
     let news = crate::news::latest(st, 4).await?;
 
@@ -251,7 +246,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
 
     // ---- bottom stats strip: all-time hours (no test accounts)
     let (total_s,): (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT coalesce(sum(s.duration_s), 0)::bigint FROM sessions s WHERE {NO_TEST_SESSIONS}"
+        "SELECT coalesce(sum(s.duration_s), 0)::bigint FROM play_sessions s WHERE {NO_TEST_SESSIONS}"
     )))
     .fetch_one(&st.db)
     .await?;
@@ -264,7 +259,6 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         "most_played": most,
         "now_playing": now_playing,
         "top_players": top_players,
-        "newest": newest,
         "news": news,
         "me": mine,
     }))

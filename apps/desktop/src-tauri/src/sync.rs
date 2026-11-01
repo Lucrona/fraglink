@@ -7,7 +7,7 @@
 use crate::LockOk;
 use crate::{now, AppState};
 use fraglink_sync::{
-    secret, Client, PollResult, SyncError, DEFAULT_SERVER, FALLBACK_SERVER, LEGACY_DEFAULT_SERVER,
+    secret, Client, PollResult, SyncError, DEFAULT_SERVER, LEGACY_DEFAULT_SERVER, OLD_IP_SERVER,
 };
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -129,7 +129,7 @@ pub fn server(app: &AppHandle) -> String {
 
 /// The production server by IP (the default up to dev.10).
 fn is_ip_default(s: &str) -> bool {
-    s.trim_end_matches('/') == FALLBACK_SERVER
+    s.trim_end_matches('/') == OLD_IP_SERVER
 }
 
 /// The saved server, except that the old localhost default (saved by every sign-in before
@@ -170,6 +170,16 @@ pub fn view(app: &AppHandle) -> SyncView {
 
 /// Called at startup: only starts the sync thread if the user signed in before.
 pub fn init(app: &AppHandle) {
+    // Login screen ticks: "0" (explicitly unticked) for either Save Password or
+    // Auto-Login means don't stay signed in across restarts, so revoke the saved
+    // session token now. Unset (older installs) keeps the old stay-signed-in behaviour.
+    // Only a DPAPI-encrypted session token is ever stored, never the password.
+    let off = |k: &str| setting(app, k).as_deref() == Some("0");
+    if token(app).is_some() && (off("save_password") || off("auto_login")) {
+        log::info!("sync: Save Password/Auto-Login off; forgetting the saved session");
+        sign_out(app);
+        return;
+    }
     if token(app).is_some() {
         start_worker(app.clone());
         crate::friends::start(app);

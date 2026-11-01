@@ -774,7 +774,7 @@ mod tests {
         std::env::set_var("FRAGLINK_STEAM_DIR", "/nonexistent-steam-dir");
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("World of Warcraft");
-        for f in ["_retail_", "_classic_beta_"] {
+        for f in ["_retail_", "_forever_"] {
             std::fs::create_dir_all(root.join(f).join("WTF")).unwrap();
         }
         std::fs::write(
@@ -783,7 +783,7 @@ mod tests {
         )
         .unwrap();
         let retail = root.join("_retail_/Wow.exe");
-        let forever = root.join("_classic_beta_/WowB.exe");
+        let forever = root.join("_forever_/Wow.exe");
         let clock = Arc::new(AtomicU64::new(0));
         let c = clock.clone();
         let env = SimEnv::new(
@@ -964,7 +964,7 @@ mod tests {
         let clock = Arc::new(AtomicU64::new(0));
         let c = clock.clone();
         let env = SimEnv::new(
-            "-:10,cs2.exe:300,-:30,steam:570:300,-:30,C:/Games/MyIndie/MyIndie.exe:300,-:30,Wow.exe:1500:idle,-:30",
+            "-:10,cs2.exe:300,-:30,steam:570:300,-:30,C:/Games/MyIndie/MyIndie.exe:300,-:30,C:/Games/World of Warcraft/_retail_/Wow.exe:1500:idle,-:30",
             Arc::new(move || c.load(Ordering::SeqCst)),
         )
         .unwrap();

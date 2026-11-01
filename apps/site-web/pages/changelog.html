@@ -1,39 +1,134 @@
-<!-- title: Changelog · Fraglink | page: changelog | desc: What's new in each Fraglink beta. -->
+<!-- title: Changelog · Fraglink | page: changelog | desc: What's new on the Fraglink website and in each app beta. -->
 <div class="mid wrap stack changelog">
-<section class="panel"><h2>0.3.0-beta.7 <small>26 October 2026</small></h2><div class="body"><ul>
+<div class="cl-tabs" role="tablist" aria-label="Show"><button type="button" class="on" data-f="All" aria-pressed="true">All</button><button type="button" data-f="App" aria-pressed="false">App</button><button type="button" data-f="Website" aria-pressed="false">Website</button></div>
+<section class="panel" data-k="Website"><h2><span class="cl-tag Website">Website</span>2 November 2026</h2><div class="body"><h3>Trending</h3><ul>
+<li>Trending just shows games and hours now, no player counts, so nobody gets singled out.</li>
+</ul>
+<h3>Home page</h3><ul>
+<li>Said bye to the Newest members box.</li>
+</ul>
+<h3>WoW levels</h3><ul>
+<li>WoW levels now update from the armory too, not just /played. Ding on an alt and your card catches up, no upload needed.</li>
+</ul>
+<h3>Live hours</h3><ul>
+<li>Hours now count up live while you play: your profile, this week, leaderboards and your friends' side panel include the game you're in right now, instead of waiting until you close it.</li>
+<li>Games you hide from friends still add their hours when you close them, as before.</li>
+</ul>
+<h3>WoW hours</h3><ul>
+<li>If WoW crashed mid-session, that session no longer gets counted twice. Your totals stay honest.</li>
+</ul>
+<h3>Behind the scenes</h3><ul>
+<li>If one part of the server trips over, live connections and friend updates keep going instead of getting stuck.</li>
+<li>Too many wrong passwords or 2FA codes on one account now pauses sign-ins to it for 15 minutes, whatever device or name is used.</li>
+<li>Database hiccups get written to the log now instead of quietly going missing.</li>
+<li>The site always uses https, and it blocks scripts it didn't ship itself.</li>
+</ul></div></section>
+<section class="panel" data-k="App"><h2><span class="cl-tag App">App</span>27 October 2026</h2><div class="body"><h3>0.3.0-beta.9.1</h3><p>(╯°□°)╯︵ ┻━┻ One more pass.</p><p><b>Pop-up boxes</b></p><ul><li>Every pop-up box fits inside the window, even at its smallest size</li><li>Change Nickname fits, and Save is blue and on the right</li><li>Set Custom Status and Add Custom Group lose the extra button inside the box</li><li>Add Friend buttons are blue</li></ul><p><b>Window</b></p><ul><li>The resize grip sits in the true bottom-right corner</li><li>Its tooltip no longer covers the side panel</li></ul>
+<h3>0.3.0-beta.9</h3><p>Missed a few spots in beta.8 - here they are.</p><p><b>Side panel (Flat Navy and Flat Grey)</b></p><ul>
+<li>No more blue banner or solid blue section bars</li>
+<li>Quieter section headers</li>
+<li>Offline friends no longer show as green</li>
+<li>The friend's avatar now sits half above the top of the panel</li></ul><p><b>Connections and WoW</b></p><ul>
+<li>New Manage WoW button that opens your Battle.net page on the website</li>
+<li>Verify WoW characters moved into the World of Warcraft button row</li>
+<li>The Spotify "coming soon" row is hidden for now</li></ul><p><b>Fixes</b></p><ul>
+<li>The arrow next to your status opens the status menu again in the flat themes</li></ul>
+<h3>0.3.0-beta.8</h3><p><b>Look and themes</b></p><ul>
+<li>Two new themes: Flat Navy and Flat Grey</li>
+<li>Crimson, Emerald and Graphite are removed; anyone using one moves to Cobalt</li>
+<li>The title bar is gone from every tab, in all themes</li>
+<li>Flat themes have visible column dividers between Name and Status that turn blue on hover, so you can drag them</li>
+<li>Text sizes are now Small, Normal, Large and Larger<ul><li>Normal is the old Large, and saved settings carry over</li></ul></li></ul><p><b>Pop-ups</b></p><ul>
+<li>New pop-up design in Fraglink navy</li>
+<li>Friend request pop-ups have Accept and Ignore</li>
+<li>An Update ready pop-up when a new version is downloaded</li></ul><p><b>Tray icon</b></p><ul>
+<li>One corner mark shows your status<ul><li>Green: online or Looking to Play. Yellow: away. Hollow ring: invisible. Greyed out: offline</li></ul></li>
+<li>A red dot while friend requests are waiting</li>
+<li>A green download arrow when an update is ready (it wins over the others)</li>
+<li>The tooltip shows "N friend requests"</li></ul><p><b>Friends</b></p><ul>
+<li>The side panel has a "This session" row; the old "Playing for" clock is gone</li>
+<li>Red Friends badge with white text, and waiting requests are highlighted</li></ul><p><b>Connections and WoW</b></p><ul>
+<li>Real Steam, Discord and Battle.net logos</li>
+<li>Battle.net shows when your /played was last imported, and Steam shows its line too</li>
+<li>A note when your Steam game details were private</li>
+<li>A "Get the Fraglink addon" button (CurseForge)</li>
+<li>A reminder to log in to each WoW character once so the addon saves its /played</li>
+<li>/played is uploaded on the website</li></ul><p><b>Other</b></p><ul>
+<li>A What's New notice after updating</li>
+<li>Unticking Save Password or Auto-Login is respected, and turning on Auto-Login also turns on Save Password</li>
+<li>Help menu with FAQ, Changelog and Contact Us</li></ul></div></section>
+<section class="panel" data-k="Website"><h2><span class="cl-tag Website">Website</span>27 October 2026</h2><div class="body"><h3>Imported hours</h3><ul>
+<li>Hours you play after a WoW /played or Steam import now add on top of it, so your total goes up straight away. Importing again replaces the starting point, so nothing counts twice.</li>
+<li>Steam hours are no longer refreshed automatically. Press Import hours in Settings › Connections whenever you want to update them.</li>
+<li>WoW /played uploads now remind you to log in to every character first, and a lower upload never lowers your hours: we keep the higher total. Deleted characters keep their hours.</li>
+<li>The upload page no longer offers to recount your WoW hours. If your total looks wrong, contact support and staff can recount it from your characters' /played.</li>
+<li>Time Fraglink tracks in WoW menus and loading screens is now kept: when a new /played upload grew less than the time the app tracked, the difference stays on top of your total.</li><li>Help pages, the FAQ and the welcome email now explain how imported and tracked hours combine.</li><li>Hidden WoW characters no longer show on your own profile either, so it looks exactly like what visitors see. Unhide them under Manage WoW.</li><li>Feature your top 3 WoW characters: pick them and their order under Manage WoW (searchable, separate for Retail and Forever). They show first on your profile; with none picked your most played show first.</li><li>WoW characters are now matched by their Battle.net character id: a renamed or realm-transferred character counts once, a character you sold or moved to another Battle.net account counts for its new owner only, and deleted characters keep their hours. Your characters are rechecked on every upload.</li><li>WoW Forever isn't released yet, so Forever /played uploads are closed for now; your Forever hours are tracked by the app until it launches.</li>
+</ul>
+<h3>Welcome email</h3><ul>
+<li>New accounts now get a welcome email after confirming their address, with tips for getting the app, importing Steam and WoW /played hours, adding friends and handy privacy settings.</li>
+<li>The welcome email's WoW /played link now goes to the Battle.net connection page.</li></ul>
+<h3>Connections and FAQ</h3><ul>
+<li>Settings › Connections now shows the real Steam, Discord and Battle.net logos.</li>
+<li>FAQ: clearer answers on what linking Battle.net or Discord does, and how WoW /played hours are imported.</li>
+<li>Battle.net in Settings › Connections now shows when your WoW /played hours were last imported.</li></ul>
+<h3>Wowhead tooltips</h3><ul>
+<li>Hover any gear slot on a WoW character to see the full Wowhead tooltip, with item level, enchants and gems.</li>
+<li>Tooltips follow your mouse and flip near the edge of the screen.</li>
+<li>On phones, tap a gear row to open its tooltip underneath. Tap again to close it.</li>
+<li>Wowhead links anywhere on the site now show tooltips too.</li>
+<li>The character render in the popup is bigger and sits in the bottom right of the header.</li></ul></div></section>
+<section class="panel" data-k="Website"><h2><span class="cl-tag Website">Website</span>26 October 2026</h2><div class="body"><h3>WoW character popup</h3><ul>
+<li>Click a WoW character on a profile to see its gear, raid progress, PvP, collections and professions.</li>
+<li>New <b>Show guild</b> switch for each character.</li>
+<li>Profiles show your top 3 WoW characters, with <b>Show all</b> for the rest.</li></ul>
+<h3>Battle.net page</h3><ul>
+<li>A new Battle.net page in Settings › Connections to verify your WoW characters and upload your /played hours with the Fraglink /played addon.</li>
+<li>Hide single characters or all of them, with search and paging.</li>
+<li>Characters show their portrait, class and spec icons.</li></ul>
+<h3>News images</h3><ul>
+<li>News posts can have a cover image: a thumbnail in the list and full width on the post.</li>
+<li>Posts can end with a button, with its own label.</li></ul>
+<h3>New pages</h3><ul>
+<li>New FAQ, Changelog, Contact, Status and Media pages.</li>
+<li>A BETA stamp shows the site is still in beta.</li>
+<li>A "You are here" trail at the top of every page.</li></ul>
+<h3>Home page and polls</h3><ul>
+<li>A refreshed home page with app screenshots.</li>
+<li>Vote in the new Quick poll.</li></ul></div></section>
+<section class="panel" data-k="App"><h2><span class="cl-tag App">App</span>26 October 2026</h2><div class="body"><h3>0.3.0-beta.7</h3><ul>
 <li>Tooltips no longer get cut off at the window edges, including with Large or Larger text.</li>
-<li>A bolder tray icon that's easier to spot.</li></ul></div></section>
-<section class="panel"><h2>0.3.0-beta.6 <small>26 October 2026</small></h2><div class="body"><ul>
+<li>A bolder tray icon that's easier to spot.</li></ul>
+<h3>0.3.0-beta.6</h3><ul>
 <li><b>Options › Games</b> has a new <b>Detected, not added</b> list: programs Fraglink asked about stay there with Add it! and Not a game.</li>
 <li>A blue tick marks games whose detection Fraglink has checked.</li>
 <li>New tray icon that follows your Windows light or dark taskbar.</li>
 <li>The name you give a game you added is now shown to everyone, not just you.</li>
 <li>Options › Games lists only games installed on this PC, with "Not seeing your game? Add it!" at the top.</li>
 <li>Clearer startup options, and windows never open larger than your screen.</li></ul></div></section>
-<section class="panel"><h2>0.3.0-beta.5 <small>25 October 2026</small></h2><div class="body"><ul>
+<section class="panel" data-k="App"><h2><span class="cl-tag App">App</span>25 October 2026</h2><div class="body"><h3>0.3.0-beta.5</h3><ul>
 <li>Unknown programs get a light <b>"Playing X? Add it!"</b> prompt. Games you add are reviewed so they get their proper name for everyone.</li>
 <li>Remove games you added yourself in Options › Games. Your hours stay on your profile.</li>
-<li>Fixes for World of Warcraft's detect path and duplicate store copies.</li></ul></div></section>
-<section class="panel"><h2>0.3.0-beta.4 <small>25 October 2026</small></h2><div class="body"><ul>
+<li>Fixes for World of Warcraft's detect path and duplicate store copies.</li></ul>
+<h3>0.3.0-beta.4</h3><ul>
 <li>Fixed a freeze when the Steam library was rescanned during a game.</li>
 <li>The app recovers from errors instead of locking up, and keeps a crash log.</li>
 <li>A game can no longer show up twice or "switch" to itself mid-session.</li>
 <li>Games that share an exe name, like different WoW versions, are told apart.</li></ul></div></section>
-<section class="panel"><h2>0.3.0-beta.3 <small>19 October 2026</small></h2><div class="body"><ul>
+<section class="panel" data-k="App"><h2><span class="cl-tag App">App</span>19 October 2026</h2><div class="body"><h3>0.3.0-beta.3</h3><ul>
 <li>New privacy switch: <b>Show connected account names</b>.</li>
 <li>Leaderboards count imported hours the same way your profile does.</li>
 <li>Every column in a profile's Games table sorts.</li>
 <li>Send friend requests from private profiles.</li>
 <li>The app always connects to playfraglink.com, so there's no server field to fill in.</li>
 <li>Manual hour imports are turned off. Steam import is unchanged.</li>
-<li>Game icons show on public profiles for visitors, and password resets say clearly when they worked.</li></ul></div></section>
-<section class="panel"><h2>0.3.0-beta.2 <small>19 October 2026</small></h2><div class="body"><ul>
+<li>Game icons show on public profiles for visitors, and password resets say clearly when they worked.</li></ul>
+<h3>0.3.0-beta.2</h3><ul>
 <li>Sign-up asks for your date of birth. You need to be 13 or older.</li>
 <li>The Friends tab shows how many friend requests are waiting, and requests can reach you by email.</li>
 <li>Under-18 accounts start private, and age is hidden by default.</li>
 <li>Hours are now either Tracked or Imported. Estimated hours are gone.</li>
 <li>Website friends lists update live.</li></ul></div></section>
-<section class="panel"><h2>0.3.0-beta.1 <small>12 October 2026</small></h2><div class="body"><ul>
+<section class="panel" data-k="App"><h2><span class="cl-tag App">App</span>12 October 2026</h2><div class="body"><h3>0.3.0-beta.1</h3><ul>
 <li>The first beta.</li>
 <li>Nicknames: pick the name friends see, and keep your @username.</li>
 <li>New profiles with your games, hours and a profile picture, plus a refreshed website.</li>
@@ -41,4 +136,5 @@
 <li>The same privacy switches in the app and on the website.</li>
 <li>Bigger pop-ups when friends come online or start a game.</li>
 <li>Announcements show as a slim banner, and groups show who's online.</li></ul></div></section>
+<nav class="cl-pager" aria-label="Changelog pages"></nav>
 </div>

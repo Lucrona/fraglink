@@ -237,13 +237,16 @@ async fn friend_request_email_respects_prefs_and_caps(pool: PgPool) {
     fn fr_mails() -> Vec<fraglink_server::mailer::Mail> {
         fraglink_server::mailer::outbox()
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|m| m.subject.contains("wants to be friends"))
             .cloned()
             .collect()
     }
-    fraglink_server::mailer::outbox().lock().unwrap().clear();
+    fraglink_server::mailer::outbox()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear();
     let app = fraglink_server::router(state(pool.clone()));
     let a = signup(&app, "from@example.com", "fromer").await;
     let b = signup(&app, "to@example.com", "target").await;
@@ -275,7 +278,10 @@ async fn friend_request_email_respects_prefs_and_caps(pool: PgPool) {
         Some(json!({ "handle": "fromer", "accept": false })),
     )
     .await;
-    fraglink_server::mailer::outbox().lock().unwrap().clear();
+    fraglink_server::mailer::outbox()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear();
     req(&app, &a, "target").await;
     assert!(
         fr_mails().is_empty(),
@@ -295,7 +301,10 @@ async fn friend_request_email_respects_prefs_and_caps(pool: PgPool) {
         Some(json!({ "friend_request_email": false })),
     )
     .await;
-    fraglink_server::mailer::outbox().lock().unwrap().clear();
+    fraglink_server::mailer::outbox()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear();
     req(&app, &a, "target").await;
     assert!(fr_mails().is_empty(), "pref off = no mail");
 }

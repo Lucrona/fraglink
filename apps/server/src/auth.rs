@@ -418,8 +418,16 @@ pub async fn create_user(
 }
 
 fn too_many_failures(state: &AppState, key: &str) -> bool {
-    let mut m = state.login_failures.lock().unwrap();
-    let v = m.entry(key.to_string()).or_default();
+    let mut m = state
+        .login_failures
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if m.len() > 50_000 {
+        m.retain(|_, v| v.last().is_some_and(|t| t.elapsed() < FAILED_LOGIN_WINDOW));
+    }
+    let Some(v) = m.get_mut(key) else {
+        return false;
+    };
     v.retain(|t| t.elapsed() < FAILED_LOGIN_WINDOW);
     v.len() >= MAX_FAILED_LOGINS
 }
@@ -428,28 +436,55 @@ fn record_failure(state: &AppState, key: &str) {
     state
         .login_failures
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .entry(key.to_string())
         .or_default()
         .push(Instant::now());
 }
 
-/// Email-or-username + password check with a per-account failure limit (10 per 15 min).
+/// Failure-limit key for an account, whatever was typed to reach it (email or username).
+fn account_key(id: Uuid) -> String {
+    format!("acct:{id}")
+}
+
+/// Same message whether the account exists or not.
+fn too_many_signins() -> AppError {
+    AppError::new(
+        StatusCode::TOO_MANY_REQUESTS,
+        "rate_limited",
+        "Too many sign-in attempts. Wait 15 minutes and try again.",
+    )
+}
+
+/// Per-account limit for the second sign-in step (2FA): wrong codes count against the
+/// same 10-per-15-minutes budget as wrong passwords.
+pub fn account_locked(state: &AppState, user: Uuid) -> ApiResult<()> {
+    if too_many_failures(state, &account_key(user)) {
+        return Err(too_many_signins());
+    }
+    Ok(())
+}
+
+/// Records a failed second step (wrong 2FA code) against the account.
+pub fn record_account_failure(state: &AppState, user: Uuid) {
+    record_failure(state, &account_key(user));
+}
+
+/// Email-or-username + password check with a per-account failure limit (10 per 15 min),
+/// counted both on what was typed and on the account it matched, so switching between
+/// email and username doesn't reset it. Used by web, app (device) and form sign-in.
 pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiResult<User> {
-    let key = email.trim().to_lowercase();
+    let login = email.trim().to_lowercase();
+    let key = format!("login:{login}");
     if too_many_failures(state, &key) {
-        return Err(AppError::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            "rate_limited",
-            "Too many failed sign-ins. Try again in 15 minutes.",
-        ));
+        return Err(too_many_signins());
     }
     let row: Option<(Uuid, String, String, String, String, bool, bool)> = sqlx::query_as(
         "SELECT id, email, handle, display_name, password_hash, banned_at IS NOT NULL, age_review_at IS NOT NULL FROM users
          WHERE ((lower(email) = $1 AND email <> '') OR lower(handle) = $1) AND deleted_at IS NULL
          ORDER BY (lower(handle) = $1) DESC LIMIT 1",
     )
-    .bind(&key)
+    .bind(&login)
     .fetch_optional(&state.db)
     .await?;
     let pw = password.to_string();
@@ -467,6 +502,11 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
         ),
         None => (None, dummy_hash().to_string(), false, false),
     };
+    if let Some(u) = &user {
+        if too_many_failures(state, &account_key(u.id)) {
+            return Err(too_many_signins());
+        }
+    }
     // Argon2 is CPU-heavy: keep it off the async workers.
     let ok = tokio::task::spawn_blocking(move || verify_password(&pw, &hash))
         .await
@@ -479,8 +519,11 @@ pub async fn check_login(state: &AppState, email: &str, password: &str) -> ApiRe
         )),
         (Some(_), true) if paused => Err(account_paused()),
         (Some(u), true) => Ok(u),
-        _ => {
+        (u, _) => {
             record_failure(state, &key);
+            if let Some(u) = u {
+                record_failure(state, &account_key(u.id));
+            }
             Err(AppError::new(
                 StatusCode::UNAUTHORIZED,
                 "bad_credentials",

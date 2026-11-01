@@ -39,6 +39,9 @@ pub mod keys {
 pub struct FriendsShared {
     running: AtomicBool,
     connected: AtomicBool,
+    /// The last connect attempt failed (HTTPS/DNS/network): the UI shows "can't connect"
+    /// while the thread keeps retrying over HTTPS (there is no plain-HTTP fallback).
+    cant_connect: AtomicBool,
     /// Latest `FriendsList` JSON from the server (hello or REST refresh).
     pub(crate) list: Mutex<Option<Value>>,
     last_toast: Mutex<HashMap<String, i64>>,
@@ -55,6 +58,7 @@ fn setting(app: &AppHandle, k: &str) -> Option<String> {
 }
 
 pub fn emit(app: &AppHandle) {
+    crate::refresh_tray_icon(app);
     let _ = app.emit(FRIENDS_EVENT, ());
 }
 
@@ -232,10 +236,36 @@ pub fn view(app: &AppHandle) -> Value {
     serde_json::json!({
         "signed_in": signed_in,
         "connected": signed_in && st.friends.connected.load(Ordering::SeqCst),
+        "cant_connect": signed_in && st.friends.cant_connect.load(Ordering::SeqCst),
         "me": setting(app, sync::keys::USER),
         "list": if signed_in { st.friends.list.lock_ok().clone() } else { None },
         "muted": muted(app),
     })
+}
+
+/// Signed in with the presence socket up.
+pub fn connected(app: &AppHandle) -> bool {
+    sync::signed_in(app)
+        && app
+            .state::<AppState>()
+            .friends
+            .connected
+            .load(Ordering::SeqCst)
+}
+
+/// Incoming friend requests waiting in the cached list (0 while signed out).
+pub fn pending_requests(app: &AppHandle) -> usize {
+    if !sync::signed_in(app) {
+        return 0;
+    }
+    app.state::<AppState>()
+        .friends
+        .list
+        .lock_ok()
+        .as_ref()
+        .and_then(|l| l.get("incoming"))
+        .and_then(|v| v.as_array())
+        .map_or(0, |a| a.len())
 }
 
 /// Start the presence thread (no-op when already running or signed out).
@@ -251,6 +281,7 @@ pub fn start(app: &AppHandle) {
             run(&app2);
             let st = app2.state::<AppState>();
             st.friends.connected.store(false, Ordering::SeqCst);
+            st.friends.cant_connect.store(false, Ordering::SeqCst);
             *st.friends.list.lock_ok() = None;
             st.friends.running.store(false, Ordering::SeqCst);
             emit(&app2);
@@ -321,9 +352,11 @@ fn backoff_delay(attempt: u32, retry_after: Option<u64>) -> Duration {
     let cap = (BACKOFF_MIN * 2f64.powi(attempt.min(10) as i32)).min(BACKOFF_MAX);
     let mut secs = cap / 2.0 + rand01() * cap / 2.0;
     if let Some(ra) = retry_after {
-        secs = secs.max(ra as f64 + rand01() * 10.0);
+        // A server Retry-After is trusted only up to an hour, so a bogus huge value
+        // can't stall reconnects for good (or overflow the Duration).
+        secs = secs.max(ra.min(3600) as f64 + rand01() * 10.0);
     }
-    Duration::from_secs_f64(secs)
+    Duration::try_from_secs_f64(secs).unwrap_or(Duration::from_secs_f64(BACKOFF_MAX))
 }
 
 fn run(app: &AppHandle) {
@@ -341,6 +374,9 @@ fn run(app: &AppHandle) {
             Err(e) => {
                 let wait = backoff_delay(attempt, e.retry_after());
                 attempt += 1;
+                if !st.friends.cant_connect.swap(true, Ordering::SeqCst) {
+                    emit(app);
+                }
                 log::info!(
                     "presence: can't connect ({e}); retry in {:.0}s",
                     wait.as_secs_f64()
@@ -354,6 +390,7 @@ fn run(app: &AppHandle) {
         let connected_at = Instant::now();
         log::info!("presence: connected");
         st.friends.connected.store(true, Ordering::SeqCst);
+        st.friends.cant_connect.store(false, Ordering::SeqCst);
         set_live(app, true);
         emit(app);
         let reason = session(app, &client, &mut sock);
@@ -554,6 +591,15 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backoff_survives_a_huge_retry_after() {
+        // A bogus Retry-After used to overflow Duration and panic the presence thread.
+        let d = backoff_delay(3, Some(u64::MAX));
+        assert!(d <= Duration::from_secs(3600 + 10), "{d:?}");
+        assert!(d >= Duration::from_secs(3600));
+        assert!(backoff_delay(u32::MAX, None) <= Duration::from_secs_f64(BACKOFF_MAX));
+    }
 
     #[test]
     fn tagged_programs_are_sent_by_exe_only() {

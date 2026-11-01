@@ -301,8 +301,10 @@ async fn second_step(
             "Too many wrong codes. Enter your password again.",
         ));
     }
+    auth::account_locked(&st, uid)?;
     code_limit(&st, uid)?;
     if !verify_code(&st, uid, &r.code).await? {
+        auth::record_account_failure(&st, uid);
         return Err(bad_code());
     }
     sqlx::query("DELETE FROM mfa_tickets WHERE ticket_hash = $1")

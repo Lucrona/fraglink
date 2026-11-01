@@ -24,6 +24,7 @@ pub mod steam;
 pub mod store;
 pub mod tracker;
 pub mod vdf;
+pub mod wow_played;
 
 pub use detector::{Detection, Detector};
 pub use engine::Engine;

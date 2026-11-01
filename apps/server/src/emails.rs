@@ -27,6 +27,8 @@ struct Parts<'a> {
     paras: Vec<String>,
     button: Option<(&'a str, &'a str)>,
     after: Vec<String>,
+    /// extra body HTML, inserted as is after the paragraphs (already escaped)
+    raw: String,
     reason: &'a str,
 }
 
@@ -73,7 +75,7 @@ fn layout(p: Parts) -> String {
 </td></tr>
 <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:30px 28px 14px 28px;">
 <h1 style="margin:0 0 18px 0;font-family:{FONT};font-size:22px;line-height:28px;font-weight:bold;color:#10161f;">{title}</h1>
-{body}{button}{after}
+{body}{raw}{button}{after}
 </td></tr>
 <tr><td bgcolor="#f4f6f9" style="background:#f4f6f9;padding:16px 28px;border-radius:0 0 6px 6px;border-top:1px solid #e1e6ec;">
 <p style="margin:0 0 6px 0;font-family:{FONT};font-size:12px;line-height:18px;color:#7a8592;">{reason}</p>
@@ -83,6 +85,7 @@ fn layout(p: Parts) -> String {
 </body></html>"##,
         title = esc(p.heading),
         pre = esc(p.preheader),
+        raw = p.raw,
         reason = esc(p.reason),
     )
 }
@@ -132,6 +135,7 @@ pub fn alert(
             paras,
             button: Some(button),
             after: vec![],
+            raw: String::new(),
             reason: "You got this because admin email alerts are on in Admin > Site settings.",
         }),
     }
@@ -152,6 +156,7 @@ pub fn confirm(name: &str, url: &str) -> Email {
             ],
             button: Some(("Confirm email", url)),
             after: vec!["The link works for 3 days. If you didn't sign up for Fraglink, you can ignore this email.".into()],
+            raw: String::new(),
             reason: "You got this because this address was used to sign up for Fraglink, or added to an account.",
         }),
     }
@@ -172,6 +177,7 @@ pub fn reset(name: &str, url: &str) -> Email {
             ],
             button: Some(("Reset password", url)),
             after: vec!["The link works for 1 hour and only once. If you didn't ask for this, ignore this email; your password stays the same.".into()],
+            raw: String::new(),
             reason: "You got this because a password reset was requested for your Fraglink account.",
         }),
     }
@@ -196,6 +202,7 @@ pub fn signin(name: &str, what: &str, security_url: &str) -> Email {
             ],
             button: Some(("Review security", security_url)),
             after: vec!["Not you? Change your password and sign out other devices from the Security tab.".into()],
+            raw: String::new(),
             reason: "You got this because sign-in alerts are on for your Fraglink account.",
         }),
     }
@@ -235,7 +242,31 @@ pub fn friend_request(
                 r##"Don't want these emails? <a href="{}" style="color:#5b6b7c;">Turn off friend request emails</a>."##,
                 esc(turn_off_url)
             )],
+            raw: String::new(),
             reason: "You got this because friend request emails are on for your Fraglink account.",
+        }),
+    }
+}
+
+/// Welcome email, sent once after a new account confirms its email.
+pub fn welcome(nickname: &str, username: &str) -> Email {
+    let body = include_str!("email_templates/welcome.html")
+        .replace("{nickname}", &esc(nickname))
+        .replace("{username}", &esc(username));
+    let text = include_str!("email_templates/welcome.txt")
+        .replace("{nickname}", nickname)
+        .replace("{username}", username);
+    Email {
+        subject: "Welcome to Fraglink".into(),
+        text,
+        html: layout(Parts {
+            preheader: "Get the app, bring your Steam and WoW hours, and add your friends.",
+            heading: "Welcome to Fraglink",
+            paras: vec![],
+            button: None,
+            after: vec![],
+            raw: body,
+            reason: "You got this once because you just created a Fraglink account.",
         }),
     }
 }
@@ -281,6 +312,7 @@ mod tests {
                     &format!("{site}/api/v1/notify/off?token=EXAMPLE"),
                 ),
             ),
+            ("welcome", super::welcome("Lucrona", "lucrona")),
         ] {
             std::fs::write(format!("{dir}/email-{n}.html"), &e.html).unwrap();
             std::fs::write(
@@ -321,5 +353,15 @@ mod tests {
         assert!(fr.html.contains("Bob &lt;x&gt;"));
         assert!(fr.html.contains("Turn off friend request emails"));
         assert!(fr.text.contains("https://playfraglink.com/friends"));
+        let w = super::welcome("<i>Lu</i>", "lu&co");
+        assert_eq!(w.subject, "Welcome to Fraglink");
+        assert!(w.html.contains("Hi &lt;i&gt;Lu&lt;/i&gt;,"));
+        assert!(w.html.contains("@lu&amp;co"));
+        assert!(!w.html.contains("{nickname}") && !w.text.contains("{username}"));
+        assert!(w.text.starts_with("Hi <i>Lu</i>,"));
+        assert!(!w.text.contains("Subject:"));
+        assert!(w
+            .html
+            .contains("https://www.curseforge.com/wow/addons/fraglink-played"));
     }
 }

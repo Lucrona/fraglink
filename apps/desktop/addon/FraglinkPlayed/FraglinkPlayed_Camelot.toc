@@ -1,0 +1,11 @@
+## Interface: 120105, 120107, 16001
+## Title: Fraglink /played
+## Notes: Saves each character's /played total for the Fraglink app. Nothing leaves your PC from the game.
+## Author: Fraglink
+## Version: 1.0.1
+## X-Website: https://playfraglink.com
+## X-Curse-Project-ID: 1766775
+## SavedVariables: FraglinkPlayedDB
+## IconTexture: Interface\AddOns\FraglinkPlayed\icon
+
+FraglinkPlayed.lua

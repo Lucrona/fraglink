@@ -55,7 +55,8 @@ async fn zip_export_has_csvs_and_json(pool: PgPool) {
             "hours_entries.json",
             "profile.json",
             "sessions.csv",
-            "steam_playtime.csv"
+            "steam_playtime.csv",
+            "wow_characters.json"
         ]
     );
     let read = |z: &mut zip::ZipArchive<std::io::Cursor<Vec<u8>>>, n: &str| {

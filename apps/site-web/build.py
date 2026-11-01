@@ -15,7 +15,7 @@ layout = open(os.path.join(HERE, "layout.html")).read()
 SITEKEY = os.environ.get("FRAGLINK_TURNSTILE_SITEKEY", "0x4AAAAAAFUF0sKGuaUYzQ8H")
 # Search engines. Production is playfraglink.com; beta sends noindex headers and Disallow: / (Caddy).
 CANON = "https://playfraglink.com"
-DESC = "Fraglink: a lightweight Windows tray app that tracks your gaming hours and shows what your friends are playing."
+DESC = "Fraglink: a small Windows tray app. You play, it tracks your hours, and your friends see what you're playing."
 # pages search engines may index -> their one canonical address (also in the server's sitemap)
 INDEXABLE = {"home": "/", "download": "/download", "news": None, "privacy": "/privacy", "terms": "/terms", "faq": "/faq", "changelog": "/changelog", "contact": "/contact", "status": "/status", "media": "/media"}
 OG_IMG = CANON + "/assets/og-card.png"
@@ -44,7 +44,10 @@ for name in sorted(os.listdir(os.path.join(HERE, "pages"))):
     if meta.get("page") in ("privacy", "terms"):  # published legal pages: no "Private preview" strip, even on beta
         out = re.sub(r'<div class="preview-flag">.*?</div></div>\n?', "", out)
     assert "xfire" not in out.lower(), name
-    open(os.path.join(DIST, name), "w").write(out)
+    # "path:connect/battlenet/verify" -> dist/connect/battlenet/verify.html (Caddy: try_files {path}.html)
+    dest = os.path.join(DIST, meta["path"].strip("/") + ".html") if meta.get("path") else os.path.join(DIST, name)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    open(dest, "w").write(out)
 # playfraglink.com's robots.txt (beta.playfraglink.com answers its own "Disallow: /" in Caddy)
 open(os.path.join(DIST, "robots.txt"), "w").write(open(os.path.join(HERE, "robots.txt")).read())
 for root, _, files in os.walk(DIST):

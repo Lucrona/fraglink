@@ -615,11 +615,14 @@ pub fn find_exe(dir: &str, names: &[String]) -> Option<String> {
     }
     let key = format!("{dir}|{}", names.join("|"));
     let cache = exe_cache();
-    if let Some(v) = cache.lock().unwrap().get(&key) {
+    if let Some(v) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
         return v.clone();
     }
     let found = probe_exe(Path::new(dir), names).or_else(|| scan_for(dir, names));
-    cache.lock().unwrap().insert(key, found.clone());
+    cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key, found.clone());
     found
 }
 
@@ -694,7 +697,10 @@ fn exe_cache() -> &'static ExeCache {
 
 /// Forget [`find_exe`] results (after Detect Games).
 pub fn clear_exe_cache() {
-    exe_cache().lock().unwrap().clear();
+    exe_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear();
 }
 
 /// `dir` + `rel` (forward slashes) in the folder's own style.
