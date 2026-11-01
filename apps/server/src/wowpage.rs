@@ -112,7 +112,10 @@ async fn list(
         _ => 0,
     };
     let order = match p.sort.as_deref() {
-        Some("level") => "level DESC, played_s DESC, lower(name)",
+        Some("level") => concat!(
+            crate::wow::shown_level!(),
+            " DESC, played_s DESC, lower(name)"
+        ),
         Some("name") => "lower(name), lower(realm)",
         Some("realm") => "lower(realm), lower(name)",
         _ => "played_s DESC, lower(name)",
@@ -127,8 +130,9 @@ async fn list(
     #[allow(clippy::type_complexity)]
     let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, bool, Option<String>, Option<String>, Option<String>, Option<String>, bool)> =
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "SELECT id, game_id, region, realm, name, class, level, played_s, hidden, race, gender, spec, bnet_spec, show_guild
-             FROM wow_characters WHERE {filter} ORDER BY {order} LIMIT $7 OFFSET $8"
+            "SELECT id, game_id, region, realm, name, class, {lvl} AS level, played_s, hidden, race, gender, spec, bnet_spec, show_guild
+             FROM wow_characters WHERE {filter} ORDER BY {order} LIMIT $7 OFFSET $8",
+            lvl = crate::wow::shown_level!()
         )))
         .bind(uid)
         .bind(&q)
@@ -451,14 +455,17 @@ mod tests {
 /// The owner's featured characters (up to 3 per flavour, in order), for the picker.
 async fn featured(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, i16)> = sqlx::query_as(
-        "SELECT id, game_id, region, realm, name, class, level, played_s, featured
+    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, i16)> =
+        sqlx::query_as(concat!(
+            "SELECT id, game_id, region, realm, name, class, ",
+            crate::wow::shown_level!(),
+            " AS level, played_s, featured
          FROM wow_characters WHERE user_id = $1 AND featured IS NOT NULL
-         ORDER BY game_id, featured",
-    )
-    .bind(a.user.id)
-    .fetch_all(&st.db)
-    .await?;
+         ORDER BY game_id, featured"
+        ))
+        .bind(a.user.id)
+        .fetch_all(&st.db)
+        .await?;
     let mut out = serde_json::Map::new();
     for (g, _) in crate::wow::GAMES {
         out.insert(g.to_string(), json!([]));

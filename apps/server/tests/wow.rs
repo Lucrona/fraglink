@@ -902,3 +902,105 @@ async fn staff_recount(
     }
     r
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn cards_show_the_newer_of_armory_and_played_level(pool: PgPool) {
+    let _flags = FLAGS.lock().await;
+    let app = fraglink_server::router(state(pool.clone()));
+    let (t, _) = two_chars(&app, &pool, "lvl").await;
+    sqlx::query("INSERT INTO site_settings(key, enabled) VALUES('wow_characters', true)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let get = |path: &'static str| {
+        let (app, t) = (app.clone(), t.clone());
+        async move {
+            fraglink_server::features::forget(); // the flag cache is shared with parallel tests
+            let r = api(&app, "GET", path, Some(&t), None).await;
+            assert_eq!(r.status, 200, "{}", r.text);
+            serde_json::from_str::<Value>(&r.text).unwrap()
+        }
+    };
+    let levels = |v: &Value| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                (
+                    c["name"].as_str().unwrap().to_string(),
+                    c["level"].as_i64().unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let profile = || async {
+        let mut l = levels(&get("/api/v1/users/lvl/profile").await["wow_characters"]);
+        l.sort();
+        l
+    };
+    let by_level = || async { levels(&get("/api/v1/me/wow/list?sort=level").await["items"]) };
+    // `login_h`: Blizzard's last login, in hours after the /played upload (None: unknown)
+    let set = |name: &'static str, lvl: i32, login_h: Option<i32>| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                "UPDATE wow_characters SET bnet_level = $2,
+                        bnet_last_login = played_at + make_interval(hours => $3) WHERE name = $1",
+            )
+            .bind(name)
+            .bind(lvl)
+            .bind(login_h)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    };
+    let pair = |a: &str, x: i64, b: &str, y: i64| vec![(a.to_string(), x), (b.to_string(), y)];
+
+    // nothing from Blizzard yet: the /played level
+    assert_eq!(profile().await, pair("Alt", 80, "Thrall", 80));
+    // armory higher (no login time, as from the account listing): it wins
+    set("Thrall", 81, None).await;
+    // armory lower from a login before the upload (lagging): /played stays
+    set("Alt", 79, Some(-1)).await;
+    assert_eq!(profile().await, pair("Alt", 80, "Thrall", 81));
+    assert_eq!(by_level().await, pair("Thrall", 81, "Alt", 80));
+    // armory lower after a later login (a level squish): it wins
+    set("Thrall", 70, Some(2)).await;
+    assert_eq!(profile().await, pair("Alt", 80, "Thrall", 70));
+    assert_eq!(by_level().await, pair("Alt", 80, "Thrall", 70));
+    let thrall: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM wow_characters WHERE name = 'Thrall'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/me/wow/featured",
+        Some(&t),
+        Some(json!({ "game_id": "wow", "ids": [thrall] })),
+    )
+    .await;
+    assert_eq!(r.status, 200, "{}", r.text);
+    assert_eq!(get("/api/v1/me/wow/featured").await["wow"][0]["level"], 70);
+
+    // the account listing's level is copied onto the uploaded character
+    sqlx::query("UPDATE bnet_characters SET level = 85 WHERE name = 'Alt'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'lvl'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    fraglink_server::wow::copy_bnet_levels(&pool, uid).await;
+    assert_eq!(profile().await, pair("Alt", 85, "Thrall", 70));
+
+    // the addon's own claim is untouched (the cheat check compares it)
+    let raw: Vec<i32> = sqlx::query_scalar("SELECT level FROM wow_characters ORDER BY name")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(raw, [80, 80]);
+}

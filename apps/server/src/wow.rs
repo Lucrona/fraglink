@@ -28,6 +28,18 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use uuid::Uuid;
 
+/// The level a character card shows: Blizzard's (armory refresh, account sync or the
+/// post-upload check) when it is newer than the last /played upload, i.e. from a later
+/// login or simply higher (levels only go up, so a lagging armory never lowers it). Otherwise
+/// the addon's. `level` itself stays the addon's claim, which `check_bnet_level` compares.
+macro_rules! shown_level {
+    () => {
+        "(CASE WHEN bnet_level > 0 AND (bnet_last_login > played_at OR bnet_level > level) \
+          THEN bnet_level ELSE level END)"
+    };
+}
+pub(crate) use shown_level;
+
 /// WoW flavours that take /played uploads. Each is kept separate, and the per-character
 /// checks, keep-the-higher rule and menu-time carry (`record_total`) apply to every entry
 /// here, so a new flavour (Classic) only needs adding here and in the app's `FLAVOURS`.
@@ -771,10 +783,26 @@ pub async fn sync_characters(
         .execute(&st.db)
         .await;
     }
+    copy_bnet_levels(&st.db, uid).await;
     tracing::info!("bnet characters: {} for {uid}", rows.len());
     reverify(st, uid).await;
     crate::wowpage::after_sync(st, uid).await;
     Some(rows.into_iter().map(|r| (r.0, r.1)).collect())
+}
+
+/// The account listing's levels onto the user's uploaded characters (`shown_level!`).
+/// The listing is fetched live, so it is the newest level Blizzard has.
+pub async fn copy_bnet_levels(db: &sqlx::PgPool, uid: Uuid) {
+    let _ = sqlx::query(
+        "UPDATE wow_characters c SET bnet_level = b.level FROM bnet_characters b
+         WHERE c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
+           AND (b.bnet_id = c.bnet_id OR (b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name)))
+           AND b.level > 0 AND c.bnet_level IS DISTINCT FROM b.level",
+    )
+    .bind(uid)
+    .execute(db)
+    .await
+    .inspect_err(|e| tracing::warn!("bnet characters: level copy for {uid}: {e}"));
 }
 
 /// A character is verified while it is on the linked Battle.net account (its `wow.profile`
@@ -998,7 +1026,7 @@ pub async fn characters(
         featured: Option<i16>,
     }
     let rows: Vec<Row> = sqlx::query_as(
-            "SELECT id, game_id, region, realm, name, class, level, played_s, played_at, verified,
+            concat!("SELECT id, game_id, region, realm, name, class, ", shown_level!(), " AS level, played_s, played_at, verified,
                     hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false) AS hid,
                     race, gender, coalesce(spec, bnet_spec) AS spec, show_guild,
                     CASE WHEN show_guild THEN (SELECT d.data->'guild'->>'name' FROM wow_char_details d
@@ -1007,7 +1035,7 @@ pub async fn characters(
              FROM wow_characters WHERE user_id = $1
                AND ($2 OR NOT (hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false)))
                AND (NOT $3 OR verified)
-             ORDER BY game_id, featured NULLS LAST, played_s DESC LIMIT 200",
+             ORDER BY game_id, featured NULLS LAST, played_s DESC LIMIT 200"),
         )
         .bind(uid)
         .bind(all)

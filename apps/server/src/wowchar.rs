@@ -16,7 +16,7 @@ use axum::extract::{Path, State};
 use axum::http::{header, HeaderMap, Response, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -389,6 +389,25 @@ pub async fn refresh(st: &AppState, id: Uuid) -> Result<(), ()> {
         }
         Err(_) => return Err(()),
     };
+    // the armory's level onto the card (`wow::shown_level!`). `bnet_checked_at` stays with
+    // the upload's cheat check so a refresh never pushes that check back.
+    if let Some(lvl) = root["level"].as_i64().filter(|l| *l > 0) {
+        let last = root["last_login_timestamp"]
+            .as_i64()
+            .and_then(|ms| Utc.timestamp_millis_opt(ms).single());
+        let _ = sqlx::query(
+            "UPDATE wow_characters SET bnet_level = $2,
+                    bnet_last_login = CASE WHEN $3::timestamptz IS NULL THEN bnet_last_login
+                                           ELSE greatest(bnet_last_login, $3) END
+             WHERE id = $1",
+        )
+        .bind(id)
+        .bind(lvl as i32)
+        .bind(last)
+        .execute(&st.db)
+        .await
+        .inspect_err(|e| tracing::warn!("wowchar: level for {id}: {e}"));
+    }
     let sub = |p: &str| format!("{base}/{p}?{ns}");
     let u: Vec<String> = [
         "character-media",
