@@ -7,23 +7,14 @@ pub mod presence;
 pub mod secret;
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-
-/// Set once a request to [`DEFAULT_SERVER`] failed at the network level (DNS, TLS, connect)
-/// and the same request worked on [`FALLBACK_SERVER`]. Lasts until the app exits.
-static ON_FALLBACK: AtomicBool = AtomicBool::new(false);
-
-/// True when this session talks to the server by IP because HTTPS/DNS failed.
-pub fn on_fallback() -> bool {
-    ON_FALLBACK.load(Ordering::Relaxed)
-}
 
 /// The production server.
 pub const DEFAULT_SERVER: &str = "https://playfraglink.com";
-/// The same server by IP over plain HTTP: the default up to dev.10, and the fallback for the
-/// rest of the session when HTTPS or DNS for [`DEFAULT_SERVER`] fails.
-pub const FALLBACK_SERVER: &str = "http://119.42.54.86";
+/// The same server by IP over plain HTTP: the saved default up to dev.10. Only recognised so an
+/// old saved setting moves to [`DEFAULT_SERVER`]; nothing is ever sent to it (no plain-HTTP
+/// fallback: when HTTPS fails the app shows "can't connect" and keeps retrying HTTPS).
+pub const OLD_IP_SERVER: &str = "http://119.42.54.86";
 /// The default before 0.2.0-dev.6. A saved copy of it only counts when signed in (a local dev server).
 pub const LEGACY_DEFAULT_SERVER: &str = "http://localhost:8787";
 
@@ -141,20 +132,6 @@ impl Client {
         &self.base
     }
 
-    /// Whether this client may fall back to [`FALLBACK_SERVER`] (only for the default server).
-    fn primary(&self) -> bool {
-        self.base == DEFAULT_SERVER
-    }
-
-    /// Where requests go right now: the configured server, or the IP fallback.
-    pub fn effective_base(&self) -> &str {
-        if self.primary() && on_fallback() {
-            FALLBACK_SERVER
-        } else {
-            &self.base
-        }
-    }
-
     fn req_at(&self, base: &str, method: &str, path: &str) -> ureq::Request {
         let r = self.agent.request(method, &format!("{base}{path}"));
         match &self.token {
@@ -178,27 +155,15 @@ impl Client {
         }
     }
 
-    /// Send to the effective server; when the default server fails at the network level
-    /// (DNS, TLS, connect), try the IP once and stay on it for the session if that works.
+    /// Send to the configured server (HTTPS for the default; never a plain-HTTP fallback).
     #[allow(clippy::result_large_err)] // ureq's own error type, handled right away
-    fn send_with_fallback(
+    fn send_base(
         &self,
         method: &str,
         path: &str,
         body: &Option<serde_json::Value>,
     ) -> Result<ureq::Response, ureq::Error> {
-        let base = self.effective_base().to_string();
-        let res = self.send(&base, method, path, body);
-        if let Err(ureq::Error::Transport(_)) = &res {
-            if self.primary() && !on_fallback() {
-                let again = self.send(FALLBACK_SERVER, method, path, body);
-                if !matches!(again, Err(ureq::Error::Transport(_))) {
-                    ON_FALLBACK.store(true, Ordering::Relaxed);
-                    return again;
-                }
-            }
-        }
-        res
+        self.send(&self.base, method, path, body)
     }
 
     fn call<T: for<'de> Deserialize<'de>>(
@@ -207,7 +172,7 @@ impl Client {
         path: &str,
         body: Option<serde_json::Value>,
     ) -> Result<T, SyncError> {
-        let res = self.send_with_fallback(method, path, &body);
+        let res = self.send_base(method, path, &body);
         match res {
             Ok(resp) => {
                 if resp.status() == 204 {
@@ -528,7 +493,7 @@ impl Client {
             return Err(SyncError::Decode("icon path not allowed".into()));
         }
         let resp = self
-            .send_with_fallback("GET", path, &None)
+            .send_base("GET", path, &None)
             .map_err(|e| SyncError::Network(e.to_string()))?;
         let mut buf = Vec::new();
         use std::io::Read;
@@ -551,7 +516,7 @@ impl Client {
             return Err(SyncError::Decode("avatar path not allowed".into()));
         }
         let resp = self
-            .send_with_fallback("GET", path, &None)
+            .send_base("GET", path, &None)
             .map_err(|e| SyncError::Network(e.to_string()))?;
         let mut buf = Vec::new();
         use std::io::Read;
@@ -580,16 +545,7 @@ impl Client {
             }
             r.call()
         };
-        let mut res = go(self.effective_base());
-        if let Err(ureq::Error::Transport(_)) = &res {
-            if self.primary() && !on_fallback() {
-                let again = go(FALLBACK_SERVER);
-                if !matches!(again, Err(ureq::Error::Transport(_))) {
-                    ON_FALLBACK.store(true, Ordering::Relaxed);
-                    res = again;
-                }
-            }
-        }
+        let res = go(&self.base);
         match res {
             Ok(resp) if resp.status() == 304 => Ok(None),
             Ok(resp) => {
@@ -626,16 +582,7 @@ impl Client {
     /// Open the live presence socket.
     pub fn presence(&self) -> Result<presence::PresenceSocket, SyncError> {
         let token = self.token.as_deref().ok_or(SyncError::Unauthorized)?;
-        let res = presence::PresenceSocket::connect(self.effective_base(), token);
-        if let Err(SyncError::Network(_)) = &res {
-            if self.primary() && !on_fallback() {
-                if let Ok(s) = presence::PresenceSocket::connect(FALLBACK_SERVER, token) {
-                    ON_FALLBACK.store(true, Ordering::Relaxed);
-                    return Ok(s);
-                }
-            }
-        }
-        res
+        presence::PresenceSocket::connect(&self.base, token)
     }
 
     /// Revoke this device's token on the server.

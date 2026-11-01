@@ -484,8 +484,10 @@
     if (realMode()) {
       const F = realFriends(), fs = LIVE.friends;
       let note = '';
-      if (!fs.list) note = `<div class="fl-mock">${fs.connected ? 'Loading friends…' : 'Connecting to your Fraglink server…'}</div>`;
-      else if (!fs.connected) note = `<div class="fl-mock">Offline: friends' status may be out of date. Reconnecting…</div>`;
+      // No plain-HTTP fallback: when HTTPS to playfraglink.com fails, say so and keep retrying (secure only).
+      const cant = `<div class="fl-mock fl-cant" data-tip="Fraglink only connects securely (HTTPS). Check your internet connection, VPN or firewall; it keeps trying on its own."><b>Can't connect to Fraglink.</b> Check your internet connection. Retrying…</div>`;
+      if (!fs.list) note = fs.connected ? '<div class="fl-mock">Loading friends…</div>' : fs.cant_connect ? cant : '<div class="fl-mock">Connecting to Fraglink…</div>';
+      else if (!fs.connected) note = fs.cant_connect ? cant.replace('Check your internet connection.', "Friends' status may be out of date.") : `<div class="fl-mock">Offline: friends' status may be out of date. Reconnecting…</div>`;
       h += groupsHtml(F, note);
       if (fs.list && !(fs.list.friends || []).length && !F.some(f => f.kind === 'req' || f.kind === 'out')) h += `<div class="fl-empty">No friends yet. <a data-action="add-friend">Add a friend</a> by their Fraglink username.</div>`;
     } else {
@@ -689,8 +691,12 @@
     return null;
   }
   function avColor(f) { if (f.avatar && f.avatar.color != null) return f.avatar.color % 6; const n = String(f.handle || f.name || ''); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0; return h % 6; }
+  // Options > Appearance "Show avatars in friends list" (default on): off = friends' pictures
+  // give way to the neutral initial in the list and the side panel (your own picture stays).
+  // Classic (Cobalt) keeps its pictures either way.
+  const showAvatars = () => setOn('show_avatars') || !/\btheme-flat-/.test(document.documentElement.className);
   function avatarHtml(f, size = 48, cls = 'sf-av') {
-    const a = f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
+    const a = (cls === 'me-av-i' || showAvatars()) && f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
     if (a.kind === 'upload') { const src = avImg(size > 32 ? a.url_64 : a.url_32); if (src) return `<i class="fav-av up ${cls}" style="${st}"><img src="${src}" alt=""></i>`; }
     if (a.kind === 'preset') return `<i class="fav-av ${cls} p c${a.preset % 6}" style="${st};font-size:${Math.round(size * .46)}px">${AV_GLYPHS[a.preset % 12]}</i>`;
     // no picture: the Fraglink mark (classic); flat themes show a neutral initial instead (.ini)
@@ -700,6 +706,7 @@
   // Friends list picture (flat themes): an uploaded picture once it has loaded, or a preset
   // tile; '' otherwise, so the row keeps its neutral letter box.
   function rowAvatar(f) {
+    if (!showAvatars()) return '';
     const a = f.avatar || {};
     if (a.kind === 'upload' && avImg(a.url_32)) return avatarHtml(f, 28, 'row-av');
     if (a.kind === 'preset') return avatarHtml(f, 28, 'row-av');
@@ -739,12 +746,14 @@
       const m = mutualOf(f);
       h += sfSec(`Mutual Friends <small>(${m.length})</small>`) + `<ul class="games">${m.map(x => `<li><i class="noicon"></i><span>${esc(x)}</span></li>`).join('') || '<li><span>None known</span></li>'}</ul>`;
     } else {
-      const s = friendHistory(f);
-      if (!s) h += sfSec('Stats') + '<p class="sf-note">Loading…</p>';
-      else if (s.private) h += sfSec('Stats') + `<p class="sf-note">${esc(f.name)} keeps their play history private.</p>`;
-      else if (!s.none) {
-        const t0 = playing ? sessionStart(f) : null;
-        const rows = kv('This session', t0 ? `<span class="sf-sess" data-start="${t0}">${fmtSess(Date.now() - t0)}</span>` : '') + kv('This week', hrsText(s.week)) + kv('Total', s.total ? hrsText(s.total) : '');
+      // This session: the friend's current game session (live presence, so it shows while they're
+      // in game even when their history is private or still loading); the only session clock.
+      const s = friendHistory(f), t0 = playing ? sessionStart(f) : null;
+      const sess = kv('This session', t0 ? `<span class="sf-sess" data-start="${t0}">${fmtSess(Date.now() - t0)}</span>` : '');
+      if (!s) h += sfSec('Stats') + sess + '<p class="sf-note">Loading…</p>';
+      else if (s.private) h += sfSec('Stats') + sess + `<p class="sf-note">${esc(f.name)} keeps their play history private.</p>`;
+      else {
+        const rows = sess + (s.none ? '' : kv('This week', hrsText(s.week)) + kv('Total', s.total ? hrsText(s.total) : ''));
         if (rows) h += sfSec('Stats') + rows;
       }
     }
@@ -1134,7 +1143,7 @@
     if (LIVE.settings) (LIVE.settings.settings = LIVE.settings.settings || {})[k] = v;
     if (k === 'theme') applyTheme(v);
     if (k === 'text_size') applyTextSize(v);
-    if (['show_offline', 'show_fof', 'always_on_top', 'share_game', 'custom_status', 'hidden_groups', 'custom_groups', 'custom_on', 'status_history'].includes(k)) { syncMenus(); syncStatus(); render(); }
+    if (['show_offline', 'show_fof', 'show_avatars', 'always_on_top', 'share_game', 'custom_status', 'hidden_groups', 'custom_groups', 'custom_on', 'status_history'].includes(k)) { syncMenus(); syncStatus(); render(); }
     if (k.startsWith('game_path:') || k.startsWith('launch_args:')) loadCatalog();
   });
 
@@ -1670,7 +1679,6 @@
   function clock() {
     $('#clock').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const s = $('#session'); if (s) s.textContent = fmtT(liveSeconds() * 1000);
-    $$('.sf-timer').forEach(t => { t.textContent = fmtT(Date.now() - +t.dataset.start); });
     $$('.sf-sess').forEach(t => { const v = fmtSess(Date.now() - +t.dataset.start); if (t.textContent !== v) t.textContent = v; });
   }
   setInterval(clock, 1000);

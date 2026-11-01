@@ -67,7 +67,7 @@
     const s = st.settings || {};
     const cur = {
       autostart: st.autostart ? '1' : '0', start_minimized: on(s, 'start_minimized', '0'), minimize_to_tray: on(s, 'minimize_to_tray', '0'),
-      show_offline: on(s, 'show_offline'), show_fof: on(s, 'show_fof'), language: s.language || 'en-AU',
+      show_offline: on(s, 'show_offline'), show_fof: on(s, 'show_fof'), show_avatars: on(s, 'show_avatars'), language: s.language || 'en-AU',
       toasts: on(s, 'toasts'), friend_toasts: on(s, 'friend_toasts'), friend_toasts_logon: on(s, 'friend_toasts_logon'), connection_alerts: on(s, 'connection_alerts', '0'), friend_toasts_dnd: on(s, 'friend_toasts_dnd'),
       share_game: on(s, 'share_game'), friend_request_toasts: on(s, 'friend_request_toasts'), share_fof: on(s, 'share_fof'),
       sound_signin: on(s, 'sound_signin', '0'), sound_signout: on(s, 'sound_signout', '0'), sound_pack: s.sound_pack || 'default',

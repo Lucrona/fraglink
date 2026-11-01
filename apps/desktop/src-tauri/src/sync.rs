@@ -7,7 +7,7 @@
 use crate::LockOk;
 use crate::{now, AppState};
 use fraglink_sync::{
-    secret, Client, PollResult, SyncError, DEFAULT_SERVER, FALLBACK_SERVER, LEGACY_DEFAULT_SERVER,
+    secret, Client, PollResult, SyncError, DEFAULT_SERVER, LEGACY_DEFAULT_SERVER, OLD_IP_SERVER,
 };
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -129,7 +129,7 @@ pub fn server(app: &AppHandle) -> String {
 
 /// The production server by IP (the default up to dev.10).
 fn is_ip_default(s: &str) -> bool {
-    s.trim_end_matches('/') == FALLBACK_SERVER
+    s.trim_end_matches('/') == OLD_IP_SERVER
 }
 
 /// The saved server, except that the old localhost default (saved by every sign-in before

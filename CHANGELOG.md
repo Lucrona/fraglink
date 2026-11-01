@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Connection
+- Fraglink only talks to the server over a secure connection (HTTPS); the old plain-HTTP backup address is gone, for sign-in, sync, friends and updates
+- When it can't connect, the friends list says so plainly and keeps retrying on its own
+
+### Friends list and side panel
+- My Profile at the bottom opens your profile on the website
+- Flat Navy and Flat Grey show friends' real pictures in the list and the side panel; friends without one get a grey box with their initial (no more red box)
+- New option: Options > Appearance > Show avatars in friends list (on by default)
+- This session also shows while a friend's history is private or still loading
+
 ## [0.3.0-beta.9.1] - 2026-10-27
 
 (╯°□°)╯︵ ┻━┻ One more pass.

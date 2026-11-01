@@ -304,6 +304,8 @@ const ALLOWED: &[&str] = &[
     "side_w",
     "text_size",
     "first_detect_done",
+    // 0.3.0 (next build): Options > Appearance "Show avatars in friends list" (default on)
+    "show_avatars",
 ];
 
 /// Automatic Away is on (10 minutes without keyboard/mouse input).

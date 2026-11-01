@@ -39,6 +39,9 @@ pub mod keys {
 pub struct FriendsShared {
     running: AtomicBool,
     connected: AtomicBool,
+    /// The last connect attempt failed (HTTPS/DNS/network): the UI shows "can't connect"
+    /// while the thread keeps retrying over HTTPS (there is no plain-HTTP fallback).
+    cant_connect: AtomicBool,
     /// Latest `FriendsList` JSON from the server (hello or REST refresh).
     pub(crate) list: Mutex<Option<Value>>,
     last_toast: Mutex<HashMap<String, i64>>,
@@ -233,6 +236,7 @@ pub fn view(app: &AppHandle) -> Value {
     serde_json::json!({
         "signed_in": signed_in,
         "connected": signed_in && st.friends.connected.load(Ordering::SeqCst),
+        "cant_connect": signed_in && st.friends.cant_connect.load(Ordering::SeqCst),
         "me": setting(app, sync::keys::USER),
         "list": if signed_in { st.friends.list.lock_ok().clone() } else { None },
         "muted": muted(app),
@@ -277,6 +281,7 @@ pub fn start(app: &AppHandle) {
             run(&app2);
             let st = app2.state::<AppState>();
             st.friends.connected.store(false, Ordering::SeqCst);
+            st.friends.cant_connect.store(false, Ordering::SeqCst);
             *st.friends.list.lock_ok() = None;
             st.friends.running.store(false, Ordering::SeqCst);
             emit(&app2);
@@ -367,6 +372,9 @@ fn run(app: &AppHandle) {
             Err(e) => {
                 let wait = backoff_delay(attempt, e.retry_after());
                 attempt += 1;
+                if !st.friends.cant_connect.swap(true, Ordering::SeqCst) {
+                    emit(app);
+                }
                 log::info!(
                     "presence: can't connect ({e}); retry in {:.0}s",
                     wait.as_secs_f64()
@@ -380,6 +388,7 @@ fn run(app: &AppHandle) {
         let connected_at = Instant::now();
         log::info!("presence: connected");
         st.friends.connected.store(true, Ordering::SeqCst);
+        st.friends.cant_connect.store(false, Ordering::SeqCst);
         set_live(app, true);
         emit(app);
         let reason = session(app, &client, &mut sock);
