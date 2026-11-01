@@ -681,14 +681,16 @@ html[class*=theme-flat] body.skin-dark .xf-row .c-status { color: var(--fmut); p
 html[class*=theme-flat] body.skin-dark .xf-row .c-info { color: var(--facc2); font-size: 12px; padding-left: 6px; box-sizing: border-box; }
 html[class*=theme-flat] body.skin-dark .xf-row.sel .c-status, html[class*=theme-flat] body.skin-dark .xf-row.sel .c-info { color: #fff; }
 html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-ini] > .gi, html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-ini] > .noicon { display: none; }
-html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-ini]::before { content: attr(data-ini); position: absolute; left: 8px; top: 5px; width: 28px; height: 28px; border-radius: 4px; background: #4f6fae; color: #fff; font: 700 11px/28px var(--flat-font); text-align: center; }
+html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-ini]::before { content: attr(data-ini); position: absolute; left: 8px; top: 5px; width: 28px; height: 28px; border-radius: 4px; background: var(--f3); color: var(--ftx); font: 700 11px/28px var(--flat-font); text-align: center; }
 html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-ini]::after { content: ''; position: absolute; left: 27px; top: 24px; width: 11px; height: 11px; box-sizing: border-box; border-radius: 50%; border: 2.5px solid var(--f1); background: var(--fon); }
 html[class*=theme-flat] body.skin-dark .xf-row.sel .c-name[data-ini]::after { border-color: var(--fsel); }
 html[class*=theme-flat] body.skin-dark .xf-row:not(.sel):hover .c-name[data-ini]::after { border-color: var(--fhov); }
 html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-dot=away]::after { background: var(--faway); }
 html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-dot=busy]::after { background: var(--fbusy); }
 html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-dot=off]::after { background: var(--foff); }
-html[class*=theme-flat] body.skin-dark .xf-row .row-av { position: absolute; left: 8px; top: 5px; width: 28px !important; height: 28px !important; margin: 0; border-radius: 4px; z-index: 1; }
+html[class*=theme-flat] body.skin-dark .xf-row .row-av { position: absolute; left: 8px; top: 5px; width: 28px !important; height: 28px !important; margin: 0; border-radius: 4px; z-index: 1; display: flex; }
+html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-av]::after { z-index: 2; }
+html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-av]::before { visibility: hidden; }
 html[class*=theme-flat] body.skin-dark .xf-row .c-status .gi { display: none; }
 
 /* bottom toolbar */
@@ -713,7 +715,7 @@ html[class*=theme-flat] body.skin-dark .side-scroll, html[class*=theme-flat] bod
 html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp { padding: 0 14px 12px; box-sizing: border-box; }
 html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp::before { content: ''; display: block; height: 64px; margin: 0 -14px; background: #1f4f9e; }
 html[class*=theme-flat] body.skin-dark .side-scroll .sf-head { display: block; padding: 0; }
-html[class*=theme-flat] body.skin-dark .side-scroll .sf-av.fav-av { display: block; width: 72px !important; height: 72px !important; margin-top: -36px; box-sizing: content-box; border: 5px solid var(--f1); border-radius: 6px; overflow: hidden; background: #c0563a; }
+html[class*=theme-flat] body.skin-dark .side-scroll .sf-av.fav-av { display: block; width: 72px !important; height: 72px !important; margin-top: -36px; box-sizing: content-box; border: 5px solid var(--f1); border-radius: 6px; overflow: hidden; }
 html[class*=theme-flat] body.skin-dark .side-scroll .sf-av img { width: 72px; height: 72px; display: block; }
 html[class*=theme-flat] body.skin-dark .side-scroll .sf-id { margin-top: 12px; padding: 12px 12px 0; background: var(--f0); border-radius: 4px 4px 0 0; }
 html[class*=theme-flat] body.skin-dark .side-scroll .sf-head .sf-name { font: 700 19px/1.2 var(--flat-font); color: var(--ftx); }
@@ -747,7 +749,7 @@ html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp::before { height: 0; 
 html[class*=theme-flat] body.skin-dark .side-scroll .gs-vp:not(:has(.sf-head))::before { height: 12px; background: none; border: 0; }
 html[class*=theme-flat] body.skin-dark .side-scroll .sf-head .sf-av.fav-av { margin-top: 0; height: 36px !important; visibility: hidden; }
 html[class*=theme-flat] body.skin-dark .side-float { display: block; position: absolute; left: 14px; top: -41px; z-index: 3; pointer-events: none; }
-html[class*=theme-flat] body.skin-dark .side-float .sf-av.fav-av { display: block; width: 72px !important; height: 72px !important; box-sizing: content-box; border: 5px solid var(--f1); border-radius: 6px; overflow: hidden; background: #c0563a; box-shadow: none; }
+html[class*=theme-flat] body.skin-dark .side-float .sf-av.fav-av { display: block; width: 72px !important; height: 72px !important; box-sizing: content-box; border: 5px solid var(--f1); border-radius: 6px; overflow: hidden; box-shadow: none; }
 html[class*=theme-flat] body.skin-dark .side-float .sf-av img { width: 72px; height: 72px; display: block; }
 /* Mask band behind the floating avatar: full panel width from the top edge to the avatar's bottom (41px),
    so scrolled content never shows beside it. */
@@ -821,3 +823,9 @@ html[class*=theme-flat] body.dark input[type=checkbox], html[class*=theme-flat] 
 html[class*=theme-flat] body.dark ::-webkit-scrollbar { background: transparent; width: 8px; height: 8px; }
 html[class*=theme-flat] body.dark ::-webkit-scrollbar-thumb { background: var(--f3); border: 0; border-radius: 4px; }
 html[class*=theme-flat] .af-b.primary { background: var(--facc, #2f63c4); color: #fff; }
+
+/* Side panel picture: real avatar when set; with none, a neutral initial on the theme surface (never a fixed colour) */
+html[class*=theme-flat] body.skin-dark .sf-av.fav-av:not(.up):not(.p) { background: var(--f3); color: var(--ftx); }
+html[class*=theme-flat] body.skin-dark .sf-av.fav-av:not(.up):not(.p) img.mk { display: none; }
+html[class*=theme-flat] body.skin-dark .sf-av.fav-av:not(.up):not(.p) .ini { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; font-weight: 700; font-family: var(--flat-font); }
+html[class*=theme-flat] body.skin-dark .sf-av.fav-av.p { display: flex; align-items: center; justify-content: center; }

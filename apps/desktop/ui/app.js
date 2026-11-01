@@ -272,7 +272,9 @@
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
     // data-dot / data-ini: the Flat themes draw a letter avatar with a status dot (themes-flat.css)
     const dot = f.kind === 'off' ? 'off' : f.away || /away/i.test(f.status || '') ? 'away' : /busy|disturb/i.test(f.status || '') ? 'busy' : 'on';
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name" data-dot="${dot}" data-ini="${esc((f.name || '?').charAt(0).toUpperCase())}">${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
+    // Flat themes only (hidden in classic): their own picture or preset tile over the letter box
+    const av = rowAvatar(f);
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${f.id}"><span class="c-name" data-dot="${dot}" data-ini="${esc((f.name || '?').charAt(0).toUpperCase())}"${av ? ' data-av' : ''}>${av}${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
@@ -691,7 +693,17 @@
     const a = f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
     if (a.kind === 'upload') { const src = avImg(size > 32 ? a.url_64 : a.url_32); if (src) return `<i class="fav-av up ${cls}" style="${st}"><img src="${src}" alt=""></i>`; }
     if (a.kind === 'preset') return `<i class="fav-av ${cls} p c${a.preset % 6}" style="${st};font-size:${Math.round(size * .46)}px">${AV_GLYPHS[a.preset % 12]}</i>`;
-    return `<i class="fav-av ${cls} c${c}" style="${st}"><img class="mk" src="brand/v28-mark.svg" alt=""></i>`;
+    // no picture: the Fraglink mark (classic); flat themes show a neutral initial instead (.ini)
+    const ini = esc(String(f.name || f.handle || '?').charAt(0).toUpperCase());
+    return `<i class="fav-av ${cls} c${c}" style="${st}"><img class="mk" src="brand/v28-mark.svg" alt=""><b class="ini" style="font-size:${Math.round(size * .4)}px">${ini}</b></i>`;
+  }
+  // Friends list picture (flat themes): an uploaded picture once it has loaded, or a preset
+  // tile; '' otherwise, so the row keeps its neutral letter box.
+  function rowAvatar(f) {
+    const a = f.avatar || {};
+    if (a.kind === 'upload' && avImg(a.url_32)) return avatarHtml(f, 28, 'row-av');
+    if (a.kind === 'preset') return avatarHtml(f, 28, 'row-av');
+    return '';
   }
   function friendStatus(f) {
     const playing = f.kind === 'playing' || f.kind === 'fof';
@@ -1265,7 +1277,8 @@
     'friend-remove': a => { if (a.dataset.confirm && !confirm(`Remove ${a.dataset.handle} from your friends?`)) return; FLB.friendRemove(a.dataset.handle).then(() => { state.sel = null; refreshFriends(); }).catch(toastErr); },
     'friend-block': a => { if (!confirm(`Block ${a.dataset.handle}? They won't be able to send you requests or see your status. They aren't told.`)) return; FLB.friendBlock(a.dataset.handle, true).then(() => { state.sel = null; refreshFriends(); }).catch(toastErr); },
     'friend-mute': a => FLB.friendMute(a.dataset.handle, a.dataset.mute === '1').then(refreshFriends).catch(toastErr),
-    'my-profile': () => notice('My Profile', LATER),
+    // My Profile (bottom bar): your own profile page on the website, like Tools > My Stats
+    'my-profile': () => { const u = realMode() && LIVE.friends.me; if (TAURI && FLB.openWebsite) FLB.openWebsite(u ? 'u/' + u : 'login').catch(toastErr); else notice('My Profile', LATER); },
     'friend-profile': a => { const h = a && a.dataset && a.dataset.handle || a && a.dataset && a.dataset.key; if (TAURI && FLB.openWebsite && h) FLB.openWebsite('u/' + h).catch(toastErr); else notice('Profile', LATER); },
     'my-stats': () => notice('Full stats', LATER), 'website': () => notice('playfraglink.com', LATER),
     'about': async () => { let v = ''; try { const st = await FLB.settings(); v = `${devVer(st.version)}${st.sim ? ' (simulation mode)' : ''}`; } catch (e) {}
