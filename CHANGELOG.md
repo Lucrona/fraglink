@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Side panel shows the real pic
 - _ and X off-centre and too big in Options
 - Resizing grabbed the shadow instead of the window edge
+- List headers running into each other when the window is narrow
 
 ## [0.3.0-beta.10] - 2026-11-02
 

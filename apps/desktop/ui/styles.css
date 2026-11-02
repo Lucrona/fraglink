@@ -626,6 +626,9 @@ body.col-dragging, body.col-dragging * { cursor: col-resize !important; user-sel
 .xf-grid.cw .c-name, body .xf-grid.cw .c-name { width: var(--cw-name) !important; flex: none; }
 .xf-grid.cw .c-status, body .xf-grid.cw .c-status { width: var(--cw-status) !important; flex: none; }
 .xf-grid.cw .c-info, body .xf-grid.cw .c-info { width: auto !important; flex: 1 1 0; min-width: 0; }
+/* beta.10.1: narrow columns cut the header label short (…) instead of running into the next one; the grip stays outside the clip. */
+.xf-grid .xf-head > span { display: flex; align-items: center; min-width: 0; }
+.xf-grid .xf-head .hl { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: inherit; }
 
 /* dev.20: change nickname (click your own name) */
 .nick-edit { cursor: pointer; }
