@@ -1050,6 +1050,10 @@
   /* "What's new" after an update. Edit WHATS_NEW for each release (keyed by the
      app version as devVer() shows it); versions without an entry just get the link. */
   const WHATS_NEW = {
+    '0.3.0-beta.10.1': [
+      'Friend pics look exactly like the website: same colour, same logo',
+      'Avatar toggle off hides the pic box in the friends list',
+    ],
     '0.3.0-beta.10': [
       'Real friend pictures in Flat Navy and Flat Grey (or a grey letter box)',
       'New option to hide avatars in the friends list',

@@ -2,7 +2,7 @@
 
 Fraglink is built in milestones, and the order can change. The original plan is in [`fraglink-mvp-spec.md`](fraglink-mvp-spec.md) §11; this page shows where things stand now. What changed in each release is in the [changelog](../CHANGELOG.md) and on [playfraglink.com/changelog](https://playfraglink.com/changelog).
 
-**Now:** public beta. The app is at **0.3.0-beta.10** (2 November 2026) and the website is live at [playfraglink.com](https://playfraglink.com).
+**Now:** public beta. The app is at **0.3.0-beta.10.1** (2 November 2026) and the website is live at [playfraglink.com](https://playfraglink.com).
 
 | | Milestone | What it delivers | Status |
 |---|---|---|---|

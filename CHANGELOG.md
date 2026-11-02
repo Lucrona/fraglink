@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.10.1] - 2026-11-02
+
+### Changes
+- Friend pics look exactly like the website: same colour, same logo (Flat Navy, Flat Grey)
+- Avatar toggle off hides the pic box in the friends list, the side panel still shows the pic
+
+### Fixes
+- Grey box instead of a friend's colour and logo
+- Letter box still showing with the avatar toggle off
+
 ## [0.3.0-beta.10] - 2026-11-02
 
 ### New
