@@ -8,18 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [0.3.0-beta.10.1] - 2026-11-02
 
 ### New
-- Fresh What's new pop-up with the Fraglink logo up top
+- Icon next to name in Options > Appearance: Game icon or Avatar (replaces the avatar toggle)
+- Redone What's new pop-up
 
 ### Changes
-- Friend pics look exactly like the website: same colour, same logo (Flat Navy, Flat Grey)
-- Avatar toggle off hides the pic box in the friends list, the side panel still shows the pic
-- Flat title bar in Flat Navy and Flat Grey
+- Smaller game icon next to names in Flat Navy and Flat Grey
+- Flat title bars stand out a bit more
+- Side panel open: the right edge resizes the panel, in every skin
 
 ### Fixes
-- Grey box instead of a friend's colour and logo
-- Letter box still showing with the avatar toggle off
-- Minimise and close buttons now line up
-- Resizing from the right grabs the window edge, not the empty strip next to it
+- Friend pics now match the website exactly
+- Side panel shows the real pic
+- _ and X off-centre and too big in Options
+- Resizing grabbed the shadow instead of the window edge
 
 ## [0.3.0-beta.10] - 2026-11-02
 

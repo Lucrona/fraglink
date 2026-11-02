@@ -268,15 +268,17 @@
     return 'Offline';
   }
   function row(f, cls = '') {
-    // classic: the game icon sits before the name while playing, a blank slot otherwise
-    const icon = f.game && f.kind !== 'off' ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
+    // Options > Appearance "Icon next to name": game icon (default; the game they're playing,
+    // an empty slot / just the status dot otherwise) or their avatar
+    const mode = nameIcon(), inGame = !!(f.game && f.kind !== 'off');
+    const icon = mode === 'game' && inGame ? `<i class="gi">${friendGameIcon(f.game)}</i>` : '<i class="noicon"></i>';
     const info = f.kind === 'playing' || f.kind === 'fof' ? f.server : f.kind === 'off' ? (f.last ? 'Last online ' + f.last : '') : (f.info || '');
     // data-dot / data-ini: the Flat themes draw a letter avatar with a status dot (themes-flat.css)
     const dot = f.kind === 'off' ? 'off' : f.away || /away/i.test(f.status || '') ? 'away' : /busy|disturb/i.test(f.status || '') ? 'busy' : 'on';
-    // Flat themes only (hidden in classic): their picture over the letter box; with
-    // 'Show avatars in friends list' off (data-noav) there's no box at all, just the status dot
-    const av = rowAvatar(f);
-    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${esc(f.id)}"><span class="c-name" data-dot="${dot}" data-ini="${esc((f.name || '?').charAt(0).toUpperCase())}"${av ? ' data-av' : ''}${showAvatars() ? '' : ' data-noav'}>${av}${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
+    // data-ico: which icon sits by the name; data-gm: a game icon is shown in the slot;
+    // data-noav: no picture box (flat themes draw just the status dot)
+    const av = mode === 'avatar' ? rowAvatar(f) : '';
+    return `<div class="xf-row ${cls} ${state.sel === f.id ? 'sel' : ''}" data-friend="${esc(f.id)}"><span class="c-name" data-ico="${mode}" data-dot="${dot}" data-ini="${esc((f.name || '?').charAt(0).toUpperCase())}"${av ? ' data-av' : ''}${mode === 'game' && inGame ? ' data-gm' : ''}${av || (mode === 'game' && inGame) ? '' : ' data-noav'}>${av}${icon}${f.fav ? '<i class="fav" data-tip="Favourite">★</i>' : ''}<span class="nm" data-tip="${esc(f.name)}">${esc(f.name)}</span></span><span class="c-status" data-tip="${esc(statusText(f))}">${esc(statusText(f))}</span><span class="c-info" data-tip="${esc(info)}">${esc(info)}</span></div>`;
   }
   function sec(key, label, cls, n) {
     const c = state.collapsed[key];
@@ -693,10 +695,9 @@
     return null;
   }
   function avColor(f) { if (f.avatar && f.avatar.color != null) return f.avatar.color % 6; const n = String(f.handle || f.name || ''); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0; return h % 6; }
-  // Options > Appearance "Show avatars in friends list" (default on): off = no picture box in
-  // the flat-theme list rows (rowAvatar / data-noav); the side panel and your own picture
-  // always show the real one. Classic (Cobalt) has no list pictures either way.
-  const showAvatars = () => setOn('show_avatars') || !/\btheme-flat-/.test(document.documentElement.className);
+  // Options > Appearance "Icon next to name" (name_icon): 'game' (default; anything else unset or
+  // unknown is game too) or 'avatar', same in every skin. The side panel always shows the real avatar.
+  const nameIcon = () => (SET().name_icon === 'avatar' ? 'avatar' : 'game');
   function avatarHtml(f, size = 48, cls = 'sf-av') {
     const a = f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
     if (a.kind === 'upload') { const src = avImg(size > 32 ? a.url_64 : a.url_32); if (src) return `<i class="fav-av up ${cls}" style="${st}"><img src="${src}" alt=""></i>`; }
@@ -704,11 +705,9 @@
     // no picture (or an upload still loading): the website's default, its Fraglink mark on the account's colour
     return `<i class="fav-av ${cls} c${c}" style="${st}"><img class="mk" src="brand/av-mark.svg" alt=""></i>`;
   }
-  // Friends list picture (flat themes): exactly what the website shows (upload, preset tile
-  // or the default mark on the account's colour); '' when avatars are switched off, so the
-  // row keeps its neutral letter box.
+  // Friends list picture ("Icon next to name" = Avatar): exactly what the website shows
+  // (upload, preset tile or the default mark on the account's colour).
   function rowAvatar(f) {
-    if (!showAvatars()) return '';
     return avatarHtml(f, 28, 'row-av');
   }
   function friendStatus(f) {
@@ -1138,7 +1137,7 @@
     if (LIVE.settings) (LIVE.settings.settings = LIVE.settings.settings || {})[k] = v;
     if (k === 'theme') applyTheme(v);
     if (k === 'text_size') applyTextSize(v);
-    if (['show_offline', 'show_fof', 'show_avatars', 'always_on_top', 'share_game', 'custom_status', 'hidden_groups', 'custom_groups', 'custom_on', 'status_history'].includes(k)) { syncMenus(); syncStatus(); render(); }
+    if (['show_offline', 'show_fof', 'name_icon', 'always_on_top', 'share_game', 'custom_status', 'hidden_groups', 'custom_groups', 'custom_on', 'status_history'].includes(k)) { syncMenus(); syncStatus(); render(); }
     if (k.startsWith('game_path:') || k.startsWith('launch_args:')) loadCatalog();
   });
 

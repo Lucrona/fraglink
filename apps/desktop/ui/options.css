@@ -190,3 +190,4 @@ body.dark .conn .soon.ok { color: #6fd27b; }
 
 /* beta.10.1: drawn _ and × icons, centred */
 .op-winbtns button { display: inline-flex; align-items: center; justify-content: center; line-height: 0 !important; }
+.op-winbtns .wb-i { width: 10px; height: 10px; display: block; pointer-events: none; }

@@ -501,7 +501,7 @@ body.skin-dark .xf-dropdown .has-sub.force { background: var(--dk-blue2, #1f4f9e
 .fav-av.c0 { background: #2d4a66; } .fav-av.c1 { background: #3f5a3a; } .fav-av.c2 { background: #5a3f3a; } .fav-av.c3 { background: #4a3d5e; } .fav-av.c4 { background: #5e5234; } .fav-av.c5 { background: #2f5458; }
 .fav-av.up { background: #1b1f26; } /* uploaded pictures keep transparency; dark backdrop */
 .fav-av.p { background-image: linear-gradient(135deg, transparent, #14181d); }
-.xf-row .row-av { display: none; margin: 0 4px 0 1px; border-radius: 2px; } /* friends list pictures: flat themes only (themes-flat.css) */
+.xf-row .row-av { display: none; margin: 0 4px 0 1px; border-radius: 2px; } /* shown when Icon next to name = Avatar */
 .xf-row .c-status .gi { display: inline-block; width: 14px; height: 14px; margin-right: 3px; vertical-align: -3px; }
 .xf-row .c-status .gi img, .xf-row .c-status .gi svg { width: 14px; height: 14px; }
 .side-scroll .sf-av.fav-av { width: 48px; height: 48px; border-radius: 4px; border-color: #000; padding: 0; }
@@ -559,20 +559,19 @@ body.skin-dark .xf-app:not(.side-open) .dk-edges [data-resize=East] { right: 12p
 body.skin-dark .xf-app:not(.side-open) .dk-edges [data-resize=NorthEast],
 body.skin-dark .xf-app:not(.side-open) .dk-edges [data-resize=SouthEast] { right: 12px; }
 
-/* beta.10.1: "What's new" pop-up (#notice.wn): hero header with the Fraglink mark, then the
+/* beta.10.1: "What's new" pop-up (#notice.wn): flat banner with a small Fraglink mark, then the
    installed version's New / Changes / Fixes from CHANGELOG.md. Cobalt look here; flat themes
    restyle it in themes-flat.css. */
 :root { --wn-new: #3fae5a; --wn-chg: #4f86d8; --wn-fix: #d08a2e; }
 #notice.wn { width: 300px; }
 #notice.wn .dlg-body { padding: 0; overflow: hidden; line-height: 1.35; }
-.wn-hero { position: relative; height: 70px; display: flex; align-items: flex-end; padding: 0 10px 8px; overflow: hidden;
-  background: linear-gradient(135deg, #0b1d44 0%, var(--dk-blue2, #1f4f9e) 70%, var(--dk-blue1, #3a6fd0) 100%); border-bottom: 1px solid #000; }
-.wn-hero .wn-mark { position: absolute; right: 8px; top: 50%; height: 50px; width: auto; margin-top: -25px; opacity: .95; pointer-events: none;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
-.wn-hero .t { position: relative; min-width: 0; padding-right: 64px; }
+.wn-hero { position: relative; height: 54px; display: flex; align-items: center; padding: 0 10px; overflow: hidden;
+  background: #15295a; border-bottom: 1px solid #000; }
+.wn-hero .wn-mark { position: absolute; right: 12px; top: 50%; height: 28px; width: auto; margin-top: -14px; opacity: .9; pointer-events: none; }
+.wn-hero .t { position: relative; min-width: 0; padding-right: 44px; }
 .wn-hero .k { color: #f0b060; font-weight: bold; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
-.wn-hero b { display: block; color: #fff; font-size: 15px; line-height: 1.15; text-shadow: 0 1px 2px #000; white-space: nowrap; }
-.wn-hero span { color: #c7d2e2; font-size: 10px; }
+.wn-hero b { display: block; color: #fff; font-size: 14px; line-height: 1.15; white-space: nowrap; }
+.wn-hero span { color: #9fb0c8; font-size: 10px; }
 .wn-cols { padding: 2px 10px 8px; max-height: 320px; overflow: auto; }
 .wn-cols p { margin: 8px 0 2px; }
 .wn-h2 { display: flex; align-items: center; gap: 6px; margin: 7px 0 2px; font-weight: bold; color: #fff; }
@@ -584,3 +583,19 @@ body.skin-dark .xf-app:not(.side-open) .dk-edges [data-resize=SouthEast] { right
 .wn-cols li:before { content: ""; position: absolute; left: 2px; top: 7px; width: 3px; height: 3px; border-radius: 50%; background: #8d96a3; }
 #notice.wn .dlg-foot { display: flex; align-items: center; }
 #notice.wn .dlg-foot .wn-full { margin-right: auto; font-size: 10px; cursor: pointer; color: #7fb0ff; text-decoration: underline; }
+/* What's new: title bar, banner and list run edge to edge inside the dialog border, with one
+   12px left/right line for the logo, banner text, list and footer */
+body.skin-dark #notice.wn { padding: 0; overflow: hidden; }
+body.skin-dark #notice.wn .dlg-title { height: 26px; padding: 0 8px 0 12px; gap: 6px; }
+body.skin-dark #notice.wn .dlg-title .xf-close { top: 6px; right: 8px; }
+body.skin-dark #notice.wn .dlg-body { border-width: 1px 0; box-shadow: none; }
+body.skin-dark #notice.wn .wn-hero { padding-left: 12px; padding-right: 12px; }
+body.skin-dark #notice.wn .wn-cols { padding: 4px 12px 10px; }
+body.skin-dark #notice.wn .dlg-foot { margin: 0; padding: 8px 12px 10px; }
+
+/* beta.10.1: "Icon next to name" in Cobalt: game icon (classic), the friend's avatar at icon size, or nothing */
+body.skin-dark .xf-row .c-name[data-ico=avatar] > .noicon, body.skin-dark .xf-row .c-name[data-ico=avatar] > .gi { display: none; }
+body.skin-dark .xf-row .row-av { width: 16px !important; height: 15px !important; margin: 1px 2px 0 0; border-radius: 2px; border-color: #000; font-size: 8px !important; line-height: 1; vertical-align: top; display: inline-flex; }
+/* beta.10.1: with the side panel open the panel's whole right edge resizes the panel, in every skin
+   (the window's own East edge is only used with the panel closed) */
+body.skin-dark .xf-app.side-open .dk-edges [data-resize=East] { display: none; }
