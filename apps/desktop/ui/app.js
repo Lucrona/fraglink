@@ -693,12 +693,12 @@
     return null;
   }
   function avColor(f) { if (f.avatar && f.avatar.color != null) return f.avatar.color % 6; const n = String(f.handle || f.name || ''); let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0; return h % 6; }
-  // Options > Appearance "Show avatars in friends list" (default on): off = friends' pictures
-  // give way to the neutral initial in the list and the side panel (your own picture stays).
-  // Classic (Cobalt) keeps its pictures either way.
+  // Options > Appearance "Show avatars in friends list" (default on): off = no picture box in
+  // the flat-theme list rows (rowAvatar / data-noav); the side panel and your own picture
+  // always show the real one. Classic (Cobalt) has no list pictures either way.
   const showAvatars = () => setOn('show_avatars') || !/\btheme-flat-/.test(document.documentElement.className);
   function avatarHtml(f, size = 48, cls = 'sf-av') {
-    const a = (cls === 'me-av-i' || showAvatars()) && f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
+    const a = f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
     if (a.kind === 'upload') { const src = avImg(size > 32 ? a.url_64 : a.url_32); if (src) return `<i class="fav-av up ${cls}" style="${st}"><img src="${src}" alt=""></i>`; }
     if (a.kind === 'preset') return `<i class="fav-av ${cls} p c${a.preset % 6}" style="${st};font-size:${Math.round(size * .46)}px">${AV_GLYPHS[a.preset % 12]}</i>`;
     // no picture (or an upload still loading): the website's default, its Fraglink mark on the account's colour
