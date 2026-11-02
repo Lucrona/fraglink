@@ -21,222 +21,148 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.3.0-beta.9.1] - 2026-10-27
 
-(╯°□°)╯︵ ┻━┻ One more pass.
-
-### Pop-up boxes
-- Every pop-up box fits inside the window, even at its smallest size
-- Change Nickname fits, and Save is blue and on the right
-- Set Custom Status and Add Custom Group lose the extra button inside the box
-- Add Friend buttons are blue
-
-### Window
-- The resize grip sits in the true bottom-right corner
-- Its tooltip no longer covers the side panel
+- Change: Pop-up boxes fit the window, even at its smallest size
+- Change: Change Nickname fits, Save is blue and on the right
+- Change: Add Friend buttons are blue
+- Change: Resize grip sits in the true bottom-right corner
+- Bug: Extra button inside Set Custom Status and Add Custom Group
+- Bug: Resize grip tooltip covering the side panel
 
 ## [0.3.0-beta.9] - 2026-10-27
 
-Missed a few spots in beta.8 - here they are.
-
-### Side panel (Flat Navy and Flat Grey)
-- No more blue banner or solid blue section bars
-- Quieter section headers
-- Offline friends no longer show as green
-- The friend's avatar now sits half above the top of the panel
-
-### Connections and WoW
-- New Manage WoW button that opens your Battle.net page on the website
-- Verify WoW characters moved into the World of Warcraft button row
-- The Spotify "coming soon" row is hidden for now
-
-### Fixes
-- The arrow next to your status opens the status menu again in the flat themes
+- New: Manage WoW button, opens your Battle.net page on the website
+- Change: Flat Navy and Flat Grey side panel loses the blue banner and solid blue section bars
+- Change: Quieter side panel section headers
+- Change: Friend's avatar sits half above the top of the side panel
+- Change: Verify WoW characters moved into the World of Warcraft button row
+- Change: Spotify "coming soon" row hidden for now
+- Bug: Offline friends showing as green
+- Bug: Status arrow not opening the status menu in the flat themes
 
 ## [0.3.0-beta.8] - 2026-10-27
 
-### Look and themes
-- Two new themes: Flat Navy and Flat Grey
-- Crimson, Emerald and Graphite are removed; anyone using one moves to Cobalt
-- The title bar is gone from every tab, in all themes
-- Flat themes have visible column dividers between Name and Status that turn blue on hover, so you can drag them
-- Text sizes are now Small, Normal, Large and Larger
-  - Normal is the old Large, and saved settings carry over
-
-### Pop-ups
-- New pop-up design in Fraglink navy
-- Friend request pop-ups have Accept and Ignore
-- An Update ready pop-up when a new version is downloaded
-
-### Tray icon
-- One corner mark shows your status
-  - Green: online or Looking to Play. Yellow: away. Hollow ring: invisible. Greyed out: offline
-- A red dot while friend requests are waiting
-- A green download arrow when an update is ready (it wins over the others)
-- The tooltip shows "N friend requests"
-
-### Friends
-- The side panel has a "This session" row; the old "Playing for" clock is gone
-- Red Friends badge with white text, and waiting requests are highlighted
-
-### Connections and WoW
-- Real Steam, Discord and Battle.net logos
-- Battle.net shows when your /played was last imported, and Steam shows its line too
-- A note when your Steam game details were private
-- A "Get the Fraglink addon" button (CurseForge)
-- A reminder to log in to each WoW character once so the addon saves its /played
-- /played is uploaded on the website
-
-### Other
-- A What's New notice after updating
-- Unticking Save Password or Auto-Login is respected, and turning on Auto-Login also turns on Save Password
-- Help menu with FAQ, Changelog and Contact Us
+- New: Flat Navy and Flat Grey themes
+- New: Pop-ups redone in Fraglink navy
+- New: Accept and Ignore on friend request pop-ups
+- New: Update ready pop-up when a new version is downloaded
+- New: Tray icon corner mark for your status: green online or Looking to Play, yellow away, hollow ring invisible, greyed out offline
+- New: Red tray dot while friend requests are waiting, green download arrow when an update's ready
+- New: Tray tooltip shows "N friend requests"
+- New: "This session" row in the side panel
+- New: Real Steam, Discord and Battle.net logos
+- New: Battle.net shows when your /played was last imported, and Steam shows its line too
+- New: Note when your Steam game details were private
+- New: "Get the Fraglink addon" button (CurseForge)
+- New: Reminder to log in to each WoW character once so the addon saves its /played
+- New: What's New notice after updating
+- New: Help menu with FAQ, Changelog and Contact Us
+- Change: Crimson, Emerald and Graphite themes removed, anyone using one moves to Cobalt
+- Change: Title bar gone from every tab, in all themes
+- Change: Flat themes have draggable Name / Status column dividers that turn blue on hover
+- Change: Text sizes are Small, Normal, Large and Larger (Normal is the old Large, settings carry over)
+- Change: "Playing for" clock removed from the side panel
+- Change: Red Friends badge with white text, waiting requests highlighted
+- Change: /played is uploaded on the website
+- Change: Turning on Auto-Login also turns on Save Password
+- Bug: Unticking Save Password or Auto-Login not being respected
 
 ## [0.3.0-beta.7] - 2026-10-26
 
-### Fixed
-
-- Tooltips no longer get cut off at the window edges (e.g. the header buttons right of Game Info). With Large/Larger text the tip was placed in unscaled pixels and grew past the edge; placement now measures the real text scale, flips left/above when there is no room and clamps on every edge, also in narrow windows. Options now uses the same in-window tip instead of native titles, so its hints are kept inside the window too.
-
-### Changed
-
-- Bolder tray icon: heavier F and swoosh that fill the 16/20/24/32 px canvas like other tray icons, dark and light variants.
+- Change: Bolder tray icon: heavier F and swoosh that fill the canvas, dark and light versions
+- Bug: Tooltips cut off at the window edges (like the header buttons right of Game Info), worst with Large or Larger text
+- Bug: Options hints using native titles that could leave the window, now the same in-window tip
 
 ## [0.3.0-beta.6] - 2026-10-26
 
-- Options > Games: new **Detected, not added** list (collapsed at the top of the tab). Programs Fraglink asked "Playing …?" about that were never answered stay there across restarts, each with **Add it!** (opens Add game manually, prefilled) and **Not a game**. Up to 200 are kept; a program drops off once it is added or marked not a game.
-- Options > Games: a blue tick next to games whose detection Fraglink has checked ("Verified by Fraglink"). It comes from `verified` in games.json and a `verified` id list in the server's detection overrides. Starting list: World of Warcraft, Hearthstone, Marvel Rivals, Star Citizen, 112 Operator.
-- New tray icon: the Fraglink mark on its own, white on a dark taskbar and black on a light one (follows the Windows "SystemUsesLightTheme" setting, switching within a few seconds of a theme change).
-- `scripts/deploy.sh` builds the server with cargo zigbuild (glibc 2.39) by default, no docker needed; `BUILD=docker` keeps the old container build.
-
-### Changed
-- The name you give a game you added yourself is now shown to everyone: friends, your public profile, the activity feed and Now playing (like Discord). Before, only you saw it and others saw "a game". Games Fraglink staff have approved or renamed still use the approved name, and Report a name keeps working.
-- Admin merge suggestions and the server's exe-to-game matching now also check Discord's detectable games list, not only Fraglink's built-in list, so a program Discord already knows counts as a known game.
-- Options > Games lists only installed games (the game's exe is on this PC now), including games you added while their exe is there. The "Played before" section is gone.
-- Options > Games: "Add game manually…" moved out of the game details panel to a line at the top of the tab: "Not seeing your game? Add it!". The hint under the list points to Scan for games.
-- Options > General: clearer startup labels, "Start hidden in the tray when Windows starts" and "Minimise button sends Fraglink to the tray". The first now only applies when Windows starts Fraglink; opening it yourself always shows the window.
-- The main and Options windows never open larger than the screen (small screens, high display scaling, Large text).
-
-### Fixed
-- Your own name for a program you added is saved on the server, so your profile, recent games and now-playing keep it after a server restart instead of showing "A game".
-- "Playing X?" prompt: the question mark sits next to the game name instead of on its own line.
+- New: Detected, not added list in Options > Games: unanswered "Playing …?" programs stay there with Add it! and Not a game (up to 200)
+- New: Blue tick ("Verified by Fraglink") on games whose detection Fraglink has checked, starting with World of Warcraft, Hearthstone, Marvel Rivals, Star Citizen and 112 Operator
+- New: Tray icon is the Fraglink mark on its own, white on a dark taskbar and black on a light one
+- Change: The name you give a game you added shows for everyone: friends, your profile, the activity feed and Now playing (approved names still win)
+- Change: Admin merge suggestions and the server's exe matching also check Discord's detectable list
+- Change: Options > Games lists only installed games, "Played before" is gone
+- Change: "Add game manually…" is now "Not seeing your game? Add it!" at the top of Options > Games
+- Change: Clearer startup labels, and "Start hidden in the tray" only applies when Windows starts Fraglink
+- Change: scripts/deploy.sh builds with cargo zigbuild by default, BUILD=docker keeps the old way
+- Bug: Main and Options windows opening larger than the screen
+- Bug: Your name for a program you added showing as "A game" after a server restart
+- Bug: "Playing X?" question mark on its own line
 
 ## [0.3.0-beta.5] - 2026-10-25
 
-### Added
-- Desktop: unknown programs get a light "Playing X? Add it!" prompt (Add it! / Not a game). Any program you add, from the prompt or with "Add game manually…", goes to Game approvals as a suggestion.
-- Your own name for a program you added shows on your profile and now-playing (everyone else sees "A game") until it is approved or rejected.
-- Options > Games: "Remove game" for games you added yourself. Their hours stay on your profile.
-- Admin > Game approvals: Suggested merges. A program players added themselves that is now on the games list is listed with its players and hours, with Merge (same as Admin > Games > Merge) and Dismiss. New suggestions are included in the Game approvals alert email. Nothing is merged automatically.
-
-### Fixed
-- Options > Games: World of Warcraft (retail) detect path stays in `_retail_` and never shows the Classic/Forever folder (`_forever_\Wow.exe`).
-- Options > Games applies detection fix-ups, folds store entries for the same folder, and drops programs that are no longer installed.
-- A program you added that the games list later knows now counts its new play under that game.
-
-### Changed
-
-- Admin > Games: every detection source is shown as a chip (Steam app ids with store links, games list, built-in, folder rule, fix-up, extra exe), so built-in games on Steam no longer look like "games list" only. New filters (no Steam link, on Steam, unverified), a "Changed" column and sort, and a last-updated line (Steam sync, games list, last game edit, last fix-up).
-- Admin > Detection: server-side search, kind filter, sort and paging; each fix-up shows its game name and when and by whom it was last changed, and can be edited.
-- Escape from Tarkov and World of Tanks are linked to their Steam app ids (3932890, 1407200).
+- New: "Playing X? Add it!" prompt for unknown programs (Add it! / Not a game), added programs go to Game approvals
+- New: Your name for a program you added shows on your profile and now-playing (others see "A game") until it's reviewed
+- New: Remove game in Options > Games for games you added yourself, hours stay
+- New: Admin > Game approvals: Suggested merges with Merge and Dismiss, nothing merged automatically
+- Change: Admin > Games shows every detection source as a chip, with new filters, a Changed column and a last-updated line
+- Change: Admin > Detection gets search, kind filter, sort, paging and editable fix-ups
+- Change: Escape from Tarkov and World of Tanks linked to their Steam app ids
+- Bug: WoW (retail) detect path showing the Classic/Forever folder
+- Bug: Options > Games skipping detection fix-ups, doubling store entries and keeping uninstalled programs
+- Bug: New play of a program you added not counting under the game once the list knows it
 
 ## [0.3.0-beta.4] - 2026-10-25
 
-### Fixed
-- Desktop: a panic no longer freezes the app silently. It is written to the log and to crash-<time>.txt, the tracker recovers, and locks recover after a panic.
-- Desktop: the Steam/install scan and the game catalogue's disk walk no longer run while the tracker lock is held (likely cause of the freeze).
-- Desktop: a watchdog logs when the tracker or window stops responding for 30 s.
-- One game identity per running game (no duplicate Steam + exe entry).
-- Tooltips have a min/max width and stay inside the window.
-
-### Added
-- Admin > Detection: Steam app, game id and folder+exe fix-ups. The apps and the Steam sync both use them. Seeded: Steam 793460 counts as 112 Operator.
-- Folder + exe path rules (for example `wow/wow.exe`) for games whose exe name is shared.
-
-### Changed
-- Privacy Policy v11 (19 October 2026): removes "hours you import yourself" from what we collect and "remove hours you imported" from Correct it, since manual hour imports are disabled. Terms stay at v6.
+- New: Admin > Detection: Steam app, game id and folder+exe fix-ups (Steam 793460 counts as 112 Operator)
+- New: Folder + exe path rules for games that share an exe name
+- New: Watchdog logs when the tracker or window stops responding for 30 s
+- Change: Privacy Policy v11: drops self-imported hours, since manual imports are off
+- Bug: App freezing silently after a panic, now logged to a crash file and recovered
+- Bug: Steam/install scan running while the tracker was locked (likely cause of the freeze)
+- Bug: Duplicate Steam + exe entry for one running game
+- Bug: Tooltips without a min/max width leaving the window
 
 ## [0.3.0-beta.3] - 2026-10-19
 
-### Added
-- playfraglink.com is open to search engines. robots.txt allows crawling except private and signed-in pages (admin, API, settings, friends, sign-in and two-step, forgot, reset, verify, pairing, Steam sign-in) and links a sitemap. The sitemap is an index plus a pages file and profile files of 5,000 each. It lists only public profiles, never test accounts, private profiles, or accounts that are leaving or under age review. Private profiles and the sign-in and settings pages send noindex. Test, leaving and unknown names answer a 404 that looks the same. Public pages and profiles have a canonical address on https://playfraglink.com, a description and link-preview (Open Graph) tags with a new preview image. *.html addresses redirect to the clean URL. beta.playfraglink.com stays noindex with Disallow: /.
-- Admin: "Unusual hours" alert. A single tracked session over 16 hours, or more than 20 hours a day on 3 or more days in a row, flags the account in Admin > Users (with a Clear button, logged in the audit) and emails staff (at most every 15 minutes, within the daily alert cap). Nothing is removed automatically: idle and away time count as played time. Test accounts and the owner account are left out.
-- New privacy switch "Show connected account names" (on by default), on the website and in the app's Options > Privacy. When it's off, visitors still see your Steam, Battle.net and Discord icons with the verified tick, but not the account names or links. Your data export now includes your privacy switches.
-- The two-step sign-in code screen tells you to email support@playfraglink.com if you've lost your authenticator and backup codes.
-
-### Changed
-- Self-reported manual hour imports are disabled. `POST /api/v1/hours/import` and the old server form `/web/import` answer 410 Gone ("Manual hour imports are disabled.") and store nothing. Hours imported before stay on your profile, and you can still delete them. Steam import is unchanged.
-- Leaderboards count a game the same way your profile does: Top players this week, Most played this week and the per-game boards now include Imported hours (Steam, manual counters, later WoW /played). All time uses the profile total (the largest of app sessions, Steam and Imported, never added together). 7 days uses the larger of the week's sessions and how much an Imported counter grew this week, so a first import doesn't count as this week's play. The per-game boards also respect the Leaderboards switch and hidden games now.
-- Imported hours: the import code now caps each game at 50,000 hours (before: about 40 years), ready for a future validated WoW addon import. A first import over 20,000 hours, or a counter that grew faster than 20 hours a day since the previous import, raises the Unusual hours admin alert. Nothing is removed automatically.
-- Website: every column header in a profile's Games table sorts, including Total. Clicking the active column flips it between descending and ascending, the arrow shows the direction, and sorting happens on the server, across all pages. The note under the table is gone.
-- App: in the friends list, the sort arrow now sits on whichever column is sorted (Name or Status) and flips with it.
-- Privacy Policy v10 (19 October 2026): explains that a Steam account linked by signing in through Steam shows its public profile name, the new "Show connected account names" switch, and that the data export includes your privacy settings. Terms stay at v6.
-- Website: the Miniprofile image is larger (1.25x) and centred; on your own profile the embed text and the Link, BBCode and HTML rows sit underneath it.
-- Website: every form now posts to a safe fallback, and the sign-in, sign-up, two-step, forgot and reset buttons stay disabled until the page has loaded, so a form sent too early can never put a password or reset token in the address bar or server logs.
-- Hours integrity: only the desktop app can report the game you're playing. The website's live connection (and any other sign-in) can still change your status, but a game sent from it is ignored, and it never ends a game the app is tracking. Game switches are capped at 6 a minute and 30 an hour per account (extra switches are ignored and logged).
-- App: the My Account totals show the server's hours plus the session running now, instead of whichever of the server and this PC was higher. The local Today, This week and Top Games figures are labelled "this PC".
-- Website: private profiles now have friend actions. Signed in, you can send a friend request (and cancel it) or accept theirs; signed out, "Sign in to add <name>" brings you back to the profile after sign-in.
-- Website: the profile Miniprofile box shows the embed text and the Link, BBCode and HTML copy rows only on your own profile. Visitors see just the image, linking to the profile.
-
-### Removed
-- App: the Server field is gone from the login, Create Account and Options > Account sign-in. The app always signs in, signs up and pairs with https://playfraglink.com.
-- The old session upload path: `POST /api/v1/sessions/upload` now answers 410 Gone, and the app's upload queue code is gone (no 0.3.0 beta used it; the unused local columns stay so no app database migration is needed).
-
-### Fixed
-- Website: game icons now show on public profiles for logged-out visitors (they showed letter tiles before).
-- Website: after choosing a new password from a reset link, the page now says your password was changed (and that other sessions were signed out) with a Sign in button, instead of an empty box. Expired, used or missing reset links, and server or connection errors, now show a clear message.
+- New: playfraglink.com open to search engines, with robots.txt, a sitemap of public pages and profiles, and link-preview tags
+- New: Admin "Unusual hours" alert for very long sessions or days, nothing removed automatically
+- New: Show connected account names privacy switch (on by default), included in your data export
+- New: Two-step code screen says to email support if you've lost your authenticator and backup codes
+- New: Friend actions on private profiles
+- Change: Manual hour imports disabled, Steam import unchanged, older imports stay
+- Change: Leaderboards count a game the same way your profile does, including imported hours
+- Change: Imported hours capped at 50,000 per game, big jumps raise the Unusual hours alert
+- Change: Every column in a profile's Games table sorts, across all pages
+- Change: Friends list sort arrow sits on the sorted column
+- Change: Privacy Policy v10
+- Change: Bigger, centred Miniprofile image, embed rows only on your own profile
+- Change: Sign-in and reset forms stay disabled until the page has loaded
+- Change: Only the desktop app can report the game you're playing, game switches capped per minute and hour
+- Change: My Account totals show the server's hours plus the current session, local figures labelled "this PC"
+- Change: Server field removed, the app always uses https://playfraglink.com
+- Change: Old session upload path removed
+- Bug: Game icons missing on public profiles for logged-out visitors
+- Bug: Password reset showing an empty box instead of saying it worked
 
 ## [0.3.0-beta.2] - 2026-10-19
 
-### Major features
-- **Date of birth at sign-up**: Create Account now asks for your date of birth with Day, Month and Year dropdowns, like Discord. You need to be 13 or older to sign up. This also fixes creating new accounts from the app.
-- **Friend request badge**: the Friends tab shows how many friend requests are waiting for you.
-
-### Added
-- Friend requests now reach you by email if you've turned that on and confirmed your email address. Each email has a one-click link to turn them off.
-
-### Changed
-- Announcement banners are centred, show up within about 2 minutes of being posted, and disappear as soon as they end.
-- Under-18 accounts start with a private profile. You can switch to public after a short confirm (Cancel and Confirm equally weighted); you can switch back any time. When you turn 18 your profile keeps whatever setting you had.
-- New accounts hide age on the profile by default (you can turn it on). Under-18 sign-ups also hide real name, gender and location by default.
-- Your hours are now either tracked (by Fraglink or Steam) or imported from a game's own counter. The stats legend shows only Tracked and Imported.
-- If you haven't used the app for 180 days, you'll need to sign in again.
-
-### Removed
-- Estimated hours and the "Estimate your history" calculator.
-
-### Website
-- Sign-up on playfraglink.com also asks for your date of birth.
-- Friends lists on the website update live, and the Friends link shows a request badge.
-- Privacy Policy v9 and Terms of Use v6 (19 October 2026): under-18 may go public; age hidden by default for new accounts.
-- Country flags now load from playfraglink.com.
-
-### Fixed
-- Privacy and Terms pages: markdown bullet lists render as real lists; inline code keeps surrounding spaces.
-- Month dropdown on Create Account no longer clipped ("Mont").
+- New: Date of birth at sign-up (Day, Month, Year), 13 or older only, also fixes creating accounts from the app
+- New: Friend request count on the Friends tab
+- New: Friend request emails if you've turned them on, with a one-click off link
+- New: Website friends lists update live, Friends link shows a request badge
+- Change: Announcement banners centred, show within about 2 minutes and vanish when they end
+- Change: Under-18 accounts start private, switching to public takes a short confirm
+- Change: Age hidden by default for new accounts, under-18s also hide real name, gender and location
+- Change: Hours are either Tracked or Imported, estimated hours and the estimate calculator gone
+- Change: Sign in again after 180 days without the app
+- Change: Privacy Policy v9 and Terms v6
+- Change: Country flags load from playfraglink.com
+- Bug: Bullet lists on the Privacy and Terms pages not rendering
+- Bug: Month dropdown on Create Account clipped ("Mont")
 
 ## [0.3.0-beta.1] - 2026-10-12
 
-The first Fraglink beta. From now on releases are numbered 0.3.0-beta.1, 0.3.0-beta.2, and so on.
-
-### Major features
-- **Nicknames**: pick the name your friends see and change it any time; your @username stays the same.
-- **New profiles and website**: profile pages with your games and hours, profile pictures, and a refreshed playfraglink.com.
-- **Linked accounts**: connect Steam, Battle.net and Discord from the app or the website.
-- **Privacy in sync**: the same privacy switches in the app and on the website, so changing one changes both.
-- **Steam-sized pop-ups**: bigger, cleaner notifications when friends come online or start a game.
-- **Announcement banner**: news from the Fraglink team shows under the app's header.
-- **Groups like Steam**: friends in your own groups still show under Friends Online, and groups show who's on.
-
-### Added
-- Announcements now show as a slim banner under the header. Click it to open the link, or × to hide it.
-
-### Changed
-- Friends you put in your own groups still show under Friends Online when they're on.
-- Your groups show how many are online out of everyone in them, e.g. (2/5).
-- Your own status shows just the game icon and name while you play.
-- Hovering a friend shows their nickname with their @username next to it.
-
-### Fixed
-- Updates now move cleanly from the earlier test builds to the beta.
+- New: The first beta, numbered 0.3.0-beta.N from here
+- New: Nicknames: pick the name friends see, keep your @username
+- New: Profiles with your games, hours and a profile picture, plus a refreshed playfraglink.com
+- New: Link Steam, Battle.net and Discord from the app or the website
+- New: Same privacy switches in the app and on the website
+- New: Announcement banner under the header, click to open or × to hide
+- Change: Bigger, cleaner pop-ups when friends come online or start a game
+- Change: Friends in your own groups still show under Friends Online
+- Change: Groups show how many are online, like (2/5)
+- Change: Your own status shows just the game icon and name while you play
+- Change: Hovering a friend shows their nickname and @username
+- Bug: Updates from the earlier test builds not moving cleanly to the beta
 
 ## [0.2.0-dev.21] - 2026-10-12
 Test update (builds report `0.2.0-21`).
