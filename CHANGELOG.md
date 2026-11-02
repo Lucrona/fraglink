@@ -7,13 +7,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.3.0-beta.10.1] - 2026-11-02
 
+### New
+- Fresh What's new pop-up with the Fraglink logo up top
+
 ### Changes
 - Friend pics look exactly like the website: same colour, same logo (Flat Navy, Flat Grey)
 - Avatar toggle off hides the pic box in the friends list, the side panel still shows the pic
+- Flat title bar in Flat Navy and Flat Grey
 
 ### Fixes
 - Grey box instead of a friend's colour and logo
 - Letter box still showing with the avatar toggle off
+- Minimise and close buttons now line up
+- Resizing from the right grabs the window edge, not the empty strip next to it
 
 ## [0.3.0-beta.10] - 2026-11-02
 

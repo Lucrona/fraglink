@@ -12,6 +12,7 @@ mod health;
 mod icons;
 mod sync;
 mod updater;
+mod whatsnew;
 mod windows;
 
 use fraglink_core::engine::{keys, Engine, DEFAULT_POLL_SECS};

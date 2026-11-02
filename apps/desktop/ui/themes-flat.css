@@ -819,3 +819,18 @@ html[class*=theme-flat] body.skin-dark .side-scroll .sf-av.fav-av.p, html[class*
 html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-noav] { padding-left: 24px; }
 html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-noav]::before { display: none; }
 html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-noav]::after { left: 8px; top: 50%; width: 9px; height: 9px; margin-top: -4.5px; border: 0; }
+
+/* beta.10.1: flat title bar: one flat colour and a flat logo (no emboss shading); _ and × icons
+   a touch larger, on the logo's centre line */
+html[class*=theme-flat] body.skin-dark .xf-titlebar { background-image: none !important; box-shadow: none !important; }
+html[class*=theme-flat] body.skin-dark .xf-logo-lock { filter: brightness(0) invert(.62) !important; }
+html[class*=theme-flat] body.skin-dark .xf-logo-emboss { display: none !important; }
+html[class*=theme-flat] body.skin-dark .xf-winbtns .wb-i { width: 11px; height: 11px; }
+/* beta.10.1: What's new hero pop-up in the flat themes */
+html[class*=theme-flat] body.skin-dark #notice.wn { width: 320px; }
+html[class*=theme-flat] body.skin-dark #notice.wn .dlg-body { background: var(--f1) !important; border: 0 !important; box-shadow: none !important; }
+html.theme-flat-navy body.skin-dark .wn-hero { background: radial-gradient(circle at 80% 30%, #3e6fb8 0, #1d3a6b 45%, #0d1a30 100%); border-bottom: 0; }
+html.theme-flat-grey body.skin-dark .wn-hero { background: radial-gradient(circle at 80% 30%, #5b6270 0, #33373e 45%, #1b1d21 100%); border-bottom: 0; }
+html[class*=theme-flat] body.skin-dark .wn-h2 { color: var(--ftx); }
+html[class*=theme-flat] body.skin-dark .wn-h2:after { background: rgba(255,255,255,.08); }
+html[class*=theme-flat] body.skin-dark .wn-cols li:before { background: var(--fmut); }

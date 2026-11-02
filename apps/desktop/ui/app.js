@@ -1047,41 +1047,25 @@
     if (newsCur.link && /^https:\/\//.test(newsCur.link)) { if (FLB.openUrl) FLB.openUrl(newsCur.link).catch(() => {}); else open(newsCur.link, '_blank'); }
   });
   setTimeout(loadNews, 1500); setInterval(loadNews, 2 * 60 * 1000); addEventListener('focus', () => loadNews());
-  /* "What's new" after an update. Edit WHATS_NEW for each release (keyed by the
-     app version as devVer() shows it); versions without an entry just get the link. */
-  const WHATS_NEW = {
-    '0.3.0-beta.10.1': [
-      'Friend pics look exactly like the website: same colour, same logo',
-      'Avatar toggle off hides the pic box in the friends list',
-    ],
-    '0.3.0-beta.10': [
-      'Real friend pictures in Flat Navy and Flat Grey (or a grey letter box)',
-      'New option to hide avatars in the friends list',
-      'This session shows actual time in game',
-      'Every game uses the game list folder hints, and Detect Games uses the server list',
-      'Secure connection only, with a clear can\'t connect message',
-      'Fewer crashes',
-    ],
-    '0.3.0-beta.9.1': [
-      'Pop-up boxes fit the window, with the main button blue and last',
-      'The resize grip sits in the window corner',
-    ],
-    '0.3.0-beta.9': [
-      'Cleaner friend side panel in Flat Navy and Flat Grey',
-      'Manage WoW and Verify WoW characters buttons in Connections',
-      'The status menu arrow works in the flat themes',
-    ],
-    '0.3.0-beta.8': [
-      'Tray icon shows one mark: update ready, friend requests, or your status',
-      'Friend requests badge on the Friends tab',
-      'Session time in the friend side panel',
-      'New Help menu with FAQ and Changelog',
-      'Hours imported dates for Steam and Battle.net in Connections',
-      'New Flat Navy and Flat Grey themes',
-      'New pop-up design, with Accept / Ignore on friend requests and an Update ready pop-up',
-      'Get the Fraglink WoW addon from Connections; /played is uploaded on the website',
-    ],
-  };
+  /* "What's new" after an update: the installed version's CHANGELOG.md notes (New / Changes /
+     Fixes), compiled into the app and sent with the settings (whats_new). Hero-header pop-up. */
+  const WN_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function wnDate(d) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${+m[3]} ${WN_MON[+m[2] - 1]} ${m[1]}` : ''; }
+  function whatsNewHtml(v, w) {
+    const short = v.replace(/^\d+\.\d+\.\d+-/, '');
+    const sec = (cls, label, a) => a && a.length ? `<div class="wn-h2"><i class="${cls}"></i>${label}</div><ul>${a.map(i => `<li data-tip="${esc(i)}">${esc(i)}</li>`).join('')}</ul>` : '';
+    const d = w ? wnDate(w.date) : '';
+    const body = w ? sec('new', 'New', w.new) + sec('chg', 'Changes', w.changes) + sec('fix', 'Fixes', w.fixes) : '';
+    return `<div class="wn-hero"><img class="wn-mark" src="brand/v28-mark.svg" alt="" draggable="false"><div class="t"><div class="k">Updated</div><b>What's new in ${esc(short)}</b><span>${esc(v)}${d ? ` · ${d}` : ''}</span></div></div>`
+      + `<div class="wn-cols">${body || '<p>Bug fixes and polish.</p>'}</div>`;
+  }
+  function showWhatsNew(v, w) {
+    notice('Fraglink updated', whatsNewHtml(v, w), [{ label: 'Got it', action: 'notice-close', primary: true }]);
+    const d = $('#notice'); d.classList.add('wn');
+    $('#notice .dlg-foot').insertAdjacentHTML('afterbegin', '<a class="wn-full" data-action="changelog-web">Full changelog</a>');
+    placeDlg(d);
+  }
+  if (!TAURI) window.__showWN = v => showWhatsNew(v, (LIVE.settings || {}).whats_new); // browser preview / QA only
   function whatsNew() {
     const s = LIVE.settings; if (!s || !s.version) return;
     const v = devVer(s.version), last = SET().last_run_version;
@@ -1090,13 +1074,13 @@
     if (last === v) return;
     saveSetting('last_run_version', v);
     if (!before) return;
-    const items = WHATS_NEW[v] || [];
-    notice('Fraglink updated', `<p><b>Fraglink updated to ${esc(v)}</b></p>${items.length ? `<ul class="wn-list">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}<p><a data-action="changelog-web">See full changelog</a></p>`);
+    showWhatsNew(v, s.whats_new);
   }
   // Footer buttons: secondary ones first, the primary (blue) action last. Default is a single primary OK.
   function notice(title, html, btns = [{ label: 'OK', action: 'notice-close', primary: true }]) {
     const foot = $('#notice .dlg-foot');
     foot.innerHTML = btns.map(b => `<button class="hw${b.primary ? ' primary' : ''}" type="button"${b.id ? ` id="${b.id}"` : ''}${b.action ? ` data-action="${b.action}"` : ''}>${esc(b.label)}</button>`).join('');
+    $('#notice').classList.remove('wn');
     $('#notice-title').textContent = title; $('#notice-body').innerHTML = html; $('#notice').hidden = false; placeDlg($('#notice'));
   }
   // In-window dialogs open centred near the top and can then be dragged by their title bar.

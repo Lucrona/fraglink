@@ -226,6 +226,8 @@ pub struct SettingsView {
     pub steam_apps: usize,
     pub epic_apps: usize,
     pub gog_apps: usize,
+    /// This version's CHANGELOG.md notes for the "What's new" pop-up.
+    pub whats_new: Option<crate::whatsnew::WhatsNew>,
 }
 
 #[tauri::command]
@@ -259,6 +261,7 @@ pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Set
             .detector
             .libs
             .count(fraglink_core::libraries::Launcher::Gog),
+        whats_new: crate::whatsnew::current(),
     })
 }
 

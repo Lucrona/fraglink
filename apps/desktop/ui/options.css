@@ -187,3 +187,6 @@ body.dark .conn .soon.ok { color: #6fd27b; }
 
 .conn-sub{margin:-2px 0 8px 40px;display:flex;gap:8px;align-items:center}
 .conn-sub .warn{color:#e0a040}
+
+/* beta.10.1: drawn _ and × icons, centred */
+.op-winbtns button { display: inline-flex; align-items: center; justify-content: center; line-height: 0 !important; }
