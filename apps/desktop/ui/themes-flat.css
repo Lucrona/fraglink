@@ -815,3 +815,7 @@ html[class*=theme-flat] .af-b.primary { background: var(--facc, #2f63c4); color:
 /* Side panel picture: drawn exactly as on the website (dark.css .fav-av palette, preset glyph, default mark) */
 html[class*=theme-flat] body.skin-dark .sf-av.fav-av:not(.up) { display: flex; align-items: center; justify-content: center; }
 html[class*=theme-flat] body.skin-dark .side-scroll .sf-av.fav-av.p, html[class*=theme-flat] body.skin-dark .side-float .sf-av.fav-av.p { font-size: 33px !important; } /* 72px tile, glyph at 46% like the website */
+/* 'Show avatars in friends list' off: no picture or letter box in the list, just a status dot before the name */
+html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-noav] { padding-left: 24px; }
+html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-noav]::before { display: none; }
+html[class*=theme-flat] body.skin-dark .xf-row .c-name[data-noav]::after { left: 8px; top: 50%; width: 9px; height: 9px; margin-top: -4.5px; border: 0; }
