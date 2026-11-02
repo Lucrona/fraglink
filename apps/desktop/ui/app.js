@@ -1052,6 +1052,14 @@
   /* "What's new" after an update. Edit WHATS_NEW for each release (keyed by the
      app version as devVer() shows it); versions without an entry just get the link. */
   const WHATS_NEW = {
+    '0.3.0-beta.10': [
+      'Real friend pictures in Flat Navy and Flat Grey (or a grey letter box)',
+      'New option to hide avatars in the friends list',
+      'This session shows actual time in game',
+      'Every game uses the game list folder hints, and Detect Games uses the server list',
+      'Secure connection only, with a clear can\'t connect message',
+      'Fewer crashes',
+    ],
     '0.3.0-beta.9.1': [
       'Pop-up boxes fit the window, with the main button blue and last',
       'The resize grip sits in the window corner',

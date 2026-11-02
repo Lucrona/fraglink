@@ -5,20 +5,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.10] - 2026-11-02
+
+Friends get their faces back, plus a bunch of under-the-hood fixes.
+
+### Friends
+- Flat Navy and Flat Grey show friends' real pictures in the list and the side panel; no picture means a grey box with their first letter (bye, red box)
+- New option: Options > Appearance > Show avatars in friends list (on by default)
+- This session shows your friend's actual time in game, and the old "Playing for" clock is gone
+- My Profile at the bottom opens your profile on the website
+
+### Detection
+- Every game uses the folder hints from the Fraglink game list, not just WoW
+- Detect Games uses the latest game list from the server, so new or fixed games don't need an app update
+
 ### Connection
 - Fraglink only talks to the server over a secure connection (HTTPS); the old plain-HTTP backup address is gone, for sign-in, sync, friends and updates
 - When it can't connect, the friends list says so plainly and keeps retrying on its own
 
-### Friends list and side panel
-- My Profile at the bottom opens your profile on the website
-- Flat Navy and Flat Grey show friends' real pictures in the list and the side panel; friends without one get a grey box with their initial (no more red box)
-- New option: Options > Appearance > Show avatars in friends list (on by default)
-- This session also shows while a friend's history is private or still loading
-
-### Fixes
-- WoW: after a WoW crash, the session it cut short is no longer counted twice once your next /played upload includes it (server fix)
+### Stability
 - The app no longer crashes on a few rare errors (startup, crash recovery, a bad server retry time, update progress); it writes them to the log and carries on
 - Names and text with an apostrophe (') show correctly everywhere in the app
+- WoW: after a WoW crash, the session it cut short is no longer counted twice (already live on the server)
 
 ## [0.3.0-beta.9.1] - 2026-10-27
 
