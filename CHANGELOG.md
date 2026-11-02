@@ -7,26 +7,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.3.0-beta.10] - 2026-11-02
 
-Friends get their faces back, plus a bunch of under-the-hood fixes.
-
-### Friends
-- Flat Navy and Flat Grey show friends' real pictures in the list and the side panel; no picture means a grey box with their first letter (bye, red box)
-- New option: Options > Appearance > Show avatars in friends list (on by default)
-- This session shows your friend's actual time in game, and the old "Playing for" clock is gone
-- My Profile at the bottom opens your profile on the website
-
-### Detection
-- Every game uses the folder hints from the Fraglink game list, not just WoW
-- Detect Games uses the latest game list from the server, so new or fixed games don't need an app update
-
-### Connection
-- Fraglink only talks to the server over a secure connection (HTTPS); the old plain-HTTP backup address is gone, for sign-in, sync, friends and updates
-- When it can't connect, the friends list says so plainly and keeps retrying on its own
-
-### Stability
-- The app no longer crashes on a few rare errors (startup, crash recovery, a bad server retry time, update progress); it writes them to the log and carries on
-- Names and text with an apostrophe (') show correctly everywhere in the app
-- WoW: after a WoW crash, the session it cut short is no longer counted twice (already live on the server)
+- New: Real friend pics in the friends list and side panel (Flat Navy, Flat Grey)
+- New: Avatar toggle in Options > Appearance (on by default)
+- New: My Profile button opens your profile on the website
+- New: Detect Games uses the server game list, no app update needed for new games
+- Change: Folder hints from the game list now used for every game, not just WoW
+- Change: This session shows real time in game, "Playing for" clock removed
+- Change: https only, with a "can't connect, retrying" message
+- Bug: Red box instead of a friend's avatar
+- Bug: This session stuck on 0m
+- Bug: Rare crashes, now logged instead
+- Bug: Apostrophes in names showing wrong
 
 ## [0.3.0-beta.9.1] - 2026-10-27
 
