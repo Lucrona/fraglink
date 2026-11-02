@@ -225,13 +225,7 @@ html.theme-flat-navy .fl-flash{background:#0e1a2f}
 html.theme-flat-navy body.skin-dark .xf-dropdown{background:#0e1a2f}
 html.theme-flat-navy body.skin-dark .xf-dropdown button:disabled{color:#4e6ca1}
 html.theme-flat-navy body.skin-dark .xf-dropdown hr{border-top:1px solid #1d3763}
-html.theme-flat-navy .fav-av{border:1px solid #1a315a;background:#213f72}
-html.theme-flat-navy .fav-av.c0{background:#213f72}
-html.theme-flat-navy .fav-av.c1{background:#213f73}
-html.theme-flat-navy .fav-av.c2{background:#213f73}
-html.theme-flat-navy .fav-av.c3{background:#324669}
-html.theme-flat-navy .fav-av.up{background:#0f1c32}
-html.theme-flat-navy .fav-av.p{background:#0b1526}
+html.theme-flat-navy .fav-av{border:1px solid #1a315a}
 html.theme-flat-navy body.skin-dark .nick-dlg input{background:#091221;border:1px solid #1d3866}
 html.theme-flat-navy .fl-tip .tip-who span{color:#6d88b8}
 html.theme-flat-navy body.skin-dark .fl-news{background:#192f55}
@@ -519,13 +513,7 @@ html.theme-flat-grey .fl-flash{background:#28292c}
 html.theme-flat-grey body.skin-dark .xf-dropdown{background:#28292c}
 html.theme-flat-grey body.skin-dark .xf-dropdown button:disabled{color:#78797c}
 html.theme-flat-grey body.skin-dark .xf-dropdown hr{border-top:1px solid #4b4c4f}
-html.theme-flat-grey .fav-av{border:1px solid #454649;background:#555659}
-html.theme-flat-grey .fav-av.c0{background:#555659}
-html.theme-flat-grey .fav-av.c1{background:#555659}
-html.theme-flat-grey .fav-av.c2{background:#555659}
-html.theme-flat-grey .fav-av.c3{background:#4e4f52}
-html.theme-flat-grey .fav-av.up{background:#2a2b2e}
-html.theme-flat-grey .fav-av.p{background:#212225}
+html.theme-flat-grey .fav-av{border:1px solid #454649}
 html.theme-flat-grey body.skin-dark .nick-dlg input{background:#1e1f22;border:1px solid #4c4d50}
 html.theme-flat-grey .fl-tip .tip-who span{color:#929396}
 html.theme-flat-grey body.skin-dark .fl-news{background:#414245}
@@ -824,8 +812,6 @@ html[class*=theme-flat] body.dark ::-webkit-scrollbar { background: transparent;
 html[class*=theme-flat] body.dark ::-webkit-scrollbar-thumb { background: var(--f3); border: 0; border-radius: 4px; }
 html[class*=theme-flat] .af-b.primary { background: var(--facc, #2f63c4); color: #fff; }
 
-/* Side panel picture: real avatar when set; with none, a neutral initial on the theme surface (never a fixed colour) */
-html[class*=theme-flat] body.skin-dark .sf-av.fav-av:not(.up):not(.p) { background: var(--f3); color: var(--ftx); }
-html[class*=theme-flat] body.skin-dark .sf-av.fav-av:not(.up):not(.p) img.mk { display: none; }
-html[class*=theme-flat] body.skin-dark .sf-av.fav-av:not(.up):not(.p) .ini { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; font-weight: 700; font-family: var(--flat-font); }
-html[class*=theme-flat] body.skin-dark .sf-av.fav-av.p { display: flex; align-items: center; justify-content: center; }
+/* Side panel picture: drawn exactly as on the website (dark.css .fav-av palette, preset glyph, default mark) */
+html[class*=theme-flat] body.skin-dark .sf-av.fav-av:not(.up) { display: flex; align-items: center; justify-content: center; }
+html[class*=theme-flat] body.skin-dark .side-scroll .sf-av.fav-av.p, html[class*=theme-flat] body.skin-dark .side-float .sf-av.fav-av.p { font-size: 33px !important; } /* 72px tile, glyph at 46% like the website */

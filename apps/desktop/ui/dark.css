@@ -494,10 +494,10 @@ body.skin-dark .xf-dropdown u { text-decoration-color: currentColor; }
 .xf-dropdown .has-sub.force > .sub { display: block; }
 body.skin-dark .xf-dropdown .has-sub.force { background: var(--dk-blue2, #1f4f9e); color: #fff; }
 /* dev.19: profile pictures (same colours as the website) */
-.fav-av { display: inline-flex; align-items: center; justify-content: center; flex: none; box-sizing: border-box; overflow: hidden; border: 1px solid #303844; border-radius: 3px; background: #2d4a66; color: #d8e0e8cc; font-style: normal; line-height: 1; }
+.fav-av { display: inline-flex; align-items: center; justify-content: center; flex: none; box-sizing: border-box; overflow: hidden; border: 1px solid #303844; border-radius: 4px; background: #2d4a66; color: #d8e0e8cc; font-style: normal; line-height: 1; }
 .fav-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .fav-av .ini { display: none; font-style: normal; }
-.fav-av img.mk { width: 58%; height: auto; object-fit: contain; opacity: .85; }
+.fav-av img.mk { width: 58% !important; height: auto !important; object-fit: contain; } /* as the website */
 .fav-av.c0 { background: #2d4a66; } .fav-av.c1 { background: #3f5a3a; } .fav-av.c2 { background: #5a3f3a; } .fav-av.c3 { background: #4a3d5e; } .fav-av.c4 { background: #5e5234; } .fav-av.c5 { background: #2f5458; }
 .fav-av.up { background: #1b1f26; } /* uploaded pictures keep transparency; dark backdrop */
 .fav-av.p { background-image: linear-gradient(135deg, transparent, #14181d); }

@@ -15,7 +15,7 @@
     const c = (p.avatar_color || 0) % 6, k = cls || '';
     if (p.avatar && /^data:image\/(webp|png|jpeg|svg\+xml)[;,]/.test(p.avatar)) return `<i class="av fav c${c} ${k}"><img src="${p.avatar}" alt=""></i>`;
     if (p.avatar_preset != null) return `<i class="av fav p c${p.avatar_preset % 6} ${k}">${GLYPHS[p.avatar_preset % 12]}</i>`;
-    return `<i class="av fav c${c} ${k}"><img class="mk" src="brand/v28-mark.svg" alt=""></i>`;
+    return `<i class="av fav c${c} ${k}"><img class="mk" src="brand/av-mark.svg" alt=""></i>`;
   }
   function close() { if (T) T.window.getCurrentWindow().close(); else el.hidden = true; }
   function show(p) {

@@ -138,7 +138,7 @@ body.toast-page.skin-dark .toast-body .gi, body.toast-page.skin-dark .toast-body
 /* dev.19: friend pictures in pop-ups (website colours); playing: game icon + small picture */
 body.toast-page .toast-body .av.fav { display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #2d4a66; border: 1px solid #303844; border-radius: 4px; color: #d8e0e8cc; font: 15px/1 sans-serif; text-shadow: none; }
 body.toast-page .toast-body .av.fav img { width: 100%; height: 100%; object-fit: cover; display: block; }
-body.toast-page .toast-body .av.fav img.mk { width: 58%; height: auto; opacity: .85; }
+body.toast-page .toast-body .av.fav img.mk { width: 58%; height: auto; object-fit: contain; }
 body.toast-page .toast-body .av.c0 { background-color: #2d4a66; } body.toast-page .toast-body .av.c1 { background-color: #3f5a3a; } body.toast-page .toast-body .av.c2 { background-color: #5a3f3a; }
 body.toast-page .toast-body .av.c3 { background-color: #4a3d5e; } body.toast-page .toast-body .av.c4 { background-color: #5e5234; } body.toast-page .toast-body .av.c5 { background-color: #2f5458; }
 body.toast-page .toast-body .av.p { background-image: linear-gradient(135deg, transparent, #14181d); }

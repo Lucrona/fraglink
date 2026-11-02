@@ -700,18 +700,15 @@
     const a = (cls === 'me-av-i' || showAvatars()) && f.avatar || {}, c = avColor(f), st = `width:${size}px;height:${size}px`;
     if (a.kind === 'upload') { const src = avImg(size > 32 ? a.url_64 : a.url_32); if (src) return `<i class="fav-av up ${cls}" style="${st}"><img src="${src}" alt=""></i>`; }
     if (a.kind === 'preset') return `<i class="fav-av ${cls} p c${a.preset % 6}" style="${st};font-size:${Math.round(size * .46)}px">${AV_GLYPHS[a.preset % 12]}</i>`;
-    // no picture: the Fraglink mark (classic); flat themes show a neutral initial instead (.ini)
-    const ini = esc(String(f.name || f.handle || '?').charAt(0).toUpperCase());
-    return `<i class="fav-av ${cls} c${c}" style="${st}"><img class="mk" src="brand/v28-mark.svg" alt=""><b class="ini" style="font-size:${Math.round(size * .4)}px">${ini}</b></i>`;
+    // no picture (or an upload still loading): the website's default, its Fraglink mark on the account's colour
+    return `<i class="fav-av ${cls} c${c}" style="${st}"><img class="mk" src="brand/av-mark.svg" alt=""></i>`;
   }
-  // Friends list picture (flat themes): an uploaded picture once it has loaded, or a preset
-  // tile; '' otherwise, so the row keeps its neutral letter box.
+  // Friends list picture (flat themes): exactly what the website shows (upload, preset tile
+  // or the default mark on the account's colour); '' when avatars are switched off, so the
+  // row keeps its neutral letter box.
   function rowAvatar(f) {
     if (!showAvatars()) return '';
-    const a = f.avatar || {};
-    if (a.kind === 'upload' && avImg(a.url_32)) return avatarHtml(f, 28, 'row-av');
-    if (a.kind === 'preset') return avatarHtml(f, 28, 'row-av');
-    return '';
+    return avatarHtml(f, 28, 'row-av');
   }
   function friendStatus(f) {
     const playing = f.kind === 'playing' || f.kind === 'fof';
