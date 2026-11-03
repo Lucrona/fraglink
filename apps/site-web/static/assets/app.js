@@ -819,7 +819,7 @@ pages.home = async () => {
   const gname = (id, n) => isUnlisted(id) ? "a game" : esc(n);
   // ---- crumb + community counters (Admin > Site settings: C1 header counters, C4 bar, off)
   const dg = (n, c) => `<span class="d${c ? " " + c : ""}">${nf.format(n).split("").map(ch => /\d/.test(ch) ? `<i>${ch}</i>` : `<i class="c">${esc(ch)}</i>`).join("")}</span>`;
-  const cs = h.counts_style || "c1";
+  const cs = h.counts_style || "off";
   let top = `<div class="crumb"><div class="wrap"><span>You are here: <a href="/">Home</a> » ${u ? "Your Fraglink" : "Welcome to Fraglink"}</span><span class="sp"></span>${cs === "c1" ? `<span class="odo"><span class="l">Registered<br>players</span>${dg(s.registered)}<span class="l">Online<br>now</span>${dg(s.online, "g")}</span>` : ""}</div></div>`;
   if (cs === "c4") top = `<div class="hbar"><div class="wrap"><span>⚡ <b>${nf.format(s.registered)}</b> registered player${s.registered === 1 ? "" : "s"}</span><span class="on">● <b>${nf.format(s.online)}</b> online now</span><span>🎮 <b>${nf.format(s.in_game)}</b> in game</span></div></div>` + top;
   $("#f2-top").innerHTML = top;

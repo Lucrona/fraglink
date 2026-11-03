@@ -18,7 +18,8 @@
 //! | `home_stats`      | on      | the stats strip at the bottom of the home page is hidden    |
 //!
 //! One choice setting, kept in `site_settings.value`: `home_counts` (`c1` odometer in the
-//! header, `c2` Community stats panel, `c4` stats bar under the tabs, `off`), default `c1`.
+//! header, `c2` Community stats panel, `c4` stats bar under the tabs, `off`), default `off`
+//! (no user counts at launch).
 
 use crate::error::{ApiResult, AppError};
 use crate::AppState;
@@ -165,7 +166,8 @@ pub fn valid_home_counts(v: &str) -> bool {
     HOME_COUNTS.iter().any(|c| c.0 == v)
 }
 
-/// The home page user-count style (`c1`, `c2`, `c4` or `off`). Errors or bad values give `c1`.
+/// The home page user-count style (`c1`, `c2`, `c4` or `off`). Unset, errors or bad values give
+/// `off`: no registered/online counts at launch unless staff turn them on.
 pub async fn home_counts(st: &AppState) -> String {
     let v: Option<(Option<String>,)> =
         sqlx::query_as("SELECT value FROM site_settings WHERE key = $1")
@@ -175,7 +177,7 @@ pub async fn home_counts(st: &AppState) -> String {
             .unwrap_or(None);
     match v.and_then(|r| r.0) {
         Some(s) if valid_home_counts(&s) => s,
-        _ => "c1".into(),
+        _ => "off".into(),
     }
 }
 
