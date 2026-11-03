@@ -1347,6 +1347,8 @@ async fn friend_respond(
 #[derive(Deserialize)]
 struct TzQuery {
     tz: Option<String>,
+    /// `session`: one row per finished session (home page) instead of per game per day.
+    per: Option<String>,
 }
 
 async fn friends_activity(
@@ -1356,7 +1358,11 @@ async fn friends_activity(
 ) -> ApiResult<Json<Value>> {
     st.rate_limit(format!("activity:{}", a.user.id), 120, 10 * MINUTE)?;
     let tz = crate::activity::tz_or_default(&st, q.tz.as_deref()).await;
-    let items = crate::activity::recent(&st, a.user.id, &tz).await?;
+    let items = if q.per.as_deref() == Some("session") {
+        crate::activity::recent_sessions(&st, a.user.id, &tz).await?
+    } else {
+        crate::activity::recent(&st, a.user.id, &tz).await?
+    };
     Ok(Json(
         json!({ "items": items, "days": crate::activity::ACTIVITY_DAYS }),
     ))
@@ -1545,6 +1551,8 @@ async fn friends_page(
         })
     });
     let online = fr.iter().filter(|f| rank(f) < 3).count();
+    let by = |r: i32| fr.iter().filter(|f| rank(f) == r).count();
+    let breakdown = json!({ "playing": by(0), "online": by(1), "away": by(2) });
     let all = fr.len();
     let items: Vec<Value> = fr
         .into_iter()
@@ -1564,7 +1572,7 @@ async fn friends_page(
     );
     let cap = |v: &Vec<friends::RequestView>| json!(v.iter().take(100).collect::<Vec<_>>());
     Ok(Json(json!({
-        "friends": page, "total": total, "all": all, "online": online, "offset": pq.offset(),
+        "friends": page, "total": total, "all": all, "online": online, "breakdown": breakdown, "offset": pq.offset(),
         "incoming": cap(&fl.incoming), "incoming_count": fl.incoming.len(),
         "outgoing": cap(&fl.outgoing), "outgoing_count": fl.outgoing.len(),
         "blocked": fl.blocked.iter().take(100).collect::<Vec<_>>(), "blocked_count": fl.blocked.len(),

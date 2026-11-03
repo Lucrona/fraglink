@@ -23,6 +23,7 @@ use uuid::Uuid;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/home", get(home))
+        .route("/api/v1/home/week", get(home_week))
         .route("/api/v1/art/{file}", get(art))
         .route("/api/v1/sig/{file}", get(crate::sig::serve))
 }
@@ -67,6 +68,140 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
             Some((Instant::now(), v.clone()));
     }
     Ok(Json(v))
+}
+
+#[derive(serde::Deserialize)]
+struct WeekQuery {
+    tz: Option<String>,
+}
+
+/// Signed-in home "this week" block: headline hours, daily bars, per-game totals and the
+/// friends leaderboard, all from [`crate::week`] (see there for the definition).
+async fn home_week(
+    State(st): State<AppState>,
+    a: crate::auth::AuthUser,
+    axum::extract::Query(q): axum::extract::Query<WeekQuery>,
+) -> ApiResult<Json<Value>> {
+    st.rate_limit(
+        format!("homeweek:{}", a.user.id),
+        120,
+        Duration::from_secs(600),
+    )?;
+    let tz = crate::activity::tz_or_default(&st, q.tz.as_deref()).await;
+    Ok(Json(
+        week_json(&st, a.user.id, &tz, chrono::Utc::now()).await?,
+    ))
+}
+
+fn hm(min: i64) -> String {
+    format!("{}h {:02}m", min / 60, min % 60)
+}
+
+/// The week block for `me` at `now` (public so tests can pin the clock).
+pub async fn week_json(
+    st: &AppState,
+    me: Uuid,
+    tz_name: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> ApiResult<Value> {
+    use crate::week;
+    let tz = week::parse_tz(tz_name);
+    let w = week::window(tz, now);
+    let friend_ids = friends::public_friend_ids(st, me).await?;
+    // leaderboard: you, plus friends whose games are visible to friends
+    let shown: Vec<(Uuid, String, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT u.id, u.handle, u.display_name FROM users u
+         WHERE (u.id = $1 OR (u.id = ANY($2) AND {}))
+           AND u.deleted_at IS NULL AND u.banned_at IS NULL",
+        crate::account::sql_shows("games")
+    )))
+    .bind(me)
+    .bind(&friend_ids)
+    .fetch_all(&st.db)
+    .await?;
+    let ids: Vec<Uuid> = shown.iter().map(|r| r.0).collect();
+    let data = week::load(st, w.clone(), &ids, Some(me)).await?;
+    let mine = data.user(me);
+    let secs = mine.seconds();
+    let total_t = week::tenths(secs);
+    let total_m = (secs + 30) / 60;
+    let day_s = mine.days();
+    let day_t = week::apportion(total_t, &day_s);
+    let day_m = week::apportion(total_m, &day_s);
+    let days: Vec<Value> = (0..week::DAYS)
+        .map(|i| {
+            let d = w.dates[i];
+            json!({
+                "date": d.to_string(),
+                "dow": d.format("%a").to_string(),
+                "label": d.format("%a %-d %b").to_string(),
+                "today": i == week::DAYS - 1,
+                "seconds": day_s[i],
+                "tenths": day_t[i],
+                "minutes": day_m[i],
+                "hm": hm(day_m[i]),
+            })
+        })
+        .collect();
+    let mut games: Vec<(&String, &week::GameWeek)> = mine.games.iter().collect();
+    games.sort_by(|a, b| b.1.last_played.cmp(&a.1.last_played).then(a.0.cmp(b.0)));
+    let gsecs: Vec<i64> = games.iter().map(|g| g.1.seconds).collect();
+    let g_t = week::apportion(total_t, &gsecs);
+    let gids: Vec<String> = games.iter().map(|g| g.0.clone()).collect();
+    let named = names::public_names(st, &gids).await?;
+    let own = presence::own_names_for(st, me, &gids).await?;
+    let apps = appids(st, &gids).await?;
+    let name_of = |id: &str| {
+        named
+            .get(id)
+            .or_else(|| own.get(id))
+            .cloned()
+            .unwrap_or_else(|| names::UNLISTED_TITLE.to_string())
+    };
+    let games_json: Vec<Value> = games
+        .iter()
+        .enumerate()
+        .map(|(i, (id, g))| {
+            json!({
+                "game_id": id, "name": name_of(id), "steam_appid": apps.get(*id),
+                "seconds": g.seconds, "tenths": g_t[i], "last_played_at": g.last_played,
+            })
+        })
+        .collect();
+    let top = games
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1 .1.seconds.cmp(&b.1 .1.seconds).then(b.0.cmp(&a.0)))
+        .map(|(i, (id, g))| json!({ "game_id": id, "name": name_of(id), "seconds": g.seconds, "tenths": g_t[i] }));
+    let mut board: Vec<Value> = Vec::new();
+    for (id, handle, name) in &shown {
+        let s = data.user(*id).seconds();
+        if *id != me && s <= 0 {
+            continue;
+        }
+        let t = if *id == me { total_t } else { week::tenths(s) };
+        board.push(json!({ "handle": handle, "display_name": name, "me": *id == me, "seconds": s, "tenths": t }));
+    }
+    board.sort_by(|a, b| {
+        b["seconds"]
+            .as_i64()
+            .cmp(&a["seconds"].as_i64())
+            .then(a["display_name"].as_str().cmp(&b["display_name"].as_str()))
+    });
+    let first = w.dates[0];
+    let last = w.dates[week::DAYS - 1];
+    Ok(json!({
+        "tz": tz.name(),
+        "start": chrono::DateTime::from_timestamp(w.bounds[0], 0),
+        "end": chrono::DateTime::from_timestamp(w.bounds[week::DAYS], 0),
+        "label": format!("{} – {}", first.format("%a %-d %b"), last.format("%a %-d %b")),
+        "seconds": secs, "tenths": total_t, "minutes": total_m,
+        "days": days,
+        "games": games_json,
+        "top_game": top,
+        "board": board,
+        "friends": friend_ids.len(),
+    }))
 }
 
 const LIVE_USER: &str =

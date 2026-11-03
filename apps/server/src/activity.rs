@@ -31,6 +31,9 @@ pub struct ActivityItem {
     /// For "played": how many sessions were added up.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sessions: Option<i64>,
+    /// Per-session mode: when that session started.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<DateTime<Utc>>,
 }
 
 /// Time zone used to split days when the caller doesn't send one.
@@ -79,6 +82,23 @@ type SessRow = (
 /// Friends' activity: who's playing now, then one line per friend per game per day with
 /// the day's total (`tz` splits days; IANA name).
 pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<ActivityItem>> {
+    recent_mode(st, me, tz, false).await
+}
+
+/// Home page feed: games friends are playing now plus one row per finished session
+/// (`duration_s` = that session's played time). A finished row that is the same session
+/// as a live one (same friend and game, started within a minute) is left out, and a
+/// session stored twice shows once.
+pub async fn recent_sessions(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<ActivityItem>> {
+    recent_mode(st, me, tz, true).await
+}
+
+async fn recent_mode(
+    st: &AppState,
+    me: Uuid,
+    tz: &str,
+    per_session: bool,
+) -> ApiResult<Vec<ActivityItem>> {
     let ids = friends::public_friend_ids(st, me).await?;
     if ids.is_empty() {
         return Ok(vec![]);
@@ -104,11 +124,80 @@ pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<Activity
                     duration_s: None,
                     day: None,
                     sessions: None,
+                    started_at: Some(started),
                 });
             }
         }
     }
     let since = Utc::now() - Duration::days(ACTIVITY_DAYS);
+    if per_session {
+        type One = (
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            DateTime<Utc>,
+            i32,
+            String,
+            Option<String>,
+        );
+        let rows: Vec<One> = sqlx::query_as(
+            "SELECT * FROM (
+               SELECT DISTINCT ON (s.user_id, s.game_id, date_trunc('second', s.started_at))
+                      u.handle, u.display_name, s.game_id, s.started_at, s.ended_at, s.duration_s,
+                      (s.ended_at AT TIME ZONE $4)::date::text AS day,
+                      (SELECT o.name FROM own_game_names o WHERE o.user_id = u.id AND o.game_id = s.game_id)
+               FROM sessions s JOIN users u ON u.id = s.user_id
+               WHERE s.user_id = ANY($1) AND u.share_activity AND u.deleted_at IS NULL
+                 AND s.ended_at >= $2 AND s.duration_s >= 60
+                 AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
+               ORDER BY s.user_id, s.game_id, date_trunc('second', s.started_at), s.ended_at DESC
+             ) x ORDER BY x.ended_at DESC LIMIT $3",
+        )
+        .bind(&ids)
+        .bind(since)
+        .bind(ACTIVITY_LIMIT)
+        .bind(tz)
+        .fetch_all(&st.db)
+        .await?;
+        let gids: Vec<String> = rows.iter().map(|r| r.2.clone()).collect();
+        let names = crate::names::public_names(st, &gids).await?;
+        let live: Vec<(String, Option<String>, DateTime<Utc>)> = out
+            .iter()
+            .map(|i| (i.handle.clone(), i.game_id.clone(), i.at))
+            .collect();
+        for (handle, name, g, started, ended, secs, day, own) in rows {
+            let (gid, gname) = if !names.contains_key(&g) && own.is_some() {
+                (g, own)
+            } else {
+                let (i, n) = crate::names::public_pair(&g, &names);
+                (i, Some(n))
+            };
+            let dup = live.iter().any(|(h, lg, at)| {
+                *h == handle
+                    && lg.as_deref() == Some(gid.as_str())
+                    && (*at - started).num_seconds().abs() <= 60
+            });
+            if dup {
+                continue;
+            }
+            out.push(ActivityItem {
+                kind: "played",
+                handle,
+                display_name: name,
+                game_id: Some(gid),
+                game_name: gname,
+                at: ended,
+                duration_s: Some(secs as i64),
+                day: Some(day),
+                sessions: Some(1),
+                started_at: Some(started),
+            });
+        }
+        out.sort_by_key(|x| std::cmp::Reverse(x.at));
+        out.truncate(ACTIVITY_LIMIT as usize);
+        return Ok(out);
+    }
     let rows: Vec<SessRow> = sqlx::query_as(
         "SELECT u.handle, u.display_name, s.game_id, (s.ended_at AT TIME ZONE $4)::date::text AS day,
                 max(s.ended_at), sum(s.duration_s)::bigint, count(*),
@@ -148,6 +237,7 @@ pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<Activity
             duration_s: Some(secs),
             day: Some(day),
             sessions: Some(n),
+            started_at: None,
         });
     }
     out.sort_by_key(|x| std::cmp::Reverse(x.at));
