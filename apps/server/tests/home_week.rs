@@ -460,3 +460,102 @@ async fn activity_per_session_has_live_and_finished_rows_once(pool: PgPool) {
         "{v}"
     );
 }
+
+/// Profile "Past 7 days" is the same calculation as the home headline (tracked hours only,
+/// same window and timezone); lifetime totals still include imported hours. The All time
+/// leaderboard shows each person's Profile total.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn profile_week_matches_home_headline(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let a = signup(&app, "a@example.com", "alice").await;
+    let b = signup(&app, "b@example.com", "bob").await;
+    befriend(&app, &a, &b, "bob", "alice").await;
+    sqlx::query("INSERT INTO games (id, name) VALUES ('wow', 'World of Warcraft'), ('cs2', 'Counter-Strike 2'), ('quake', 'Quake')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for (h, g, s, e, secs) in [
+        ("alice", "wow", "26 hours", "25 hours", 3517),
+        ("alice", "cs2", "50 hours", "49 hours", 2000),
+        ("alice", "quake", "3 hours", "1 hours", 4321),
+        ("alice", "wow", "20 days", "19 days", 3600), // outside the week
+        ("bob", "wow", "5 hours", "4 hours", 3600),
+    ] {
+        sqlx::query(
+            "INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s)
+             SELECT gen_random_uuid(), id, $2, now() - $3::interval, now() - $4::interval, $5 FROM users WHERE handle = $1",
+        )
+        .bind(h)
+        .bind(g)
+        .bind(s)
+        .bind(e)
+        .bind(secs)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    // imported Steam playtime: in the lifetime total, never in the week
+    sqlx::query("INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at) SELECT id, 730, 'cs2', 600, 300, now() FROM users WHERE handle = 'alice'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for tz in ["Australia/Sydney", "UTC", "America/Los_Angeles"] {
+        let w = api(
+            &app,
+            "GET",
+            &format!("/api/v1/home/week?tz={tz}"),
+            Some(&a),
+            None,
+        )
+        .await
+        .json();
+        assert_consistent(&w);
+        let p = api(
+            &app,
+            "GET",
+            &format!("/api/v1/users/alice/profile?tz={tz}"),
+            Some(&a),
+            None,
+        )
+        .await
+        .json();
+        let o = &p["overall"];
+        println!(
+            "{tz}: home {} s / {} t, profile {o}",
+            w["seconds"], w["tenths"]
+        );
+        assert_eq!(n(&o["tenths_7d"]), n(&w["tenths"]), "{tz}: {o} vs {w}");
+        assert_eq!(n(&o["minutes_7d"]), n(&w["minutes"]), "{tz}");
+        assert_eq!(o["week_label"], w["label"], "{tz}");
+        let games = p["games"].as_array().unwrap();
+        let gt: i64 = games.iter().map(|g| n(&g["tenths_7d"])).sum();
+        let gm: i64 = games.iter().map(|g| n(&g["minutes_7d"])).sum();
+        assert_eq!(gt, n(&o["tenths_7d"]), "{tz}: per game tenths");
+        assert_eq!(gm, n(&o["minutes_7d"]), "{tz}: per game minutes");
+        // tracked 3517+2000+4321+3600 s plus 600 imported minutes on cs2 (more than tracked)
+        assert!(n(&o["total_min"]) >= 600 + 59 + 72, "{o}");
+        assert!(n(&o["minutes_7d"]) < 600, "imports never in the week: {o}");
+        // All time: each row is that person's Profile total
+        for r in w["board_all"].as_array().unwrap() {
+            let h = r["handle"].as_str().unwrap();
+            let pp = api(
+                &app,
+                "GET",
+                &format!("/api/v1/users/{h}/profile"),
+                Some(&a),
+                None,
+            )
+            .await
+            .json();
+            assert_eq!(
+                n(&r["minutes"]),
+                n(&pp["overall"]["total_min"]),
+                "{h} all time"
+            );
+        }
+        assert_eq!(w["board_all"][0]["handle"], "alice");
+        assert_eq!(w["board_all"].as_array().unwrap().len(), 2);
+    }
+    let _ = b;
+}

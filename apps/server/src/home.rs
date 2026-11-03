@@ -70,9 +70,9 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
     Ok(Json(v))
 }
 
-#[derive(serde::Deserialize)]
-struct WeekQuery {
-    tz: Option<String>,
+#[derive(serde::Deserialize, Default)]
+pub struct WeekQuery {
+    pub tz: Option<String>,
 }
 
 /// Signed-in home "this week" block: headline hours, daily bars, per-game totals and the
@@ -188,6 +188,34 @@ pub async fn week_json(
             .cmp(&a["seconds"].as_i64())
             .then(a["display_name"].as_str().cmp(&b["display_name"].as_str()))
     });
+    // All time: each person's lifetime total exactly as their Profile shows it to you
+    // (tracked + imported, games they hide from others left out; your own hidden games count).
+    let all_rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT g.user_id, coalesce(sum(g.display_min), 0)::bigint FROM user_game_stats g
+         WHERE g.user_id = ANY($1)
+           AND (g.user_id = $2 OR NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = g.user_id AND h.game_id = g.game_id))
+         GROUP BY g.user_id",
+    )
+    .bind(&ids)
+    .bind(me)
+    .fetch_all(&st.db)
+    .await?;
+    let all_min: std::collections::HashMap<Uuid, i64> = all_rows.into_iter().collect();
+    let mut board_all: Vec<Value> = Vec::new();
+    for (id, handle, name) in &shown {
+        let m = all_min.get(id).copied().unwrap_or(0);
+        if *id != me && m <= 0 {
+            continue;
+        }
+        board_all
+            .push(json!({ "handle": handle, "display_name": name, "me": *id == me, "minutes": m }));
+    }
+    board_all.sort_by(|a, b| {
+        b["minutes"]
+            .as_i64()
+            .cmp(&a["minutes"].as_i64())
+            .then(a["display_name"].as_str().cmp(&b["display_name"].as_str()))
+    });
     let first = w.dates[0];
     let last = w.dates[week::DAYS - 1];
     Ok(json!({
@@ -200,6 +228,7 @@ pub async fn week_json(
         "games": games_json,
         "top_game": top,
         "board": board,
+        "board_all": board_all,
         "friends": friend_ids.len(),
     }))
 }

@@ -868,13 +868,21 @@ pages.home = async () => {
         : `<div class="in empty">${fl.all ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</div>`, ` <a class="more" href="/friends">All friends »</a>`, "o1 fr42"); }
     // Friends leaderboard: same week as above; your row is your "Hours this week".
     let lbP = "";
-    if (wk && wk.board.some(r => !r.me)) { const b = wk.board, mi = b.findIndex(r => r.me);
-      let rows = b.slice(0, 6).map((r, i) => [r, i]); if (mi >= 6) rows = rows.slice(0, 5).concat([[b[mi], mi]]);
-      lbP = panel(`Friends leaderboard <span class="tabs"><a class="on" role="tab" aria-selected="true">This week</a></span>`, `<table class="t2"><tbody data-p="week" class="on">${rows.map(([r, i]) => `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="/u/${encodeURIComponent(r.handle)}">${r.me ? "You" : nm(r)}</a></td><td class="n">${h1(r.tenths)}</td></tr>`).join("")}</tbody></table>
-        <div class="per on" data-p="week">Hours this week, ${esc(wk.label)}</div>`, "", "o4 lb42"); }
+    const ba = (wk && wk.board_all) || [];
+    if (wk && (wk.board.some(r => !r.me) || ba.some(r => !r.me))) {
+      const top6 = b => { const mi = b.findIndex(r => r.me); let rows = b.slice(0, 6).map((r, i) => [r, i]); if (mi >= 6) rows = rows.slice(0, 5).concat([[b[mi], mi]]); return rows; };
+      const trs = (b, f) => top6(b).map(([r, i]) => `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="/u/${encodeURIComponent(r.handle)}">${r.me ? "You" : nm(r)}</a></td><td class="n">${f(r)}</td></tr>`).join("");
+      const allH = r => r.minutes > 0 && r.minutes < 60 ? "&lt;1 h" : nf.format(Math.round((r.minutes || 0) / 60)) + " h";
+      lbP = panel(`Friends leaderboard <span class="tabs"><a class="on" data-t="week" role="tab" tabindex="0" aria-selected="true">This week</a><a data-t="all" role="tab" tabindex="0" aria-selected="false">All time</a></span>`, `<table class="t2"><tbody data-p="week" class="on">${trs(wk.board, r => h1(r.tenths))}</tbody><tbody data-p="all">${trs(ba, allH)}</tbody></table>
+        <div class="per on" data-p="week">Hours this week, ${esc(wk.label)}</div><div class="per" data-p="all">Total hours, as shown on each profile</div>`, "", "o4 lb42"); }
     inner += `<div class="hub"><div>${rgP}${actP}</div><div>${frP}${lbP}</div></div>`;
     $("#h42-in").innerHTML = inner;
     const wkEl = $("#wk42"); if (wkEl) wkTips(wkEl);
+    const lb = $("#h42-in .lb42");
+    if (lb) $$(".tabs a", lb).forEach(a => { const go = e => { e.preventDefault(); const t = a.dataset.t;
+      $$(".tabs a", lb).forEach(x => { x.classList.toggle("on", x === a); x.setAttribute("aria-selected", x === a ? "true" : "false"); });
+      $$("[data-p]", lb).forEach(x => x.classList.toggle("on", x.dataset.p === t)); };
+      a.addEventListener("click", go); a.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") go(e); }); });
   }
   // ---- trending, how it works (signed out), news, poll + community
   const mp = h.most_played.slice(0, 4), m0 = (mp[0] && mp[0].minutes) || 1;
@@ -1088,7 +1096,7 @@ pages.profile = async () => {
   if (!handle) { location.replace(me() ? "/u/" + encodeURIComponent(me().handle) : "/login"); return; }
   document.title = handle + " · Fraglink";
   let p;
-  try { p = await api("/users/" + encodeURIComponent(handle) + "/profile?limit=" + GPAGE, { keepSession: true }); }
+  try { p = await api("/users/" + encodeURIComponent(handle) + "/profile?limit=" + GPAGE + "&tz=" + encodeURIComponent(TZ), { keepSession: true }); }
   catch (e) {
     if (e.status === 401) {
       root.innerHTML = `<div class="narrow panel"><h2>${esc(handle)}</h2><div class="body"><p>This profile is only visible to signed-in Fraglink players.</p><p><a class="btn" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in</a> <a class="btn dl" href="/signup">Create an account</a></p></div></div>`;
@@ -1157,7 +1165,7 @@ pages.profile = async () => {
       <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
   const sec = (title, body, right, cls, id) => `<section class="panel sx${cls ? " " + cls : ""}"${id ? ` id="${id}"` : ""}><h2><span class="tab">${title}</span>${right ? `<span class="rt">${right}</span>` : ""}</h2>${body}</section>`;
   const report = !self && token() ? `<div class="avlinks">${p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : ""}<a href="#" class="report flagit" data-report-profile>&#9873; Report this profile</a></div>` : "";
-  const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div><b>${hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}${self || Array.isArray(p.friends) ? `<a href="${self ? "/friends" : "#friends"}" class="kf"><b>${p.friend_count}</b><span>Friends</span></a>` : `<div><b>${p.friend_count}</b><span>Friends</span></div>`}</div>`;
+  const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div${p.overall.week_label ? ` title="Tracked hours, ${esc(p.overall.week_label)}"` : ""}><b>${p.overall.tenths_7d != null ? (p.overall.tenths_7d / 10).toFixed(1) : hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}${self || Array.isArray(p.friends) ? `<a href="${self ? "/friends" : "#friends"}" class="kf"><b>${p.friend_count}</b><span>Friends</span></a>` : `<div><b>${p.friend_count}</b><span>Friends</span></div>`}</div>`;
   const nick = p.display_name || p.handle, prevs = (p.previous_names || []).filter(n => n.toLowerCase() !== nick.toLowerCase() && n.toLowerCase() !== p.handle.toLowerCase());
   const head = `<section class="ph${bannerG ? "" : " noart"}"${bannerG ? ` style="background:${artBg(bannerG.game_id, bannerG.name)}"` : ""}><div class="inr">
       <div>${avatar(p.avatar, 184)}${report}</div>
@@ -1195,13 +1203,14 @@ pages.profile = async () => {
   } else if (!p.games || !p.games.length) {
     games = sec("Games", `<div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div>`);
   } else {
+    const w7 = x => x.tenths_7d != null ? (x.tenths_7d > 0 ? h1(x.tenths_7d) : "-") : hours(x.minutes_7d);
     const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" && g.tier !== "imported" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
-      <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
+      <td class="n">${w7(g)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const many = (p.games_total || p.games.length) > GPAGE;
     games = sec("Games", `
       <table class="gt" style="width:100%;border-collapse:collapse"><thead><tr>${[["name", "Game", ""], ["week", "Past 7 days", "n"], ["total", "Total", "n"], ["recent", "Last played", "n hide-sm"]].map(([k, l, c]) => `<th class="${c} srt${k === "total" ? " on" : ""}" data-gs="${k}" tabindex="0" role="button" aria-sort="${k === "total" ? "descending" : "none"}" title="Sort by ${l.toLowerCase()}">${l}<i>${k === "total" ? " ▾" : ""}</i></th>`).join("")}</tr></thead>
       <tbody data-gbody>${p.games.map(row).join("")}</tbody>
-      <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
+      <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${w7(p.overall)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
       <div data-gpager>${many ? pagerHtml(0, GPAGE, p.games_total) : ""}</div>`);
     gamesRow = row;
   }
@@ -1281,7 +1290,7 @@ pages.profile = async () => {
     // column starts in its natural one (Game A→Z, the numbers biggest first, Last played newest).
     const st = { offset: 0, sort: "total", dir: "desc" };
     const load = async keepPos => {
-      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: st.sort, dir: st.dir });
+      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: st.sort, dir: st.dir, tz: TZ });
       gbody.style.opacity = .5;
       try {
         const r = await api("/users/" + encodeURIComponent(p.handle) + "/profile?" + qs, { keepSession: true });

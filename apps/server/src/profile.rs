@@ -196,6 +196,7 @@ async fn profile(
     headers: HeaderMap,
     Path(handle): Path<String>,
     axum::extract::Query(pq): axum::extract::Query<crate::paging::PageQuery>,
+    axum::extract::Query(wq): axum::extract::Query<crate::home::WeekQuery>,
 ) -> ApiResult<Json<Value>> {
     let viewer = m.0.as_ref().map(|a| a.user.id);
     let games_only = pq.show.as_deref() == Some("games");
@@ -354,9 +355,42 @@ async fn profile(
     };
 
     let (mut games, mut recent) = (Vec::new(), Vec::new());
-    let (mut total_min, mut min_7d) = (0i64, 0i64);
+    let (mut total_min, mut min_7d, mut tenths_7d) = (0i64, 0i64, 0i64);
+    let mut week_label = None;
     if can_see_games {
         let rows = api::game_stats(&st, p.id).await?;
+        // "Past 7 days": tracked hours only, from crate::week (the viewer's timezone, same
+        // window and rounding as the home page), so your own profile always matches "Hours
+        // this week" there. Lifetime totals below still include imported hours.
+        let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+        let w = crate::week::window(crate::week::parse_tz(&tz), Utc::now());
+        let (first, last) = (w.dates[0], w.dates[crate::week::DAYS - 1]);
+        week_label = Some(format!(
+            "{} – {}",
+            first.format("%a %-d %b"),
+            last.format("%a %-d %b")
+        ));
+        let wk = crate::week::load(&st, w, &[p.id], is_self.then_some(p.id))
+            .await?
+            .user(p.id);
+        let mut wg: Vec<(String, i64)> = wk
+            .games
+            .iter()
+            .filter(|(g, _)| !hidden.contains(*g))
+            .map(|(g, x)| (g.clone(), x.seconds))
+            .collect();
+        wg.sort();
+        let wsecs: i64 = wg.iter().map(|g| g.1).sum();
+        min_7d = (wsecs + 30) / 60;
+        tenths_7d = crate::week::tenths(wsecs);
+        let parts: Vec<i64> = wg.iter().map(|g| g.1).collect();
+        let gm = crate::week::apportion(min_7d, &parts);
+        let gt = crate::week::apportion(tenths_7d, &parts);
+        let week_of: std::collections::HashMap<String, (i64, i64)> = wg
+            .iter()
+            .enumerate()
+            .map(|(i, g)| (g.0.clone(), (gm[i], gt[i])))
+            .collect();
         let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
         let named = names::public_names(&st, &ids).await?;
         let apps = crate::home::appids(&st, &ids).await?;
@@ -371,16 +405,17 @@ async fn profile(
                 continue;
             }
             total_min += g.display_min;
-            min_7d += g.minutes_7d;
+            let (g_min_7d, g_tenths_7d) = week_of.get(&g.game_id).copied().unwrap_or((0, 0));
             let listed = named.contains_key(&g.game_id);
-            if g.display_min == 0 && g.minutes_7d == 0 {
+            if g.display_min == 0 && g_min_7d == 0 {
                 continue;
             }
             games.push(json!({
                 "game_id": if listed || is_self || own.contains_key(&g.game_id) { g.game_id.clone() } else { names::UNLISTED_ID.to_string() },
                 "name": own.get(&g.game_id).cloned().unwrap_or(g.name),
                 "listed": listed,
-                "minutes_7d": g.minutes_7d,
+                "minutes_7d": g_min_7d,
+                "tenths_7d": g_tenths_7d,
                 "total_min": g.display_min,
                 "tier": g.display_tier,
                 "last_played_at": g.last_played_at,
@@ -586,7 +621,7 @@ async fn profile(
         "presence": presence,
         "games": games_page.0,
         "games_total": games_all,
-        "overall": { "total_min": total_min, "minutes_7d": min_7d },
+        "overall": { "total_min": total_min, "minutes_7d": min_7d, "tenths_7d": tenths_7d, "week_label": week_label },
         "recent": recent,
         "recent_days": RECENT_DAYS,
         "avatar": avatar,
