@@ -81,8 +81,8 @@ async fn tiers_and_rankings(pool: PgPool) {
     sqlx::query("INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at) VALUES($1, 730, 'cs2', 300, 0, now())")
         .bind(alice).execute(&pool).await.unwrap();
 
-    // Leaderboards count like profiles (Oct 2026): all time is display_min (largest of sessions,
-    // Steam and Imported); 7 days counts Imported only by how much the counter grew this week.
+    // All time counts like profiles: display_min (largest of sessions, Steam and Imported).
+    // 7 days is tracked play only (crate::week): imports and Steam never count in a week.
     let ranks = |period: &'static str| {
         let app = app.clone();
         let c = c.clone();
@@ -121,14 +121,14 @@ async fn tiers_and_rankings(pool: PgPool) {
         week,
         vec![("alice".to_string(), 120), ("bob".to_string(), 60)]
     );
-    // bob's counter was 599,700 three days ago: it grew 300 minutes this week, which beats his
-    // 60 minutes of sessions (the larger one counts, not both)
+    // bob's counter was 599,700 three days ago and grew 300 minutes since: still not this
+    // week's play (Nov 2026: imported hours never count in a 7-day figure)
     sqlx::query("INSERT INTO hours_entries (id, user_id, game_id, tier, source, minutes, created_at, captured_at) SELECT gen_random_uuid(), id, 'cs2', 'imported', 'manual', 599700, now() - interval '3 days', now() - interval '3 days' FROM users WHERE handle = 'bob'")
         .execute(&pool).await.unwrap();
     let week = ranks("7d").await;
     assert_eq!(
         week,
-        vec![("bob".to_string(), 300), ("alice".to_string(), 120)]
+        vec![("alice".to_string(), 120), ("bob".to_string(), 60)]
     );
     // turning Leaderboards off takes you off the board
     sqlx::query("UPDATE users SET privacy = privacy || '{\"leaderboards\": false}'::jsonb WHERE handle = 'bob'")

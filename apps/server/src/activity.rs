@@ -31,12 +31,16 @@ pub struct ActivityItem {
     /// For "played": how many sessions were added up.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sessions: Option<i64>,
+    /// Per-session mode: when that session started.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<DateTime<Utc>>,
 }
 
 /// Time zone used to split days when the caller doesn't send one.
 pub const DEFAULT_TZ: &str = "Australia/Sydney";
 
-/// A valid IANA zone name (checked against Postgres), else the default.
+/// A valid IANA zone name (checked against Postgres), else the default. This ignores saved
+/// zones: use [`crate::week::zone`] for anything shown to a person.
 pub async fn tz_or_default(st: &AppState, tz: Option<&str>) -> String {
     let Some(tz) = tz.filter(|t| t.len() <= 64) else {
         return DEFAULT_TZ.into();
@@ -79,6 +83,23 @@ type SessRow = (
 /// Friends' activity: who's playing now, then one line per friend per game per day with
 /// the day's total (`tz` splits days; IANA name).
 pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<ActivityItem>> {
+    recent_mode(st, me, tz, false).await
+}
+
+/// Home page feed: games friends are playing now plus one row per finished session
+/// (`duration_s` = that session's played time). A finished row that is the same session
+/// as a live one (same friend and game, started within a minute) is left out, and a
+/// session stored twice shows once.
+pub async fn recent_sessions(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<ActivityItem>> {
+    recent_mode(st, me, tz, true).await
+}
+
+async fn recent_mode(
+    st: &AppState,
+    me: Uuid,
+    tz: &str,
+    per_session: bool,
+) -> ApiResult<Vec<ActivityItem>> {
     let ids = friends::public_friend_ids(st, me).await?;
     if ids.is_empty() {
         return Ok(vec![]);
@@ -104,11 +125,80 @@ pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<Activity
                     duration_s: None,
                     day: None,
                     sessions: None,
+                    started_at: Some(started),
                 });
             }
         }
     }
     let since = Utc::now() - Duration::days(ACTIVITY_DAYS);
+    if per_session {
+        type One = (
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            DateTime<Utc>,
+            i32,
+            String,
+            Option<String>,
+        );
+        let rows: Vec<One> = sqlx::query_as(
+            "SELECT * FROM (
+               SELECT DISTINCT ON (s.user_id, s.game_id, date_trunc('second', s.started_at))
+                      u.handle, u.display_name, s.game_id, s.started_at, s.ended_at, s.duration_s,
+                      (s.ended_at AT TIME ZONE $4)::date::text AS day,
+                      (SELECT o.name FROM own_game_names o WHERE o.user_id = u.id AND o.game_id = s.game_id)
+               FROM sessions s JOIN users u ON u.id = s.user_id
+               WHERE s.user_id = ANY($1) AND u.share_activity AND u.deleted_at IS NULL
+                 AND s.ended_at >= $2 AND s.duration_s >= 60
+                 AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
+               ORDER BY s.user_id, s.game_id, date_trunc('second', s.started_at), s.ended_at DESC
+             ) x ORDER BY x.ended_at DESC LIMIT $3",
+        )
+        .bind(&ids)
+        .bind(since)
+        .bind(ACTIVITY_LIMIT)
+        .bind(tz)
+        .fetch_all(&st.db)
+        .await?;
+        let gids: Vec<String> = rows.iter().map(|r| r.2.clone()).collect();
+        let names = crate::names::public_names(st, &gids).await?;
+        let live: Vec<(String, Option<String>, DateTime<Utc>)> = out
+            .iter()
+            .map(|i| (i.handle.clone(), i.game_id.clone(), i.at))
+            .collect();
+        for (handle, name, g, started, ended, secs, day, own) in rows {
+            let (gid, gname) = if !names.contains_key(&g) && own.is_some() {
+                (g, own)
+            } else {
+                let (i, n) = crate::names::public_pair(&g, &names);
+                (i, Some(n))
+            };
+            let dup = live.iter().any(|(h, lg, at)| {
+                *h == handle
+                    && lg.as_deref() == Some(gid.as_str())
+                    && (*at - started).num_seconds().abs() <= 60
+            });
+            if dup {
+                continue;
+            }
+            out.push(ActivityItem {
+                kind: "played",
+                handle,
+                display_name: name,
+                game_id: Some(gid),
+                game_name: gname,
+                at: ended,
+                duration_s: Some(secs as i64),
+                day: Some(day),
+                sessions: Some(1),
+                started_at: Some(started),
+            });
+        }
+        out.sort_by_key(|x| std::cmp::Reverse(x.at));
+        out.truncate(ACTIVITY_LIMIT as usize);
+        return Ok(out);
+    }
     let rows: Vec<SessRow> = sqlx::query_as(
         "SELECT u.handle, u.display_name, s.game_id, (s.ended_at AT TIME ZONE $4)::date::text AS day,
                 max(s.ended_at), sum(s.duration_s)::bigint, count(*),
@@ -148,6 +238,7 @@ pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<Activity
             duration_s: Some(secs),
             day: Some(day),
             sessions: Some(n),
+            started_at: None,
         });
     }
     out.sort_by_key(|x| std::cmp::Reverse(x.at));
@@ -155,13 +246,11 @@ pub async fn recent(st: &AppState, me: Uuid, tz: &str) -> ApiResult<Vec<Activity
     Ok(out)
 }
 
-fn week_start(now: DateTime<Utc>) -> DateTime<Utc> {
-    use chrono::{Datelike, TimeZone};
-    let d = now.date_naive() - Duration::days(now.weekday().num_days_from_monday() as i64);
-    Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
-}
-
-pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendSummary> {
+/// A friend's card. `week_seconds` and `last_7d_seconds` are both the friend's week exactly as
+/// the home page counts it ([`crate::week`] in `tz`: tracked play only, today and the 6 days
+/// before, games they hide from others left out), so the card matches their headline.
+/// `top_game_7d` is the game they played most in it.
+pub async fn summary(st: &AppState, me: Uuid, handle: &str, tz: &str) -> ApiResult<FriendSummary> {
     let p = friends::find_visible(st, Some(me), handle).await?;
     if p.id != me && !friends::are_friends(st, me, p.id).await? {
         return Err(AppError::new(
@@ -187,29 +276,22 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
     };
     let (mut week, mut d7, mut top) = (None, None, None);
     if shares || p.id == me {
-        let now = Utc::now();
-        // The game running now counts too (play_sessions).
-        // Clip sessions to the window so a session that started before it only counts its tail.
-        let secs = |from: DateTime<Utc>| {
-            sqlx::query_scalar::<_, Option<i64>>(
-                "SELECT sum(LEAST(duration_s, GREATEST(0, EXTRACT(EPOCH FROM (ended_at - $2))::bigint)))::bigint
-                 FROM play_sessions WHERE user_id = $1 AND ended_at > $2",
-            )
-            .bind(p.id)
-            .bind(from)
-            .fetch_one(&st.db)
-        };
-        week = Some(secs(week_start(now)).await?.unwrap_or(0));
-        d7 = Some(secs(now - Duration::days(7)).await?.unwrap_or(0));
-        let top_id: Option<String> = sqlx::query_scalar(
-            "SELECT s.game_id FROM play_sessions s
-             WHERE s.user_id = $1 AND s.ended_at > $2
-             GROUP BY 1 ORDER BY sum(s.duration_s) DESC LIMIT 1",
-        )
-        .bind(p.id)
-        .bind(now - Duration::days(7))
-        .fetch_optional(&st.db)
-        .await?;
+        // the game running now counts too (week::load reads play_sessions)
+        // their week in their own saved zone (so everyone sees the number they see on their
+        // home page); `tz` (the viewer's browser) only when they saved none
+        let tz = crate::week::zone(st, Some(p.id), Some(tz)).await;
+        let wk = crate::week::for_user(st, p.id, &tz, p.id == me)
+            .await?
+            .shown(|_| true);
+        week = Some(wk.seconds);
+        d7 = Some(wk.seconds);
+        let top_id: Option<String> = wk
+            .games
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| g.seconds > 0)
+            .max_by(|a, b| a.1.seconds.cmp(&b.1.seconds).then(b.0.cmp(&a.0)))
+            .map(|(_, g)| g.game_id.clone());
         if let Some(id) = top_id {
             top = Some(
                 crate::names::public_name(st, &id)
@@ -227,23 +309,4 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
         last_7d_seconds: d7,
         top_game_7d: top,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::TimeZone;
-    #[test]
-    fn week_starts_monday_utc() {
-        let t = Utc.with_ymd_and_hms(2026, 10, 3, 15, 0, 0).unwrap(); // Saturday
-        assert_eq!(
-            week_start(t),
-            Utc.with_ymd_and_hms(2026, 9, 28, 0, 0, 0).unwrap()
-        );
-        let m = Utc.with_ymd_and_hms(2026, 9, 28, 0, 0, 1).unwrap();
-        assert_eq!(
-            week_start(m),
-            Utc.with_ymd_and_hms(2026, 9, 28, 0, 0, 0).unwrap()
-        );
-    }
 }

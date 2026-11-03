@@ -45,6 +45,7 @@ pub mod status;
 pub mod steam;
 pub mod turnstile;
 pub mod web;
+pub mod week;
 pub mod wow;
 pub mod wowchar;
 pub mod wowpage;

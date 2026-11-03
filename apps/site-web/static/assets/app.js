@@ -60,6 +60,11 @@ const WH = (() => {
   return { ok, scan };
 })();
 const me = () => { try { return JSON.parse(localStorage.getItem(UK)); } catch (e) { return null; } };
+/* Zone for every day and time shown: the one saved in Settings > Account > Time zone, else the
+   browser's (the server resolves weeks the same way, see week.rs `zone`). */
+const okZone = z => { if (!z) return false; try { new Intl.DateTimeFormat("en", { timeZone: z }); return true; } catch (e) { return false; } };
+const SAVED0 = (() => { const z = (me() || {}).timezone; return okZone(z) ? z : null; })();
+const ZONE = SAVED0 || TZ || undefined;
 function setSession(t, u) { localStorage.setItem(TK, t); localStorage.setItem(UK, JSON.stringify(u)); }
 function clearSession() { localStorage.removeItem(TK); localStorage.removeItem(UK); }
 
@@ -128,30 +133,39 @@ function dur(sec) {
   return Math.max(1, m) + " min";
 }
 function since(iso) { return dur((Date.now() - new Date(iso).getTime()) / 1000); }
-const dayFmt = new Intl.DateTimeFormat("en-AU", { weekday: "long" });
-const dateFmt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
-const fullDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
+const dayFmt = new Intl.DateTimeFormat("en-AU", { weekday: "long", timeZone: ZONE });
+const dateFmt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", timeZone: ZONE });
+const fullDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: ZONE });
+/* Calendar day ("2026-11-04") of an instant in ZONE; a plain day string from the server is
+   already a day (in the same zone) and is kept as is. */
+const keyFmt = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: ZONE });
+const isDay = d => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
+const dayKey = d => isDay(d) ? d : keyFmt.format(new Date(d));
+const dayNo = k => { const [y, m, d] = k.split("-").map(Number); return Date.UTC(y, m - 1, d) / 86400000; };
+/* A plain day as a Date at noon UTC, formatted in UTC so it never shifts a day. */
+const utcDay = { w: new Intl.DateTimeFormat("en-AU", { weekday: "long", timeZone: "UTC" }), d: new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", timeZone: "UTC" }), f: new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) };
+const fullDay = d => isDay(d) ? utcDay.f.format(new Date(d + "T12:00:00Z")) : fullDate.format(new Date(d));
 /* Friends' activity rows from the server: "playing" first, then one per friend/game/day. */
-function actDay(i) { return i.kind === "playing" ? "Now" : dayLabel(i.day ? new Date(i.day + "T12:00:00") : i.at); }
+function actDay(i) { return i.kind === "playing" ? "Now" : dayLabel(i.day || i.at); }
 function actText(i) {
   const g = isUnlisted(i.game_id) ? "a game" : `<b>${esc(i.game_name)}</b>`;
   return i.kind === "playing" ? `is playing ${g} now` : `played ${g} for ${dur(i.duration_s)}`;
 }
+/* "Today", "Yesterday", a weekday or a date, counted in ZONE. */
 function dayLabel(d) {
-  const t = new Date(); t.setHours(0, 0, 0, 0);
-  const x = new Date(d); x.setHours(0, 0, 0, 0);
-  const diff = Math.round((t - x) / 86400000);
+  const k = dayKey(d), diff = Math.round(dayNo(dayKey(Date.now())) - dayNo(k));
   if (diff === 0) return "Today";
   if (diff === 1) return "Yesterday";
-  if (diff < 7) return dayFmt.format(x);
-  return dateFmt.format(x);
+  const x = new Date(k + "T12:00:00Z");
+  if (diff > 0 && diff < 7) return utcDay.w.format(x);
+  return utcDay.d.format(x);
 }
 function lastPlayed(iso) {
   if (!iso) return "-";
-  const d = new Date(iso), diff = (Date.now() - d) / 86400000;
-  if (diff < 1 && new Date().getDate() === d.getDate()) return "Today";
-  if (diff < 7) return dayFmt.format(d).slice(0, 3);
-  return dateFmt.format(d);
+  const k = dayKey(iso), diff = Math.round(dayNo(dayKey(Date.now())) - dayNo(k)), x = new Date(k + "T12:00:00Z");
+  if (diff === 0) return "Today";
+  if (diff > 0 && diff < 7) return utcDay.w.format(x).slice(0, 3);
+  return utcDay.d.format(x);
 }
 const initial = s => esc((s || "?").trim().charAt(0).toUpperCase() || "?");
 const tint = s => "c" + ((Array.from(s || "").reduce((a, c) => a + c.charCodeAt(0), 0) % 3) + 1);
@@ -358,7 +372,7 @@ async function fillDownload() {
   try {
     const l = await latest();
     btns.forEach(b => { if (l.url) b.href = l.url; b.removeAttribute("aria-disabled"); });
-    vers.forEach(v => { v.textContent = "Version " + l.version + (l.date ? " · " + fullDate.format(new Date(l.date)) : "") + " · Windows 10/11, 64-bit"; });
+    vers.forEach(v => { v.textContent = "Version " + l.version + (l.date ? " · " + fullDay(l.date) : "") + " · Windows 10/11, 64-bit"; });
   } catch (e) {
     vers.forEach(v => { v.textContent = "Download's not available right now. Try again in a few minutes."; });
   }
@@ -767,78 +781,160 @@ pages.bnetverify = async () => {
   act.innerHTML = `<a class="btn" href="/connect/battlenet">Done</a>`;
 };
 
+/* ---------- Home V4.2 (signed out: hero + carousel; signed in: your week + friends) ----------
+   Your hours, the daily bars, the per-game rows and the friends leaderboard all come from one
+   server call (/home/week), so they always use the same 7 days and time zone and add up. */
+const tFmt = new Intl.DateTimeFormat("en-AU", { hour: "numeric", minute: "2-digit", timeZone: ZONE });
+const h1 = t => (Math.max(0, t || 0) / 10).toFixed(1) + " h";
+const hm = s => { s = Math.max(0, Math.round(s || 0)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h}h${m ? " " + String(m).padStart(2, "0") + "m" : ""}` : `${Math.max(1, m)}m`; };
+const ago42 = iso => { const d = dayLabel(iso); return `${d === "Today" || d === "Yesterday" ? d.toLowerCase() : d}, ${tFmt.format(new Date(iso))}`; };
+/* Bar tooltip: pinned to the bar (not the mouse), kept inside the chart box so it never covers the
+   panel heading or spills out of the chart; hover, keyboard focus and tap all show it. */
+function wkTips(wk) {
+  const place = d => { const t = d.querySelector(".tip"), b = d.querySelector("i"); if (!t || !b) return;
+    const W = wk.clientWidth, tw = t.offsetWidth, th = t.offsetHeight, x = d.offsetLeft + d.offsetWidth / 2 - tw / 2;
+    t.style.left = Math.round(Math.max(0, Math.min(W - tw, x))) + "px";
+    t.style.top = Math.round(Math.max(0, b.offsetTop - th - 4)) + "px"; };
+  $$(".d", wk).forEach(d => { d.addEventListener("mouseenter", () => place(d)); d.addEventListener("focus", () => place(d));
+    d.addEventListener("click", () => { const on = !d.classList.contains("tipon"); $$(".d.tipon", wk).forEach(x => x.classList.remove("tipon")); if (on) { place(d); d.classList.add("tipon"); } }); });
+  document.addEventListener("click", e => { if (!wk.contains(e.target)) $$(".d.tipon", wk).forEach(x => x.classList.remove("tipon")); });
+}
+async function loadPoll42() {
+  const box = document.getElementById("poll42"); if (!box) return;
+  let d; try { d = await api("/poll"); } catch (e) { d = null; }
+  const p = d && d.poll, sec = box.closest(".f2p");
+  if (!p) { sec.remove(); const two = $("#h42-two"); if (two && two.children.length === 1) two.classList.add("one"); return; }
+  const can = d.signed_in && !p.closed;
+  box.innerHTML = `<b class="q">${esc(p.question)}</b>${p.options.map(o => `<div class="opt"><label><input type="radio" name="fp" value="${o.id}" ${p.my_vote === o.id ? "checked" : ""} ${can ? "" : "disabled"}> ${esc(o.label)}</label><div class="bar"><i style="width:${o.pct}%"></i></div><span>${o.pct}%</span></div>`).join("")}
+    <div class="go">${can ? `<a href="#" id="fp-vote">${p.my_vote ? "Change vote" : "Vote"}</a>` : p.closed ? `<span class="dimt">Poll closed</span>` : `<a href="/login?next=/">Sign in to vote</a>`}</div>`;
+  const vb = document.getElementById("fp-vote");
+  if (vb) vb.onclick = async e => { e.preventDefault();
+    const c = box.querySelector("input[name=fp]:checked"); if (!c || vb.dataset.busy) return; vb.dataset.busy = 1;
+    try { await api("/poll/vote", { method: "POST", body: { option_id: Number(c.value) } }); loadPoll42(); } catch (x) { delete vb.dataset.busy; alert(x.message); } };
+}
+/* Home: Friends' activity shows 5 rows; with two columns, up to 10, as many as end level with
+   the right column (Friends online + leaderboard). The panel itself stretches to the bottom. */
+function fitAct42() {
+  const p = document.querySelector("#h42-in .hub .o3"); if (!p) return;
+  const rows = $$(".feed .act", p), days = $$(".feed .day", p), L = p.parentElement, R = L.nextElementSibling;
+  const sync = () => { days.forEach(d => { let n = d.nextElementSibling, any = false;
+      while (n && !n.classList.contains("day")) { if (!n.hidden) { any = true; break; } n = n.nextElementSibling; }
+      d.hidden = !any; });
+    const vis = rows.filter(r => !r.hidden); rows.forEach(r => r.classList.toggle("lv", r === vis[vis.length - 1])); };
+  rows.forEach((r, i) => { r.hidden = i >= 5; });
+  const two = R && R.lastElementChild && getComputedStyle(L).display === "flex";
+  if (two) { p.style.flex = "none";
+    const end = R.lastElementChild.getBoundingClientRect().bottom;
+    for (let i = 5; i < rows.length; i++) { rows[i].hidden = false; sync();
+      if (p.getBoundingClientRect().bottom > end + 0.5) { rows[i].hidden = true; break; } }
+    p.style.flex = ""; }
+  sync();
+}
 pages.home = async () => {
   fillDownload();
-  let h;
-  try { h = await api("/home"); } catch (e) { return; }
   const u = token() ? me() : null;
-  const ids = h.most_played.map(g => g.game_id).concat(h.now_playing.map(n => n.game_id));
-  let fl = null, act = null;
-  if (u && token()) {
-    [fl, act] = await Promise.all([api("/friends/page?show=online&limit=10").catch(() => null), api("/friends/activity?tz=" + encodeURIComponent(TZ)).catch(() => null)]);
-    if (fl) fl.friends.forEach(f => f.presence && ids.push(f.presence.game_id));
-    if (act) act.items.forEach(i => ids.push(i.game_id));
-  }
+  if (u) { $("#h42-out").hidden = true; $("#h42-crumb").textContent = "Your Fraglink"; }
+  latest().then(l => { if (!l || !l.version) return; $("#h42-ver").textContent = l.version; $("#h42-date").textContent = l.date ? " · " + fullDay(l.date) : ""; $("#h42-rel").hidden = false; }).catch(() => {});
+  let h;
+  try { h = await api("/home?tz=" + encodeURIComponent(TZ)); } catch (e) { return; }
+  let wk = null, fl = null, act = null;
+  if (u) [wk, fl, act] = await Promise.all([
+    api("/home/week?tz=" + encodeURIComponent(TZ)).catch(() => null),
+    api("/friends/page?show=online&limit=10").catch(() => null),
+    api("/friends/activity?per=session&tz=" + encodeURIComponent(TZ)).catch(() => null)]);
+  const ids = h.most_played.map(g => g.game_id);
+  if (fl) fl.friends.forEach(f => f.presence && ids.push(f.presence.game_id));
+  if (act) act.items.forEach(i => ids.push(i.game_id));
   await loadIcons(ids);
   const s = h.stats, prof = n => `/u/${encodeURIComponent(n.handle)}`, nm = n => esc(n.display_name || n.handle);
   const panel = (title, body, more, cls) => `<section class="panel f2p${cls ? " " + cls : ""}"><h2>${title}${more || ""}</h2>${body}</section>`;
+  const gname = (id, n) => isUnlisted(id) ? "a game" : esc(n);
+  // ---- crumb + community counters (Admin > Site settings: C1 header counters, C4 bar, off)
   const dg = (n, c) => `<span class="d${c ? " " + c : ""}">${nf.format(n).split("").map(ch => /\d/.test(ch) ? `<i>${ch}</i>` : `<i class="c">${esc(ch)}</i>`).join("")}</span>`;
-  // ---- top: user counts (Admin > Site settings: C1 header counters, C2 panel, C4 bar, off)
-  const cs = h.counts_style || "c1";
-  let top = `<div class="crumb"><div class="wrap"><span>You are here: <a href="/">Home</a> » Welcome to Fraglink</span><span class="sp"></span>${cs === "c1" ? `<span class="odo"><span class="l">Registered<br>players</span>${dg(s.registered)}<span class="l">Online<br>now</span>${dg(s.online, "g")}</span>` : ""}</div></div>`;
-  if (cs === "c4") top = `<div class="hbar"><div class="wrap"><span>⚡ <b>${nf.format(s.registered)}</b> registered player${s.registered === 1 ? "" : "s"}</span><span class="on">● <b>${nf.format(s.online)}</b> online now</span><span>🎮 <b>${nf.format(s.in_game)}</b> in game</span><span>⏱ <b>${nf.format(Math.round(s.minutes_7d / 60))}</b> h tracked this week</span></div></div>` + top;
+  const cs = h.counts_style || "off";
+  let top = `<div class="crumb"><div class="wrap"><span>You are here: <a href="/">Home</a> » ${u ? "Your Fraglink" : "Welcome to Fraglink"}</span><span class="sp"></span>${cs === "c1" ? `<span class="odo"><span class="l">Registered<br>players</span>${dg(s.registered)}<span class="l">Online<br>now</span>${dg(s.online, "g")}</span>` : ""}</div></div>`;
+  if (cs === "c4") top = `<div class="hbar"><div class="wrap"><span>⚡ <b>${nf.format(s.registered)}</b> registered player${s.registered === 1 ? "" : "s"}</span><span class="on">● <b>${nf.format(s.online)}</b> online now</span><span>🎮 <b>${nf.format(s.in_game)}</b> in game</span></div></div>` + top;
   $("#f2-top").innerHTML = top;
-  // ---- featured: app window with real people playing (signed out) or your week (signed in)
-  const np = h.now_playing.slice(0, 4);
-  if (u && h.me) {
-    { const h = $("#f2-feat-h"); if (h) h.textContent = "Your Fraglink"; }
-    $("#f2-feat .feat-l").innerHTML = `<div class="k">Welcome back</div><h1>${esc(u.display_name || u.handle)}</h1>
-      <p>${h.me.top_game ? `Most played this week: <b>${esc(h.me.top_game)}</b>` : `Nothing played this week yet. <a href="/download">Get the app</a> and it counts your hours.`}</p>
-      <div class="kpi"><div><b>${hrsShort(h.me.minutes_7d)}</b><span>Hours this week</span></div><div><b>${hrsShort(h.me.total_min)}</b><span>Total hours</span></div><div><b>${h.me.friends_online}/${h.me.friends}</b><span>Friends online</span></div></div>
-      <div class="fine"><a href="${prof(u)}">View my profile</a> · <a href="/friends">Friends</a> · <a href="/settings">Settings</a></div>`;
+  // ---- signed in: your week + recent games + friends
+  if (u) {
+    let inner = "";
+    if (wk) {
+      const mx = Math.max(0, ...wk.days.map(d => d.seconds));
+      const bars = wk.days.map(d => { const day = `${d.label}${d.today ? " (today)" : ""}`;
+        return `<div class="d" tabindex="0" data-day="${esc(day)}"><span class="tip">${esc(day)} · <small>${d.seconds ? `${h1(d.tenths)} (${d.hm})` : "no games"}</small></span>${d.seconds ? `<i style="height:${Math.max(2, Math.round(d.seconds / mx * 36))}px"></i>` : `<i class="z"></i>`}${esc(d.dow)}</div>`; }).join("");
+      const tg = wk.top_game;
+      inner += panel("Your Fraglink", `<div class="mebar m42" id="me42"><div><div class="k">Welcome back</div><h1>${nm(u)}</h1></div>
+        <div><b class="big" id="hw">${h1(wk.tenths)}</b><span>Hours this week</span></div>
+        <div><b class="big" id="mp">${tg ? esc(tg.name) : "—"}</b><span id="mps">${tg ? `Most played this week · ${h1(tg.tenths)}` : "Nothing played this week yet"}</span></div>
+        <div class="ch"><div class="wk42${wk.seconds ? "" : " empty"}" id="wk42">${bars}<div class="none">No games tracked this week yet</div></div></div></div>`, ` <a class="more" href="${prof(u)}">My profile »</a>`);
+    }
+    // Recent games: this week's games, most recent first; the rows add up to "Hours this week".
+    let rg = "";
+    if (wk && wk.games.length) {
+      const g = wk.games, show = g.length > 4 ? g.slice(0, 3) : g, rest = g.slice(show.length);
+      const art = (id, n) => `<span class="a" style="background:${artBg(id, n)}"></span>`;
+      rg = show.map(x => `<div class="rg">${art(x.game_id, x.name)}<div class="w"><b>${gname(x.game_id, x.name)}</b><small>Last played ${ago42(x.last_played_at)}</small></div><div class="h">${h1(x.tenths)}<small>this week</small></div></div>`).join("");
+      if (rest.length) rg += `<div class="rg more"><span class="a" style="background:${artGrad("other")}"></span><div class="w"><b>${rest.length} other games</b><small>Last played ${ago42(rest[0].last_played_at)}</small></div><div class="h">${h1(rest.reduce((a, x) => a + x.tenths, 0))}<small>this week</small></div></div>`;
+    }
+    const rgP = rg ? panel("Your recent games", rg, ` <a class="more" href="${prof(u)}">All my games »</a>`, "o2") : "";
+    // Friends' activity: one row per session (live ones first), grouped by day. Latest 5; on
+    // two columns up to 10, as many as fit beside Friends online + leaderboard (fitAct42).
+    let feed = "";
+    if (act && act.items.length) { let last = "";
+      act.items.slice(0, 10).forEach(i => { const live = i.kind === "playing", d = live ? "Today" : dayLabel(i.day || i.at);
+        if (d !== last) { feed += `<div class="day">${d}</div>`; last = d; }
+        feed += `<div class="act">${icon(i.game_id, i.game_name, "g")}<span class="who42"><a href="${prof(i)}">${nm(i)}</a> ${live
+          ? `is playing <b>${gname(i.game_id, i.game_name)}</b>${i.started_at ? ` <span class="done">· started ${tFmt.format(new Date(i.started_at))}</span>` : ""}</span><span class="pnow">● playing now</span>`
+          : `<span class="done">played</span> <b>${gname(i.game_id, i.game_name)}</b> <span class="done">for ${hm(i.duration_s)}</span></span><span class="w">${tFmt.format(new Date(i.at))}</span>`}</div>`; }); }
+    const actP = feed ? panel("Friends' activity", `<div class="feed">${feed}</div>`, ` <a class="more" href="/friends">View all »</a>`, "o3") : "";
+    // Friends online: playing / online / away counts; a duration only when the client reported a session start.
+    let frP = "";
+    if (fl) { const rk = p => p.game_name ? 0 : p.status === "online" ? 1 : 2;
+      const on = fl.friends.filter(f => f.presence && f.presence.status !== "offline").sort((a, b) => rk(a.presence) - rk(b.presence) || String(a.display_name || a.handle).localeCompare(String(b.display_name || b.handle)));
+      const bd = fl.breakdown || {}, n = (bd.playing || 0) + (bd.online || 0) + (bd.away || 0) || fl.online || 0;
+      const tm = p => { if (!p.game_name || !p.session_started_at) return ""; const sec = (Date.now() - new Date(p.session_started_at)) / 1000; return sec >= 0 && sec <= 86400 ? `<span class="tm" title="Started ${tFmt.format(new Date(p.session_started_at))}">${hm(sec)}</span>` : ""; };
+      const rows = on.map(f => { const p = f.presence, st = p.game_name ? "playing" : p.status;
+        return `<div class="fr"><div class="fa ${tint(f.handle)}">${initial(f.display_name || f.handle)}</div><div class="who"><div class="nm"><span><a href="${prof(f)}">${nm(f)}</a></span><span class="st ${st}">${st}</span></div>${p.game_name
+          ? `<div class="gm pl">${icon(p.game_id, p.game_name)}${isUnlisted(p.game_id) ? "Playing a game" : esc(p.game_name)}${tm(p)}</div>` : `<div class="gm">${st === "away" ? "Away for a bit" : "Online, not in a game"}</div>`}</div></div>`; }).join("");
+      const extra = n - on.length;
+      frP = panel(`Friends online (${n})`, on.length ? `<div class="fhd"><span class="g"><b>${bd.playing || 0}</b> playing</span><span class="o"><b>${bd.online || 0}</b> online</span><span class="a"><b>${bd.away || 0}</b> away</span></div>${rows}${extra > 0 ? `<div class="fr"><a href="/friends">+${extra} more »</a></div>` : ""}`
+        : `<div class="in empty">${fl.all ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</div>`, ` <a class="more" href="/friends">All friends »</a>`, "o1 fr42"); }
+    // Friends leaderboard: same week as above; your row is your "Hours this week".
+    let lbP = "";
+    const ba = (wk && wk.board_all) || [];
+    if (wk && (wk.board.some(r => !r.me) || ba.some(r => !r.me))) {
+      const top6 = b => { const mi = b.findIndex(r => r.me); let rows = b.slice(0, 6).map((r, i) => [r, i]); if (mi >= 6) rows = rows.slice(0, 5).concat([[b[mi], mi]]); return rows; };
+      const trs = (b, f) => top6(b).map(([r, i]) => `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="/u/${encodeURIComponent(r.handle)}">${r.me ? "You" : nm(r)}</a></td><td class="n">${f(r)}</td></tr>`).join("");
+      const allH = r => r.minutes > 0 && r.minutes < 60 ? "&lt;1 h" : nf.format(Math.round((r.minutes || 0) / 60)) + " h";
+      lbP = panel(`Friends leaderboard <span class="tabs"><a class="on" data-t="week" role="tab" tabindex="0" aria-selected="true">This week</a><a data-t="all" role="tab" tabindex="0" aria-selected="false">All time</a></span>`, `<table class="t2"><tbody data-p="week" class="on">${trs(wk.board, r => h1(r.tenths))}</tbody><tbody data-p="all">${trs(ba, allH)}</tbody></table>
+        <div class="per on" data-p="week">Hours this week, ${esc(wk.label)}</div><div class="per" data-p="all">Total hours, as shown on each profile</div>`, "", "o4 lb42"); }
+    inner += `<div class="hub"><div>${rgP}${actP}</div><div>${frP}${lbP}</div></div>`;
+    $("#h42-in").innerHTML = inner;
+    fitAct42();
+    if (!fitAct42.on) { fitAct42.on = 1; let t; addEventListener("resize", () => { clearTimeout(t); t = setTimeout(fitAct42, 120); });
+      if (document.fonts) document.fonts.ready.then(fitAct42); }
+    const wkEl = $("#wk42"); if (wkEl) wkTips(wkEl);
+    const lb = $("#h42-in .lb42");
+    if (lb) $$(".tabs a", lb).forEach(a => { const go = e => { e.preventDefault(); const t = a.dataset.t;
+      $$(".tabs a", lb).forEach(x => { x.classList.toggle("on", x === a); x.setAttribute("aria-selected", x === a ? "true" : "false"); });
+      $$("[data-p]", lb).forEach(x => x.classList.toggle("on", x.dataset.p === t)); fitAct42(); };
+      a.addEventListener("click", go); a.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") go(e); }); });
   }
-  const winRows = u && fl ? fl.friends.filter(f => f.presence && f.presence.status !== "offline").slice(0, 4).map(f => ({ n: f, g: f.presence.game_name, away: f.presence.status === "away" }))
-    : np.map(n => ({ n, g: n.game_name }));
-  if ($("#f2-win")) $("#f2-win").innerHTML = `<div class="tb"><img src="/assets/mark.svg" alt="">Fraglink<span class="x">_ □ ×</span></div>
-    ${u ? `<div class="me">${avatar((me() || {}).avatar, 22)}<div><b>${esc(u.display_name || u.handle)}</b><br><span class="on">Online</span></div></div>` : ""}
-    <div class="g">${u ? "Friends online" : "Playing now"} (${winRows.length})</div>
-    ${winRows.length ? winRows.map(r => `<div class="r"><span class="dot ${r.away ? "away" : "online"}"></span><b>${nm(r.n)}</b><small>${r.g ? esc(r.g) : r.away ? "Away" : "Online"}</small></div>`).join("") : `<div class="r"><small style="margin:0;color:var(--dim)">${u ? "No friends online right now." : "Nobody in a game right now."}</small></div>`}`;
-  // ---- live ticker
-  const tick = h.now_playing.length ? (() => { const it = h.now_playing.map(n => `<span><a href="${prof(n)}"><b>${nm(n)}</b></a> is playing ${esc(n.game_name)}</span>`).join(""); return `<div class="tick"><span class="live">LIVE »</span><div class="run"><div class="t">${it}${it}</div></div></div>`; })() : "";
-  const trend = h.most_played.length ? panel("Trending games this week", `<div class="tr">${h.most_played.slice(0, 4).map((g, i) => `<div class="tile2"><div class="art">${gameArt(g.game_id, g.name)}<span class="rk">#${i + 1}</span><span class="nmx">${esc(g.name)}</span></div><div class="st"><b>${hrsShort(g.minutes)} h</b> this week</div></div>`).join("")}</div>`) : "";
-  let actBody = "";
-  if (act && act.items.length) {
-    let last = "";
-    act.items.slice(0, 10).forEach(i => { const d = actDay(i); if (d !== last) { actBody += `<div class="day">${d}</div>`; last = d; }
-      actBody += `<div class="act">${icon(i.game_id, i.game_name)}<span><a href="${prof(i)}">${nm(i)}</a> ${actText(i)}</span></div>`; });
-  } else if (h.now_playing.length) {
-    actBody = `<div class="day">Right now</div>` + h.now_playing.slice(0, 8).map(n => `<div class="act">${avatar(n.avatar, 22)}<span><a href="${prof(n)}">${nm(n)}</a> is playing ${icon(n.game_id, n.game_name)} ${esc(n.game_name)}</span>${n.since ? `<span class="w">${since(n.since)}</span>` : ""}</div>`).join("");
-  }
-  const actP = actBody ? panel(u && act && act.items.length ? "Friends' activity" : "Activity report", actBody) : "";
-  const news = panel("News", h.news.length ? h.news.map(n => `<div class="ni${n.image ? " has-img" : ""}">${n.image ? `<a class="nimg" href="${esc(n.url)}" tabindex="-1"><img src="${esc(n.image)}" alt="" loading="lazy"></a>` : ""}<div><h4><a href="${esc(n.url)}">${esc(n.title)}</a></h4><div class="d">${fullDate.format(new Date(n.at))}${n.pinned ? " · Pinned" : ""}</div></div></div>`).join("") : `<div class="in empty">No news yet.</div>`, ` <a class="more" href="/news">More news »</a>`);
-  $("#f2-mid").innerHTML = tick + trend + actP + news;
-  // ---- right column
-  const c2 = cs === "c2" ? panel("Community stats", `<table class="t2"><tr><td>Registered players</td><td class="n">${nf.format(s.registered)}</td></tr><tr><td><span class="dot online"></span> Online now</td><td class="n">${nf.format(s.online)}</td></tr><tr><td>Playing a game now</td><td class="n">${nf.format(s.in_game)}</td></tr><tr><td>Hours tracked this week</td><td class="n">${nf.format(Math.round(s.minutes_7d / 60))}</td></tr></table>`) : "";
-  const fr = p => p.game_name ? 3 : p.status === "away" ? 1 : 2; // in game first, then online, then away
-  const friendsP = fl ? panel(`Friends online (${fl.online})`, (() => { const on = fl.friends.filter(f => f.presence && f.presence.status !== "offline").sort((a, b) => fr(b.presence) - fr(a.presence) || String(a.display_name || a.handle).localeCompare(String(b.display_name || b.handle)));
-    const extra = Math.max(on.length, fl.total || fl.online || 0) - Math.min(on.length, 10);
-    return on.length ? `<table class="t2 f2np">${on.slice(0, 10).map(f => `<tr><td><span class="dot ${f.presence.status === "away" ? "away" : "online"}"></span> <a href="${prof(f)}">${nm(f)}</a><small>${f.presence.game_name ? (isUnlisted(f.presence.game_id) ? "Playing a game" : esc(f.presence.game_name)) : "Online"}</small></td></tr>`).join("")}</table>${extra > 0 ? `<div class="in" style="padding-top:2px"><a href="/friends">+${extra} more »</a></div>` : ""}` : `<div class="in empty">${fl.all ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</div>`; })(), ` <a class="more" href="/friends">All »</a>`) : "";
-  const tops = h.top_players.length ? panel("Top players this week", `<table class="t2">${h.top_players.slice(0, 5).map((p, i) => `<tr><td class="rk">${i + 1}</td><td><a href="${prof(p)}">${nm(p)}</a></td><td class="n">${hrsShort(p.minutes)} h</td></tr>`).join("")}</table>`) : "";
-  const who = h.now_playing.length ? panel("Who's playing now", `<table class="t2 f2np">${h.now_playing.slice(0, 6).map(n => `<tr><td><span class="dot online"></span> <a href="${prof(n)}">${nm(n)}</a><small>${esc(n.game_name)}</small></td></tr>`).join("")}</table>`) : "";
-  const poll = panel("Quick poll", `<div class="in poll" id="f2-poll"><span class="dimt">Loading…</span></div>`);
-  const comm = panel("Community", `<div class="in" style="line-height:2"><a href="https://discord.gg/QbaYRtvADj" rel="noopener">» Discord server</a><br><a href="/news">» News</a><br><a href="/download">» Download the app</a></div>`);
-  $("#f2-right").innerHTML = c2 + friendsP + tops + who + poll + comm;
-  loadPoll();
-  // ---- bottom stats strip (C3; Admin switch "Home page stats strip")
-  if (h.stats_strip !== false) {
-    const pl = (n, one, many) => `<b>${nf.format(n)}</b> ${n === 1 ? one : many}`;
-    const hrs = Math.round((s.minutes_total || 0) / 60), rawH = (s.minutes_total || 0) / 60;
-    // joke stats from the real total hours: whole numbers, at least 1 once any time is tracked
-    const est = per => rawH > 0 ? Math.max(1, Math.round(rawH / per)) : 0;
+  // ---- trending, how it works (signed out), news, poll + community
+  const mp = h.most_played.slice(0, 4), m0 = (mp[0] && mp[0].minutes) || 1;
+  const trend = mp.length ? panel("Trending games this week", `<div class="tr">${mp.map((g, i) => `<div class="tile2"><div class="art" style="height:132px">${gameArt(g.game_id, g.name)}<span class="rk">#${i + 1}</span><span class="nmx">${esc(g.name)}</span></div><div class="st"><b>${hrsShort(g.minutes)} h</b> this week<span class="hb"><i style="width:${Math.max(2, Math.round(g.minutes / m0 * 100))}%"></i></span></div></div>`).join("")}</div>`, "", "strip4") : "";
+  const how = u ? "" : panel("How Fraglink works", `<div class="hows"><div><span class="n1">1</span><div><b>Install Fraglink</b><p>A lightweight Windows tray app. Takes a minute, then it sits down by your clock.</p></div></div><div><span class="n1">2</span><div><b>Play your games</b><p>Just play like you normally would. Your playtime gets tracked automatically.</p></div></div><div><span class="n1">3</span><div><b>Connect with friends</b><p>See who's playing what, and find out who's really put the most hours in.</p></div></div><a class="glass o go" data-dl href="/download" style="margin:0 14px">Get Fraglink</a></div>`);
+  const news = h.news.length ? panel("News", h.news.slice(0, 3).map(n => `<div class="ni${n.image ? " has-img" : ""}">${n.image ? `<a class="nimg" href="${esc(n.url)}" tabindex="-1"><img src="${esc(n.image)}" alt="" loading="lazy"></a>` : ""}<div><h4><a href="${esc(n.url)}">${esc(n.title)}</a></h4><div class="d">${fullDate.format(new Date(n.at))}</div>${n.summary ? `<p class="sum">${esc(n.summary)}</p>` : ""}<a class="rm" href="${esc(n.url)}">Read more »</a></div></div>`).join(""), ` <a class="more" href="/news">More news »</a>`) : "";
+  const two = `<div class="two" id="h42-two">${panel("Quick poll", `<div class="poll2" id="poll42"><span class="dimt">Loading…</span></div>`)}${panel("Community", `<div class="comm2"><a href="https://discord.gg/QbaYRtvADj" rel="noopener">» Discord server</a><br><a href="/news">» News</a><br><a href="/download">» Download the app</a></div>`)}</div>`;
+  $("#h42-rest").innerHTML = trend + how + news + two;
+  if (!u) fillDownload();
+  loadPoll42();
+  // ---- bottom strip (Admin switch "Home page stats strip"): community total + joke estimates
+  if (h.stats_strip !== false && (s.minutes_total || 0) >= 60) {
+    const rawH = s.minutes_total / 60, est = per => Math.max(1, Math.round(rawH / per));
     const jokes = [[2, "can of energy drink consumed", "cans of energy drink consumed"], [6, "pizza devoured", "pizzas devoured"], [10, "rage-quit", "rage-quits"], [3, "“one more game”", "“one more game”s"], [8, "headset hair day", "headset hair days"]]
       .map(j => ({ n: est(j[0]), one: j[1], many: j[2] })).sort(() => Math.random() - .5).slice(0, 3);
-    const fun = rawH > 0 ? `<div class="fun">${jokes.map(j => `~<b>${nf.format(j.n)}</b> ${j.n === 1 ? j.one : j.many}*`).join(" · ")}<small>*estimated, very scientifically</small></div>` : "";
-    $("#f2-strip").innerHTML = `<div class="fstat"><div class="wrap">Our members have tracked ${pl(hrs, "hour", "hours")} · ${pl(s.registered, "registered player", "registered players")} · <b>${nf.format(s.online)}</b> online now (<b>${nf.format(s.in_game)}</b> in game)${fun}</div></div>`;
+    $("#f2-strip").innerHTML = `<div class="fstat"><div class="wrap">Our members have tracked <b>${nf.format(Math.round(rawH))}</b> hours<div class="fun">${jokes.map(j => `~<b>${nf.format(j.n)}</b> ${j.n === 1 ? j.one : j.many}*`).join(" · ")}<small>*estimated, very scientifically</small></div></div></div>`;
   }
 };
 pages.download = () => fillDownload();
@@ -932,7 +1028,7 @@ pages.contact = () => {
 pages.status = () => {
   const set = (k, ok, text) => { const li = $(`#st-list [data-k="${k}"]`); li.className = ok ? "up" : "down"; $(".st-v", li).textContent = text; };
   const SEV = { minor: "Minor", major: "Major", maintenance: "Maintenance" };
-  const when = t => new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const when = t => new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: ZONE });
   const run = async () => {
     let site = false, api_ = false, live = false;
     try { const r = await fetch("/", { cache: "no-store", method: "HEAD" }); site = r.ok; } catch (e) { /* down */ }
@@ -1036,7 +1132,7 @@ pages.profile = async () => {
   if (!handle) { location.replace(me() ? "/u/" + encodeURIComponent(me().handle) : "/login"); return; }
   document.title = handle + " · Fraglink";
   let p;
-  try { p = await api("/users/" + encodeURIComponent(handle) + "/profile?limit=" + GPAGE, { keepSession: true }); }
+  try { p = await api("/users/" + encodeURIComponent(handle) + "/profile?limit=" + GPAGE + "&tz=" + encodeURIComponent(TZ), { keepSession: true }); }
   catch (e) {
     if (e.status === 401) {
       root.innerHTML = `<div class="narrow panel"><h2>${esc(handle)}</h2><div class="body"><p>This profile is only visible to signed-in Fraglink players.</p><p><a class="btn" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in</a> <a class="btn dl" href="/signup">Create an account</a></p></div></div>`;
@@ -1103,9 +1199,9 @@ pages.profile = async () => {
   }).join("")}</div>` : "";
   const np = live ? `<div class="np">${gameArt(pres.game_id, pres.game_name, "npa")}<div><div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8">Now playing</div>
       <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
-  const sec = (title, body, right, cls, id) => `<section class="panel sx${cls ? " " + cls : ""}"${id ? ` id="${id}"` : ""}><h2><span class="tab">${title}</span>${right ? `<span class="rt">${right}</span>` : ""}</h2>${body}</section>`;
+  const sec = (title, body, right, cls, id) => `<section class="panel sx${cls ? " " + cls : ""}"${id ? ` id="${id}"` : ""}><h2>${title}${right ? `<span class="more">${right}</span>` : ""}</h2>${body}</section>`;
   const report = !self && token() ? `<div class="avlinks">${p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : ""}<a href="#" class="report flagit" data-report-profile>&#9873; Report this profile</a></div>` : "";
-  const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div><b>${hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}${self || Array.isArray(p.friends) ? `<a href="${self ? "/friends" : "#friends"}" class="kf"><b>${p.friend_count}</b><span>Friends</span></a>` : `<div><b>${p.friend_count}</b><span>Friends</span></div>`}</div>`;
+  const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div${p.overall.week_label ? ` title="Tracked hours, ${esc(p.overall.week_label)}"` : ""}><b>${p.overall.tenths_7d != null ? (p.overall.tenths_7d / 10).toFixed(1) : hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}${self || Array.isArray(p.friends) ? `<a href="${self ? "/friends" : "#friends"}" class="kf"><b>${p.friend_count}</b><span>Friends</span></a>` : `<div><b>${p.friend_count}</b><span>Friends</span></div>`}</div>`;
   const nick = p.display_name || p.handle, prevs = (p.previous_names || []).filter(n => n.toLowerCase() !== nick.toLowerCase() && n.toLowerCase() !== p.handle.toLowerCase());
   const head = `<section class="ph${bannerG ? "" : " noart"}"${bannerG ? ` style="background:${artBg(bannerG.game_id, bannerG.name)}"` : ""}><div class="inr">
       <div>${avatar(p.avatar, 184)}${report}</div>
@@ -1143,13 +1239,14 @@ pages.profile = async () => {
   } else if (!p.games || !p.games.length) {
     games = sec("Games", `<div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div>`);
   } else {
+    const w7 = x => x.tenths_7d != null ? (x.tenths_7d > 0 ? h1(x.tenths_7d) : "-") : hours(x.minutes_7d);
     const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" && g.tier !== "imported" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
-      <td class="n">${hours(g.minutes_7d)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
+      <td class="n">${w7(g)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const many = (p.games_total || p.games.length) > GPAGE;
     games = sec("Games", `
       <table class="gt" style="width:100%;border-collapse:collapse"><thead><tr>${[["name", "Game", ""], ["week", "Past 7 days", "n"], ["total", "Total", "n"], ["recent", "Last played", "n hide-sm"]].map(([k, l, c]) => `<th class="${c} srt${k === "total" ? " on" : ""}" data-gs="${k}" tabindex="0" role="button" aria-sort="${k === "total" ? "descending" : "none"}" title="Sort by ${l.toLowerCase()}">${l}<i>${k === "total" ? " ▾" : ""}</i></th>`).join("")}</tr></thead>
       <tbody data-gbody>${p.games.map(row).join("")}</tbody>
-      <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${hours(p.overall.minutes_7d)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
+      <tfoot><tr class="tot"><td>Overall hours</td><td class="n">${w7(p.overall)}</td><td class="n">${hours(p.overall.total_min)}</td><td class="hide-sm"></td></tr></tfoot></table>
       <div data-gpager>${many ? pagerHtml(0, GPAGE, p.games_total) : ""}</div>`);
     gamesRow = row;
   }
@@ -1187,7 +1284,7 @@ pages.profile = async () => {
   });
   const daysM = new Map();
   if (p.history_visible) (p.recent || []).forEach(r => {
-    const d = new Date(r.ended_at), k = d.toDateString();
+    const d = new Date(r.ended_at), k = dayKey(d);
     if (!daysM.has(k)) daysM.set(k, { at: d, games: new Map() });
     const g = daysM.get(k).games, gk = r.game_id + "|" + r.game_name, cur = g.get(gk) || { id: r.game_id, name: r.game_name, secs: 0, at: d };
     cur.secs += r.duration_s || 0; if (d > cur.at) cur.at = d; g.set(gk, cur);
@@ -1229,7 +1326,7 @@ pages.profile = async () => {
     // column starts in its natural one (Game A→Z, the numbers biggest first, Last played newest).
     const st = { offset: 0, sort: "total", dir: "desc" };
     const load = async keepPos => {
-      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: st.sort, dir: st.dir });
+      const qs = new URLSearchParams({ show: "games", limit: GPAGE, offset: st.offset, sort: st.sort, dir: st.dir, tz: TZ });
       gbody.style.opacity = .5;
       try {
         const r = await api("/users/" + encodeURIComponent(p.handle) + "/profile?" + qs, { keepSession: true });
@@ -1336,6 +1433,20 @@ pages.friends = async () => {
 /* ----- settings (tabs) ----- */
 const RIG_FIELDS = [["manufacturer", "Manufacturer", "e.g. Custom build, Alienware"], ["cpu", "Processor", "e.g. Ryzen 7 7800X3D"], ["gpu", "Video card", "e.g. RTX 4070"], ["memory", "Memory", "e.g. 32 GB DDR5"], ["storage", "Storage", "e.g. 2 TB NVMe"], ["motherboard", "Motherboard", ""], ["monitor", "Monitor", "e.g. 27\" 1440p 165 Hz"], ["headset", "Headset", ""], ["keyboard", "Keyboard", ""], ["mouse", "Mouse", ""], ["mousepad", "Mouse pad", ""], ["case", "Case", ""], ["os", "Operating system", "e.g. Windows 11"]];
 const STYLES = ["Casual", "Weekend warrior", "Competitive", "Completionist", "MMO addict", "Sniper only", "Support main", "Speedrunner", "Explorer", "Clueless"];
+/* Settings > Account > Time zone: every IANA zone the browser knows, grouped by region. */
+const ZONES = (() => { let z = []; try { z = Intl.supportedValuesOf("timeZone"); } catch (e) { /* old browser */ }
+  if (!z.length) z = ["Africa/Johannesburg", "America/Chicago", "America/Los_Angeles", "America/New_York", "America/Sao_Paulo", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Brisbane", "Australia/Perth", "Australia/Sydney", "Europe/Berlin", "Europe/London", "Pacific/Auckland"];
+  return z.includes("UTC") ? z : z.concat("UTC"); })();
+const zoneOff = z => { try { const p = new Intl.DateTimeFormat("en", { timeZone: z, timeZoneName: "shortOffset" }).formatToParts(new Date()).find(x => x.type === "timeZoneName"); return p ? p.value.replace("GMT", "UTC") : ""; } catch (e) { return ""; } };
+const zoneLabel = z => { const i = z.indexOf("/"); return (i < 0 ? z : z.slice(i + 1)).replace(/_/g, " ").replace(/\//g, " / ") + ` (${zoneOff(z) || "UTC"})`; };
+function zoneOptions(cur, term) {
+  const t = (term || "").trim().toLowerCase(), groups = new Map();
+  const list = cur && !ZONES.includes(cur) ? ZONES.concat(cur) : ZONES;
+  list.forEach(z => { const l = zoneLabel(z); if (t && z !== cur && !(z.toLowerCase().includes(t) || l.toLowerCase().includes(t))) return;
+    const g = z.includes("/") ? z.split("/")[0] : "Other"; if (!groups.has(g)) groups.set(g, []); groups.get(g).push([z, l]); });
+  const auto = `<option value=""${cur ? "" : " selected"}>Automatic (browser): ${esc(TZ ? `${TZ} (${zoneOff(TZ) || "UTC"})` : "not detected, Australia/Sydney")}</option>`;
+  return auto + Array.from(groups.keys()).sort().map(g => `<optgroup label="${esc(g)}">${groups.get(g).sort((a, b) => a[1].localeCompare(b[1])).map(([z, l]) => `<option value="${esc(z)}"${z === cur ? " selected" : ""}>${esc(l)}</option>`).join("")}</optgroup>`).join("");
+}
 const TABS = [["account", "Account & profile"], ["rig", "Gaming rig"], ["games", "Played games"], ["privacy", "Privacy"], ["notifications", "Notifications"], ["connections", "Connections"], ["security", "Security"]];
 pages.settings = async () => {
   if (!requireLogin()) return;
@@ -1343,7 +1454,7 @@ pages.settings = async () => {
   let m;
   try { m = await api("/me"); } catch (e) { if (!token()) return requireLogin(); root.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; return; }
   let u = m.user;
-  const keep = () => setSession(token(), Object.assign(me() || {}, { id: u.id, handle: u.handle, display_name: u.display_name, email: u.email, avatar: u.avatar, email_verified: u.email_verified, mail_live: u.mail_live, staff_role: u.staff_role || null }));
+  const keep = () => setSession(token(), Object.assign(me() || {}, { id: u.id, handle: u.handle, display_name: u.display_name, email: u.email, avatar: u.avatar, email_verified: u.email_verified, mail_live: u.mail_live, staff_role: u.staff_role || null, timezone: u.timezone || null }));
   keep(); renderHeader(); verifyBar();
   const tab = () => { const t = location.hash.replace("#", ""); return TABS.some(x => x[0] === t) ? t : "account"; };
   const row = (label, html, hint) => `<label>${label}</label><div>${html}${hint ? `<div class="sub">${hint}</div>` : ""}</div>`;
@@ -1363,6 +1474,9 @@ pages.settings = async () => {
       ${row("Username", `<b>${esc(u.handle)}</b> <small style="color:#8a96a3">playfraglink.com/u/${esc(u.handle)}</small>`, "Your sign-in name and profile address. It's permanent; ask staff if it really needs changing.")}
       ${row("Nickname", `<input class="t" name="display_name" maxlength="32" value="${esc(u.display_name || "")}">`, "The name everyone sees, in the app and on the site. Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave empty to use your username.")}
       ${row("Email", `${esc(u.email || "")} ${verified}`)}
+      ${row("", `<button class="btn dl">Save</button>`)}</div></form>
+    <h3>Time zone</h3><form ${FA} data-f="tz">${msg}<div class="frm">
+      ${row("Time zone", `<div class="tzpick"><input class="t" type="search" data-tzq placeholder="Search, e.g. London or New York" aria-label="Search time zones" autocomplete="off"><select class="t" name="timezone" aria-label="Time zone">${zoneOptions(u.timezone || "", "")}</select></div>`, "Your week (Hours this week, Past 7 days, leaderboards) and the days and times on the site use this zone, on every device and in the app. Automatic uses this browser's zone.")}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
     <h3>About you</h3><form ${FA} data-f="about">${msg}<div class="frm">
       ${row("About me", `<textarea class="t" name="about" maxlength="300">${esc(u.about || "")}</textarea>`, "Up to 300 characters.")}
@@ -1392,7 +1506,7 @@ pages.settings = async () => {
   async function gamesTab(el) {
     const PG = 50, st = { offset: 0 };
     el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">Loading…</div>`;
-    let first; try { first = await api(`/me/games?limit=${PG}`); } catch (e) { bad(el, e); return; }
+    let first; try { first = await api(`/me/games?limit=${PG}&tz=${encodeURIComponent(TZ)}`); } catch (e) { bad(el, e); return; }
     if (!first.all) { el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">No games yet. Games show up here after you play with the Fraglink app running.</div>`; return; }
     el.innerHTML = `<h3>Played games</h3>${msg}
       <p class="pg-help">Switch a game off to hide it from your profile, signature image and the home page. It still counts in your own totals.</p>
@@ -1420,7 +1534,7 @@ pages.settings = async () => {
     const load = async keepPos => {
       const qs = new URLSearchParams({ limit: PG, offset: st.offset, sort: sortSel.value, show: showSel.value, q: q.value.trim() });
       list.style.opacity = .5;
-      try { await render(await api("/me/games?" + qs), keepPos); } catch (x) { bad(el, x); }
+      try { await render(await api("/me/games?" + qs + "&tz=" + encodeURIComponent(TZ)), keepPos); } catch (x) { bad(el, x); }
       list.style.opacity = 1;
     };
     let t; wireSearch(q, () => { clearTimeout(t); t = setTimeout(() => { st.offset = 0; load(); }, 200); });
@@ -1536,7 +1650,7 @@ pages.settings = async () => {
 
   function render() {
     const t = tab();
-    root.innerHTML = `<h1 style="margin:14px 0 0;font-size:22px">Account settings</h1><nav class="tabs">${TABS.map(([k, l]) => `<a href="#${k}" class="${k === t ? "on" : ""}">${l}</a>`).join("")}</nav><div class="tabpane" id="pane"></div>`;
+    root.innerHTML = `<section class="head"><div><h1>Account settings</h1><div class="sub">Your profile, gaming rig, privacy, notifications and linked accounts.</div></div></section><nav class="tabs">${TABS.map(([k, l]) => `<a href="#${k}" class="${k === t ? "on" : ""}">${l}</a>`).join("")}</nav><div class="tabpane" id="pane"></div>`;
     const el = $("#pane");
     if (t === "account") el.innerHTML = accountTab();
     else if (t === "rig") el.innerHTML = rigTab();
@@ -1548,6 +1662,11 @@ pages.settings = async () => {
   }
   async function refresh() { u = (await api("/me")).user; keep(); renderHeader(); }
   window.addEventListener("hashchange", render);
+  root.addEventListener("input", e => {
+    if (!e.target.matches || !e.target.matches("[data-tzq]")) return;
+    const sel = e.target.parentNode.querySelector("select[name=timezone]"); if (!sel) return;
+    sel.innerHTML = zoneOptions(sel.value, e.target.value);
+  });
   root.addEventListener("submit", async e => {
     const f = e.target.closest("form[data-f]"); if (!f) return; e.preventDefault();
     const k = f.dataset.f, v = n => f.elements[n] ? f.elements[n].value : undefined;
@@ -1560,6 +1679,11 @@ pages.settings = async () => {
           Object.assign(body, { country: v("country"), real_name: v("real_name"), gender: v("gender") });
         }
         const r = await api("/me/profile", { method: "POST", body }); Object.assign(u, r); ok(f, "Saved.");
+      }
+      else if (k === "tz") {
+        const r = await api("/me/timezone", { method: "POST", body: { timezone: v("timezone") || null } });
+        u.timezone = r.timezone; keep();
+        ok(f, r.timezone ? `Saved. Your week and times now use ${zoneLabel(r.timezone)}.` : "Saved. Your week and times follow this browser's time zone.");
       }
       else if (k === "email") { await api("/me/email", { method: "POST", body: { current_password: v("current_password"), new_email: v("new_email").trim() } }); await refresh(); render(); ok($("#pane"), "Email changed. We sent a link to confirm the new address. Can't find it? Check your junk or spam folder."); }
       else if (k === "delete") {
@@ -1620,7 +1744,7 @@ pages.settings = async () => {
           ok($("#pane"), "Date of birth saved.");
         } catch (x) { alert(x.message); if (x.code === "account_paused") location.href = "/login"; }
       } else if (b.matches("[data-export]")) {
-        const r = await fetch(API + "/export.zip", { headers: { Authorization: "Bearer " + token() } });
+        const r = await fetch(API + "/export.zip?tz=" + encodeURIComponent(TZ), { headers: { Authorization: "Bearer " + token() } });
         if (!r.ok) { const j = await r.json().catch(() => null); throw new Error((j && j.message) || "Export failed (HTTP " + r.status + ")."); }
         const a = document.createElement("a"); a.href = URL.createObjectURL(await r.blob()); a.download = "fraglink-export.zip"; a.click();
       }
@@ -1777,7 +1901,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const ready = () => $$("button[data-wait]").forEach(b => { b.disabled = false; b.removeAttribute("data-wait"); });
   if (f) Promise.resolve(f()).catch(e => { console.error(e); }).finally(ready); else ready();
   // keep the header in sync with the real account (handle/display name changes)
-  if (token() && document.body.dataset.page !== "settings" && document.body.dataset.page !== "verify") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null, avatar: m.user.avatar, email_verified: m.user.email_verified, mail_live: m.user.mail_live }); renderHeader(); verifyBar(); }).catch(() => { if (!token()) renderHeader(); });
+  if (token() && document.body.dataset.page !== "settings" && document.body.dataset.page !== "verify") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null, avatar: m.user.avatar, email_verified: m.user.email_verified, mail_live: m.user.mail_live, timezone: m.user.timezone || null }); renderHeader(); verifyBar(); /* saved zone changed (another device, or first visit after sign-in): redraw with it */ if ((m.user.timezone || null) !== SAVED0 && okZone(m.user.timezone || "UTC")) location.reload(); }).catch(() => { if (!token()) renderHeader(); });
   else verifyBar();
   if (token()) {
     startFriendsLive();
@@ -1803,23 +1927,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   if (qs("deleted")) { const d = new Date(qs("deleted")); const el = document.createElement("div"); el.className = "verify-bar delete-bar"; el.innerHTML = `<div class="wrap">Your account is scheduled for deletion${isNaN(d) ? "" : " on " + fullDate.format(d)}. Sign in again before then to keep it.</div>`; ($(".preview-flag") || $(".top")).after(el); }
 });
-/* ---------- home Quick poll (GET /poll, POST /poll/vote) ---------- */
-async function loadPoll(d) {
-  const box = document.getElementById("f2-poll"); if (!box) return;
-  try { d = d || await api("/poll"); } catch (e) { box.closest(".f2p, section, .panel")?.remove(); return; }
-  const p = d.poll;
-  if (!p) { (box.closest(".f2p") || box.parentElement).style.display = "none"; return; }
-  const can = d.signed_in && !p.closed;
-  box.innerHTML = `<b>${esc(p.question)}</b>${p.options.map(o => `<label><input type="radio" name="fp" value="${o.id}" ${p.my_vote === o.id ? "checked" : ""} ${can ? "" : "disabled"}> ${esc(o.label)} <span class="dimt" style="float:right">${o.pct}%</span></label><div class="bar"><i style="width:${o.pct}%"></i></div>`).join("")}
-    <div style="margin-top:8px">${can ? `<button class="glass" id="fp-vote">${p.my_vote ? "Change vote" : "Vote!"}</button> ` : p.closed ? "" : `<a href="/login?next=/">Sign in to vote</a> · `}<span class="dimt">${p.total} vote${p.total === 1 ? "" : "s"}${p.closed ? " · closed" : ""}${p.my_vote ? " · you voted ✔" : ""}</span></div>`;
-  const vb = document.getElementById("fp-vote");
-  if (vb) vb.onclick = async () => {
-    const c = box.querySelector("input[name=fp]:checked"); if (!c) return;
-    vb.disabled = true;
-    try { const r = await api("/poll/vote", { method: "POST", body: { option_id: Number(c.value) } }); loadPoll({ poll: r.poll, signed_in: true }); }
-    catch (e) { vb.disabled = false; alert(e.message); }
-  };
-}
 
 
 // WoW character popup (public profile)
@@ -1898,21 +2005,19 @@ const WOWPOP = (() => {
 
 })();
 
-// Home screenshot carousel: auto-advance 5s, pause on hover/focus, arrows, dots, swipe.
+// Home screenshot carousel (V4.2): arrows, thumbnails, arrow keys, swipe. No auto-advance.
 (function () {
-  const c = document.getElementById("f2-car"); if (!c) return;
-  const t = c.querySelector(".car-t"), n = t.children.length, d = c.querySelector(".car-d");
-  let i = 0, timer = 0, x0 = null;
-  d.innerHTML = Array.from({ length: n }, (_, k) => `<button type="button" aria-label="Screenshot ${k + 1}"></button>`).join("");
-  const go = k => { i = (k + n) % n; t.style.transform = `translateX(-${i * 100}%)`; d.querySelectorAll("button").forEach((b, j) => b.classList.toggle("on", j === i)); };
-  const play = () => { clearInterval(timer); if (!matchMedia("(prefers-reduced-motion: reduce)").matches) timer = setInterval(() => go(i + 1), 5000); };
-  const stop = () => clearInterval(timer);
-  c.querySelector(".p").onclick = () => { go(i - 1); play(); };
-  c.querySelector(".n").onclick = () => { go(i + 1); play(); };
-  d.onclick = e => { const b = e.target.closest("button"); if (b) { go([...d.children].indexOf(b)); play(); } };
-  c.addEventListener("mouseenter", stop); c.addEventListener("mouseleave", play);
-  c.addEventListener("focusin", stop); c.addEventListener("focusout", play);
-  c.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; stop(); }, { passive: true });
-  c.addEventListener("touchend", e => { if (x0 !== null) { const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1)); } x0 = null; play(); });
-  go(0); play();
+  const r = document.getElementById("car42"); if (!r) return;
+  const s = r.querySelectorAll(".sl"), t = r.querySelectorAll(".th42 button"), caps = Array.from(t, b => b.title);
+  let i = 0, x0 = null;
+  const go = n => { i = (n + s.length) % s.length; s.forEach((e, k) => e.classList.toggle("on", k === i)); t.forEach((e, k) => { e.classList.toggle("on", k === i); e.setAttribute("aria-current", k === i ? "true" : "false"); });
+    r.querySelector(".cap").textContent = caps[i]; r.querySelector(".cnt").textContent = (i + 1) + " / " + s.length; };
+  r.querySelector(".car-b.p").onclick = () => go(i - 1);
+  r.querySelector(".car-b.n").onclick = () => go(i + 1);
+  t.forEach(b => { b.onclick = () => go(+b.dataset.go); });
+  r.addEventListener("keydown", e => { if (e.key === "ArrowLeft") go(i - 1); else if (e.key === "ArrowRight") go(i + 1); });
+  const st = r.querySelector(".stage");
+  st.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, { passive: true });
+  st.addEventListener("touchend", e => { if (x0 !== null) { const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1)); } x0 = null; });
+  go(0);
 })();
