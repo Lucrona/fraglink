@@ -798,6 +798,24 @@ async function loadPoll42() {
     const c = box.querySelector("input[name=fp]:checked"); if (!c || vb.dataset.busy) return; vb.dataset.busy = 1;
     try { await api("/poll/vote", { method: "POST", body: { option_id: Number(c.value) } }); loadPoll42(); } catch (x) { delete vb.dataset.busy; alert(x.message); } };
 }
+/* Home: Friends' activity shows 5 rows; with two columns, up to 10, as many as end level with
+   the right column (Friends online + leaderboard). The panel itself stretches to the bottom. */
+function fitAct42() {
+  const p = document.querySelector("#h42-in .hub .o3"); if (!p) return;
+  const rows = $$(".feed .act", p), days = $$(".feed .day", p), L = p.parentElement, R = L.nextElementSibling;
+  const sync = () => { days.forEach(d => { let n = d.nextElementSibling, any = false;
+      while (n && !n.classList.contains("day")) { if (!n.hidden) { any = true; break; } n = n.nextElementSibling; }
+      d.hidden = !any; });
+    const vis = rows.filter(r => !r.hidden); rows.forEach(r => r.classList.toggle("lv", r === vis[vis.length - 1])); };
+  rows.forEach((r, i) => { r.hidden = i >= 5; });
+  const two = R && R.lastElementChild && getComputedStyle(L).display === "flex";
+  if (two) { p.style.flex = "none";
+    const end = R.lastElementChild.getBoundingClientRect().bottom;
+    for (let i = 5; i < rows.length; i++) { rows[i].hidden = false; sync();
+      if (p.getBoundingClientRect().bottom > end + 0.5) { rows[i].hidden = true; break; } }
+    p.style.flex = ""; }
+  sync();
+}
 pages.home = async () => {
   fillDownload();
   const u = token() ? me() : null;
@@ -845,10 +863,11 @@ pages.home = async () => {
       if (rest.length) rg += `<div class="rg more"><span class="a" style="background:${artGrad("other")}"></span><div class="w"><b>${rest.length} other games</b><small>Last played ${ago42(rest[0].last_played_at)}</small></div><div class="h">${h1(rest.reduce((a, x) => a + x.tenths, 0))}<small>this week</small></div></div>`;
     }
     const rgP = rg ? panel("Your recent games", rg, ` <a class="more" href="${prof(u)}">All my games »</a>`, "o2") : "";
-    // Friends' activity: one row per session (live ones first), latest 5, grouped by day.
+    // Friends' activity: one row per session (live ones first), grouped by day. Latest 5; on
+    // two columns up to 10, as many as fit beside Friends online + leaderboard (fitAct42).
     let feed = "";
     if (act && act.items.length) { let last = "";
-      act.items.slice(0, 5).forEach(i => { const live = i.kind === "playing", d = live ? "Today" : dayLabel(i.day ? new Date(i.day + "T12:00:00") : i.at);
+      act.items.slice(0, 10).forEach(i => { const live = i.kind === "playing", d = live ? "Today" : dayLabel(i.day ? new Date(i.day + "T12:00:00") : i.at);
         if (d !== last) { feed += `<div class="day">${d}</div>`; last = d; }
         feed += `<div class="act">${icon(i.game_id, i.game_name, "g")}<span class="who42"><a href="${prof(i)}">${nm(i)}</a> ${live
           ? `is playing <b>${gname(i.game_id, i.game_name)}</b>${i.started_at ? ` <span class="done">· started ${tFmt.format(new Date(i.started_at))}</span>` : ""}</span><span class="pnow">● playing now</span>`
@@ -877,11 +896,14 @@ pages.home = async () => {
         <div class="per on" data-p="week">Hours this week, ${esc(wk.label)}</div><div class="per" data-p="all">Total hours, as shown on each profile</div>`, "", "o4 lb42"); }
     inner += `<div class="hub"><div>${rgP}${actP}</div><div>${frP}${lbP}</div></div>`;
     $("#h42-in").innerHTML = inner;
+    fitAct42();
+    if (!fitAct42.on) { fitAct42.on = 1; let t; addEventListener("resize", () => { clearTimeout(t); t = setTimeout(fitAct42, 120); });
+      if (document.fonts) document.fonts.ready.then(fitAct42); }
     const wkEl = $("#wk42"); if (wkEl) wkTips(wkEl);
     const lb = $("#h42-in .lb42");
     if (lb) $$(".tabs a", lb).forEach(a => { const go = e => { e.preventDefault(); const t = a.dataset.t;
       $$(".tabs a", lb).forEach(x => { x.classList.toggle("on", x === a); x.setAttribute("aria-selected", x === a ? "true" : "false"); });
-      $$("[data-p]", lb).forEach(x => x.classList.toggle("on", x.dataset.p === t)); };
+      $$("[data-p]", lb).forEach(x => x.classList.toggle("on", x.dataset.p === t)); fitAct42(); };
       a.addEventListener("click", go); a.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") go(e); }); });
   }
   // ---- trending, how it works (signed out), news, poll + community
