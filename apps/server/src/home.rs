@@ -48,7 +48,13 @@ pub async fn appids(st: &AppState, ids: &[String]) -> ApiResult<HashMap<String, 
     Ok(out)
 }
 
-async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>> {
+/// Signed out, the page is cached and its "this week" figures use the default timezone
+/// (Australia/Sydney); signed in, they use `?tz=` (the browser's), like `/home/week`.
+async fn home(
+    State(st): State<AppState>,
+    m: MaybeUser,
+    axum::extract::Query(q): axum::extract::Query<WeekQuery>,
+) -> ApiResult<Json<Value>> {
     let viewer = m.0.as_ref().map(|a| a.user.id);
     if viewer.is_none() {
         if let Some((t, v)) = st
@@ -62,7 +68,8 @@ async fn home(State(st): State<AppState>, m: MaybeUser) -> ApiResult<Json<Value>
             }
         }
     }
-    let v = build(&st, viewer).await?;
+    let tz = crate::activity::tz_or_default(&st, viewer.and(q.tz.as_deref())).await;
+    let v = build(&st, viewer, &tz).await?;
     if viewer.is_none() {
         *st.home_public.lock().unwrap_or_else(|e| e.into_inner()) =
             Some((Instant::now(), v.clone()));
@@ -124,7 +131,7 @@ pub async fn week_json(
     let mine = data.user(me);
     let secs = mine.seconds();
     let total_t = week::tenths(secs);
-    let total_m = (secs + 30) / 60;
+    let total_m = week::minutes(secs);
     let day_s = mine.days();
     let day_t = week::apportion(total_t, &day_s);
     let day_m = week::apportion(total_m, &day_s);
@@ -143,11 +150,10 @@ pub async fn week_json(
             })
         })
         .collect();
-    let mut games: Vec<(&String, &week::GameWeek)> = mine.games.iter().collect();
-    games.sort_by(|a, b| b.1.last_played.cmp(&a.1.last_played).then(a.0.cmp(b.0)));
-    let gsecs: Vec<i64> = games.iter().map(|g| g.1.seconds).collect();
-    let g_t = week::apportion(total_t, &gsecs);
-    let gids: Vec<String> = games.iter().map(|g| g.0.clone()).collect();
+    // games in the home page's order with their tenths (the same split every surface uses)
+    let shown_wk = mine.shown(|_| true);
+    let games = &shown_wk.games;
+    let gids: Vec<String> = games.iter().map(|g| g.game_id.clone()).collect();
     let named = names::public_names(st, &gids).await?;
     let own = presence::own_names_for(st, me, &gids).await?;
     let apps = appids(st, &gids).await?;
@@ -160,19 +166,18 @@ pub async fn week_json(
     };
     let games_json: Vec<Value> = games
         .iter()
-        .enumerate()
-        .map(|(i, (id, g))| {
+        .map(|g| {
             json!({
-                "game_id": id, "name": name_of(id), "steam_appid": apps.get(*id),
-                "seconds": g.seconds, "tenths": g_t[i], "last_played_at": g.last_played,
+                "game_id": g.game_id, "name": name_of(&g.game_id), "steam_appid": apps.get(&g.game_id),
+                "seconds": g.seconds, "tenths": g.tenths, "minutes": g.minutes, "last_played_at": g.last_played,
             })
         })
         .collect();
     let top = games
         .iter()
         .enumerate()
-        .max_by(|a, b| a.1 .1.seconds.cmp(&b.1 .1.seconds).then(b.0.cmp(&a.0)))
-        .map(|(i, (id, g))| json!({ "game_id": id, "name": name_of(id), "seconds": g.seconds, "tenths": g_t[i] }));
+        .max_by(|a, b| a.1.seconds.cmp(&b.1.seconds).then(b.0.cmp(&a.0)))
+        .map(|(_, g)| json!({ "game_id": g.game_id, "name": name_of(&g.game_id), "seconds": g.seconds, "tenths": g.tenths }));
     let mut board: Vec<Value> = Vec::new();
     for (id, handle, name) in &shown {
         let s = data.user(*id).seconds();
@@ -238,8 +243,15 @@ const LIVE_USER: &str =
 /// Sessions of test accounts never count in public totals.
 const NO_TEST_SESSIONS: &str = "s.user_id NOT IN (SELECT id FROM users WHERE is_test)";
 
-pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
+/// The home page. Every "this week" figure is tracked play only, over the [`crate::week`]
+/// window in `tz` (imported hours never count in a week), with the same per-session rule and
+/// rounding as `/home/week`, so a person's figures here equal their own home headline.
+pub async fn build(st: &AppState, viewer: Option<Uuid>, tz: &str) -> ApiResult<Value> {
     let signed_in = viewer.is_some();
+    let w = crate::week::window(crate::week::parse_tz(tz), chrono::Utc::now());
+    let (wa, wb) = (w.bounds[0], w.bounds[crate::week::DAYS]);
+    let secs = crate::week::secs_sql("$1", "$2");
+    let inw = crate::week::in_window_sql("$1", "$2");
     let friend_ids = match viewer {
         Some(v) => friends::public_friend_ids(st, v).await?,
         None => vec![],
@@ -250,28 +262,34 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         "SELECT (SELECT count(*) FROM users u WHERE {LIVE_USER}),
                 (SELECT count(*) FROM presence p JOIN users u ON u.id = p.user_id WHERE {LIVE_USER} AND p.status IN ('online','away')),
                 (SELECT count(*) FROM presence p JOIN users u ON u.id = p.user_id WHERE {LIVE_USER} AND p.status IN ('online','away') AND p.game_id IS NOT NULL),
-                (SELECT coalesce(sum(s.duration_s), 0)::bigint FROM play_sessions s WHERE s.started_at >= now() - interval '7 days' AND {NO_TEST_SESSIONS})"
+                (SELECT coalesce(sum({secs}), 0)::bigint FROM play_sessions s WHERE {inw} AND {NO_TEST_SESSIONS})"
     )))
+    .bind(wa)
+    .bind(wb)
     .fetch_one(&st.db)
     .await?;
 
     // ---- most played this week (aggregate; unlisted/hidden games never shown)
-    // (app sessions or Imported counter growth, whichever is larger per player: hours::WEEK_CTE)
+    // (tracked play only, crate::week window: imported hours never count in a week)
     // Private profiles still count (it's an anonymous total), but deleted, banned, pending-delete
     // and test accounts don't. No player count is shown, so a tile can't point at one person.
     let rows: Vec<(String, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "WITH {wk}
-         SELECT s.game_id, sum(s.m)::bigint
-         FROM wk s JOIN users u ON u.id = s.user_id
-         WHERE {LIVE_USER}
+        "SELECT s.game_id, sum({secs})::bigint
+         FROM play_sessions s JOIN users u ON u.id = s.user_id
+         WHERE {inw} AND {LIVE_USER}
            AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
          GROUP BY s.game_id
-         HAVING sum(s.m) >= 1
-         ORDER BY 2 DESC LIMIT 40",
-        wk = crate::hours::WEEK_CTE
+         HAVING sum({secs}) >= 30
+         ORDER BY 2 DESC, 1 LIMIT 40"
     )))
+    .bind(wa)
+    .bind(wb)
     .fetch_all(&st.db)
     .await?;
+    let rows: Vec<(String, i64)> = rows
+        .into_iter()
+        .map(|(g, s)| (g, crate::week::minutes(s)))
+        .collect();
     let ids: Vec<String> = rows.iter().map(|r| r.0.clone()).collect();
     let named = names::public_names(st, &ids).await?;
     let apps = appids(st, &ids).await?;
@@ -346,17 +364,20 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         crate::account::sql_shows("leaderboards")
     );
     let tops: Vec<(Uuid, String, String, i64, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "WITH {wk}, w AS (
-            SELECT s.user_id, s.game_id, s.m FROM wk s
-            WHERE NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id))
-         SELECT u.id, u.handle, u.display_name, sum(w.m)::bigint AS m,
-                (array_agg(w.game_id ORDER BY w.m DESC))[1]
+        "WITH w AS (
+            SELECT s.user_id, s.game_id, sum({secs})::bigint AS secs FROM play_sessions s
+            WHERE {inw}
+              AND NOT EXISTS (SELECT 1 FROM hidden_games h WHERE h.user_id = s.user_id AND h.game_id = s.game_id)
+            GROUP BY 1, 2)
+         SELECT u.id, u.handle, u.display_name, sum(w.secs)::bigint AS secs,
+                (array_agg(w.game_id ORDER BY w.secs DESC, w.game_id))[1]
          FROM w JOIN users u ON u.id = w.user_id
          WHERE {LIVE_USER} AND {share}
-         GROUP BY u.id, u.handle, u.display_name HAVING sum(w.m) >= 10
-         ORDER BY m DESC, u.handle LIMIT 8",
-        wk = crate::hours::WEEK_CTE
+         GROUP BY u.id, u.handle, u.display_name HAVING sum(w.secs) >= 570
+         ORDER BY secs DESC, u.handle LIMIT 8"
     )))
+    .bind(wa)
+    .bind(wb)
     .fetch_all(&st.db)
     .await?;
     let tids: Vec<Uuid> = tops.iter().map(|t| t.0).collect();
@@ -365,8 +386,9 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     let tav = avatars::many(st, &tids).await?;
     let top_players: Vec<Value> = tops
         .iter()
-        .map(|(id, h, dn, m, g)| {
-            json!({ "handle": h, "display_name": dn, "minutes": m, "avatar": tav.get(id),
+        .map(|(id, h, dn, secs, g)| {
+            json!({ "handle": h, "display_name": dn, "minutes": crate::week::minutes(*secs),
+            "seconds": secs, "tenths": crate::week::tenths(*secs), "avatar": tav.get(id),
             "top_game": tnamed.get(g) })
         })
         .collect();
@@ -377,19 +399,25 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
     // ---- your week
     let mut mine = Value::Null;
     if let Some(v) = viewer {
-        let (w, total): (i64, i64) = sqlx::query_as(
-            "SELECT coalesce((SELECT sum(minutes_7d) FROM user_game_stats WHERE user_id = $1), 0)::bigint,
-                    coalesce((SELECT sum(display_min) FROM user_game_stats WHERE user_id = $1), 0)::bigint",
+        // your own week, as on /home/week (your hidden games count for you)
+        let wk = crate::week::load(st, w.clone(), &[v], Some(v))
+            .await?
+            .user(v)
+            .shown(|_| true);
+        let week_min = wk.minutes;
+        let (total,): (i64,) = sqlx::query_as(
+            "SELECT coalesce((SELECT sum(display_min) FROM user_game_stats WHERE user_id = $1), 0)::bigint",
         )
         .bind(v)
         .fetch_one(&st.db)
         .await?;
-        let top: Option<(String, i64)> = sqlx::query_as(
-            "SELECT game_id, minutes_7d FROM user_game_stats WHERE user_id = $1 AND minutes_7d > 0 ORDER BY minutes_7d DESC LIMIT 1",
-        )
-        .bind(v)
-        .fetch_optional(&st.db)
-        .await?;
+        let top: Option<(String, i64)> = wk
+            .games
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| g.seconds > 0)
+            .max_by(|a, b| a.1.seconds.cmp(&b.1.seconds).then(b.0.cmp(&a.0)))
+            .map(|(_, g)| (g.game_id.clone(), g.minutes));
         let top_name = match &top {
             Some((g, _)) => names::public_names(st, std::slice::from_ref(g))
                 .await?
@@ -403,7 +431,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
             .values()
             .filter(|p| p.status != "offline" && p.game_id.is_some())
             .count();
-        mine = json!({ "minutes_7d": w, "total_min": total,
+        mine = json!({ "minutes_7d": week_min, "tenths_7d": wk.tenths, "total_min": total,
             "top_game": top_name, "top_game_min": top.map(|t| t.1),
             "friends_online": fonline, "friends_in_game": fgame, "friends": friend_ids.len() });
     }
@@ -419,7 +447,7 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>) -> ApiResult<Value> {
         "signed_in": signed_in,
         "counts_style": crate::features::home_counts(st).await,
         "stats_strip": crate::features::on(st, "home_stats").await,
-        "stats": { "registered": registered, "online": online, "in_game": in_game, "minutes_7d": week_s / 60, "minutes_total": total_s / 60 },
+        "stats": { "registered": registered, "online": online, "in_game": in_game, "minutes_7d": crate::week::minutes(week_s), "minutes_total": total_s / 60 },
         "most_played": most,
         "now_playing": now_playing,
         "top_players": top_players,

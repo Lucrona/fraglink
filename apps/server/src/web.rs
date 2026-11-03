@@ -222,7 +222,9 @@ async fn home(
         ));
     };
     let uid = a.user.id;
-    let games = api::game_stats(&st, uid).await?;
+    // no browser timezone on this server-rendered page: the default one (Australia/Sydney)
+    let tz = crate::activity::tz_or_default(&st, None).await;
+    let games = api::game_stats(&st, uid, &tz).await?;
     let steam: Option<(String, bool, Option<chrono::DateTime<chrono::Utc>>, Option<String>)> = sqlx::query_as(
         "SELECT provider_uid, verified, last_sync_at, sync_status FROM linked_accounts WHERE user_id = $1 AND provider = 'steam'",
     )
@@ -289,7 +291,7 @@ async fn home(
         );
     }
     b += &format!(
-        r#"</table><p><b>{}</b> verified<br><small class="m"><span class="t-tracked">● Tracked</span> = Fraglink sessions or Steam's own playtime · <span class="t-imported">◆ Imported</span> = a game's own counter (self-reported, e.g. WoW /played from the Fraglink addon). Leaderboards count WoW /played only for characters verified through Battle.net.</small></p></div>"#,
+        r#"</table><p><b>{}</b> verified<br><small class="m"><span class="t-tracked">● Tracked</span> = Fraglink sessions or Steam's own playtime · <span class="t-imported">◆ Imported</span> = a game's own counter (self-reported, e.g. WoW /played from the Fraglink addon). Past 7 days counts only what the Fraglink app tracked (never imported hours). All-time leaderboards count WoW /played only for characters verified through Battle.net.</small></p></div>"#,
         hrs(verified)
     );
     // steam

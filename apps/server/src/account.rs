@@ -680,8 +680,11 @@ async fn my_games(
     State(st): State<AppState>,
     a: AuthUser,
     axum::extract::Query(pq): axum::extract::Query<crate::paging::PageQuery>,
+    axum::extract::Query(wq): axum::extract::Query<crate::home::WeekQuery>,
 ) -> ApiResult<Json<Value>> {
-    let rows = api::game_stats(&st, a.user.id).await?;
+    // "this week" per game: tracked only, the home page's week in the viewer's timezone
+    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+    let rows = api::game_stats(&st, a.user.id, &tz).await?;
     let hidden = hidden_games(&st, a.user.id).await?;
     let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
     let named = crate::names::public_names(&st, &ids).await?;
@@ -691,7 +694,7 @@ async fn my_games(
         .map(|g| {
             json!({
                 "game_id": g.game_id, "name": named.get(&g.game_id).cloned().unwrap_or(g.name),
-                "total_min": g.display_min, "minutes_7d": g.minutes_7d, "last_played_at": g.last_played_at,
+                "total_min": g.display_min, "minutes_7d": g.minutes_7d, "tenths_7d": g.tenths_7d, "last_played_at": g.last_played_at,
                 "hidden": hidden.contains(&g.game_id),
             })
         })

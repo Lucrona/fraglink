@@ -804,7 +804,7 @@ pages.home = async () => {
   if (u) { $("#h42-out").hidden = true; $("#h42-crumb").textContent = "Your Fraglink"; }
   latest().then(l => { if (!l || !l.version) return; $("#h42-ver").textContent = l.version; $("#h42-date").textContent = l.date ? " · " + fullDate.format(new Date(l.date)) : ""; $("#h42-rel").hidden = false; }).catch(() => {});
   let h;
-  try { h = await api("/home"); } catch (e) { return; }
+  try { h = await api("/home?tz=" + encodeURIComponent(TZ)); } catch (e) { return; }
   let wk = null, fl = null, act = null;
   if (u) [wk, fl, act] = await Promise.all([
     api("/home/week?tz=" + encodeURIComponent(TZ)).catch(() => null),
@@ -1453,7 +1453,7 @@ pages.settings = async () => {
   async function gamesTab(el) {
     const PG = 50, st = { offset: 0 };
     el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">Loading…</div>`;
-    let first; try { first = await api(`/me/games?limit=${PG}`); } catch (e) { bad(el, e); return; }
+    let first; try { first = await api(`/me/games?limit=${PG}&tz=${encodeURIComponent(TZ)}`); } catch (e) { bad(el, e); return; }
     if (!first.all) { el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">No games yet. Games show up here after you play with the Fraglink app running.</div>`; return; }
     el.innerHTML = `<h3>Played games</h3>${msg}
       <p class="pg-help">Switch a game off to hide it from your profile, signature image and the home page. It still counts in your own totals.</p>
@@ -1481,7 +1481,7 @@ pages.settings = async () => {
     const load = async keepPos => {
       const qs = new URLSearchParams({ limit: PG, offset: st.offset, sort: sortSel.value, show: showSel.value, q: q.value.trim() });
       list.style.opacity = .5;
-      try { await render(await api("/me/games?" + qs), keepPos); } catch (x) { bad(el, x); }
+      try { await render(await api("/me/games?" + qs + "&tz=" + encodeURIComponent(TZ)), keepPos); } catch (x) { bad(el, x); }
       list.style.opacity = 1;
     };
     let t; wireSearch(q, () => { clearTimeout(t); t = setTimeout(() => { st.offset = 0; load(); }, 200); });
@@ -1681,7 +1681,7 @@ pages.settings = async () => {
           ok($("#pane"), "Date of birth saved.");
         } catch (x) { alert(x.message); if (x.code === "account_paused") location.href = "/login"; }
       } else if (b.matches("[data-export]")) {
-        const r = await fetch(API + "/export.zip", { headers: { Authorization: "Bearer " + token() } });
+        const r = await fetch(API + "/export.zip?tz=" + encodeURIComponent(TZ), { headers: { Authorization: "Bearer " + token() } });
         if (!r.ok) { const j = await r.json().catch(() => null); throw new Error((j && j.message) || "Export failed (HTTP " + r.status + ")."); }
         const a = document.createElement("a"); a.href = URL.createObjectURL(await r.blob()); a.download = "fraglink-export.zip"; a.click();
       }

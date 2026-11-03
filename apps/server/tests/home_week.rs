@@ -471,7 +471,7 @@ async fn profile_week_matches_home_headline(pool: PgPool) {
     let a = signup(&app, "a@example.com", "alice").await;
     let b = signup(&app, "b@example.com", "bob").await;
     befriend(&app, &a, &b, "bob", "alice").await;
-    sqlx::query("INSERT INTO games (id, name) VALUES ('wow', 'World of Warcraft'), ('cs2', 'Counter-Strike 2'), ('quake', 'Quake')")
+    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true), ('cs2', 'Counter-Strike 2', true), ('quake', 'Quake', true) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, verified = true")
         .execute(&pool)
         .await
         .unwrap();
@@ -558,4 +558,282 @@ async fn profile_week_matches_home_headline(pool: PgPool) {
         assert_eq!(w["board_all"].as_array().unwrap().len(), 2);
     }
     let _ = b;
+}
+
+/// Every 7-day figure anywhere is the home page's week: tracked play only (imports and
+/// Steam never count), same window, same rounding. For one person they all equal their
+/// "Hours this week" headline (and its per-game split) in the same timezone.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn every_week_figure_matches_home_headline(pool: PgPool) {
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let a = signup(&app, "a@example.com", "alice").await;
+    let b = signup(&app, "b@example.com", "bob").await;
+    befriend(&app, &a, &b, "bob", "alice").await;
+    for t in [&a, &b] {
+        let r = api(
+            &app,
+            "POST",
+            "/api/v1/me/privacy",
+            Some(t),
+            Some(json!({"public_profile": true})),
+        )
+        .await;
+        assert_eq!(r.status, 200, "{}", r.text);
+    }
+    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('wow', 'World of Warcraft', true), ('cs2', 'Counter-Strike 2', true), ('quake', 'Quake', true) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, verified = true")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for (h, g, s, e, secs) in [
+        ("alice", "wow", "26 hours", "25 hours", 3517),
+        ("alice", "cs2", "50 hours", "49 hours", 2000),
+        ("alice", "quake", "3 hours", "1 hours", 4321),
+        ("alice", "wow", "20 days", "19 days", 3600), // outside the week
+        ("bob", "wow", "5 hours", "4 hours", 3600),
+    ] {
+        sqlx::query(
+            "INSERT INTO sessions (id, user_id, game_id, started_at, ended_at, duration_s)
+             SELECT gen_random_uuid(), id, $2, now() - $3::interval, now() - $4::interval, $5 FROM users WHERE handle = $1",
+        )
+        .bind(h)
+        .bind(g)
+        .bind(s)
+        .bind(e)
+        .bind(secs)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    // imports: Steam playtime (600 min forever, 300 in two weeks) and a WoW counter that grew
+    // 300 minutes this week. They count in lifetime totals, never in a week.
+    sqlx::query("INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at) SELECT id, 730, 'cs2', 600, 300, now() FROM users WHERE handle = 'alice'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for (min, ago) in [
+        (599_700, "8 days"),
+        (599_800, "3 days"),
+        (600_000, "1 hour"),
+    ] {
+        sqlx::query("INSERT INTO hours_entries (id, user_id, game_id, tier, source, minutes, created_at, captured_at) SELECT gen_random_uuid(), id, 'wow', 'imported', 'manual', $1, now() - $2::interval, now() - $2::interval FROM users WHERE handle = 'alice'")
+            .bind(min)
+            .bind(ago)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let tracked = 3517 + 2000 + 4321;
+    let get = |path: String, t: String| {
+        let app = app.clone();
+        async move {
+            let r = api(&app, "GET", &path, Some(&t), None).await;
+            assert_eq!(r.status, 200, "{path}: {}", r.text);
+            r.json()
+        }
+    };
+    let mins = |s: i64| (s + 30) / 60;
+    for tz in ["Australia/Sydney", "UTC", "America/Los_Angeles"] {
+        let w = get(format!("/api/v1/home/week?tz={tz}"), a.clone()).await;
+        assert_consistent(&w);
+        assert_eq!(n(&w["seconds"]), tracked, "{tz}: tracked only: {w}");
+        let (secs, minutes, tenths) = (n(&w["seconds"]), n(&w["minutes"]), n(&w["tenths"]));
+        let wg = w["games"].as_array().unwrap().clone();
+        let g_of = |id: &str| wg.iter().find(|g| g["game_id"] == id).cloned().unwrap();
+        let wb = get(format!("/api/v1/home/week?tz={tz}"), b.clone()).await;
+
+        // home page: your week, top players, site total, most played
+        let h = get(format!("/api/v1/home?tz={tz}"), a.clone()).await;
+        assert_eq!(n(&h["me"]["minutes_7d"]), minutes, "{tz}: home me");
+        assert_eq!(n(&h["me"]["tenths_7d"]), tenths, "{tz}: home me");
+        assert!(
+            n(&h["me"]["total_min"]) >= 600_000,
+            "lifetime keeps imports"
+        );
+        assert_eq!(h["me"]["top_game"], "Quake");
+        let tp = h["top_players"].as_array().unwrap();
+        let me_tp = tp.iter().find(|r| r["handle"] == "alice").unwrap();
+        assert_eq!(n(&me_tp["seconds"]), secs, "{tz}: top players");
+        assert_eq!(n(&me_tp["minutes"]), minutes, "{tz}: top players");
+        assert_eq!(n(&me_tp["tenths"]), tenths, "{tz}: top players");
+        let all_s = secs + n(&wb["seconds"]);
+        assert_eq!(n(&h["stats"]["minutes_7d"]), mins(all_s), "{tz}: site week");
+        for m in h["most_played"].as_array().unwrap() {
+            let id = m["game_id"].as_str().unwrap();
+            let s: i64 = [&w, &wb]
+                .iter()
+                .flat_map(|v| v["games"].as_array().unwrap().iter())
+                .filter(|g| g["game_id"] == id)
+                .map(|g| n(&g["seconds"]))
+                .sum();
+            assert_eq!(n(&m["minutes"]), mins(s), "{tz}: most played {id}");
+        }
+
+        // profile (also covered above), stats, my games (paged and not), JSON export
+        let p = get(format!("/api/v1/users/alice/profile?tz={tz}"), a.clone()).await;
+        assert_eq!(n(&p["overall"]["minutes_7d"]), minutes, "{tz}: profile");
+        assert_eq!(n(&p["overall"]["tenths_7d"]), tenths, "{tz}: profile");
+        let s = get(format!("/api/v1/stats?tz={tz}"), a.clone()).await;
+        assert_eq!(n(&s["overall"]["minutes_7d"]), minutes, "{tz}: stats");
+        assert_eq!(n(&s["overall"]["tenths_7d"]), tenths, "{tz}: stats");
+        let per_game =
+            |v: &Value, k: &str| -> i64 { v.as_array().unwrap().iter().map(|g| n(&g[k])).sum() };
+        assert_eq!(
+            per_game(&s["games"], "minutes_7d"),
+            minutes,
+            "{tz}: stats games"
+        );
+        assert_eq!(
+            per_game(&s["games"], "tenths_7d"),
+            tenths,
+            "{tz}: stats games"
+        );
+        for g in s["games"].as_array().unwrap() {
+            let pg = p["games"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|x| x["game_id"] == g["game_id"])
+                .unwrap();
+            assert_eq!(
+                g["minutes_7d"], pg["minutes_7d"],
+                "{tz}: stats vs profile per game"
+            );
+            assert_eq!(
+                g["tenths_7d"], pg["tenths_7d"],
+                "{tz}: stats vs profile per game"
+            );
+            assert_eq!(
+                n(&g["tenths_7d"]),
+                n(&g_of(g["game_id"].as_str().unwrap())["tenths"]),
+                "{tz}: stats vs home per game"
+            );
+        }
+        for q in ["", "&limit=2", "&limit=50&sort=week"] {
+            let mg = get(format!("/api/v1/me/games?tz={tz}{q}"), a.clone()).await;
+            if q == "&limit=2" {
+                assert_eq!(n(&mg["total"]), 3, "{mg}");
+                continue;
+            }
+            assert_eq!(
+                per_game(&mg["games"], "minutes_7d"),
+                minutes,
+                "{tz}: my games {q}"
+            );
+            assert_eq!(
+                per_game(&mg["games"], "tenths_7d"),
+                tenths,
+                "{tz}: my games {q}"
+            );
+        }
+        let ex = get(format!("/api/v1/export?tz={tz}"), a.clone()).await;
+        assert_eq!(
+            per_game(&ex["game_stats"], "minutes_7d"),
+            minutes,
+            "{tz}: export"
+        );
+
+        // a friend's card (desktop): both week figures are the headline in seconds
+        let fs = get(format!("/api/v1/friends/alice/summary?tz={tz}"), b.clone()).await;
+        assert_eq!(n(&fs["week_seconds"]), secs, "{tz}: friend card");
+        assert_eq!(n(&fs["last_7d_seconds"]), secs, "{tz}: friend card");
+        assert_eq!(fs["top_game_7d"], "Quake");
+
+        // per-game leaderboards: each game's seconds as on the home page; summed, the headline
+        let mut lb_s = 0;
+        for g in ["wow", "cs2", "quake"] {
+            let lb = get(
+                format!("/api/v1/leaderboard/{g}?period=7d&tz={tz}"),
+                b.clone(),
+            )
+            .await;
+            let r = lb["ranks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r["handle"] == "alice")
+                .unwrap_or_else(|| panic!("{tz}: alice on {g}: {lb}"))
+                .clone();
+            let hs = n(&g_of(g)["seconds"]);
+            assert_eq!(n(&r["seconds"]), hs, "{tz}: leaderboard {g}");
+            assert_eq!(n(&r["minutes"]), mins(hs), "{tz}: leaderboard {g}");
+            lb_s += n(&r["seconds"]);
+        }
+        assert_eq!(lb_s, secs, "{tz}: leaderboards add up to the headline");
+        let all = get("/api/v1/leaderboard/wow?period=all".into(), b.clone()).await;
+        assert!(
+            n(&all["ranks"][0]["minutes"]) >= 600_000,
+            "all time keeps imports"
+        );
+    }
+
+    // signature card and the ZIP export (default timezone: Australia/Sydney)
+    let w = get("/api/v1/home/week".into(), a.clone()).await;
+    let card = fraglink_server::sig::card_for(&st, "alice")
+        .await
+        .unwrap()
+        .unwrap();
+    let wh = |m: i64| format!("{} h this week", (m + 30) / 60);
+    assert!(
+        card.line2.starts_with(&wh(n(&w["minutes"]))),
+        "{} vs {}",
+        card.line2,
+        w["minutes"]
+    );
+    let r = api(&app, "GET", "/api/v1/export.zip", Some(&a), None).await;
+    assert_eq!(r.status, 200, "{}", r.text);
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(r.bytes.clone())).unwrap();
+    let mut csv = String::new();
+    std::io::Read::read_to_string(&mut z.by_name("games.csv").unwrap(), &mut csv).unwrap();
+    let mut lines = csv.lines();
+    let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+    let col = head
+        .iter()
+        .position(|c| *c == "minutes_last_7_days")
+        .unwrap();
+    let zip_min: i64 = lines
+        .map(|l| l.split(',').nth(col).unwrap().parse::<i64>().unwrap())
+        .sum();
+    assert_eq!(zip_min, n(&w["minutes"]), "{csv}");
+    // the legacy web page's "Past 7 days" column shows the same per-game minutes
+    let web = page(&app, "/", Some(&a)).await;
+    assert_eq!(web.status, 200, "{}", web.text);
+    assert!(web.text.contains("Past 7 days"), "{}", web.text);
+    {
+        let s = get("/api/v1/stats".into(), a.clone()).await;
+        for g in s["games"].as_array().unwrap() {
+            let m = n(&g["minutes_7d"]);
+            let cell = format!(r#"<td class="n">{}.{}h</td>"#, m / 60, (m % 60) * 10 / 60);
+            assert!(web.text.contains(&cell), "{cell} not in web page");
+        }
+    }
+
+    // hidden games: still yours on your own figures, gone from everything others see
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/me/games/hide",
+        Some(&a),
+        Some(json!({"game_id": "quake", "hidden": true})),
+    )
+    .await;
+    assert_eq!(r.status, 200, "{}", r.text);
+    fraglink_server::sig::forget("alice");
+    let w = get("/api/v1/home/week".into(), a.clone()).await;
+    assert_eq!(n(&w["seconds"]), tracked, "own week keeps hidden games");
+    let visible = tracked - 4321;
+    let fs = get("/api/v1/friends/alice/summary".into(), b.clone()).await;
+    assert_eq!(n(&fs["week_seconds"]), visible, "friend card hides it");
+    assert_eq!(fs["top_game_7d"], "World of Warcraft");
+    let h = get("/api/v1/home".into(), b.clone()).await;
+    let tp = h["top_players"].as_array().unwrap();
+    let r = tp.iter().find(|r| r["handle"] == "alice").unwrap();
+    assert_eq!(n(&r["seconds"]), visible, "top players hide it");
+    let lb = get("/api/v1/leaderboard/quake?period=7d".into(), b.clone()).await;
+    assert!(lb["ranks"].as_array().unwrap().is_empty(), "{lb}");
+    let card = fraglink_server::sig::card_for(&st, "alice")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(card.line2.starts_with(&wh(mins(visible))), "{}", card.line2);
 }

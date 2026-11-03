@@ -245,13 +245,11 @@ async fn recent_mode(
     Ok(out)
 }
 
-fn week_start(now: DateTime<Utc>) -> DateTime<Utc> {
-    use chrono::{Datelike, TimeZone};
-    let d = now.date_naive() - Duration::days(now.weekday().num_days_from_monday() as i64);
-    Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
-}
-
-pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendSummary> {
+/// A friend's card. `week_seconds` and `last_7d_seconds` are both the friend's week exactly as
+/// the home page counts it ([`crate::week`] in `tz`: tracked play only, today and the 6 days
+/// before, games they hide from others left out), so the card matches their headline.
+/// `top_game_7d` is the game they played most in it.
+pub async fn summary(st: &AppState, me: Uuid, handle: &str, tz: &str) -> ApiResult<FriendSummary> {
     let p = friends::find_visible(st, Some(me), handle).await?;
     if p.id != me && !friends::are_friends(st, me, p.id).await? {
         return Err(AppError::new(
@@ -277,29 +275,19 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
     };
     let (mut week, mut d7, mut top) = (None, None, None);
     if shares || p.id == me {
-        let now = Utc::now();
-        // The game running now counts too (play_sessions).
-        // Clip sessions to the window so a session that started before it only counts its tail.
-        let secs = |from: DateTime<Utc>| {
-            sqlx::query_scalar::<_, Option<i64>>(
-                "SELECT sum(LEAST(duration_s, GREATEST(0, EXTRACT(EPOCH FROM (ended_at - $2))::bigint)))::bigint
-                 FROM play_sessions WHERE user_id = $1 AND ended_at > $2",
-            )
-            .bind(p.id)
-            .bind(from)
-            .fetch_one(&st.db)
-        };
-        week = Some(secs(week_start(now)).await?.unwrap_or(0));
-        d7 = Some(secs(now - Duration::days(7)).await?.unwrap_or(0));
-        let top_id: Option<String> = sqlx::query_scalar(
-            "SELECT s.game_id FROM play_sessions s
-             WHERE s.user_id = $1 AND s.ended_at > $2
-             GROUP BY 1 ORDER BY sum(s.duration_s) DESC LIMIT 1",
-        )
-        .bind(p.id)
-        .bind(now - Duration::days(7))
-        .fetch_optional(&st.db)
-        .await?;
+        // the game running now counts too (week::load reads play_sessions)
+        let wk = crate::week::for_user(st, p.id, tz, p.id == me)
+            .await?
+            .shown(|_| true);
+        week = Some(wk.seconds);
+        d7 = Some(wk.seconds);
+        let top_id: Option<String> = wk
+            .games
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| g.seconds > 0)
+            .max_by(|a, b| a.1.seconds.cmp(&b.1.seconds).then(b.0.cmp(&a.0)))
+            .map(|(_, g)| g.game_id.clone());
         if let Some(id) = top_id {
             top = Some(
                 crate::names::public_name(st, &id)
@@ -317,23 +305,4 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str) -> ApiResult<FriendS
         last_7d_seconds: d7,
         top_game_7d: top,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::TimeZone;
-    #[test]
-    fn week_starts_monday_utc() {
-        let t = Utc.with_ymd_and_hms(2026, 10, 3, 15, 0, 0).unwrap(); // Saturday
-        assert_eq!(
-            week_start(t),
-            Utc.with_ymd_and_hms(2026, 9, 28, 0, 0, 0).unwrap()
-        );
-        let m = Utc.with_ymd_and_hms(2026, 9, 28, 0, 0, 1).unwrap();
-        assert_eq!(
-            week_start(m),
-            Utc.with_ymd_and_hms(2026, 9, 28, 0, 0, 0).unwrap()
-        );
-    }
 }

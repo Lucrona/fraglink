@@ -1508,6 +1508,7 @@ async fn connection_names_switch(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap(),
+        "Australia/Sydney",
     )
     .await
     .unwrap();

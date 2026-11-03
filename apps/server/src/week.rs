@@ -15,8 +15,8 @@
 //! (idle time trimmed off the start, as the friend summary does), clipped to the window and
 //! split at local midnights. Everything is whole seconds; nothing is rounded until display.
 //! Imported counters (Steam totals, manual imports, WoW /played growth) have no time of day,
-//! so they can't go into daily bars and are not part of this week (the leaderboards page
-//! still uses them).
+//! so they can't go into daily bars and are never part of any 7-day figure anywhere (home,
+//! profile, leaderboards, signatures, friend cards, exports): lifetime totals keep them.
 //!
 //! **Display**: hours with one decimal. The day and game tenths are apportioned from the
 //! total's tenths (largest remainder), so the numbers on screen add up exactly too.
@@ -179,6 +179,95 @@ pub async fn load(
         out.entry(u).or_default().add(&window, &g, a, b, d as i64);
     }
     Ok(Week { window, users: out })
+}
+
+/// Load one person's week now, in `tz_name` (already checked, or a fallback is used).
+/// `own` keeps their hidden games (use it when they are looking at their own figures).
+pub async fn for_user(st: &AppState, user: Uuid, tz_name: &str, own: bool) -> ApiResult<UserWeek> {
+    let w = window(parse_tz(tz_name), Utc::now());
+    Ok(load(st, w, &[user], own.then_some(user)).await?.user(user))
+}
+
+/// SQL for the seconds of a `play_sessions s` row inside the window `{a}..{b}` (unix
+/// seconds, bound as bigint): the same rule as [`split`] summed over the days, on whole
+/// seconds, so a SQL total over many people equals what [`load`] gives for each of them.
+pub fn secs_sql(a: &str, b: &str) -> String {
+    let e = "floor(extract(epoch FROM s.ended_at))::bigint";
+    let st = "floor(extract(epoch FROM s.started_at))::bigint";
+    format!(
+        "GREATEST(LEAST({e}, {b}::bigint) - GREATEST({e} - GREATEST(s.duration_s, 0)::bigint, LEAST({st}, {e}), {a}::bigint), 0)"
+    )
+}
+
+/// SQL filter for the sessions that can touch the window `{a}..{b}` (as in [`load`]).
+pub fn in_window_sql(a: &str, b: &str) -> String {
+    format!("s.ended_at > to_timestamp({a}::bigint) AND s.started_at < to_timestamp({b}::bigint)")
+}
+
+/// Whole minutes for `seconds`, rounded half up (how every surface turns the week into minutes).
+pub fn minutes(seconds: i64) -> i64 {
+    (seconds.max(0) + 30) / 60
+}
+
+/// One game's share of a week as shown on screen.
+#[derive(Debug, Clone)]
+pub struct ShownGame {
+    pub game_id: String,
+    pub seconds: i64,
+    pub minutes: i64,
+    pub tenths: i64,
+    pub last_played: Option<DateTime<Utc>>,
+}
+
+/// A person's week as every surface shows it: the total in seconds, whole minutes and tenths,
+/// and each game's share of those minutes and tenths (largest remainder, games in the home
+/// page's order: most recently played first), so the games always add up to the total.
+#[derive(Debug, Clone, Default)]
+pub struct Shown {
+    pub seconds: i64,
+    pub minutes: i64,
+    pub tenths: i64,
+    pub games: Vec<ShownGame>,
+}
+
+impl Shown {
+    /// (minutes, tenths) for one game, 0 when it wasn't played this week.
+    pub fn game(&self, id: &str) -> (i64, i64) {
+        self.games
+            .iter()
+            .find(|g| g.game_id == id)
+            .map_or((0, 0), |g| (g.minutes, g.tenths))
+    }
+}
+
+impl UserWeek {
+    /// The week as shown, counting only the games `keep` accepts.
+    pub fn shown(&self, keep: impl Fn(&str) -> bool) -> Shown {
+        let mut games: Vec<(&String, &GameWeek)> =
+            self.games.iter().filter(|(g, _)| keep(g)).collect();
+        games.sort_by(|a, b| b.1.last_played.cmp(&a.1.last_played).then(a.0.cmp(b.0)));
+        let parts: Vec<i64> = games.iter().map(|g| g.1.seconds).collect();
+        let seconds: i64 = parts.iter().sum();
+        let (m, t) = (minutes(seconds), tenths(seconds));
+        let gm = apportion(m, &parts);
+        let gt = apportion(t, &parts);
+        Shown {
+            seconds,
+            minutes: m,
+            tenths: t,
+            games: games
+                .iter()
+                .enumerate()
+                .map(|(i, (id, g))| ShownGame {
+                    game_id: (*id).clone(),
+                    seconds: g.seconds,
+                    minutes: gm[i],
+                    tenths: gt[i],
+                    last_played: g.last_played,
+                })
+                .collect(),
+        }
+    }
 }
 
 /// Tenths of an hour for `seconds`, rounded half up.

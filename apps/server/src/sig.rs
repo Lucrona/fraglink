@@ -1,6 +1,7 @@
 //! Signature image: a 460 x 100 PNG status card for forums and Discord bios
 //! (`/api/v1/sig/<handle>.png`). Only for profiles set to public; shows the avatar,
-//! name, what they're playing now (or last played), and hours this week / all time.
+//! name, what they're playing now (or last played), and hours this week (tracked only, the
+//! home page's week in the default timezone) / all time.
 //! Rendered on demand and cached for 30 seconds.
 
 use crate::error::ApiResult;
@@ -103,6 +104,18 @@ pub struct Card {
 }
 
 async fn render_for(st: &AppState, handle: &str) -> ApiResult<Option<Vec<u8>>> {
+    let Some(card) = card_for(st, handle).await? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        tokio::task::spawn_blocking(move || render(&card))
+            .await
+            .map_err(crate::error::AppError::internal)?,
+    ))
+}
+
+/// The card's contents for a public profile (None: no such public profile).
+pub async fn card_for(st: &AppState, handle: &str) -> ApiResult<Option<Card>> {
     type Row = (
         Uuid,
         String,
@@ -160,8 +173,15 @@ async fn render_for(st: &AppState, handle: &str) -> ApiResult<Option<Vec<u8>>> {
     }
     let mut line2 = String::from("playfraglink.com");
     if show_hours {
-        let (w, total): (i64, i64) = sqlx::query_as(
-            "SELECT coalesce(sum(minutes_7d), 0)::bigint, coalesce(sum(display_min), 0)::bigint
+        // this week: tracked play only, the home page's week (default timezone: the card is
+        // public and has no viewer), games hidden from others left out; total: all time
+        let tz = crate::activity::tz_or_default(st, None).await;
+        let w = crate::week::for_user(st, uid, &tz, false)
+            .await?
+            .shown(|g| !hidden.iter().any(|h| h == g))
+            .minutes;
+        let (total,): (i64,) = sqlx::query_as(
+            "SELECT coalesce(sum(display_min), 0)::bigint
              FROM user_game_stats WHERE user_id = $1 AND NOT (game_id = ANY($2))",
         )
         .bind(uid)
@@ -218,11 +238,7 @@ async fn render_for(st: &AppState, handle: &str) -> ApiResult<Option<Vec<u8>>> {
             None => None,
         },
     };
-    Ok(Some(
-        tokio::task::spawn_blocking(move || render(&card))
-            .await
-            .map_err(crate::error::AppError::internal)?,
-    ))
+    Ok(Some(card))
 }
 
 fn hrs(min: i64) -> String {

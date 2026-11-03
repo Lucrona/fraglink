@@ -775,14 +775,22 @@ pub struct GameStat {
     pub imported_min: i64,
     pub display_min: i64,
     pub display_tier: String,
+    /// Past 7 days, whole minutes: tracked only, from [`crate::week`] (never imports).
     pub minutes_7d: i64,
+    /// The same in tenths of an hour, as the home page shows it.
+    #[sqlx(default)]
+    #[serde(default)]
+    pub tenths_7d: i64,
     pub last_played_at: Option<DateTime<Utc>>,
 }
 
-/// Per-game totals with the server's names (unknown games: "Unlisted game").
-pub async fn game_stats(st: &AppState, user_id: Uuid) -> ApiResult<Vec<GameStat>> {
+/// Per-game totals for the owner (or staff) with the server's names (unknown games:
+/// "Unlisted game"). Lifetime figures include imports; the 7-day ones are the owner's
+/// [`crate::week`] in `tz` (hidden games included, as on their own home page), so they add
+/// up to "Hours this week" there.
+pub async fn game_stats(st: &AppState, user_id: Uuid, tz: &str) -> ApiResult<Vec<GameStat>> {
     let mut rows: Vec<GameStat> = sqlx::query_as(
-        "SELECT game_id, name, tracked_min, imported_min, display_min, display_tier, minutes_7d, last_played_at
+        "SELECT game_id, name, tracked_min, imported_min, display_min, display_tier, 0::bigint AS minutes_7d, last_played_at
          FROM user_game_stats WHERE user_id = $1 ORDER BY display_min DESC, name",
     )
     .bind(user_id)
@@ -790,18 +798,29 @@ pub async fn game_stats(st: &AppState, user_id: Uuid) -> ApiResult<Vec<GameStat>
     .await?;
     let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
     let names = crate::names::public_names(st, &ids).await?;
+    let wk = crate::week::for_user(st, user_id, tz, true)
+        .await?
+        .shown(|_| true);
     for r in &mut rows {
         r.name = names
             .get(&r.game_id)
             .cloned()
             .unwrap_or_else(|| crate::names::UNLISTED_TITLE.to_string());
+        (r.minutes_7d, r.tenths_7d) = wk.game(&r.game_id);
     }
     Ok(rows)
 }
 
-async fn stats(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
-    let games = game_stats(&st, a.user.id).await?;
+async fn stats(
+    State(st): State<AppState>,
+    a: AuthUser,
+    Query(wq): Query<crate::home::WeekQuery>,
+) -> ApiResult<Json<Value>> {
+    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+    let games = game_stats(&st, a.user.id, &tz).await?;
     let verified: i64 = games.iter().map(|g| g.display_min).sum();
+    let minutes_7d: i64 = games.iter().map(|g| g.minutes_7d).sum();
+    let tenths_7d: i64 = games.iter().map(|g| g.tenths_7d).sum();
     // App builds up to 0.3.0-beta.1 still read `estimated_min` (their tooltip would show
     // "NaN" without it). The Estimated tier is gone, so it is always 0. Drop this once
     // those builds are retired.
@@ -815,7 +834,7 @@ async fn stats(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>
         .collect();
     Ok(Json(json!({
         "games": games,
-        "overall": { "verified_min": verified, "estimated_min": 0 }
+        "overall": { "verified_min": verified, "estimated_min": 0, "minutes_7d": minutes_7d, "tenths_7d": tenths_7d }
     })))
 }
 
@@ -823,11 +842,15 @@ async fn stats(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>
 struct LbQuery {
     #[serde(default)]
     period: Option<String>,
+    /// IANA timezone for the 7-day window (default: Australia/Sydney).
+    #[serde(default)]
+    tz: Option<String>,
 }
 
 /// Per-game ranks, counted like profiles: all time is the game's total (`display_min`: the
-/// larger of the app's sessions, Steam playtime and Imported hours), 7 days is
-/// `hours::WEEK_CTE`. Only public profiles that show games and hours, have Leaderboards on and
+/// larger of the app's sessions, Steam playtime and Imported hours), 7 days is tracked play
+/// only: the [`crate::week`] window in `tz`, each person's seconds of this game exactly as
+/// their home page counts them (`seconds`), in whole minutes rounded half up. Only public profiles that show games and hours, have Leaderboards on and
 /// haven't hidden the game; never test accounts. Needs a signed-in caller.
 async fn leaderboard(
     State(st): State<AppState>,
@@ -842,17 +865,40 @@ async fn leaderboard(
         crate::account::sql_shows("games"),
         crate::account::sql_shows("leaderboards")
     );
-    let sql = match q.period.as_deref().unwrap_or("7d") {
-        "7d" => format!(
-            "WITH {wk} SELECT u.handle, w.m FROM wk w JOIN users u ON u.id = w.user_id
-             WHERE w.game_id = $1 AND {who} ORDER BY w.m DESC, u.handle LIMIT 50",
-            wk = crate::hours::WEEK_CTE
-        ),
-        "all" => format!(
-            "SELECT u.handle, g.board_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
-             WHERE g.game_id = $1 AND g.board_min > 0 AND {who}
-             ORDER BY g.board_min DESC, u.handle LIMIT 50"
-        ),
+    let rows: Vec<(String, i64, Option<i64>)> = match q.period.as_deref().unwrap_or("7d") {
+        "7d" => {
+            let tz = crate::activity::tz_or_default(&st, q.tz.as_deref()).await;
+            let w = crate::week::window(crate::week::parse_tz(&tz), Utc::now());
+            let sql = format!(
+                "SELECT u.handle, sum({secs})::bigint AS s FROM play_sessions s JOIN users u ON u.id = s.user_id
+                 WHERE s.game_id = $1 AND {inw} AND {who}
+                 GROUP BY u.handle HAVING sum({secs}) >= 30
+                 ORDER BY s DESC, u.handle LIMIT 50",
+                secs = crate::week::secs_sql("$2", "$3"),
+                inw = crate::week::in_window_sql("$2", "$3"),
+            );
+            let r: Vec<(String, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+                .bind(&game_id)
+                .bind(w.bounds[0])
+                .bind(w.bounds[crate::week::DAYS])
+                .fetch_all(&st.db)
+                .await?;
+            r.into_iter()
+                .map(|(h, s)| (h, crate::week::minutes(s), Some(s)))
+                .collect()
+        }
+        "all" => {
+            let sql = format!(
+                "SELECT u.handle, g.board_min FROM user_game_stats g JOIN users u ON u.id = g.user_id
+                 WHERE g.game_id = $1 AND g.board_min > 0 AND {who}
+                 ORDER BY g.board_min DESC, u.handle LIMIT 50"
+            );
+            let r: Vec<(String, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+                .bind(&game_id)
+                .fetch_all(&st.db)
+                .await?;
+            r.into_iter().map(|(h, m)| (h, m, None)).collect()
+        }
         _ => {
             return Err(AppError::bad_request(
                 "invalid_period",
@@ -860,15 +906,11 @@ async fn leaderboard(
             ))
         }
     };
-    let rows: Vec<(String, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
-        .bind(&game_id)
-        .fetch_all(&st.db)
-        .await?;
     let ranks: Vec<Value> = rows
         .iter()
         .enumerate()
         // `tracked_min` is the old name of `minutes`, kept for older clients
-        .map(|(i, (h, m))| json!({ "rank": i + 1, "handle": h, "minutes": m, "tracked_min": m }))
+        .map(|(i, (h, m, secs))| json!({ "rank": i + 1, "handle": h, "minutes": m, "tracked_min": m, "seconds": secs }))
         .collect();
     Ok(Json(
         json!({ "game_id": game_id, "tier": "display", "ranks": ranks }),
@@ -1125,12 +1167,25 @@ async fn steam_sync(
 
 // ------------------------------------------------------------------ export
 
-pub async fn export_json(st: &AppState, user: &User) -> ApiResult<Value> {
+pub async fn export_json(st: &AppState, user: &User, tz: &str) -> ApiResult<Value> {
     let q = |sql: &'static str| {
         sqlx::query_scalar::<_, Value>(sql)
             .bind(user.id)
             .fetch_one(&st.db)
     };
+    // 7-day minutes in the export: tracked only, from crate::week in `tz`
+    let mut game_stats = q("SELECT coalesce(jsonb_agg(to_jsonb(g) - 'user_id'), '[]'::jsonb) FROM user_game_stats g WHERE user_id = $1").await?;
+    let wk = crate::week::for_user(st, user.id, tz, true)
+        .await?
+        .shown(|_| true);
+    if let Some(rows) = game_stats.as_array_mut() {
+        for r in rows {
+            let id = r["game_id"].as_str().unwrap_or_default().to_string();
+            let (m, t) = wk.game(&id);
+            r["minutes_7d"] = json!(m);
+            r["tenths_7d"] = json!(t);
+        }
+    }
     Ok(json!({
         "format": "fraglink-server-export",
         "schema": 1,
@@ -1146,14 +1201,19 @@ pub async fn export_json(st: &AppState, user: &User) -> ApiResult<Value> {
         "steam_playtime": q("SELECT coalesce(jsonb_agg(to_jsonb(p) - 'user_id'), '[]'::jsonb) FROM steam_playtime p WHERE user_id = $1").await?,
         "hours_entries": q("SELECT coalesce(jsonb_agg(to_jsonb(h) - 'user_id' ORDER BY captured_at), '[]'::jsonb) FROM hours_entries h WHERE user_id = $1").await?,
         "wow_characters": q("SELECT coalesce(jsonb_agg(to_jsonb(c) - 'user_id' || jsonb_build_object('played_history', (SELECT coalesce(jsonb_agg(jsonb_build_object('played_s', p.played_s, 'at', p.at) ORDER BY p.at), '[]'::jsonb) FROM wow_played_snaps p WHERE p.char_id = c.id)) ORDER BY c.game_id, c.played_s DESC), '[]'::jsonb) FROM wow_characters c WHERE c.user_id = $1").await?,
-        "game_stats": q("SELECT coalesce(jsonb_agg(to_jsonb(g) - 'user_id'), '[]'::jsonb) FROM user_game_stats g WHERE user_id = $1").await?,
+        "game_stats": game_stats,
         "devices": q("SELECT coalesce(jsonb_agg(jsonb_build_object('device_name', device_name, 'created_at', created_at, 'last_used_at', last_used_at, 'revoked_at', revoked_at)), '[]'::jsonb) FROM auth_tokens WHERE user_id = $1 AND kind = 'device'").await?,
         "friends": crate::friends::export(st, user.id).await?,
     }))
 }
 
-async fn export(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
-    Ok(Json(export_json(&st, &a.user).await?))
+async fn export(
+    State(st): State<AppState>,
+    a: AuthUser,
+    Query(wq): Query<crate::home::WeekQuery>,
+) -> ApiResult<Json<Value>> {
+    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+    Ok(Json(export_json(&st, &a.user, &tz).await?))
 }
 
 /// Seconds between zip exports per user (spec W14: at most one per hour).
@@ -1171,8 +1231,8 @@ steam_playtime.csv   Steam's own playtime counters (tracked tier)\n\
 friends.json         friends, pending requests and blocks\n\
 fraglink-account.json  everything above in one JSON document\n\n\
 Times are UTC (RFC 3339). Minutes are whole minutes; seconds where the column says _s.\n\
-Leaderboards count the last 7 days: the larger of Fraglink sessions and a game's own counter growth.\n\
-WoW addon /played counts there only for characters verified on your Battle.net account.\n";
+7-day figures (minutes_last_7_days, leaderboards) count only play the Fraglink app tracked over\n\
+the last 7 days, today included; imported hours and Steam's counters count in all-time totals only.\n";
 
 fn csv_line(fields: &[String]) -> String {
     let mut l = fields
@@ -1187,8 +1247,10 @@ fn csv_line(fields: &[String]) -> String {
 async fn export_zip(
     State(st): State<AppState>,
     a: AuthUser,
+    Query(wq): Query<crate::home::WeekQuery>,
 ) -> ApiResult<axum::response::Response> {
     use axum::response::IntoResponse;
+    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
     {
         let mut log = st.export_log.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(t) = log.get(&a.user.id) {
@@ -1204,7 +1266,7 @@ async fn export_zip(
         log.insert(a.user.id, std::time::Instant::now());
     }
     let uid = a.user.id;
-    let full = export_json(&st, &a.user).await?;
+    let full = export_json(&st, &a.user, &tz).await?;
 
     let rows: Vec<(Uuid, String, String, DateTime<Utc>, DateTime<Utc>, i32, i32, Option<String>, DateTime<Utc>)> = sqlx::query_as(
         "SELECT s.id, s.game_id, g.name, s.started_at, s.ended_at, s.duration_s, s.idle_trimmed_s, s.client_version, s.uploaded_at
@@ -1229,7 +1291,7 @@ async fn export_zip(
         ]);
     }
     let mut games = String::from("game_id,game_name,tracked_minutes,imported_minutes,display_minutes,display_tier,minutes_last_7_days,last_played_utc\n");
-    for g in game_stats(&st, uid).await? {
+    for g in game_stats(&st, uid, &tz).await? {
         games += &csv_line(&[
             g.game_id,
             g.name,
@@ -1372,10 +1434,12 @@ async fn friend_summary(
     State(st): State<AppState>,
     a: AuthUser,
     Path(handle): Path<String>,
+    Query(wq): Query<crate::home::WeekQuery>,
 ) -> ApiResult<Json<crate::activity::FriendSummary>> {
     st.rate_limit(format!("summary:{}", a.user.id), 240, 10 * MINUTE)?;
+    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
     Ok(Json(
-        crate::activity::summary(&st, a.user.id, &handle).await?,
+        crate::activity::summary(&st, a.user.id, &handle, &tz).await?,
     ))
 }
 

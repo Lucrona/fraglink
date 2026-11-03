@@ -9,7 +9,8 @@
 //! - a character's /played never goes down, and can't grow faster than real time.
 //!
 //! Characters also on the user's Battle.net account (`wow.profile` scope, fetched when
-//! they link) are "verified": only those count on leaderboards (`hours::WEEK_CTE`). The
+//! they link) are "verified": only those count toward the game's stored total (and so on
+//! all-time leaderboards; /played never counts in a 7-day figure, see `crate::week`). The
 //! rest show on the profile as self-reported. The game's total is the sum of all its
 //! characters, stored as one `hours_entries` row (source `wow_addon`) whenever it changes.
 

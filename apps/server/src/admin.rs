@@ -1463,7 +1463,8 @@ async fn user_detail(
         .into_iter()
         .map(|(i, k, n, c, l, e)| json!({ "id": i, "kind": k, "name": n, "created_at": c, "last_used_at": l, "expires_at": e }))
         .collect();
-    let games = api::game_stats(&st, id).await?;
+    let tz = crate::activity::tz_or_default(&st, None).await;
+    let games = api::game_stats(&st, id, &tz).await?;
     // admin view: show the stored name for games the public can't see
     let raw: Vec<(String, String)> =
         sqlx::query_as("SELECT g.id, g.name FROM games g WHERE g.id = ANY($1)")

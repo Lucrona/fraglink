@@ -358,11 +358,11 @@ async fn profile(
     let (mut total_min, mut min_7d, mut tenths_7d) = (0i64, 0i64, 0i64);
     let mut week_label = None;
     if can_see_games {
-        let rows = api::game_stats(&st, p.id).await?;
         // "Past 7 days": tracked hours only, from crate::week (the viewer's timezone, same
         // window and rounding as the home page), so your own profile always matches "Hours
         // this week" there. Lifetime totals below still include imported hours.
         let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+        let rows = api::game_stats(&st, p.id, &tz).await?;
         let w = crate::week::window(crate::week::parse_tz(&tz), Utc::now());
         let (first, last) = (w.dates[0], w.dates[crate::week::DAYS - 1]);
         week_label = Some(format!(
@@ -372,25 +372,10 @@ async fn profile(
         ));
         let wk = crate::week::load(&st, w, &[p.id], is_self.then_some(p.id))
             .await?
-            .user(p.id);
-        let mut wg: Vec<(String, i64)> = wk
-            .games
-            .iter()
-            .filter(|(g, _)| !hidden.contains(*g))
-            .map(|(g, x)| (g.clone(), x.seconds))
-            .collect();
-        wg.sort();
-        let wsecs: i64 = wg.iter().map(|g| g.1).sum();
-        min_7d = (wsecs + 30) / 60;
-        tenths_7d = crate::week::tenths(wsecs);
-        let parts: Vec<i64> = wg.iter().map(|g| g.1).collect();
-        let gm = crate::week::apportion(min_7d, &parts);
-        let gt = crate::week::apportion(tenths_7d, &parts);
-        let week_of: std::collections::HashMap<String, (i64, i64)> = wg
-            .iter()
-            .enumerate()
-            .map(|(i, g)| (g.0.clone(), (gm[i], gt[i])))
-            .collect();
+            .user(p.id)
+            .shown(|g| !hidden.iter().any(|h| h == g));
+        min_7d = wk.minutes;
+        tenths_7d = wk.tenths;
         let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
         let named = names::public_names(&st, &ids).await?;
         let apps = crate::home::appids(&st, &ids).await?;
@@ -405,7 +390,7 @@ async fn profile(
                 continue;
             }
             total_min += g.display_min;
-            let (g_min_7d, g_tenths_7d) = week_of.get(&g.game_id).copied().unwrap_or((0, 0));
+            let (g_min_7d, g_tenths_7d) = wk.game(&g.game_id);
             let listed = named.contains_key(&g.game_id);
             if g.display_min == 0 && g_min_7d == 0 {
                 continue;
