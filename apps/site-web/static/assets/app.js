@@ -60,6 +60,11 @@ const WH = (() => {
   return { ok, scan };
 })();
 const me = () => { try { return JSON.parse(localStorage.getItem(UK)); } catch (e) { return null; } };
+/* Zone for every day and time shown: the one saved in Settings > Account > Time zone, else the
+   browser's (the server resolves weeks the same way, see week.rs `zone`). */
+const okZone = z => { if (!z) return false; try { new Intl.DateTimeFormat("en", { timeZone: z }); return true; } catch (e) { return false; } };
+const SAVED0 = (() => { const z = (me() || {}).timezone; return okZone(z) ? z : null; })();
+const ZONE = SAVED0 || TZ || undefined;
 function setSession(t, u) { localStorage.setItem(TK, t); localStorage.setItem(UK, JSON.stringify(u)); }
 function clearSession() { localStorage.removeItem(TK); localStorage.removeItem(UK); }
 
@@ -128,30 +133,39 @@ function dur(sec) {
   return Math.max(1, m) + " min";
 }
 function since(iso) { return dur((Date.now() - new Date(iso).getTime()) / 1000); }
-const dayFmt = new Intl.DateTimeFormat("en-AU", { weekday: "long" });
-const dateFmt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
-const fullDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
+const dayFmt = new Intl.DateTimeFormat("en-AU", { weekday: "long", timeZone: ZONE });
+const dateFmt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", timeZone: ZONE });
+const fullDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: ZONE });
+/* Calendar day ("2026-11-04") of an instant in ZONE; a plain day string from the server is
+   already a day (in the same zone) and is kept as is. */
+const keyFmt = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: ZONE });
+const isDay = d => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
+const dayKey = d => isDay(d) ? d : keyFmt.format(new Date(d));
+const dayNo = k => { const [y, m, d] = k.split("-").map(Number); return Date.UTC(y, m - 1, d) / 86400000; };
+/* A plain day as a Date at noon UTC, formatted in UTC so it never shifts a day. */
+const utcDay = { w: new Intl.DateTimeFormat("en-AU", { weekday: "long", timeZone: "UTC" }), d: new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", timeZone: "UTC" }), f: new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) };
+const fullDay = d => isDay(d) ? utcDay.f.format(new Date(d + "T12:00:00Z")) : fullDate.format(new Date(d));
 /* Friends' activity rows from the server: "playing" first, then one per friend/game/day. */
-function actDay(i) { return i.kind === "playing" ? "Now" : dayLabel(i.day ? new Date(i.day + "T12:00:00") : i.at); }
+function actDay(i) { return i.kind === "playing" ? "Now" : dayLabel(i.day || i.at); }
 function actText(i) {
   const g = isUnlisted(i.game_id) ? "a game" : `<b>${esc(i.game_name)}</b>`;
   return i.kind === "playing" ? `is playing ${g} now` : `played ${g} for ${dur(i.duration_s)}`;
 }
+/* "Today", "Yesterday", a weekday or a date, counted in ZONE. */
 function dayLabel(d) {
-  const t = new Date(); t.setHours(0, 0, 0, 0);
-  const x = new Date(d); x.setHours(0, 0, 0, 0);
-  const diff = Math.round((t - x) / 86400000);
+  const k = dayKey(d), diff = Math.round(dayNo(dayKey(Date.now())) - dayNo(k));
   if (diff === 0) return "Today";
   if (diff === 1) return "Yesterday";
-  if (diff < 7) return dayFmt.format(x);
-  return dateFmt.format(x);
+  const x = new Date(k + "T12:00:00Z");
+  if (diff > 0 && diff < 7) return utcDay.w.format(x);
+  return utcDay.d.format(x);
 }
 function lastPlayed(iso) {
   if (!iso) return "-";
-  const d = new Date(iso), diff = (Date.now() - d) / 86400000;
-  if (diff < 1 && new Date().getDate() === d.getDate()) return "Today";
-  if (diff < 7) return dayFmt.format(d).slice(0, 3);
-  return dateFmt.format(d);
+  const k = dayKey(iso), diff = Math.round(dayNo(dayKey(Date.now())) - dayNo(k)), x = new Date(k + "T12:00:00Z");
+  if (diff === 0) return "Today";
+  if (diff > 0 && diff < 7) return utcDay.w.format(x).slice(0, 3);
+  return utcDay.d.format(x);
 }
 const initial = s => esc((s || "?").trim().charAt(0).toUpperCase() || "?");
 const tint = s => "c" + ((Array.from(s || "").reduce((a, c) => a + c.charCodeAt(0), 0) % 3) + 1);
@@ -358,7 +372,7 @@ async function fillDownload() {
   try {
     const l = await latest();
     btns.forEach(b => { if (l.url) b.href = l.url; b.removeAttribute("aria-disabled"); });
-    vers.forEach(v => { v.textContent = "Version " + l.version + (l.date ? " · " + fullDate.format(new Date(l.date)) : "") + " · Windows 10/11, 64-bit"; });
+    vers.forEach(v => { v.textContent = "Version " + l.version + (l.date ? " · " + fullDay(l.date) : "") + " · Windows 10/11, 64-bit"; });
   } catch (e) {
     vers.forEach(v => { v.textContent = "Download's not available right now. Try again in a few minutes."; });
   }
@@ -770,7 +784,7 @@ pages.bnetverify = async () => {
 /* ---------- Home V4.2 (signed out: hero + carousel; signed in: your week + friends) ----------
    Your hours, the daily bars, the per-game rows and the friends leaderboard all come from one
    server call (/home/week), so they always use the same 7 days and time zone and add up. */
-const tFmt = new Intl.DateTimeFormat("en-AU", { hour: "numeric", minute: "2-digit" });
+const tFmt = new Intl.DateTimeFormat("en-AU", { hour: "numeric", minute: "2-digit", timeZone: ZONE });
 const h1 = t => (Math.max(0, t || 0) / 10).toFixed(1) + " h";
 const hm = s => { s = Math.max(0, Math.round(s || 0)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h}h${m ? " " + String(m).padStart(2, "0") + "m" : ""}` : `${Math.max(1, m)}m`; };
 const ago42 = iso => { const d = dayLabel(iso); return `${d === "Today" || d === "Yesterday" ? d.toLowerCase() : d}, ${tFmt.format(new Date(iso))}`; };
@@ -820,7 +834,7 @@ pages.home = async () => {
   fillDownload();
   const u = token() ? me() : null;
   if (u) { $("#h42-out").hidden = true; $("#h42-crumb").textContent = "Your Fraglink"; }
-  latest().then(l => { if (!l || !l.version) return; $("#h42-ver").textContent = l.version; $("#h42-date").textContent = l.date ? " · " + fullDate.format(new Date(l.date)) : ""; $("#h42-rel").hidden = false; }).catch(() => {});
+  latest().then(l => { if (!l || !l.version) return; $("#h42-ver").textContent = l.version; $("#h42-date").textContent = l.date ? " · " + fullDay(l.date) : ""; $("#h42-rel").hidden = false; }).catch(() => {});
   let h;
   try { h = await api("/home?tz=" + encodeURIComponent(TZ)); } catch (e) { return; }
   let wk = null, fl = null, act = null;
@@ -867,7 +881,7 @@ pages.home = async () => {
     // two columns up to 10, as many as fit beside Friends online + leaderboard (fitAct42).
     let feed = "";
     if (act && act.items.length) { let last = "";
-      act.items.slice(0, 10).forEach(i => { const live = i.kind === "playing", d = live ? "Today" : dayLabel(i.day ? new Date(i.day + "T12:00:00") : i.at);
+      act.items.slice(0, 10).forEach(i => { const live = i.kind === "playing", d = live ? "Today" : dayLabel(i.day || i.at);
         if (d !== last) { feed += `<div class="day">${d}</div>`; last = d; }
         feed += `<div class="act">${icon(i.game_id, i.game_name, "g")}<span class="who42"><a href="${prof(i)}">${nm(i)}</a> ${live
           ? `is playing <b>${gname(i.game_id, i.game_name)}</b>${i.started_at ? ` <span class="done">· started ${tFmt.format(new Date(i.started_at))}</span>` : ""}</span><span class="pnow">● playing now</span>`
@@ -1014,7 +1028,7 @@ pages.contact = () => {
 pages.status = () => {
   const set = (k, ok, text) => { const li = $(`#st-list [data-k="${k}"]`); li.className = ok ? "up" : "down"; $(".st-v", li).textContent = text; };
   const SEV = { minor: "Minor", major: "Major", maintenance: "Maintenance" };
-  const when = t => new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const when = t => new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: ZONE });
   const run = async () => {
     let site = false, api_ = false, live = false;
     try { const r = await fetch("/", { cache: "no-store", method: "HEAD" }); site = r.ok; } catch (e) { /* down */ }
@@ -1270,7 +1284,7 @@ pages.profile = async () => {
   });
   const daysM = new Map();
   if (p.history_visible) (p.recent || []).forEach(r => {
-    const d = new Date(r.ended_at), k = d.toDateString();
+    const d = new Date(r.ended_at), k = dayKey(d);
     if (!daysM.has(k)) daysM.set(k, { at: d, games: new Map() });
     const g = daysM.get(k).games, gk = r.game_id + "|" + r.game_name, cur = g.get(gk) || { id: r.game_id, name: r.game_name, secs: 0, at: d };
     cur.secs += r.duration_s || 0; if (d > cur.at) cur.at = d; g.set(gk, cur);
@@ -1419,6 +1433,20 @@ pages.friends = async () => {
 /* ----- settings (tabs) ----- */
 const RIG_FIELDS = [["manufacturer", "Manufacturer", "e.g. Custom build, Alienware"], ["cpu", "Processor", "e.g. Ryzen 7 7800X3D"], ["gpu", "Video card", "e.g. RTX 4070"], ["memory", "Memory", "e.g. 32 GB DDR5"], ["storage", "Storage", "e.g. 2 TB NVMe"], ["motherboard", "Motherboard", ""], ["monitor", "Monitor", "e.g. 27\" 1440p 165 Hz"], ["headset", "Headset", ""], ["keyboard", "Keyboard", ""], ["mouse", "Mouse", ""], ["mousepad", "Mouse pad", ""], ["case", "Case", ""], ["os", "Operating system", "e.g. Windows 11"]];
 const STYLES = ["Casual", "Weekend warrior", "Competitive", "Completionist", "MMO addict", "Sniper only", "Support main", "Speedrunner", "Explorer", "Clueless"];
+/* Settings > Account > Time zone: every IANA zone the browser knows, grouped by region. */
+const ZONES = (() => { let z = []; try { z = Intl.supportedValuesOf("timeZone"); } catch (e) { /* old browser */ }
+  if (!z.length) z = ["Africa/Johannesburg", "America/Chicago", "America/Los_Angeles", "America/New_York", "America/Sao_Paulo", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Brisbane", "Australia/Perth", "Australia/Sydney", "Europe/Berlin", "Europe/London", "Pacific/Auckland"];
+  return z.includes("UTC") ? z : z.concat("UTC"); })();
+const zoneOff = z => { try { const p = new Intl.DateTimeFormat("en", { timeZone: z, timeZoneName: "shortOffset" }).formatToParts(new Date()).find(x => x.type === "timeZoneName"); return p ? p.value.replace("GMT", "UTC") : ""; } catch (e) { return ""; } };
+const zoneLabel = z => { const i = z.indexOf("/"); return (i < 0 ? z : z.slice(i + 1)).replace(/_/g, " ").replace(/\//g, " / ") + ` (${zoneOff(z) || "UTC"})`; };
+function zoneOptions(cur, term) {
+  const t = (term || "").trim().toLowerCase(), groups = new Map();
+  const list = cur && !ZONES.includes(cur) ? ZONES.concat(cur) : ZONES;
+  list.forEach(z => { const l = zoneLabel(z); if (t && z !== cur && !(z.toLowerCase().includes(t) || l.toLowerCase().includes(t))) return;
+    const g = z.includes("/") ? z.split("/")[0] : "Other"; if (!groups.has(g)) groups.set(g, []); groups.get(g).push([z, l]); });
+  const auto = `<option value=""${cur ? "" : " selected"}>Automatic (browser): ${esc(TZ ? `${TZ} (${zoneOff(TZ) || "UTC"})` : "not detected, Australia/Sydney")}</option>`;
+  return auto + Array.from(groups.keys()).sort().map(g => `<optgroup label="${esc(g)}">${groups.get(g).sort((a, b) => a[1].localeCompare(b[1])).map(([z, l]) => `<option value="${esc(z)}"${z === cur ? " selected" : ""}>${esc(l)}</option>`).join("")}</optgroup>`).join("");
+}
 const TABS = [["account", "Account & profile"], ["rig", "Gaming rig"], ["games", "Played games"], ["privacy", "Privacy"], ["notifications", "Notifications"], ["connections", "Connections"], ["security", "Security"]];
 pages.settings = async () => {
   if (!requireLogin()) return;
@@ -1426,7 +1454,7 @@ pages.settings = async () => {
   let m;
   try { m = await api("/me"); } catch (e) { if (!token()) return requireLogin(); root.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; return; }
   let u = m.user;
-  const keep = () => setSession(token(), Object.assign(me() || {}, { id: u.id, handle: u.handle, display_name: u.display_name, email: u.email, avatar: u.avatar, email_verified: u.email_verified, mail_live: u.mail_live, staff_role: u.staff_role || null }));
+  const keep = () => setSession(token(), Object.assign(me() || {}, { id: u.id, handle: u.handle, display_name: u.display_name, email: u.email, avatar: u.avatar, email_verified: u.email_verified, mail_live: u.mail_live, staff_role: u.staff_role || null, timezone: u.timezone || null }));
   keep(); renderHeader(); verifyBar();
   const tab = () => { const t = location.hash.replace("#", ""); return TABS.some(x => x[0] === t) ? t : "account"; };
   const row = (label, html, hint) => `<label>${label}</label><div>${html}${hint ? `<div class="sub">${hint}</div>` : ""}</div>`;
@@ -1446,6 +1474,9 @@ pages.settings = async () => {
       ${row("Username", `<b>${esc(u.handle)}</b> <small style="color:#8a96a3">playfraglink.com/u/${esc(u.handle)}</small>`, "Your sign-in name and profile address. It's permanent; ask staff if it really needs changing.")}
       ${row("Nickname", `<input class="t" name="display_name" maxlength="32" value="${esc(u.display_name || "")}">`, "The name everyone sees, in the app and on the site. Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave empty to use your username.")}
       ${row("Email", `${esc(u.email || "")} ${verified}`)}
+      ${row("", `<button class="btn dl">Save</button>`)}</div></form>
+    <h3>Time zone</h3><form ${FA} data-f="tz">${msg}<div class="frm">
+      ${row("Time zone", `<div class="tzpick"><input class="t" type="search" data-tzq placeholder="Search, e.g. London or New York" aria-label="Search time zones" autocomplete="off"><select class="t" name="timezone" aria-label="Time zone">${zoneOptions(u.timezone || "", "")}</select></div>`, "Your week (Hours this week, Past 7 days, leaderboards) and the days and times on the site use this zone, on every device and in the app. Automatic uses this browser's zone.")}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
     <h3>About you</h3><form ${FA} data-f="about">${msg}<div class="frm">
       ${row("About me", `<textarea class="t" name="about" maxlength="300">${esc(u.about || "")}</textarea>`, "Up to 300 characters.")}
@@ -1631,6 +1662,11 @@ pages.settings = async () => {
   }
   async function refresh() { u = (await api("/me")).user; keep(); renderHeader(); }
   window.addEventListener("hashchange", render);
+  root.addEventListener("input", e => {
+    if (!e.target.matches || !e.target.matches("[data-tzq]")) return;
+    const sel = e.target.parentNode.querySelector("select[name=timezone]"); if (!sel) return;
+    sel.innerHTML = zoneOptions(sel.value, e.target.value);
+  });
   root.addEventListener("submit", async e => {
     const f = e.target.closest("form[data-f]"); if (!f) return; e.preventDefault();
     const k = f.dataset.f, v = n => f.elements[n] ? f.elements[n].value : undefined;
@@ -1643,6 +1679,11 @@ pages.settings = async () => {
           Object.assign(body, { country: v("country"), real_name: v("real_name"), gender: v("gender") });
         }
         const r = await api("/me/profile", { method: "POST", body }); Object.assign(u, r); ok(f, "Saved.");
+      }
+      else if (k === "tz") {
+        const r = await api("/me/timezone", { method: "POST", body: { timezone: v("timezone") || null } });
+        u.timezone = r.timezone; keep();
+        ok(f, r.timezone ? `Saved. Your week and times now use ${zoneLabel(r.timezone)}.` : "Saved. Your week and times follow this browser's time zone.");
       }
       else if (k === "email") { await api("/me/email", { method: "POST", body: { current_password: v("current_password"), new_email: v("new_email").trim() } }); await refresh(); render(); ok($("#pane"), "Email changed. We sent a link to confirm the new address. Can't find it? Check your junk or spam folder."); }
       else if (k === "delete") {
@@ -1860,7 +1901,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const ready = () => $$("button[data-wait]").forEach(b => { b.disabled = false; b.removeAttribute("data-wait"); });
   if (f) Promise.resolve(f()).catch(e => { console.error(e); }).finally(ready); else ready();
   // keep the header in sync with the real account (handle/display name changes)
-  if (token() && document.body.dataset.page !== "settings" && document.body.dataset.page !== "verify") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null, avatar: m.user.avatar, email_verified: m.user.email_verified, mail_live: m.user.mail_live }); renderHeader(); verifyBar(); }).catch(() => { if (!token()) renderHeader(); });
+  if (token() && document.body.dataset.page !== "settings" && document.body.dataset.page !== "verify") api("/me").then(m => { setSession(token(), { id: m.user.id, handle: m.user.handle, display_name: m.user.display_name, email: m.user.email, staff_role: m.user.staff_role || null, avatar: m.user.avatar, email_verified: m.user.email_verified, mail_live: m.user.mail_live, timezone: m.user.timezone || null }); renderHeader(); verifyBar(); /* saved zone changed (another device, or first visit after sign-in): redraw with it */ if ((m.user.timezone || null) !== SAVED0 && okZone(m.user.timezone || "UTC")) location.reload(); }).catch(() => { if (!token()) renderHeader(); });
   else verifyBar();
   if (token()) {
     startFriendsLive();

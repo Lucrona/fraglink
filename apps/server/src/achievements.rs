@@ -146,7 +146,9 @@ pub async fn for_user(st: &AppState, user: Uuid, hidden: &[String]) -> ApiResult
             return Ok(v.clone());
         }
     }
-    let tz = crate::activity::DEFAULT_TZ;
+    // late nights and day streaks in the owner's saved zone, else Australia/Sydney
+    let tz = crate::week::zone(st, Some(user), None).await;
+    let tz = tz.as_str();
     let (total_s, games, longest_s, late): (Option<i64>, i64, Option<i32>, i64) = sqlx::query_as(
         "SELECT sum(duration_s)::bigint, count(DISTINCT game_id), max(duration_s),
                 count(*) FILTER (WHERE extract(hour FROM started_at AT TIME ZONE $3) < 5 AND duration_s >= 600)

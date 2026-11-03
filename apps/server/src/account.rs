@@ -58,6 +58,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/me/games/hide", post(hide_game))
         .route("/api/v1/me/games/reset", post(reset_game))
         .route("/api/v1/me/notifications", post(save_notifications))
+        .route("/api/v1/me/timezone", post(save_timezone))
         .route("/api/v1/me/mfa", get(mfa_status))
         .route("/api/v1/notify/off", get(notify_off))
 }
@@ -113,6 +114,8 @@ pub async fn me_extra(st: &AppState, uid: Uuid) -> ApiResult<Value> {
         "mfa": mfa::status(st, uid).await?,
         "details": details_json(st, uid).await?,
         "mail_live": mailer::live(st),
+        // Settings > Account > Timezone: an IANA name, or null = automatic (the browser's)
+        "timezone": crate::week::saved_zone(st, uid).await,
         "avatar_upload_allowed": avatars::upload_block_reason(st, uid).await?.is_none(),
         "avatar_upload_block": avatars::upload_block_reason(st, uid).await?,
     }))
@@ -682,8 +685,8 @@ async fn my_games(
     axum::extract::Query(pq): axum::extract::Query<crate::paging::PageQuery>,
     axum::extract::Query(wq): axum::extract::Query<crate::home::WeekQuery>,
 ) -> ApiResult<Json<Value>> {
-    // "this week" per game: tracked only, the home page's week in the viewer's timezone
-    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+    // "this week" per game: tracked only, the home page's week in your zone
+    let tz = crate::week::zone(&st, Some(a.user.id), wq.tz.as_deref()).await;
     let rows = api::game_stats(&st, a.user.id, &tz).await?;
     let hidden = hidden_games(&st, a.user.id).await?;
     let ids: Vec<String> = rows.iter().map(|r| r.game_id.clone()).collect();
@@ -889,6 +892,46 @@ async fn save_notifications(
     .fetch_one(&st.db)
     .await?;
     Ok(Json(notify_defaults(&v)))
+}
+
+#[derive(Deserialize)]
+struct TimezoneReq {
+    /// IANA name ("America/Los_Angeles"); null or "" = automatic (the browser's zone).
+    #[serde(default)]
+    timezone: Option<String>,
+}
+
+/// Settings > Account > Timezone. Saved zones win over the browser's everywhere a week or a
+/// time is shown (see [`crate::week::zone`]); null goes back to automatic.
+async fn save_timezone(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<TimezoneReq>,
+) -> ApiResult<Json<Value>> {
+    api::check_origin(&a, &headers, &st)?;
+    let tz = match r
+        .timezone
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        None => None,
+        Some(t) => Some(crate::week::check_zone(&st, t).await.ok_or_else(|| {
+            AppError::bad_request(
+                "invalid_timezone",
+                "That isn't a time zone we know. Pick one from the list.",
+            )
+        })?),
+    };
+    sqlx::query("UPDATE users SET timezone = $2 WHERE id = $1")
+        .bind(a.user.id)
+        .bind(&tz)
+        .execute(&st.db)
+        .await?;
+    // the signature card shows this week in the owner's zone
+    crate::sig::forget(&a.user.handle.to_lowercase());
+    Ok(Json(json!({ "timezone": tz })))
 }
 
 async fn mfa_status(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {

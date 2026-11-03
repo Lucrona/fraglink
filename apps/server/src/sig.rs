@@ -173,9 +173,10 @@ pub async fn card_for(st: &AppState, handle: &str) -> ApiResult<Option<Card>> {
     }
     let mut line2 = String::from("playfraglink.com");
     if show_hours {
-        // this week: tracked play only, the home page's week (default timezone: the card is
-        // public and has no viewer), games hidden from others left out; total: all time
-        let tz = crate::activity::tz_or_default(st, None).await;
+        // this week: tracked play only, the home page's week in the owner's saved zone (else
+        // Australia/Sydney: the card is public and has no viewer), games hidden from others
+        // left out; total: all time
+        let tz = crate::week::zone(st, Some(uid), None).await;
         let w = crate::week::for_user(st, uid, &tz, false)
             .await?
             .shown(|g| !hidden.iter().any(|h| h == g))

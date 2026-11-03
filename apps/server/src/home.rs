@@ -49,7 +49,8 @@ pub async fn appids(st: &AppState, ids: &[String]) -> ApiResult<HashMap<String, 
 }
 
 /// Signed out, the page is cached and its "this week" figures use the default timezone
-/// (Australia/Sydney); signed in, they use `?tz=` (the browser's), like `/home/week`.
+/// (Australia/Sydney); signed in, they use the viewer's zone ([`crate::week::zone`]: saved,
+/// else `?tz=`, else Sydney), like `/home/week`.
 async fn home(
     State(st): State<AppState>,
     m: MaybeUser,
@@ -68,7 +69,7 @@ async fn home(
             }
         }
     }
-    let tz = crate::activity::tz_or_default(&st, viewer.and(q.tz.as_deref())).await;
+    let tz = crate::week::zone(&st, viewer, viewer.and(q.tz.as_deref())).await;
     let v = build(&st, viewer, &tz).await?;
     if viewer.is_none() {
         *st.home_public.lock().unwrap_or_else(|e| e.into_inner()) =
@@ -94,7 +95,7 @@ async fn home_week(
         120,
         Duration::from_secs(600),
     )?;
-    let tz = crate::activity::tz_or_default(&st, q.tz.as_deref()).await;
+    let tz = crate::week::zone(&st, Some(a.user.id), q.tz.as_deref()).await;
     Ok(Json(
         week_json(&st, a.user.id, &tz, chrono::Utc::now()).await?,
     ))

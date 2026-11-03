@@ -1092,3 +1092,6 @@ a.cp-slot{color:inherit;text-decoration:none}a.cp-slot:hover{background:var(--ro
 .home42 .rg span.a{display:block;width:92px;height:43px;border-radius:3px;border:1px solid #000;flex:none}
 .home42 .two.one{grid-template-columns:1fr}
 @media(max-width:480px){.home42 .rg span.a{width:64px;height:30px}}
+/* Settings > Account > Time zone: search box above the grouped list */
+.tzpick{display:flex;flex-direction:column;gap:6px;max-width:420px}.tzpick .t{width:100%;box-sizing:border-box}
+.tzpick select.t{background-color:#0b1118;border:1px solid #2d4560;color:#dfe7ef;border-radius:3px;padding:6px 8px;font:inherit;height:34px;color-scheme:dark}

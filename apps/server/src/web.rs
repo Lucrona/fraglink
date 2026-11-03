@@ -222,8 +222,8 @@ async fn home(
         ));
     };
     let uid = a.user.id;
-    // no browser timezone on this server-rendered page: the default one (Australia/Sydney)
-    let tz = crate::activity::tz_or_default(&st, None).await;
+    // no browser timezone on this server-rendered page: your saved zone, else Australia/Sydney
+    let tz = crate::week::zone(&st, Some(uid), None).await;
     let games = api::game_stats(&st, uid, &tz).await?;
     let steam: Option<(String, bool, Option<chrono::DateTime<chrono::Utc>>, Option<String>)> = sqlx::query_as(
         "SELECT provider_uid, verified, last_sync_at, sync_status FROM linked_accounts WHERE user_id = $1 AND provider = 'steam'",

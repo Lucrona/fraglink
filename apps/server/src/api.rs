@@ -816,7 +816,7 @@ async fn stats(
     a: AuthUser,
     Query(wq): Query<crate::home::WeekQuery>,
 ) -> ApiResult<Json<Value>> {
-    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+    let tz = crate::week::zone(&st, Some(a.user.id), wq.tz.as_deref()).await;
     let games = game_stats(&st, a.user.id, &tz).await?;
     let verified: i64 = games.iter().map(|g| g.display_min).sum();
     let minutes_7d: i64 = games.iter().map(|g| g.minutes_7d).sum();
@@ -842,19 +842,20 @@ async fn stats(
 struct LbQuery {
     #[serde(default)]
     period: Option<String>,
-    /// IANA timezone for the 7-day window (default: Australia/Sydney).
+    /// The browser's IANA zone for the 7-day window; the viewer's saved zone wins, the
+    /// default is Australia/Sydney ([`crate::week::zone`]).
     #[serde(default)]
     tz: Option<String>,
 }
 
 /// Per-game ranks, counted like profiles: all time is the game's total (`display_min`: the
 /// larger of the app's sessions, Steam playtime and Imported hours), 7 days is tracked play
-/// only: the [`crate::week`] window in `tz`, each person's seconds of this game exactly as
+/// only: the [`crate::week`] window in the viewer's zone (one window for the whole board), each person's seconds of this game exactly as
 /// their home page counts them (`seconds`), in whole minutes rounded half up. Only public profiles that show games and hours, have Leaderboards on and
 /// haven't hidden the game; never test accounts. Needs a signed-in caller.
 async fn leaderboard(
     State(st): State<AppState>,
-    _a: AuthUser,
+    a: AuthUser,
     Path(game_id): Path<String>,
     Query(q): Query<LbQuery>,
 ) -> ApiResult<Json<Value>> {
@@ -867,7 +868,8 @@ async fn leaderboard(
     );
     let rows: Vec<(String, i64, Option<i64>)> = match q.period.as_deref().unwrap_or("7d") {
         "7d" => {
-            let tz = crate::activity::tz_or_default(&st, q.tz.as_deref()).await;
+            // one window for everyone on the board: the viewer's (saved zone, else ?tz=)
+            let tz = crate::week::zone(&st, Some(a.user.id), q.tz.as_deref()).await;
             let w = crate::week::window(crate::week::parse_tz(&tz), Utc::now());
             let sql = format!(
                 "SELECT u.handle, sum({secs})::bigint AS s FROM play_sessions s JOIN users u ON u.id = s.user_id
@@ -1194,6 +1196,10 @@ pub async fn export_json(st: &AppState, user: &User, tz: &str) -> ApiResult<Valu
         "age_confirmed_at": q("SELECT coalesce(to_jsonb(age_confirmed_at), 'null'::jsonb) FROM users WHERE id = $1").await?,
         "birth_date": q("SELECT coalesce(to_jsonb(birth_date), 'null'::jsonb) FROM users WHERE id = $1").await?,
         "is_minor": q("SELECT to_jsonb(is_minor) FROM users WHERE id = $1").await?,
+        // Settings > Account > Timezone (null = automatic: the browser's zone, else
+        // Australia/Sydney); `week_timezone` is the zone this export's 7-day figures used.
+        "timezone": q("SELECT coalesce(to_jsonb(timezone), 'null'::jsonb) FROM users WHERE id = $1").await?,
+        "week_timezone": tz,
         "linked_accounts": q("SELECT coalesce(jsonb_agg(to_jsonb(l) - 'user_id'), '[]'::jsonb) FROM linked_accounts l WHERE user_id = $1").await?,
         // Effective per-feature switches (missing key = shown), e.g. connection_names.
         "privacy": crate::account::privacy_view(&q("SELECT coalesce(privacy, '{}'::jsonb) FROM users WHERE id = $1").await?),
@@ -1212,7 +1218,7 @@ async fn export(
     a: AuthUser,
     Query(wq): Query<crate::home::WeekQuery>,
 ) -> ApiResult<Json<Value>> {
-    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+    let tz = crate::week::zone(&st, Some(a.user.id), wq.tz.as_deref()).await;
     Ok(Json(export_json(&st, &a.user, &tz).await?))
 }
 
@@ -1220,7 +1226,7 @@ async fn export(
 pub const EXPORT_ZIP_INTERVAL_SECS: u64 = 3600;
 
 const ZIP_README: &str = "Fraglink account export\n\n\
-profile.json         your account, linked accounts and paired devices\n\
+profile.json         your account, time zone setting, linked accounts and paired devices\n\
 sessions.csv         every session uploaded by the Fraglink app (tier: tracked)\n\
 games.csv            per-game minutes by tier: tracked, imported (self-reported), and what is displayed\n\
 hours_entries.json   game counters (imported): WoW /played totals from the Fraglink addon and any\n\
@@ -1250,7 +1256,7 @@ async fn export_zip(
     Query(wq): Query<crate::home::WeekQuery>,
 ) -> ApiResult<axum::response::Response> {
     use axum::response::IntoResponse;
-    let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+    let tz = crate::week::zone(&st, Some(a.user.id), wq.tz.as_deref()).await;
     {
         let mut log = st.export_log.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(t) = log.get(&a.user.id) {
@@ -1320,7 +1326,7 @@ async fn export_zip(
             at.to_rfc3339(),
         ]);
     }
-    let profile = json!({ "user": full["user"], "linked_accounts": full["linked_accounts"], "devices": full["devices"] });
+    let profile = json!({ "user": full["user"], "timezone": full["timezone"], "linked_accounts": full["linked_accounts"], "devices": full["devices"] });
     let pretty = |v: &Value| serde_json::to_vec_pretty(v).unwrap_or_default();
     let bytes = fraglink_core::export::zip_bytes(&[
         ("README.txt", ZIP_README.as_bytes().to_vec()),
@@ -1419,7 +1425,8 @@ async fn friends_activity(
     axum::extract::Query(q): axum::extract::Query<TzQuery>,
 ) -> ApiResult<Json<Value>> {
     st.rate_limit(format!("activity:{}", a.user.id), 120, 10 * MINUTE)?;
-    let tz = crate::activity::tz_or_default(&st, q.tz.as_deref()).await;
+    // your feed's days and times: your saved zone, else the browser's
+    let tz = crate::week::zone(&st, Some(a.user.id), q.tz.as_deref()).await;
     let items = if q.per.as_deref() == Some("session") {
         crate::activity::recent_sessions(&st, a.user.id, &tz).await?
     } else {
@@ -1437,6 +1444,7 @@ async fn friend_summary(
     Query(wq): Query<crate::home::WeekQuery>,
 ) -> ApiResult<Json<crate::activity::FriendSummary>> {
     st.rate_limit(format!("summary:{}", a.user.id), 240, 10 * MINUTE)?;
+    // `tz` is only the browser fallback: the friend's own saved zone wins (see summary)
     let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
     Ok(Json(
         crate::activity::summary(&st, a.user.id, &handle, &tz).await?,

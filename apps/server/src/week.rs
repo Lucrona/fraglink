@@ -64,6 +64,62 @@ pub fn window(tz: Tz, now: DateTime<Utc>) -> Window {
     Window { tz, dates, bounds }
 }
 
+/// A zone name both chrono-tz and Postgres know (Postgres is used for some day splits in
+/// SQL), in its canonical spelling; None for anything else.
+pub async fn check_zone(st: &AppState, name: &str) -> Option<String> {
+    let name = name.trim();
+    if name.is_empty() || name.len() > 64 {
+        return None;
+    }
+    let tz = name.parse::<Tz>().ok()?;
+    let canon = tz.name().to_string();
+    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name = $1)")
+        .bind(&canon)
+        .fetch_one(&st.db)
+        .await
+        .ok()
+        .filter(|ok| *ok)
+        .map(|_| canon)
+}
+
+/// The zone someone saved in Settings > Account (None = automatic).
+pub async fn saved_zone(st: &AppState, user: Uuid) -> Option<String> {
+    sqlx::query_scalar::<_, Option<String>>("SELECT timezone FROM users WHERE id = $1")
+        .bind(user)
+        .fetch_optional(&st.db)
+        .await
+        .ok()
+        .flatten()
+        .flatten()
+}
+
+/// The zone for `user`'s figures and times, in this order:
+/// 1. the zone they saved (Settings > Account > Timezone),
+/// 2. `browser`: the `?tz=` the website sends (only when it is a valid zone),
+/// 3. the site default, Australia/Sydney.
+///
+/// Whose zone: a person's own week (home, profile, stats, exports, the friend card, the
+/// signature card, the old web page, the admin view of them) is always in *their* saved
+/// zone, so the same person shows the same number to everyone; `browser` is the viewer's
+/// and only fills in when the owner saved nothing. Lists that rank many people (the 7-day
+/// leaderboards, the home top players / most played / site total) use one window for
+/// everybody, the *viewer's* (`user` = the viewer).
+pub async fn zone(st: &AppState, user: Option<Uuid>, browser: Option<&str>) -> String {
+    if let Some(u) = user {
+        if let Some(z) = saved_zone(st, u).await {
+            if z.parse::<Tz>().is_ok() {
+                return z;
+            }
+        }
+    }
+    if let Some(b) = browser {
+        if let Some(z) = check_zone(st, b).await {
+            return z;
+        }
+    }
+    crate::activity::DEFAULT_TZ.into()
+}
+
 /// Parse a zone name; unknown names fall back to the site default.
 pub fn parse_tz(name: &str) -> Tz {
     name.parse::<Tz>().unwrap_or_else(|_| {

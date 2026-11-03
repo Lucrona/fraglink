@@ -39,7 +39,8 @@ pub struct ActivityItem {
 /// Time zone used to split days when the caller doesn't send one.
 pub const DEFAULT_TZ: &str = "Australia/Sydney";
 
-/// A valid IANA zone name (checked against Postgres), else the default.
+/// A valid IANA zone name (checked against Postgres), else the default. This ignores saved
+/// zones: use [`crate::week::zone`] for anything shown to a person.
 pub async fn tz_or_default(st: &AppState, tz: Option<&str>) -> String {
     let Some(tz) = tz.filter(|t| t.len() <= 64) else {
         return DEFAULT_TZ.into();
@@ -276,7 +277,10 @@ pub async fn summary(st: &AppState, me: Uuid, handle: &str, tz: &str) -> ApiResu
     let (mut week, mut d7, mut top) = (None, None, None);
     if shares || p.id == me {
         // the game running now counts too (week::load reads play_sessions)
-        let wk = crate::week::for_user(st, p.id, tz, p.id == me)
+        // their week in their own saved zone (so everyone sees the number they see on their
+        // home page); `tz` (the viewer's browser) only when they saved none
+        let tz = crate::week::zone(st, Some(p.id), Some(tz)).await;
+        let wk = crate::week::for_user(st, p.id, &tz, p.id == me)
             .await?
             .shown(|_| true);
         week = Some(wk.seconds);

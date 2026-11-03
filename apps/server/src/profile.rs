@@ -358,10 +358,11 @@ async fn profile(
     let (mut total_min, mut min_7d, mut tenths_7d) = (0i64, 0i64, 0i64);
     let mut week_label = None;
     if can_see_games {
-        // "Past 7 days": tracked hours only, from crate::week (the viewer's timezone, same
-        // window and rounding as the home page), so your own profile always matches "Hours
-        // this week" there. Lifetime totals below still include imported hours.
-        let tz = crate::activity::tz_or_default(&st, wq.tz.as_deref()).await;
+        // "Past 7 days": tracked hours only, from crate::week (same window and rounding as
+        // the home page) in the profile owner's saved zone, else the viewer's browser zone,
+        // so the owner's profile always matches their "Hours this week". Lifetime totals
+        // below still include imported hours.
+        let tz = crate::week::zone(&st, Some(p.id), wq.tz.as_deref()).await;
         let rows = api::game_stats(&st, p.id, &tz).await?;
         let w = crate::week::window(crate::week::parse_tz(&tz), Utc::now());
         let (first, last) = (w.dates[0], w.dates[crate::week::DAYS - 1]);
