@@ -18,26 +18,29 @@ async function act(btn, fn) {
   try { return await fn(); } catch (e) { alert(e.message); } finally { if (btn) btn.disabled = false; }
 }
 
+/* Sidebar console: [route, label, allowed, group]. Groups keep their order. */
 const TABS = [
-  ["approvals", "Game approvals", can.approvals],
-  ["games", "Games", can.games],
-  ["detection", "Detection", can.games],
-  ["users", "Users", can.users],
-  ["hours", "Hours review", can.hours],
-  ["avatars", "Reported pictures", can.avatars],
-  ["server", "Server", can.server],
-  ["announcements", "Announcements", can.announcements],
-  ["news", "News", can.news],
-  ["polls", "Polls", can.news],
-  ["incidents", "Status incidents", can.server],
-  ["settings", "Site settings", can.settings],
-  ["staff", "Staff", can.staff],
+  ["approvals", "Game approvals", can.approvals, "To do"],
+  ["hours", "Hours review", can.hours, "To do"],
+  ["avatars", "Reported pictures", can.avatars, "To do"],
+  ["allgames", "All games", can.games, "Games"],
+  ["games", "Game library", can.games, "Games"],
+  ["detection", "Detection rules", can.games, "Games"],
+  ["users", "Users", can.users, "Community"],
+  ["news", "News", can.news, "Community"],
+  ["polls", "Polls", can.news, "Community"],
+  ["announcements", "Announcements", can.announcements, "Community"],
+  ["incidents", "Status incidents", can.server, "Site"],
+  ["server", "Server", can.server, "Site"],
+  ["settings", "Site settings", can.settings, "Site"],
+  ["staff", "Staff", can.staff, "Site"],
 ].filter(t => t[2]);
+const GROUPS = [...new Set(TABS.map(t => t[3]))];
 
-root.innerHTML = `<div class="wrap adm">
+root.innerHTML = `<div class="wrap adm adm-console">
   <div class="adm-head"><h1>Admin</h1><span class="role">${esc(who.role)}</span><span class="dimt">Signed in as ${esc(who.handle)}. Every action is logged.</span></div>
-  <nav class="tabs">${TABS.map(t => `<a href="#${t[0]}" data-tab="${t[0]}">${esc(t[1])}<span class="n" hidden></span></a>`).join("")}</nav>
-  <div id="view"></div></div>`;
+  <div class="adm-lay"><nav class="adm-side" aria-label="Admin sections">${GROUPS.map(g => `<h3>${esc(g)}</h3>` + TABS.filter(t => t[3] === g).map(t => `<a href="#${t[0]}" data-tab="${t[0]}">${esc(t[1])}<span class="n" hidden></span></a>`).join("")).join("")}</nav>
+  <div id="view"></div></div></div>`;
 const view = $("#view");
 let timer = null;
 
@@ -46,9 +49,9 @@ function route() {
   view.onclick = null; view.onchange = null;
   const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
   const t = tab === "user" ? "users" : tab;
-  $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
+  $$(".adm-side a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
   { const tb = TABS.find(x => x[0] === t); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
-  const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail }[tab];
+  const fn = { approvals, allgames: allGames, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -64,7 +67,7 @@ async function approvals() {
   const mrg = decided ? [] : (await api("/admin/merge_suggestions").catch(() => ({ merges: [] }))).merges;
   if (!decided) badge("approvals", rows.length + unk.length + mrg.length);
   const mrgHtml = mrg.length ? `<section class="panel"><h2>Suggested merges (${mrg.length})</h2>
-    <div class="note">Programs players added themselves that are now on the games list. Merge moves their sessions and hours into the list game (same as Admin &gt; Games &gt; Merge) and future play counts there. Dismiss keeps them apart.</div>
+    <div class="note">Programs players added themselves that are now on the games list. Merge moves their sessions and hours into the list game (same as Admin &gt; Game library &gt; Merge) and future play counts there. Dismiss keeps them apart.</div>
     <table><thead><tr><th>Program</th><th>Merge into</th><th class="num">Players</th><th class="num">Hours</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
     ${mrg.map(m => `<tr data-mrg="${esc(m.game_id)}" data-into="${esc(m.into)}"><td><span class="mono">${esc(m.exe)}</span>${m.name ? `<div class="dimt">${esc(m.name)}</div>` : ""}</td><td>${esc(m.into_name || m.into)} <span class="mono dimt">${esc(m.into)}</span></td><td class="num">${m.players}</td><td class="num">${hrs(m.seconds / 60)}</td><td>${day(m.first_seen)}</td>
       <td class="num"><div class="acts"><button class="btn sm dl" data-merge>Merge</button><button class="btn sm danger" data-dismiss>Dismiss</button></div></td></tr>`).join("")}</tbody></table></section>` : "";
@@ -149,7 +152,7 @@ async function avatarReports() {
       <td class="num"><button class="btn sm" data-pok>Dismiss</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No open reports.</div>`}</section>`);
   badge("avatars", d.reports.length + pr.reports.length);
 }
-function badge(tab, n) { const s = $(`.tabs a[data-tab=${tab}] .n`); if (s) { s.textContent = n; s.hidden = !n; } }
+function badge(tab, n) { const s = $(`.adm-side a[data-tab=${tab}] .n`); if (s) { s.textContent = n; s.hidden = !n; } }
 
 /* ---------- detection fix-ups ---------- */
 const DKIND = { steam: "Steam app id", id: "Game id", path: "Folder + exe" };
@@ -213,10 +216,147 @@ function srcChips(g) {
     : `<span class="pill${k === "unlisted" ? " warn" : ""}">${esc(SRC_LBL[k] || k)}</span>`).join("");
 }
 
+/* ---------- All games: everything Fraglink knows, from every source ---------- */
+const AG = { q: "", src: "", status: "", flag: "", sort: "updated", offset: 0, open: "" };
+const AG_SRC = [["games list", "Games list", "l"], ["built-in", "Built-in", "b"], ["steam", "Steam", "s"], ["folder rule", "Folder rule", "f"], ["fix-up", "Fix-up", "x"], ["extra exe", "Extra exe", "e"], ["approved", "Approved", "a"], ["unlisted", "Unlisted", "u"]];
+const AG_ST = { active: ["Active", "ok"], hidden: ["Hidden", "hid"], retired: ["Retired", "ret"], merged: ["Merged", "mer"] };
+const AG_FLAG = [["new", "New on Games list · 7 days"], ["changed", "Games list changed · 7 days"], ["edited", "Staff edited"], ["hours", "Has hours"], ["unverified", "Unverified"]];
+const AG_ADDED = { fraglink: "first played on Fraglink", list: "first seen on the Games list", before_tracking: "on the Games list before tracking began" };
+const num = n => (n || 0).toLocaleString("en");
+const srcTag = k => { const s = AG_SRC.find(x => x[0] === k); return `<span class="src ${s ? s[2] : ""}">${esc(s ? s[1] : k)}</span>`; };
+function stTag(r) {
+  const s = AG_ST[r.status] || [r.status, ""];
+  const life = r.lifecycle && r.lifecycle !== "live" ? ` <span class="st beta">${esc(LIFE[r.lifecycle] || r.lifecycle)}</span>` : "";
+  return `<span class="st ${s[1]}">${esc(r.partial && r.status === "active" ? "Exe retired" : s[0])}</span>${life}`;
+}
+async function allGames(arg) {
+  if (arg) { AG.q = arg; AG.offset = 0; }
+  view.innerHTML = `<section class="panel" style="margin-bottom:12px"><h2>Where the list comes from</h2><div id="agfresh"><div class="body empty">Loading…</div></div></section>
+    <section class="panel"><h2>All games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+    <div class="ag-tb"><input class="in" type="search" id="agq" placeholder="Search name, id, exe, alias or Steam app id" value="${esc(AG.q)}" autocomplete="off" aria-label="Search games">
+      <select class="in" id="agflag" aria-label="Show only"><option value="">Everything</option>${AG_FLAG.map(([k, v]) => `<option value="${k}"${AG.flag === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
+      <select class="in" id="agsort" aria-label="Sort"><option value="updated">Last change first</option><option value="added">Newest added</option><option value="name">Name A–Z</option><option value="players">Most players</option><option value="hours">Most hours</option></select>
+      <span class="dimt" style="margin-left:auto">50 per page · click a row to open it</span></div>
+    <div class="ag-flt" id="agsrc"></div><div class="ag-flt" id="agst"></div>
+    <div id="aglist"><div class="body empty">Loading…</div></div></section>`;
+  $("#agsort").value = AG.sort;
+  let t; $("#agq").oninput = e => { clearTimeout(t); t = setTimeout(() => { AG.q = e.target.value.trim(); AG.offset = 0; AG.open = ""; listAll(); }, 300); };
+  $("#agflag").onchange = e => { AG.flag = e.target.value; AG.offset = 0; listAll(); };
+  $("#agsort").onchange = e => { AG.sort = e.target.value; AG.offset = 0; listAll(); };
+  view.onclick = e => {
+    const c = e.target.closest("[data-agsrc]"); if (c) { AG.src = AG.src === c.dataset.agsrc ? "" : c.dataset.agsrc; AG.offset = 0; listAll(); return; }
+    const s_ = e.target.closest("[data-agst]"); if (s_) { AG.status = AG.status === s_.dataset.agst ? "" : s_.dataset.agst; AG.offset = 0; listAll(); return; }
+    const so = e.target.closest("th[data-agsort]"); if (so) { AG.sort = so.dataset.agsort; $("#agsort").value = AG.sort; AG.offset = 0; listAll(); return; }
+    const pg = e.target.closest("[data-agoff]"); if (pg) { AG.offset = +pg.dataset.agoff; AG.open = ""; listAll().then(() => $("#aglist").scrollIntoView({ block: "start" })); return; }
+    if (e.target.closest("a,button,tr.exp")) return;
+    const tr = e.target.closest("tr.r"); if (tr) toggleAll(tr);
+  };
+  await listAll();
+}
+function freshHtml(m) {
+  const gl = m.games_list, glj = m.games_list_job, ss = m.steam || {}, ch = m.list_changes_7d || {};
+  const chTxt = Object.entries(ch).map(([k, v]) => `${v} ${k}`).join(" · ");
+  const box = (k, v, d) => `<div><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+  return `<div class="ag-fresh">
+    ${box("Games list", gl ? `${num(gl.games)} games` : "Not downloaded", `${gl && gl.updated ? `version ${esc(gl.updated)} · ` : ""}${glj ? `checked ${when(glj.last_run_at)}` : "not checked yet"}${chTxt ? ` · 7 days: ${esc(chTxt)}` : ""}`)}
+    ${box("Built-in signatures", `${num(m.builtin.games)} games`, `ships with the app · version ${esc(m.builtin.version || "-")}`)}
+    ${box("Steam", `${num(ss.games)} linked games`, `${ss.job ? `last import ${when(ss.job.last_run_at)}${ss.job.detail ? ` (${esc(ss.job.detail)})` : ""}` : "no import recorded yet"}${ss.last_change ? ` · last change ${when(ss.last_change)}` : ""}`)}
+    ${box("Staff edits", `${num(m.edits.count)} games`, m.edits.last ? `last ${when(m.edits.last)}` : "none yet")}
+    ${box("Detection fix-ups", `${num(m.fixups.count)} rules`, `${m.fixups.last ? `last ${when(m.fixups.last)}` : "none yet"} · ${num(m.folder_rules)} folder rules`)}
+    ${box("Approved by staff", `${num(m.approved.count)} games`, m.approved.last ? `last ${when(m.approved.last)}` : "none yet")}</div>`;
+}
+async function listAll() {
+  const box = $("#aglist"); if (!box) return;
+  const d = await api("/admin/games-all?" + new URLSearchParams({ q: AG.q, src: AG.src, status: AG.status, flag: AG.flag, sort: AG.sort, offset: AG.offset }));
+  AG.offset = d.offset;
+  $("#agfresh").innerHTML = freshHtml(d.meta);
+  $("#agcount").textContent = d.total === d.everything ? `· ${num(d.everything)} games` : `· ${num(d.total)} of ${num(d.everything)} games`;
+  const cs = d.counts.src || {}, ct = d.counts.status || {};
+  $("#agsrc").innerHTML = `<span class="lb">Source</span><button class="chip${AG.src ? "" : " on"}" data-agsrc="">All</button>` +
+    AG_SRC.map(([k, l]) => `<button class="chip${AG.src === k ? " on" : ""}" data-agsrc="${esc(k)}"${cs[k] || AG.src === k ? "" : " disabled"}>${esc(l)} <b>${num(cs[k])}</b></button>`).join("");
+  $("#agst").innerHTML = `<span class="lb">Status</span><button class="chip${AG.status ? "" : " on"}" data-agst="">All</button>` +
+    Object.keys({ ...AG_ST, ...ct }).map(k => `<button class="chip${AG.status === k ? " on" : ""}" data-agst="${esc(k)}"${ct[k] || AG.status === k ? "" : " disabled"}>${esc((AG_ST[k] || [{ partial: "Exe retired", removed: "Off Games list" }[k] || LIFE[k] || k])[0])} <b>${num(ct[k])}</b></button>`).join("");
+  if (!d.rows.length) { box.innerHTML = `<div class="body empty">No games match these filters.</div>`; return; }
+  const th = (k, l, c) => `<th class="srt${AG.sort === k ? " on" : ""} ${c || ""}" data-agsort="${k}">${l}</th>`;
+  box.innerHTML = `<table class="gl"><thead><tr>${th("name", "Game")}<th>Sources</th><th>Exes</th><th>Status</th>${th("players", "Players", "nr")}${th("hours", "Hours", "nr")}${th("added", "Added")}${th("updated", "Last change")}</tr></thead><tbody>
+    ${d.rows.map(r => `<tr class="r" data-id="${esc(r.id)}"><td><div class="gm"><img src="${esc(r.icon)}" alt="" data-hide-broken><div><div class="nm">${esc(r.name)}${r.renamed ? ` <span class="pill warn" title="Official name: ${esc(r.official)}">renamed</span>` : ""}${r.verified ? "" : ` <span class="pill">unverified</span>`}</div><div class="id">${esc(r.id)}</div></div></div></td>
+      <td>${r.sources.map(srcTag).join("")}</td>
+      <td><div class="exes" title="${esc(r.exes.join(", "))}">${r.exes.length ? esc(r.exes.join(", ")) + (r.exe_count > r.exes.length ? ` +${r.exe_count - r.exes.length}` : "") : `<span class="dimt">-</span>`}</div>${r.folders || r.fixups ? `<div class="sm">${r.folders ? `${r.folders} folder hint${r.folders === 1 ? "" : "s"}` : ""}${r.folders && r.fixups ? " · " : ""}${r.fixups ? `${r.fixups} fix-up${r.fixups === 1 ? "" : "s"}` : ""}</div>` : ""}</td>
+      <td>${stTag(r)}${r.removed_from_list ? `<div class="sm">off Games list ${day(r.removed_from_list)}</div>` : ""}</td>
+      <td class="nr">${r.players ? num(r.players) : `<span class="dimt">0</span>`}</td><td class="nr ${r.total_min ? "hh" : ""}">${r.total_min ? hrs(r.total_min) : `<span class="dimt">-</span>`}</td>
+      <td class="sm" title="${esc(AG_ADDED[r.added_kind] || "")}">${r.added_kind === "before_tracking" ? "before tracking" : r.added ? day(r.added) : "-"}</td>
+      <td><div class="sm">${r.updated ? when(r.updated) : "-"}</div>${r.by ? `<div class="who">${esc(r.by)}</div>` : ""}</td></tr>`).join("")}</tbody></table>
+    ${pagerAll(d)}`;
+  const o = AG.open && box.querySelector(`tr.r[data-id="${CSS.escape(AG.open)}"]`);
+  if (o) toggleAll(o, true);
+}
+function pagerAll(d) {
+  const pages = Math.ceil(d.total / d.page_size), cur = Math.floor(d.offset / d.page_size);
+  if (pages <= 1) return `<div class="pg"><span>${num(d.total)} game${d.total === 1 ? "" : "s"}</span></div>`;
+  const want = new Set([0, pages - 1, cur - 2, cur - 1, cur, cur + 1, cur + 2].filter(p => p >= 0 && p < pages));
+  let last = -1, out = "";
+  [...want].sort((a, b) => a - b).forEach(p => { if (p - last > 1) out += `<span>…</span>`; out += `<button data-agoff="${p * d.page_size}"${p === cur ? ` class="on" aria-current="page"` : ""}>${p + 1}</button>`; last = p; });
+  return `<div class="pg"><button data-agoff="${Math.max(0, d.offset - d.page_size)}"${cur ? "" : " disabled"}>‹ Prev</button>${out}<button data-agoff="${d.offset + d.page_size}"${cur < pages - 1 ? "" : " disabled"}>Next ›</button>
+    <span class="sp">${num(d.offset + 1)}–${num(Math.min(d.total, d.offset + d.page_size))} of ${num(d.total)}</span></div>`;
+}
+const HIST = {
+  "game.steam_sync": "Steam details updated", "game.edit": "Edited", "game.approve": "Approved", "game.reject": "Rejected", "game.undo_decision": "Decision undone",
+  "game.icon_upload": "Icon uploaded", "game.icon_remove": "Icon removed", "game.media": "Media changed", "game.art": "Cover art changed", "game.delete": "Deleted", "unknown_game.map": "Unknown id mapped", "game.merge": "Merged", "game.retire": "Retired", "game.unretire": "Retire undone", "game.status": "Status set",
+  new: "Added to the Games list", back: "Back on the Games list", renamed: "Renamed on the Games list", exes: "Exes changed on the Games list", removed: "Removed from the Games list",
+  first_seen: "First seen on the Games list", on_list_when_tracking_began: "On the Games list when tracking began", first_on_fraglink: "First played on Fraglink", status_checked: "Status checked",
+};
+function histLine(e) {
+  const lbl = HIST[e.action] || String(e.action || "").replace(/^game\.|^detection\.|^unknown_game\./, "").replace(/_/g, " ");
+  const a = e.after || {}, b = e.before || {};
+  let det = "";
+  if (e.action === "renamed") det = `${esc(b.name || "")} → ${esc(a.name || "")}`;
+  else if (e.action === "exes") det = `<span class="mono">${esc((a.exes || []).join(", "))}</span>`;
+  else if (a.name && b.name && a.name !== b.name) det = `${esc(b.name)} → ${esc(a.name)}`;
+  else if (a.into) det = `into <span class="mono">${esc(a.into)}</span>`;
+  else if (a.to) det = `to <span class="mono">${esc(a.to)}</span>`;
+  else if (a.pattern) det = `<span class="mono">${esc(a.pattern)}</span>`;
+  else if (a.steam_appid) det = `Steam ${esc(String(a.steam_appid))}`;
+  const by = e.kind === "audit" ? (e.by ? `<em${e.by === "Steam sync" ? ` class="sys"` : ""}>${esc(e.by)}</em>` : "") : e.by ? `<em class="sys">${esc(e.by)}</em>` : "";
+  return `<div><time>${when(e.at)}</time><span><b>${esc(lbl)}</b>${det ? " · " + det : ""}${by ? " · " + by : ""}${e.list_updated ? ` <span class="dimt">(list ${esc(e.list_updated)})</span>` : ""}</span></div>`;
+}
+async function toggleAll(tr, keep) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains("exp")) { if (keep) return; next.remove(); tr.classList.remove("open"); AG.open = ""; return; }
+  $$("#aglist tr.exp").forEach(x => x.remove()); $$("#aglist tr.open").forEach(x => x.classList.remove("open"));
+  const id = tr.dataset.id; AG.open = id; tr.classList.add("open");
+  const ex = document.createElement("tr"); ex.className = "exp";
+  ex.innerHTML = `<td colspan="8"><div class="dimt">Loading…</div></td>`; tr.after(ex);
+  const [g, h] = await Promise.all([api("/admin/games/" + encodeURIComponent(id)).catch(() => null), api(`/admin/games/${encodeURIComponent(id)}/history`).catch(() => ({ events: [] }))]);
+  if (!ex.isConnected) return;
+  const rows = [], d = (g && g.detection) || {}, o = (g && g.override) || {}, b = d.builtin;
+  if (b) rows.push(["Built-in", [...(b.exes || []), ...(b.path_exes || [])].join(", ") + ((b.path_hints || []).length ? ` in ${b.path_hints.join(", ")}` : ""), "ships with the app"]);
+  if (d.in_games_list) rows.push(["Games list", (d.list_patterns || []).map(p => p.exes.join(", ") + (p.paths.length ? " in " + p.paths.join(", ") : "")).join("; "), "downloaded daily"]);
+  ((g && g.steam_appids) || []).forEach(a => rows.push(["Steam", String(a), "Steam import"]));
+  if ((o.extra_exes || []).length) rows.push(["Extra exes", o.extra_exes.join(", "), d.edited ? when(d.edited.at) + (d.edited.by ? " · " + d.edited.by : "") : "staff"]);
+  if ((o.path_hints || []).length) rows.push(["Folder hints", o.path_hints.join(", "), d.edited ? when(d.edited.at) : "staff"]);
+  (d.fixups || []).forEach(x => rows.push(["Fix-up", x.pattern + (x.note ? ` (${x.note})` : ""), when(x.updated_at) + (x.updated_by ? " · " + x.updated_by : "")]));
+  ((g && g.merged_from) || []).forEach(m => rows.push(["Merged in", m, ""]));
+  const r = (g && g.retired) || null;
+  const names = [["Shown as", g ? (g.public_name || g.name || id) : id], ["Official", g ? g.name || "-" : "-"], ["Id", `<span class="mono">${esc(id)}</span>`, 1]];
+  if ((o.aliases || []).length) names.push(["Also called", o.aliases.join(", ")]);
+  const links = ((g && g.steam_appids) || []).map(a => `<a href="https://store.steampowered.com/app/${a}" target="_blank" rel="noopener">Steam store ${a}</a>`);
+  if (r && r.successor) links.push(`<a href="#allgames/${encodeURIComponent(r.successor)}">${r.merged ? "Merged into" : "New entry"} ${esc(r.successor)}</a>`);
+  const ev = h.events || [];
+  ex.innerHTML = `<td colspan="8"><div class="xg">
+    <div class="xb"><h4>How it's found <span>${rows.length} rule${rows.length === 1 ? "" : "s"}</span></h4>${rows.length ? `<table>${rows.map(x => `<tr><td style="width:96px">${esc(x[0])}</td><td class="mono">${esc(x[1])}</td><td class="rt">${esc(x[2])}</td></tr>`).join("")}</table>` : `<div class="xkv"><span class="dimt">No rules: only reported by the app as unlisted.</span></div>`}</div>
+    <div class="xb"><h4>Names &amp; links</h4><div class="xkv">${names.map(n => `<b>${esc(n[0])}</b><span>${n[2] ? n[1] : esc(n[1])}</span>`).join("")}
+      <b>Players</b><span>${g ? `${num(g.players)} · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})` : "-"}</span>
+      <b>Links</b><span>${links.join(" · ") || `<span class="dimt">none</span>`}</span></div></div>
+    <div class="xb wide"><h4>History <span>${ev.length} event${ev.length === 1 ? "" : "s"} · staff, Steam sync and Games list</span></h4>${ev.length ? `<div class="lg">${ev.map(histLine).join("")}</div>` : `<div class="xkv"><span class="dimt">Nothing recorded yet.</span></div>`}</div></div>
+    <div class="xact"><span class="note">Edits, retire, merge, icons and status live in the Game library editor.</span><a class="btn sm" href="#detection">Detection rules</a><a class="btn sm dl" href="#games/id:${encodeURIComponent(id)}">Open in editor ›</a></div></td>`;
+}
+
 /* ---------- 2. games ---------- */
 async function games(q) {
   q = q || "";
-  view.innerHTML = `<div class="split"><section class="panel"><h2>Games</h2>
+  const direct = q.startsWith("id:") ? q.slice(3) : "";
+  if (direct) q = direct;
+  view.innerHTML = `<div class="split"><section class="panel"><h2>Game library</h2>
     <form method="post" action="/api/v1/form-fallback" class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off">
       <select class="in" id="gshow" aria-label="Show"><option value="">All games with hours</option><option value="edited">Edited / retired / status set</option><option value="no_steam">With hours, no Steam link</option><option value="steam">With hours, on Steam</option><option value="unverified">With hours, unverified</option></select></form>
     <div id="gmeta"></div>
@@ -228,6 +368,7 @@ async function games(q) {
   GS.offset = 0;
   $("#gshow").onchange = e => { GS.show = e.target.value; GS.offset = 0; listGames($("#gs").q.value.trim()); };
   listGames(q);
+  if (direct) editGame(direct).catch(e => { $("#gedit").innerHTML = `<h2>Edit game</h2><div class="alert err">${esc(e.message)}</div>`; });
 }
 const GS = { sort: "players", show: "", offset: 0, lastQ: "" };
 /* Search as you type (debounced); Enter still works. */
