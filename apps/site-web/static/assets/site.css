@@ -1095,3 +1095,7 @@ a.cp-slot{color:inherit;text-decoration:none}a.cp-slot:hover{background:var(--ro
 /* Settings > Account > Time zone: search box above the grouped list */
 .tzpick{display:flex;flex-direction:column;gap:6px;max-width:420px}.tzpick .t{width:100%;box-sizing:border-box}
 .tzpick select.t{background-color:#0b1118;border:1px solid #2d4560;color:#dfe7ef;border-radius:3px;padding:6px 8px;font:inherit;height:34px;color-scheme:dark}
+/* carousel 2026-11-04: portrait friends window, scaled to the stage height; toast shown at a readable size */
+.home42 .c42 .sl img.tall{max-height:460px;width:auto}
+.home42 .c42 .sl[data-i="2"] img{width:452px}
+@media(max-width:640px){.home42 .c42 .sl img.tall{max-height:380px}.home42 .c42 .sl[data-i="2"] img{width:100%}}
