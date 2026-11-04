@@ -401,7 +401,31 @@ pub async fn link(state: &AppState, user_id: Uuid, steamid: u64, verified: bool)
 }
 
 /// Import official playtime for the user's linked Steam account (Tracked tier).
+/// Each run is recorded as job `steam_sync` (Admin > All games "last updated").
 pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> {
+    let r = import_inner(state, user_id).await;
+    match &r {
+        Ok(res) => {
+            let d = format!("{} games from 1 account", res.games);
+            crate::admin::record_job(state, "steam_sync", Some(&d), true).await;
+        }
+        // signed-in user mistakes, not a sync run
+        Err(e) if matches!(e.code, "steam_not_linked" | "steam_sync_cooldown") => {}
+        Err(e) if e.code == "steam_private" => {
+            crate::admin::record_job(state, "steam_sync", Some("account is private"), true).await;
+        }
+        Err(e) => {
+            let d = format!("failed: {}", e.code);
+            crate::admin::record_job(state, "steam_sync", Some(&d), false).await;
+        }
+    }
+    r
+}
+
+/// A games row as a Steam sync sees it: (name, Steam app id, icon hash).
+type SteamRow = (String, Option<i32>, Option<String>);
+
+async fn import_inner(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> {
     let row: Option<(String, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
         "SELECT provider_uid, last_sync_at FROM linked_accounts WHERE user_id = $1 AND provider = 'steam'",
     )
@@ -445,19 +469,37 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
     let mut tx = state.db.begin().await?;
     let mut n = 0;
     let mut total = 0;
+    // The rows as they were, so changes get games.updated_at and a 'Steam sync' audit entry.
+    let gids: Vec<String> = games
+        .iter()
+        .filter(|g| g.playtime_forever > 0)
+        .map(|g| ids.id(&fraglink_core::detector::steam_game_id(sigs(), g.appid)))
+        .collect();
+    let before: std::collections::HashMap<String, SteamRow> =
+        sqlx::query_as::<_, (String, String, Option<i32>, Option<String>)>(
+            "SELECT id, name, steam_appid, steam_icon_hash FROM games WHERE id = ANY($1)",
+        )
+        .bind(&gids)
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(|(id, n, a, h)| (id, (n, a, h)))
+        .collect();
+    let mut changed: Vec<(String, Option<SteamRow>, SteamRow)> = vec![];
     for g in games.iter().filter(|g| g.playtime_forever > 0) {
         let minted = fraglink_core::detector::steam_game_id(sigs(), g.appid);
         let gid = ids.id(&minted);
-        if gid != minted {
+        let after: Option<SteamRow> = if gid != minted {
             // counted as a game staff picked: keep that game's row as it is
-            sqlx::query(
-                "INSERT INTO games(id, name, steam_appid, verified) VALUES($1, $2, $3, true) ON CONFLICT (id) DO NOTHING",
+            sqlx::query_as(
+                "INSERT INTO games(id, name, steam_appid, verified) VALUES($1, $2, $3, true) ON CONFLICT (id) DO NOTHING
+                 RETURNING name, steam_appid, steam_icon_hash",
             )
             .bind(&gid)
             .bind(if g.name.is_empty() { gid.clone() } else { g.name.clone() })
             .bind(g.appid as i32)
-            .execute(&mut *tx)
-            .await?;
+            .fetch_optional(&mut *tx)
+            .await?
         } else {
             let name = sigs()
                 .by_steam_appid(g.appid)
@@ -469,20 +511,27 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
                         g.name.clone()
                     }
                 });
-            sqlx::query(
+            sqlx::query_as(
             "INSERT INTO games(id, name, steam_appid, steam_icon_hash, verified) VALUES($1, $2, $3, $4, true)
              ON CONFLICT (id) DO UPDATE SET steam_appid = COALESCE(games.steam_appid, excluded.steam_appid),
                name = CASE WHEN games.verified THEN games.name ELSE excluded.name END, verified = true,
                steam_icon_hash = CASE WHEN games.steam_appid IS NULL OR games.steam_appid = excluded.steam_appid
                                       THEN COALESCE(excluded.steam_icon_hash, games.steam_icon_hash)
-                                      ELSE games.steam_icon_hash END",
+                                      ELSE games.steam_icon_hash END
+             RETURNING name, steam_appid, steam_icon_hash",
         )
         .bind(&gid)
         .bind(&name)
         .bind(g.appid as i32)
         .bind(icon_hash(&g.img_icon_url))
-        .execute(&mut *tx)
-        .await?;
+        .fetch_optional(&mut *tx)
+        .await?
+        };
+        if let Some(a) = after {
+            let b = before.get(&gid);
+            if b != Some(&a) && !changed.iter().any(|(id, _, _)| id == &gid) {
+                changed.push((gid.clone(), b.cloned(), a));
+            }
         }
         sqlx::query(
             "INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at)
@@ -500,6 +549,23 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
         .await?;
         n += 1;
         total += g.playtime_forever;
+    }
+    for (gid, b, a) in &changed {
+        let row = |r: &SteamRow| serde_json::json!({ "name": r.0, "steam_appid": r.1, "icon": r.2.is_some() });
+        sqlx::query("UPDATE games SET updated_at = now() WHERE id = $1")
+            .bind(gid)
+            .execute(&mut *tx)
+            .await?;
+        // a system entry: no staff actor
+        sqlx::query(
+            "INSERT INTO admin_audit(actor_id, actor_handle, action, target, before, after)
+             VALUES(NULL, 'Steam sync', 'game.steam_sync', $1, $2, $3)",
+        )
+        .bind(gid)
+        .bind(b.as_ref().map(row))
+        .bind(row(a))
+        .execute(&mut *tx)
+        .await?;
     }
     sqlx::query("UPDATE linked_accounts SET sync_status = 'ok', last_sync_at = now() WHERE user_id = $1 AND provider = 'steam'")
         .bind(user_id)

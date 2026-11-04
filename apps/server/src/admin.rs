@@ -41,6 +41,11 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/suggestions/undo", post(undo_suggestion))
         .route("/api/v1/admin/games", get(games_search))
         .route("/api/v1/admin/games-meta", get(games_meta))
+        .route("/api/v1/admin/games-all", get(crate::all_games::list))
+        .route(
+            "/api/v1/admin/games/{id}/history",
+            get(crate::all_games::history),
+        )
         .route("/api/v1/admin/games/{id}", get(game_detail).post(game_save))
         .route("/api/v1/admin/games/{id}/delete", post(game_delete))
         .route(

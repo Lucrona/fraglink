@@ -222,6 +222,11 @@ impl GameLists {
 
     /// Name of an override rule (`star_citizen`), from the server's file or the bundled one.
     pub fn override_name(&self, data: &Path, id: &str) -> Option<String> {
+        self.override_names(data).get(id).cloned()
+    }
+
+    /// Every override rule: id -> name (re-read at most every 5 minutes).
+    pub fn override_names(&self, data: &Path) -> Arc<std::collections::HashMap<String, String>> {
         let fresh = |t: &std::time::Instant| t.elapsed() < Duration::from_secs(300);
         if let Some((t, m)) = self
             .override_names
@@ -230,7 +235,7 @@ impl GameLists {
             .as_ref()
         {
             if fresh(t) {
-                return m.get(id).cloned();
+                return m.clone();
             }
         }
         let m: std::collections::HashMap<String, String> =
@@ -247,7 +252,7 @@ impl GameLists {
             .override_names
             .write()
             .unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), m.clone()));
-        m.get(id).cloned()
+        m
     }
 }
 
@@ -351,6 +356,8 @@ pub async fn refresh_loop(st: AppState) {
                     );
                     st.games.install(b);
                     loaded = true;
+                    // first-seen dates and Admin's list of what changed
+                    crate::all_games::track_list(&st).await;
                 }
                 Ok(Err(e)) => {
                     tracing::warn!("detectable list build failed: {e:#}");
