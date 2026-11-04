@@ -9,6 +9,7 @@ pub mod achievements;
 pub mod activity;
 pub mod admin;
 pub mod alerts;
+pub mod all_games;
 pub mod api;
 pub mod art;
 pub mod auth;
