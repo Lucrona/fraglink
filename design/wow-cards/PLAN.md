@@ -100,14 +100,22 @@ Lookups go in a new table. They do not insert `wow_characters`, because `played_
 
 ## Card choice
 
-Both mocks use the site's dark blue panel and orange header. Sample names only. Forever cards have no realm. Missing spec, class, portrait, and hours are omitted. A dash means "no figure", not zero. Portraits are initials, not armory renders.
+The roster and ledger sketches are not the design. They stay in this folder so the rejection is on record. Do not implement them.
 
-- Option A, roster: dense grid for many alts. Hours are one line (addon `/played` only).
-- Option B, ledger: one row per character with addon `/played` and app-tracked hours side by side, labelled so they are not added.
+The review mock is `option-c-infopanel.html`. It is a compact info panel: a small portrait, the name with class and level, one aligned metadata line, the site's blue header, and an Armory link only when a public profile exists. The exact arrangement of any older game-profile panel is not known, so this does not invent one. Fields are ones Fraglink already stores, or that a profile request we have tested ourselves can return. Sample names are labelled. Forever has no realm line. Missing spec, class, hours, and portrait detail are omitted. Addon `/played` and app-tracked time are not added together.
 
-Narrow roster cards wrap the saved date. Ledger rows need a second column of width; on a phone the two figures sit under the name.
+No profile code changes until this panel is accepted. The HTML is not copied by `apps/site-web/build.py`.
 
-Pick one before any profile code changes. The HTML is in this folder and is not copied by `apps/site-web/build.py`.
+## The site runs character refresh itself
+
+Routine refresh is a server job, the same kind as the detectable-list refresh and the Steam sync job record. It is not a staff queue and not an outside scheduler.
+
+- One loop on the server refreshes public profiles and retries a failed Battle.net or profile request later.
+- The existing detail cache (serve the last good summary, refresh in the background) stays. A miss does not delete the character or any hour row.
+- Retail and Forever are separate runs. A Forever profile namespace stays off until Fraglink has requested it and the result is recorded. A report is not that test.
+- Each run writes a job row: last run, last success, and a short detail. Admin health shows that. A job that has never run is not shown as healthy.
+- The job does not merge characters, rewrite `hours_entries`, or delete snapshots. Ownership still comes only from the user's own `wow.profile` list.
+- An Armory link is a link. It is not a copy of `/played` and it is not proof the account owns the character.
 
 ## Phases
 
