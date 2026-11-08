@@ -552,11 +552,15 @@ async fn import_inner(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult
                 changed.push((gid.clone(), b.cloned(), a));
             }
         }
+        // A new snapshot uses the resolved id. An existing snapshot keeps its
+        // game id: catalogue mapping and a detection fix-up do not retarget,
+        // rewrite, or delete rows already stored. The minute counters still
+        // refresh, because that is the Steam total, not a move.
         sqlx::query(
             "INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at)
              VALUES($1, $2, $3, $4, $5, now())
              ON CONFLICT (user_id, steam_appid) DO UPDATE
-               SET game_id = excluded.game_id, minutes_forever = excluded.minutes_forever,
+               SET minutes_forever = excluded.minutes_forever,
                    minutes_2weeks = excluded.minutes_2weeks, fetched_at = excluded.fetched_at",
         )
         .bind(user_id)

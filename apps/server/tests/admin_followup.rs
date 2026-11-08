@@ -535,6 +535,11 @@ async fn steam_catalogue_id_is_not_a_merge_until_both_sides_have_rows(pool: PgPo
     assert_eq!(preview.status, StatusCode::OK, "{}", preview.text);
     let p = preview.json();
     assert_eq!(p["read_only"], true);
+    assert_eq!(p["effect"], "merge", "{p}");
+    assert!(
+        p["change"].as_str().unwrap().contains("not added together"),
+        "{p}"
+    );
     assert_eq!(p["can_merge"], true, "{p}");
     assert_eq!(p["moving_rows"]["sessions"], 1);
     assert_eq!(p["staying_rows"]["sessions"], 1);
@@ -607,6 +612,35 @@ async fn steam_catalogue_id_is_not_a_merge_until_both_sides_have_rows(pool: PgPo
         .find(|r| r["product"] == "1808501")
         .unwrap();
     assert_eq!(side_row["op"], "map", "{side_row}");
+    let side_preview = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games/steam%3A1808501/merge?into=side_game",
+        Some(&boss),
+        None,
+    )
+    .await;
+    assert_eq!(side_preview.status, StatusCode::OK, "{}", side_preview.text);
+    let sp = side_preview.json();
+    assert_eq!(sp["read_only"], true);
+    assert_eq!(sp["effect"], "link", "{sp}");
+    assert_eq!(sp["can_merge"], false, "{sp}");
+    assert_eq!(sp["moving_rows"]["sessions"], 1);
+    assert_eq!(sp["staying_rows"]["sessions"], 0);
+    assert!(
+        sp["change"].as_str().unwrap().contains("would not move"),
+        "{sp}"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM sessions WHERE game_id = 'steam:1808501'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1,
+        "the link preview is read-only"
+    );
     let linked = api(
         &app,
         "POST",

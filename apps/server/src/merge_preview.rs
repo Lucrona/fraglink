@@ -123,16 +123,34 @@ pub async fn build(st: &AppState, source: &str, target: &str) -> ApiResult<Value
         );
     }
     let can_merge = blocked.is_empty();
+    let effect = if can_merge {
+        "merge"
+    } else if minted && !target_minted && (moves.is_empty() || stays.is_empty()) {
+        "link"
+    } else {
+        "closed"
+    };
+    let change = match effect {
+        "merge" => "Merge would move the sessions, imported rows, estimated rows, and Steam snapshots from the first id onto the game that stays. Those rows are not copied, and the old id is retired. Imported counters are not added together: the later one is the shown counter and the earlier one stays stored. Estimated minutes stay stored and stay out of the shown total. The shown total below is that result, not a sum.",
+        "link" => "Link would not move, rewrite, or delete sessions, imported hours, estimated hours, or Steam snapshots. Every count below stays on its current id. A link only records a detection fix-up so a future report can use the catalogue game.",
+        _ => "This pair is not a link and not a merge. Nothing was changed.",
+    };
     Ok(json!({
         "read_only": true,
         "can_merge": can_merge,
+        "effect": effect,
+        "change": change,
         "blocked": blocked,
         "stays": card(&into),
         "moves": card(&from),
         "moving_rows": rows_json(&moves),
         "staying_rows": rows_json(&stays),
         "aliases": aliases,
-        "alias_note": "Detection fix-ups are not rewritten. A merge records that future reports of the old id count as the game that stays.",
+        "alias_note": match effect {
+            "merge" => "Detection fix-ups are not rewritten. A merge records that future reports of the old id count as the game that stays.",
+            "link" => "A link adds one detection fix-up for future reports. It does not rewrite fix-ups already stored, and it does not move the rows above.",
+            _ => "Detection fix-ups are not rewritten. Nothing was changed.",
+        },
         "projection": projection,
         "warnings": warnings,
     }))
