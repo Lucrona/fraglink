@@ -105,6 +105,9 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/v1/admin/hours/flags", get(hours_flags))
         .merge(crate::admin_tools::routes())
+        .merge(crate::hours_review::routes())
+        .merge(crate::suggested_merge::routes())
+        .merge(crate::admin_desk::routes())
         .route("/api/v1/admin/server", get(server))
         .route(
             "/api/v1/admin/announcements",
@@ -2044,15 +2047,14 @@ async fn delete_session(
 struct FlagsQ {
     #[serde(default)]
     days: Option<i32>,
+    /// `open` (default), `reviewed`, or `all`.
+    #[serde(default)]
+    show: Option<String>,
 }
 
-async fn hours_flags(
-    State(st): State<AppState>,
-    s: Staff,
-    Query(q): Query<FlagsQ>,
-) -> ApiResult<Json<Value>> {
-    s.need(Role::Moderator)?;
-    let days = q.days.unwrap_or(30).clamp(1, 365);
+/// The live Hours Review queue, before reviewed rows are hidden.
+pub(crate) async fn hours_flag_list(st: &AppState, days: i32) -> ApiResult<Vec<Value>> {
+    let days = days.clamp(1, 365);
     let mut flags: Vec<Value> = Vec::new();
 
     // more than 20 h of play on one (UTC) day
@@ -2068,10 +2070,12 @@ async fn hours_flags(
     .fetch_all(&st.db)
     .await?;
     for (u, h, d, secs, n) in rows {
-        flags.push(
-            json!({ "kind": "day_over_20h", "user_id": u, "handle": h, "when": d,
-                           "minutes": secs / 60, "detail": format!("{n} sessions on {d} (UTC)") }),
-        );
+        flags.push(json!({
+            "kind": "day_over_20h", "flag_key": format!("day_over_20h:{u}:{d}"),
+            "evidence": secs.to_string(),
+            "user_id": u, "handle": h, "when": d,
+            "minutes": secs / 60, "detail": format!("{n} sessions on {d} (UTC)")
+        }));
     }
 
     // single sessions over 18 h
@@ -2086,11 +2090,13 @@ async fn hours_flags(
     .fetch_all(&st.db)
     .await?;
     for (u, h, sid, g, n, at, d) in rows {
-        flags.push(
-            json!({ "kind": "session_over_18h", "user_id": u, "handle": h, "session_id": sid,
-                           "game_id": g, "game_name": n, "when": at, "minutes": d / 60,
-                           "detail": "one session longer than 18 hours" }),
-        );
+        flags.push(json!({
+            "kind": "session_over_18h", "flag_key": format!("session_over_18h:{sid}"),
+            "evidence": d.to_string(),
+            "user_id": u, "handle": h, "session_id": sid,
+            "game_id": g, "game_name": n, "when": at, "minutes": d / 60,
+            "detail": "one session longer than 18 hours"
+        }));
     }
 
     // overlapping sessions: hours counted twice for the same stretch of time
@@ -2112,9 +2118,12 @@ async fn hours_flags(
     .fetch_all(&st.db)
     .await?;
     for (u, h, n, secs, at) in rows {
-        flags.push(json!({ "kind": "overlapping_sessions", "user_id": u, "handle": h, "when": at,
-                           "minutes": secs / 60,
-                           "detail": format!("{n} overlapping session pair(s): hours growing faster than real time") }));
+        flags.push(json!({
+            "kind": "overlapping_sessions", "flag_key": format!("overlapping_sessions:{u}"),
+            "evidence": format!("{n}:{secs}"),
+            "user_id": u, "handle": h, "when": at, "minutes": secs / 60,
+            "detail": format!("{n} overlapping session pair(s): hours growing faster than real time")
+        }));
     }
 
     // tracked total for a game larger than the time since its first session
@@ -2129,16 +2138,33 @@ async fn hours_flags(
     .fetch_all(&st.db)
     .await?;
     for (u, h, g, n, secs, first) in rows {
-        flags.push(
-            json!({ "kind": "faster_than_real_time", "user_id": u, "handle": h, "game_id": g,
-                           "game_name": n, "when": first, "minutes": secs / 60,
-                           "detail": "more hours than time passed since the first session" }),
-        );
+        flags.push(json!({
+            "kind": "faster_than_real_time",
+            "flag_key": format!("faster_than_real_time:{u}:{g}"),
+            "evidence": secs.to_string(),
+            "user_id": u, "handle": h, "game_id": g,
+            "game_name": n, "when": first, "minutes": secs / 60,
+            "detail": "more hours than time passed since the first session"
+        }));
     }
     // WoW addon entries that failed their checks (edited, decreasing, impossible growth,
     // wrong BattleTag, level Battle.net disagrees with)
-    flags.extend(crate::wow::admin_flags(&st, days).await?);
-    Ok(Json(json!({ "days": days, "flags": flags })))
+    flags.extend(crate::wow::admin_flags(st, days).await?);
+    Ok(flags)
+}
+
+async fn hours_flags(
+    State(st): State<AppState>,
+    s: Staff,
+    Query(q): Query<FlagsQ>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Moderator)?;
+    let days = q.days.unwrap_or(30).clamp(1, 365);
+    let show = q.show.as_deref().unwrap_or("open");
+    let flags = hours_flag_list(&st, days).await?;
+    let mut body = crate::hours_review::filter(&st, flags, show).await?;
+    body["days"] = json!(days);
+    Ok(Json(body))
 }
 
 // ---------------------------------------------------------------------------

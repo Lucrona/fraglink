@@ -1151,9 +1151,9 @@ async fn set_hidden(
 
 /// Admin > Hours review items for failed addon checks.
 pub async fn admin_flags(st: &AppState, days: i32) -> ApiResult<Vec<Value>> {
-    let rows: Vec<(Uuid, String, String, Option<String>, String, String, Option<i64>, String, DateTime<Utc>)> =
+    let rows: Vec<(i64, Uuid, String, String, Option<String>, String, String, Option<i64>, String, DateTime<Utc>)> =
         sqlx::query_as(
-            "SELECT f.user_id, u.handle, f.game_id, g.name, f.char_label, f.kind, f.played_s, f.detail, f.created_at
+            "SELECT f.id, f.user_id, u.handle, f.game_id, g.name, f.char_label, f.kind, f.played_s, f.detail, f.created_at
              FROM wow_flags f JOIN users u ON u.id = f.user_id LEFT JOIN games g ON g.id = f.game_id
              WHERE f.created_at > now() - make_interval(days => $1) AND u.deleted_at IS NULL
              ORDER BY f.created_at DESC LIMIT 200",
@@ -1163,8 +1163,10 @@ pub async fn admin_flags(st: &AppState, days: i32) -> ApiResult<Vec<Value>> {
         .await?;
     Ok(rows
         .into_iter()
-        .map(|(u, h, g, n, who, k, s, d, at)| {
-            json!({ "kind": k, "user_id": u, "handle": h, "game_id": g, "game_name": n,
+        .map(|(id, u, h, g, n, who, k, s, d, at)| {
+            json!({ "kind": k, "flag_key": format!("wow:{id}"),
+                    "evidence": format!("{k}:{}:{d}", s.unwrap_or(0)),
+                    "user_id": u, "handle": h, "game_id": g, "game_name": n,
                     "when": at, "minutes": s.map(|s| s / 60), "detail": format!("{who}: {d}") })
         })
         .collect())
