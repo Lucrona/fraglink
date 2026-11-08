@@ -170,6 +170,24 @@ async fn link_by_vanity_and_import(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(n, 3, "re-import updates in place");
+    // each import is recorded for Admin > All games; changed game rows get updated_at and
+    // a system audit entry, and an unchanged re-import adds none
+    let (ok, detail): (bool, String) = sqlx::query_as(
+        "SELECT last_ok_at IS NOT NULL, detail FROM job_runs WHERE job = 'steam_sync'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(ok);
+    assert!(detail.contains("games"), "{detail}");
+    let (audits, stamped): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM admin_audit WHERE action = 'game.steam_sync' AND actor_id IS NULL),
+                (SELECT count(*) FROM games WHERE updated_at IS NOT NULL)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(audits > 0 && stamped > 0, "{audits} {stamped}");
     let hades: String =
         sqlx::query_scalar("SELECT game_id FROM steam_playtime WHERE steam_appid = 1145350")
             .fetch_one(&pool)

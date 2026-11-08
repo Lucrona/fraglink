@@ -400,7 +400,7 @@ fn clean(s: &str, max: usize) -> String {
 pub const MIN_LIVE_SECS: i64 = 30;
 /// A session that lost its connection ends this long after the last heartbeat
 /// (clients ping every 30 s).
-const HEARTBEAT_GRACE_SECS: i64 = 45;
+pub(crate) const HEARTBEAT_GRACE_SECS: i64 = 45;
 /// Same cap as uploaded sessions had (the sessions table checks it).
 const MAX_SESSION_SECS: i64 = 24 * 3600;
 

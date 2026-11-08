@@ -41,6 +41,11 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/suggestions/undo", post(undo_suggestion))
         .route("/api/v1/admin/games", get(games_search))
         .route("/api/v1/admin/games-meta", get(games_meta))
+        .route("/api/v1/admin/games-all", get(crate::all_games::list))
+        .route(
+            "/api/v1/admin/games/{id}/history",
+            get(crate::all_games::history),
+        )
         .route("/api/v1/admin/games/{id}", get(game_detail).post(game_save))
         .route("/api/v1/admin/games/{id}/delete", post(game_delete))
         .route(
@@ -99,6 +104,7 @@ pub fn routes() -> Router<AppState> {
             delete(delete_session),
         )
         .route("/api/v1/admin/hours/flags", get(hours_flags))
+        .merge(crate::admin_tools::routes())
         .route("/api/v1/admin/server", get(server))
         .route(
             "/api/v1/admin/announcements",
@@ -133,7 +139,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/games/{id}/steam_check", get(steam_check))
 }
 
-static STARTED: OnceLock<std::time::Instant> = OnceLock::new();
+pub(crate) static STARTED: OnceLock<std::time::Instant> = OnceLock::new();
 
 /// Remember when the server started (for the Server tab's uptime).
 pub fn mark_started() {
@@ -169,7 +175,7 @@ impl Role {
 }
 
 /// Rank of an optional role (0 = not staff).
-fn rank(r: Option<Role>) -> u8 {
+pub(crate) fn rank(r: Option<Role>) -> u8 {
     r.map(|r| r as u8).unwrap_or(0)
 }
 
@@ -241,6 +247,10 @@ fn permissions(r: Role) -> Value {
         "avatars": true,
         "mfa_reset": admin,
         "change_handle": admin,
+        "changelog": admin,
+        "health": admin,
+        "user_delete": admin,
+        "bulk": admin,
     })
 }
 
@@ -268,11 +278,11 @@ pub(crate) async fn audit(
     Ok(())
 }
 
-fn bad(code: &'static str, msg: &str) -> AppError {
+pub(crate) fn bad(code: &'static str, msg: &str) -> AppError {
     AppError::bad_request(code, msg)
 }
 
-fn clean(s: &str, max: usize) -> String {
+pub(crate) fn clean(s: &str, max: usize) -> String {
     s.chars()
         .filter(|c| !c.is_control())
         .collect::<String>()
@@ -1336,10 +1346,21 @@ async fn game_icon_delete(
 async fn users_search(
     State(st): State<AppState>,
     s: Staff,
-    Query(q): Query<SearchQ>,
+    Query(q): Query<UsersQ>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Moderator)?;
+    let off = q.offset.unwrap_or(0).max(0);
     let q = q.q.trim().to_lowercase();
+    let filter = "u.deleted_at IS NULL
+               AND ($1 = '' OR lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2
+                    OR (u.email <> '' AND lower(u.email) LIKE $2))";
+    let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT count(*) FROM users u WHERE {filter}"
+    )))
+    .bind(&q)
+    .bind(like_pattern(&q))
+    .fetch_one(&st.db)
+    .await?;
     let rows: Vec<(
         Uuid,
         String,
@@ -1354,18 +1375,17 @@ async fn users_search(
         bool,
         Option<DateTime<Utc>>,
         Option<DateTime<Utc>>,
-    )> = sqlx::query_as(
+    )> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT u.id, u.handle, u.display_name, u.email, u.created_at, u.role, u.banned_at,
                     p.status, p.heartbeat_at, u.is_test, u.is_minor, u.age_review_at, u.hours_flag_at
              FROM users u LEFT JOIN presence p ON p.user_id = u.id
-             WHERE u.deleted_at IS NULL
-               AND ($1 = '' OR lower(u.handle) LIKE $2 OR lower(u.display_name) LIKE $2
-                    OR (u.email <> '' AND lower(u.email) LIKE $2))
-             ORDER BY (lower(u.handle) = $1) DESC, (u.age_review_at IS NOT NULL) DESC, u.created_at DESC
-             LIMIT 50",
-    )
+             WHERE {filter}
+             ORDER BY (lower(u.handle) = $1) DESC, (u.age_review_at IS NOT NULL) DESC, u.created_at DESC, u.id
+             LIMIT 50 OFFSET $3"
+    )))
     .bind(&q)
     .bind(like_pattern(&q))
+    .bind(off)
     .fetch_all(&st.db)
     .await?;
     let users: Vec<Value> = rows
@@ -1376,11 +1396,21 @@ async fn users_search(
                     "last_seen": hb, "is_test": test, "is_minor": minor, "age_review_at": review, "hours_flag_at": hflag })
         })
         .collect();
-    Ok(Json(json!({ "users": users })))
+    Ok(Json(
+        json!({ "users": users, "total": total, "offset": off, "page_size": 50 }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct UsersQ {
+    #[serde(default)]
+    q: String,
+    #[serde(default)]
+    offset: Option<i64>,
 }
 
 /// (handle, role) of a live account, or 404.
-async fn target(st: &AppState, id: Uuid) -> ApiResult<(String, Option<Role>, bool)> {
+pub(crate) async fn target(st: &AppState, id: Uuid) -> ApiResult<(String, Option<Role>, bool)> {
     let r: Option<(String, Option<String>, bool)> = sqlx::query_as(
         "SELECT handle, role, banned_at IS NOT NULL FROM users WHERE id = $1 AND deleted_at IS NULL",
     )
@@ -1392,7 +1422,7 @@ async fn target(st: &AppState, id: Uuid) -> ApiResult<(String, Option<Role>, boo
 }
 
 /// Staff may act on accounts ranked below them (never on the owner).
-fn outranks(s: &Staff, target_id: Uuid, target_role: Option<Role>) -> ApiResult<()> {
+pub(crate) fn outranks(s: &Staff, target_id: Uuid, target_role: Option<Role>) -> ApiResult<()> {
     if s.user.id == target_id || rank(Some(s.role)) <= rank(target_role) {
         return Err(AppError::new(
             StatusCode::FORBIDDEN,
@@ -1884,7 +1914,7 @@ async fn tiers(st: &AppState, user: Uuid, game: &str) -> ApiResult<Value> {
 }
 
 /// Staff may change their own hours, or those of accounts ranked below them.
-fn may_edit_hours(s: &Staff, id: Uuid, role: Option<Role>) -> ApiResult<()> {
+pub(crate) fn may_edit_hours(s: &Staff, id: Uuid, role: Option<Role>) -> ApiResult<()> {
     if s.user.id == id {
         return Ok(());
     }
@@ -2114,7 +2144,7 @@ async fn hours_flags(
 // ---------------------------------------------------------------------------
 // 5. server
 
-fn read(p: &str) -> String {
+pub(crate) fn read(p: &str) -> String {
     std::fs::read_to_string(p).unwrap_or_default()
 }
 
@@ -2153,7 +2183,7 @@ async fn cpu_percent() -> Option<f64> {
     (dt > 0.0).then(|| ((dt - i2.saturating_sub(i1) as f64) / dt * 1000.0).round() / 10.0)
 }
 
-async fn cmd(prog: &str, args: &[&str]) -> Option<String> {
+pub(crate) async fn cmd(prog: &str, args: &[&str]) -> Option<String> {
     let prog = prog.to_string();
     let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
     let run =
@@ -2252,34 +2282,7 @@ async fn server(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> 
         .next()
         .and_then(|x| x.parse().ok())
         .unwrap_or(0.0);
-    // recent warnings and errors from the server's journal
-    let journal = cmd(
-        "journalctl",
-        &[
-            "-u",
-            "fraglink-server",
-            "--since",
-            "-48h",
-            "-n",
-            "4000",
-            "-o",
-            "short-iso",
-            "--no-pager",
-            "-q",
-        ],
-    )
-    .await;
-    let errors: Option<Vec<String>> = journal.map(|j| {
-        let mut v: Vec<String> = j
-            .lines()
-            .map(strip_ansi)
-            .filter(|l| l.contains(" WARN ") || l.contains(" ERROR ") || l.contains("panicked"))
-            .map(|l| l.chars().take(400).collect())
-            .collect();
-        v.reverse();
-        v.truncate(60);
-        v
-    });
+    let errors = recent_errors().await;
     Ok(Json(json!({
         "version": env!("CARGO_PKG_VERSION"),
         "process_uptime_s": STARTED.get().map(|t| t.elapsed().as_secs()).unwrap_or(0),
@@ -2297,6 +2300,38 @@ async fn server(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> 
         "errors": errors,
         "checked_at": Utc::now(),
     })))
+}
+
+/// Recent warnings and errors from the server's journal (newest first, at most 60); None
+/// when the journal can't be read.
+pub(crate) async fn recent_errors() -> Option<Vec<String>> {
+    let journal = cmd(
+        "journalctl",
+        &[
+            "-u",
+            "fraglink-server",
+            "--since",
+            "-48h",
+            "-n",
+            "4000",
+            "-o",
+            "short-iso",
+            "--no-pager",
+            "-q",
+        ],
+    )
+    .await;
+    journal.map(|j| {
+        let mut v: Vec<String> = j
+            .lines()
+            .map(strip_ansi)
+            .filter(|l| l.contains(" WARN ") || l.contains(" ERROR ") || l.contains("panicked"))
+            .map(|l| l.chars().take(400).collect())
+            .collect();
+        v.reverse();
+        v.truncate(60);
+        v
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -3565,7 +3600,7 @@ struct SettingReq {
     key: String,
     #[serde(default)]
     enabled: bool,
-    /// only for `home_counts`
+    /// only for `home_counts` and the Download page links
     value: Option<String>,
 }
 
@@ -3576,6 +3611,25 @@ async fn settings_set(
     Json(r): Json<SettingReq>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
+    if crate::features::is_link(&r.key) {
+        let v = r.value.as_deref().unwrap_or("").trim().to_string();
+        let before = crate::features::links(&st)
+            .await
+            .get(&r.key)
+            .cloned()
+            .unwrap_or_default();
+        crate::features::set_link(&st, &r.key, &v, s.user.id).await?;
+        audit(
+            &st,
+            &s,
+            "site_setting",
+            &r.key,
+            json!({ "value": before }),
+            json!({ "value": v }),
+        )
+        .await?;
+        return Ok(Json(crate::features::admin_list(&st).await?));
+    }
     if r.key == crate::features::HOME_COUNTS_KEY {
         let v = r.value.as_deref().unwrap_or("");
         let before = crate::features::home_counts(&st).await;
