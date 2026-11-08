@@ -42,10 +42,7 @@ main{padding:16px 0 32px}
 .hrs{text-align:right;font-variant-numeric:tabular-nums;color:#e8edf2;white-space:nowrap}
 .hrs small{display:block;color:var(--dim);font-weight:400;font-size:10.5px}
 .side{display:flex;gap:6px;align-items:center;justify-content:flex-end;white-space:nowrap}
-.pill{font-size:10.5px;border:1px solid var(--line2);border-radius:2px;padding:0 5px;color:var(--muted)}
-.pill.ok{border-color:#2f5a2a;color:#b8dcae}
-.pill.warn{border-color:#5a3a17;color:#f0c58e}
-.pill.info{border-color:#3d5a7a;color:#a9c8e8}
+.tick{color:#8fdc79;font-weight:700;font-size:14px;line-height:1}
 a.arm{color:var(--link);font-size:12px;font-weight:600}
 .foot{padding:8px 12px 10px;color:var(--dim);font-size:12px}
 @media(max-width:640px){
@@ -67,30 +64,30 @@ a.arm{color:var(--link);font-size:12px;font-weight:600}
       <div><div class="name">Mockrend</div><div class="cls">80 Frost Mage</div></div>
       <div class="meta">Samplekeep · US · Retail</div>
       <div class="hrs">1,284 h<small>/played · 8 Nov</small></div>
-      <div class="side"><span class="pill ok">Account</span><a class="arm" href="#sample-armory">Armory</a></div>
+      <div class="side"><span class="tick" title="On the linked Battle.net account">✓</span><a class="arm" href="#sample-armory">Armory</a></div>
     </div>
     <div class="row">
       <div class="port">Sa</div>
       <div><div class="name">Samplekin</div><div class="cls">62 Hunter</div></div>
       <div class="meta">Samplekeep · US · Retail</div>
-      <div class="hrs">40 h<small>/played · not counted</small></div>
-      <div class="side"><span class="pill warn">Public profile</span><a class="arm" href="#sample-armory">Armory</a></div>
+      <div class="hrs">40 h<small>/played</small></div>
+      <div class="side"><a class="arm" href="#sample-armory">Armory</a></div>
     </div>
     <div class="row">
       <div class="port">VM</div>
       <div><div class="name">Vale Mocken</div><div class="cls">Warrior</div></div>
       <div class="meta">EU · Forever</div>
-      <div class="hrs">86 h<small>signed file · not counted</small></div>
-      <div class="side"><span class="pill info">Signed file</span></div>
+      <div class="hrs">86 h<small>/played</small></div>
+      <div class="side"></div>
     </div>
     <div class="row">
       <div class="port">DS</div>
       <div><div class="name">Dorn Sample</div></div>
       <div class="meta">EU · Forever</div>
       <div class="hrs"></div>
-      <div class="side"><span class="pill warn">Not found yet</span></div>
+      <div class="side"></div>
     </div>
-    <p class="foot">Eight more sample alts would continue in this list, not as large cards. No realm is shown for Forever. No class, hours, or Armory link is invented when the sample does not have one. The Armory link is a sample link, not play time and not ownership.</p>
+    <p class="foot">The tick means the character is on the linked Battle.net account. An Armory link is not that tick. /played is the addon total, not an API check. Forever has no realm. Missing class, hours, tick, and link are left out.</p>
   </section>
 </div></main>
 </body>

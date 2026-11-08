@@ -102,7 +102,7 @@ Lookups go in a new table. They do not insert `wow_characters`, because `played_
 
 The roster and ledger sketches are not the design. They stay in this folder so the rejection is on record. Do not implement them.
 
-The review mock is `option-c-infopanel.html`. It is a compact info panel: a small portrait, the name with class and level, one aligned metadata line, the site's blue header, and an Armory link only when a public profile exists. The exact arrangement of any older game-profile panel is not known, so this does not invent one. Fields are ones Fraglink already stores, or that a profile request we have tested ourselves can return. Sample names are labelled. Forever has no realm line. Missing spec, class, hours, and portrait detail are omitted. Addon `/played` and app-tracked time are not added together.
+The review mock is `option-c-infopanel.html`. It is a compact info panel: a small portrait, the name with class and level, one aligned metadata line, and the site's blue header. A single tick means the character is on the linked Battle.net account. Retail already does that check. Forever can use the same tick only after the user-token account list has been tested. A public Armory page is a link, not the tick, and addon `/played` is not an API verification. The exact arrangement of any older game-profile panel is not known, so this does not invent one. Fields are ones Fraglink already stores. Sample names are labelled. Forever has no realm line. Missing spec, class, hours, and the tick are omitted.
 
 No profile code changes until this panel is accepted. The HTML is not copied by `apps/site-web/build.py`.
 
