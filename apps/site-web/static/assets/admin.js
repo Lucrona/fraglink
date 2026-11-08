@@ -25,8 +25,7 @@ const TABS = [
   ["hours", "Hours review", can.hours, "To do"],
   ["hourscheck", "Hours checker", can.hours, "To do"],
   ["avatars", "Reported pictures", can.avatars, "To do"],
-  ["allgames", "All games", can.games, "Games"],
-  ["games", "Game library", can.games, "Games"],
+  ["games", "Games", can.games, "Games"],
   ["detection", "Detection rules", can.games, "Games"],
   ["suggested", "Suggested Merge", can.approvals || can.games, "Games"],
   ["detect", "Detection tester", can.games, "Games"],
@@ -58,11 +57,15 @@ let timer = null;
 function route() {
   clearInterval(timer);
   view.onclick = null; view.onchange = null;
-  const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
+  const hash = location.hash.slice(1) || TABS[0][0];
+  const slash = hash.indexOf("/");
+  const tab = slash < 0 ? hash : hash.slice(0, slash);
+  const arg = slash < 0 ? "" : hash.slice(slash + 1);
+  if (tab === "allgames") { location.replace("#games" + (arg ? "/" + arg : "")); return; }
   const t = tab === "user" ? "users" : tab;
   $$(".adm-side a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
   { const tb = TABS.find(x => x[0] === t); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
-  const fn = { approvals, allgames: allGames, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail, hourscheck: hoursCheck, bulk: bulkFixes, changelog, health, suggested: suggestedMerge, detect: detectTest, artwork: missingArt, checks: dataChecks, history: reviewHistory, undo: undoRecent }[tab];
+  const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail, hourscheck: hoursCheck, bulk: bulkFixes, changelog, health, suggested: suggestedMerge, detect: detectTest, artwork: missingArt, checks: dataChecks, history: reviewHistory, undo: undoRecent }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -229,7 +232,7 @@ const SEL = new Set(JSON.parse(sessionStorage.getItem("adm_bulk_ids") || "[]"));
 const saveSel = () => { sessionStorage.setItem("adm_bulk_ids", JSON.stringify([...SEL])); const b = $("#agsel"); if (b) { b.hidden = !SEL.size; $("b", b).textContent = num(SEL.size); } };
 const AG_SRC = [["games list", "Games list", "l"], ["built-in", "Built-in", "b"], ["steam", "Steam", "s"], ["folder rule", "Folder rule", "f"], ["fix-up", "Fix-up", "x"], ["extra exe", "Extra exe", "e"], ["approved", "Approved", "a"], ["unlisted", "Unlisted", "u"]];
 const AG_ST = { active: ["Active", "ok"], hidden: ["Hidden", "hid"], retired: ["Retired", "ret"], merged: ["Merged", "mer"] };
-const AG_FLAG = [["new", "New on Games list · 7 days"], ["changed", "Games list changed · 7 days"], ["edited", "Staff edited"], ["hours", "Has hours"], ["unverified", "Unverified"]];
+const AG_FLAG = [["new", "New on the list · 7 days"], ["changed", "List changed · 7 days"], ["edited", "Staff edited"], ["hours", "Has recorded hours"], ["unverified", "Unverified"]];
 const AG_ADDED = { fraglink: "first played on Fraglink", list: "first seen on the Games list", before_tracking: "on the Games list before tracking began" };
 const num = n => (n || 0).toLocaleString("en");
 const srcTag = k => { const s = AG_SRC.find(x => x[0] === k); return `<span class="src ${s ? s[2] : ""}">${esc(s ? s[1] : k)}</span>`; };
@@ -238,10 +241,15 @@ function stTag(r) {
   const life = r.lifecycle && r.lifecycle !== "live" ? ` <span class="st beta">${esc(LIFE[r.lifecycle] || r.lifecycle)}</span>` : "";
   return `<span class="st ${s[1]}">${esc(r.partial && r.status === "active" ? "Exe retired" : s[0])}</span>${life}`;
 }
-async function allGames(arg) {
-  if (arg) { AG.q = arg; AG.offset = 0; }
+async function games(arg) {
+  arg = arg ? decodeURIComponent(arg) : "";
+  if (arg.startsWith("id:")) { AG.open = arg.slice(3); AG.q = AG.open; AG.offset = 0; }
+  else if (arg) { AG.q = arg; AG.offset = 0; AG.open = ""; }
+  return allGames();
+}
+async function allGames() {
   view.innerHTML = `<section class="panel" style="margin-bottom:12px"><h2>Where the list comes from</h2><div id="agfresh"><div class="body empty">Loading…</div></div></section>
-    <section class="panel"><h2>All games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+    <section class="panel"><h2>Games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
     <div class="ag-tb"><input class="in" type="search" id="agq" placeholder="Search name, id, exe, alias or Steam app id" value="${esc(AG.q)}" autocomplete="off" aria-label="Search games">
       <select class="in" id="agflag" aria-label="Show only"><option value="">Everything</option>${AG_FLAG.map(([k, v]) => `<option value="${k}"${AG.flag === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
       <select class="in" id="agsort" aria-label="Sort"><option value="updated">Last change first</option><option value="added">Newest added</option><option value="name">Name A–Z</option><option value="players">Most players</option><option value="hours">Most hours</option></select>
@@ -292,7 +300,7 @@ async function listAll() {
   if (!d.rows.length) { box.innerHTML = `<div class="body empty">No games match these filters.</div>`; return; }
   const th = (k, l, c) => `<th class="srt${AG.sort === k ? " on" : ""} ${c || ""}" data-agsort="${k}">${l}</th>`;
   box.innerHTML = `<table class="gl"><thead><tr><th class="ck"><input type="checkbox" data-sel="*" aria-label="Select this page"></th>${th("name", "Game")}<th>Sources</th><th>Exes</th><th>Status</th>${th("players", "Players", "nr")}${th("hours", "Hours", "nr")}${th("added", "Added")}${th("updated", "Last change")}</tr></thead><tbody>
-    ${d.rows.map(r => `<tr class="r" data-id="${esc(r.id)}"><td class="ck"><input type="checkbox" data-sel="${esc(r.id)}"${SEL.has(r.id) ? " checked" : ""} aria-label="Select ${esc(r.name)}"></td><td><div class="gm"><img src="${esc(r.icon)}" alt="" data-hide-broken><div><div class="nm">${esc(r.name)}${r.renamed ? ` <span class="pill warn" title="Official name: ${esc(r.official)}">renamed</span>` : ""}${r.verified ? "" : ` <span class="pill">unverified</span>`}</div><div class="id">${esc(r.id)}</div></div></div></td>
+    ${d.rows.map(r => `<tr class="r" data-id="${esc(r.id)}"><td class="ck"><input type="checkbox" data-sel="${esc(r.id)}"${SEL.has(r.id) ? " checked" : ""} aria-label="Select ${esc(r.name)}"></td><td><div class="gm"><img src="${esc(r.icon)}" alt="" data-hide-broken><div><div class="nm">${esc(r.name)}${r.renamed ? ` <span class="pill warn" title="Official name: ${esc(r.official)}">renamed</span>` : ""}${r.verified ? "" : ` <span class="pill">unverified</span>`}</div><div class="id">${esc(r.id)}</div>${(r.also_recorded || []).map(a => `<div class="sm">Also saved as <a href="#games/id:${encodeURIComponent(a.id)}">${esc(a.id)}</a>${a.total_min ? ` · ${hrs(a.total_min)}` : ""}</div>`).join("")}</div></div></td>
       <td>${r.sources.map(srcTag).join("")}</td>
       <td><div class="exes" title="${esc(r.exes.join(", "))}">${r.exes.length ? esc(r.exes.join(", ")) + (r.exe_count > r.exes.length ? ` +${r.exe_count - r.exes.length}` : "") : `<span class="dimt">-</span>`}</div>${r.folders || r.fixups ? `<div class="sm">${r.folders ? `${r.folders} folder hint${r.folders === 1 ? "" : "s"}` : ""}${r.folders && r.fixups ? " · " : ""}${r.fixups ? `${r.fixups} fix-up${r.fixups === 1 ? "" : "s"}` : ""}</div>` : ""}</td>
       <td>${stTag(r)}${r.removed_from_list ? `<div class="sm">off Games list ${day(r.removed_from_list)}</div>` : ""}</td>
@@ -354,7 +362,7 @@ async function toggleAll(tr, keep) {
   const names = [["Shown as", g ? (g.public_name || g.name || id) : id], ["Official", g ? g.name || "-" : "-"], ["Id", `<span class="mono">${esc(id)}</span>`, 1]];
   if ((o.aliases || []).length) names.push(["Also called", o.aliases.join(", ")]);
   const links = ((g && g.steam_appids) || []).map(a => `<a href="https://store.steampowered.com/app/${a}" target="_blank" rel="noopener">Steam store ${a}</a>`);
-  if (r && r.successor) links.push(`<a href="#allgames/${encodeURIComponent(r.successor)}">${r.merged ? "Merged into" : "New entry"} ${esc(r.successor)}</a>`);
+  if (r && r.successor) links.push(`<a href="#games/${encodeURIComponent(r.successor)}">${r.merged ? "Merged into" : "New entry"} ${esc(r.successor)}</a>`);
   const ev = h.events || [];
   ex.innerHTML = `<td colspan="9"><div class="xg">
     <div class="xb"><h4>How it's found <span>${rows.length} rule${rows.length === 1 ? "" : "s"}</span></h4>${rows.length ? `<table>${rows.map(x => `<tr><td style="width:96px">${esc(x[0])}</td><td class="mono">${esc(x[1])}</td><td class="rt">${esc(x[2])}</td></tr>`).join("")}</table>` : `<div class="xkv"><span class="dimt">No rules: only reported by the app as unlisted.</span></div>`}</div>
@@ -362,30 +370,11 @@ async function toggleAll(tr, keep) {
       <b>Players</b><span>${g ? `${num(g.players)} · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})` : "-"}</span>
       <b>Links</b><span>${links.join(" · ") || `<span class="dimt">none</span>`}</span></div></div>
     <div class="xb wide"><h4>History <span>${ev.length} event${ev.length === 1 ? "" : "s"} · staff, Steam sync and Games list</span></h4>${ev.length ? `<div class="lg">${ev.map(histLine).join("")}</div>` : `<div class="xkv"><span class="dimt">Nothing recorded yet.</span></div>`}</div></div>
-    <div class="xact"><span class="note">Edits save here with the same checks as the Game library, and they land in History.</span><a class="btn sm" href="#detection">Detection rules</a></div>
+    <div class="xact"><span class="note">Edits save here and land in History. Hours recorded under another id for this same game stay on that id.</span><a class="btn sm" href="#detection">Detection rules</a></div>
     <section class="panel inline-edit" id="gedit"><div class="body empty">Loading editor…</div></section></td>`;
   editGame(id).catch(e => { const box = $("#gedit"); if (box) box.innerHTML = `<h2>Edit game</h2><div class="alert err">${esc(e.message)}</div>`; });
 }
 
-/* ---------- 2. games ---------- */
-async function games(q) {
-  q = q || "";
-  const direct = q.startsWith("id:") ? q.slice(3) : "";
-  if (direct) q = direct;
-  view.innerHTML = `<div class="split"><section class="panel"><h2>Game library</h2>
-    <form method="post" action="/api/v1/form-fallback" class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off">
-      <select class="in" id="gshow" aria-label="Show"><option value="">All games with hours</option><option value="edited">Edited / retired / status set</option><option value="no_steam">With hours, no Steam link</option><option value="steam">With hours, on Steam</option><option value="unverified">With hours, unverified</option></select></form>
-    <div id="gmeta"></div>
-    <div id="glist"><div class="body empty">Loading…</div></div></section>
-    <section class="panel" id="gedit"><h2>Edit game</h2><div class="body empty">Pick a game on the left.</div></section></div>`;
-  $("#gs").addEventListener("submit", e => { e.preventDefault(); history.replaceState(null, "", "#games/" + encodeURIComponent(e.target.q.value.trim())); listGames(e.target.q.value.trim()); });
-  liveSearch($("#gs"));
-  lastUpdated().then(h => { const e = $("#gmeta"); if (e) e.innerHTML = h; });
-  GS.offset = 0;
-  $("#gshow").onchange = e => { GS.show = e.target.value; GS.offset = 0; listGames($("#gs").q.value.trim()); };
-  listGames(q);
-  if (direct) editGame(direct).catch(e => { $("#gedit").innerHTML = `<h2>Edit game</h2><div class="alert err">${esc(e.message)}</div>`; });
-}
 const GS = { sort: "players", show: "", offset: 0, lastQ: "" };
 /* Search as you type (debounced); Enter still works. */
 function liveSearch(form) {
@@ -1244,7 +1233,7 @@ async function bulkFixes() {
       <label>Game ids, one per line<textarea name="ids" rows="6" class="mono" placeholder="Tick games in All games, or paste ids here">${esc([...SEL].join("\n"))}</textarea></label>
       <div class="row"><select class="in" name="lifecycle">${Object.entries(LIFE).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select><label style="margin:0">Expected end / launch <input type="date" name="date"></label><label style="margin:0;flex:1">Note<input class="in" type="text" name="note" maxlength="500" style="width:100%"></label></div>
       <label class="check"><input type="checkbox" name="checked" checked> Mark as checked now</label>
-      <div class="row"><button class="btn dl">Preview changes</button><span class="dimt" id="bstn"></span><a class="btn sm" href="#allgames">Pick in All games</a></div><div id="bstprev"></div><div class="alert" id="bstmsg" hidden></div></form></section>
+      <div class="row"><button class="btn dl">Preview changes</button><span class="dimt" id="bstn"></span><a class="btn sm" href="#games">Pick in Games</a></div><div id="bstprev"></div><div class="alert" id="bstmsg" hidden></div></form></section>
     ${can.games ? `<section class="panel"><h2>Upload icons or covers</h2><div class="body f"><p class="note">Name each file after its game id, e.g. <span class="mono">counter-strike-2.png</span>. Use <span class="mono">__</span> for a <span class="mono">:</span> in the id. PNG, JPG or WebP up to 1 MB each.</p>
       <div class="row"><select class="in" id="upk"><option value="icon">Icons</option><option value="cover">Covers</option></select><input type="file" id="upf" multiple accept="image/png,image/jpeg,image/webp"><button class="btn dl" id="upgo" disabled>Upload all</button></div>
       <div id="uplist"></div><div class="alert" id="upmsg" hidden></div></div></section>` : ""}`;
