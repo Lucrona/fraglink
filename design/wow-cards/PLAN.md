@@ -63,18 +63,20 @@ Forever's public identity is region + first name + surname. Cards and the manual
 
 ## Toggles
 
-Two layers, so one switch cannot mean both "hide my cards" and "stop the service".
+The public profile has one Retail / Forever control. It chooses which roster is on screen. The other flavour stays stored. It does not delete characters, snapshots, or hour rows, and it does not write an imported total.
+
+Hours, `/played` upload, hide, the guild opt-in, and verification stay on the WoW users page (`/connect/battlenet`). That page is unchanged by this mock. `hide_all` remains "hide from profile" and is not the flavour control.
 
 Per user, stored, defaulted so today's Retail behaviour stays:
 
 | Switch | Default | Off means |
 |---|---|---|
-| Show Retail cards | on | Profile hides Retail cards. Rows remain. Hours still follow the count switch. |
+| Show Retail on the profile | on | The Retail side of the profile control is empty. Rows remain. |
 | Count Retail `/played` | on | New Retail totals are not written. Existing imported rows stay. |
-| Show Forever cards | off | No Forever cards on the profile until the owner turns it on. |
+| Show Forever on the profile | off | The Forever side stays empty until the owner turns it on. |
 | Count Forever `/played` | off | Forever `/played` is saved raw and is not an imported total. |
 
-Turning any of these off does not delete characters, snaps, or hour rows. `hide_all` remains "hide from profile" and is not reused as a flavour switch.
+Turning any of these off does not delete characters, snaps, or hour rows.
 
 Global service switches, default off, separate from the user switches:
 
@@ -102,7 +104,11 @@ Lookups go in a new table. They do not insert `wow_characters`, because `played_
 
 The roster and ledger sketches are not the design. They stay in this folder so the rejection is on record. Do not implement them.
 
-The review mock is `option-c-infopanel.html`. It is a compact info panel: a small portrait, the name with class and level, one aligned metadata line, and the site's blue header. A single tick means the character is on the linked Battle.net account. Retail already does that check. Forever can use the same tick only after the user-token account list has been tested. A public Armory page is a link, not the tick, and addon `/played` is not an API verification. The exact arrangement of any older game-profile panel is not known, so this does not invent one. Fields are ones Fraglink already stores. Sample names are labelled. Forever has no realm line. Missing spec, class, hours, and the tick are omitted.
+The review mock is `option-c-infopanel.html`. The public profile shows the character name, class, avatar, and guild, plus one tick when the character is on the linked Battle.net account. Retail already does that ownership check. Forever can use the same tick only after the user-token account list has been tested, so the sample Forever rows have none. There are no hours on this panel, and no status labels. `/played`, tracked time, and import stay on the WoW users page. A Retail / Forever control picks which roster is visible. The selected name is the flavour. Missing class and guild are omitted. A missing avatar falls back to initials. Sample names are labelled. This does not remove any stored field, snapshot, or hour row.
+
+Guild on that panel is the Retail character-profile `guild.name`, and only when the owner has Show guild on. The current summary already reads that name. If Retail did not return one, the line is absent. Forever has no tested guild field, so the mock leaves those lines blank. Do not invent a Forever guild, and do not turn on `BNET_FOREVER_NAMESPACE` to look for one.
+
+The add-flow notes above (account list, public profile, signed file) stay on the users page. They are not labels on the public profile. The exact arrangement of any older game-profile panel is not known, so this does not invent one.
 
 No profile code changes until this panel is accepted. The HTML is not copied by `apps/site-web/build.py`.
 
@@ -125,7 +131,7 @@ Routine refresh is a server job, the same kind as the detectable-list refresh an
 3. After a live Forever client capture, and only if `RequestTimePlayed` and the SavedVariables file actually work: addon packaging for that client. Interface `16001` alone is not that capture. Still no imported total.
 4. After our own request of the public profile, not after the forum post: Forever lookup uses the tested path. Badges stay honest. Misses store nothing in `wow_characters`.
 5. After our own user-token account list shows Forever characters: set verified from that list only. Public app-token data still cannot verify ownership.
-6. Ship the chosen card. Hide empty fields. Forever still has no realm line.
+6. Ship the accepted profile panel: name, class, avatar, Retail guild when the profile returned one and the owner shows it, and the verified tick. No hours on that panel. The Retail / Forever control only changes which roster is visible. Forever guild stays blank until a tested response includes one.
 7. Only with a separate review of the overlap rule: inserting a new imported `hours_entries` row for Forever, behind both the global switch and the user count switch. Old imported rows are not updated or deleted. Recount stays a staff action and keeps its audit log.
 
 ## Before any future deploy
