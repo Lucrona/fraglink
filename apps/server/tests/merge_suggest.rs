@@ -4,8 +4,8 @@ use common::*;
 use serde_json::json;
 use sqlx::PgPool;
 
-/// A tracked `exe:` program the games list knows is suggested (never auto-merged);
-/// dismiss hides it, and the normal merge moves its hours.
+/// A tracked `exe:` the games list knows is suggested and never merged on its own.
+/// One saved history is a link, not a merge. Two saved histories can be merged.
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn suggested_merge_list_dismiss_merge(pool: PgPool) {
     let st = state(pool.clone());
@@ -78,13 +78,46 @@ async fn suggested_merge_list_dismiss_merge(pool: PgPool) {
         Some(json!({ "into": b_into, "confirm": b })),
     )
     .await;
+    assert_ne!(
+        r.status,
+        StatusCode::OK,
+        "one saved history is not a merge: {}",
+        r.text
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE game_id = $1")
+        .bind(&b)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+    fraglink_server::names::ensure_game_row(&st, &b_into)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s)
+                 VALUES($1, $2, $3, now() - interval '3 hours', now() - interval '2 hours', 600)",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(uid)
+    .bind(&b_into)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let r = api(
+        &app,
+        "POST",
+        &format!("/api/v1/admin/games/{b}/merge"),
+        Some(&owner),
+        Some(json!({ "into": b_into, "confirm": b })),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE game_id = $1")
         .bind(&b_into)
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(n, 1);
+    assert_eq!(n, 2);
     let r = api(
         &app,
         "GET",

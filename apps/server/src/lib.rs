@@ -33,6 +33,7 @@ pub mod hours;
 pub mod hours_review;
 pub mod icons;
 pub mod mailer;
+pub mod merge_preview;
 pub mod merge_suggest;
 pub mod mfa;
 pub mod names;

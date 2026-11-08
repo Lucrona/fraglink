@@ -85,8 +85,10 @@ pub struct DetectableDb {
     games: Vec<DGame>,
     /// exe file name -> (game index, pattern)
     by_exe: HashMap<String, Vec<(u32, String)>>,
-    /// Steam app id -> game index
+    /// Steam app id -> game index. The first game seen wins; duplicates are counted
+    /// in `steam_count` and are not a safe automatic mapping.
     by_steam: HashMap<u32, u32>,
+    steam_count: HashMap<u32, u32>,
 }
 
 /// The match for one process.
@@ -111,8 +113,10 @@ impl DetectableDb {
         f.games.retain(|g| !is_test_build(&g.name));
         let mut by_exe: HashMap<String, Vec<(u32, String)>> = HashMap::new();
         let mut by_steam: HashMap<u32, u32> = HashMap::new();
+        let mut steam_count: HashMap<u32, u32> = HashMap::new();
         for (i, g) in f.games.iter().enumerate() {
             for a in &g.steam {
+                *steam_count.entry(*a).or_insert(0) += 1;
                 by_steam.entry(*a).or_insert(i as u32);
             }
             for e in &g.exes {
@@ -130,6 +134,7 @@ impl DetectableDb {
             games: f.games,
             by_exe,
             by_steam,
+            steam_count,
         }
     }
 
@@ -186,6 +191,15 @@ impl DetectableDb {
     /// The entry Discord links to this Steam app id, if any.
     pub fn by_steam_appid(&self, appid: u32) -> Option<&DGame> {
         self.by_steam.get(&appid).map(|i| &self.games[*i as usize])
+    }
+
+    /// The one catalogue game that lists this Steam app id.
+    /// `None` when nobody lists it, or more than one game does.
+    pub fn unique_steam(&self, appid: u32) -> Option<&DGame> {
+        if self.steam_count.get(&appid).copied().unwrap_or(0) != 1 {
+            return None;
+        }
+        self.by_steam_appid(appid)
     }
 
     /// Most specific entry matching this process, if any.

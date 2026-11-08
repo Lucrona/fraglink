@@ -98,9 +98,27 @@ pub fn steam_game_id(sigs: &SignatureDb, appid: u32) -> String {
         .unwrap_or_else(|| format!("steam:{appid}"))
 }
 
-/// The id of a Steam app: a signature id, else `steam:<appid>`, then any Admin
-/// alias / merge (`steam:793460` -> `112_operator`). The server's Steam sync uses
-/// the same order, so app sessions and Steam playtime land on one game.
+/// Signature id, else the single catalogue game that lists this Steam app id,
+/// else `steam:<appid>`. Two catalogue games for one app id stay `steam:<appid>`:
+/// that conflict is not resolved by guessing. Existing rows are not moved.
+pub fn steam_catalogue_id(
+    sigs: &SignatureDb,
+    detectable: &crate::detectable::DetectableDb,
+    appid: u32,
+) -> String {
+    if let Some(g) = sigs.by_steam_appid(appid) {
+        return g.id.clone();
+    }
+    if let Some(g) = detectable.unique_steam(appid) {
+        return g.slug.clone();
+    }
+    format!("steam:{appid}")
+}
+
+/// The id of a Steam app: a signature id, else one catalogue game, else
+/// `steam:<appid>`, then any Admin alias / merge (`steam:793460` -> `112_operator`).
+/// The server's Steam sync uses the same order, so new app sessions and new Steam
+/// playtime land on one game. Rows already stored under another id stay there.
 pub fn steam_identity(sigs: &SignatureDb, overrides: &Overrides, appid: u32) -> String {
     overrides.resolve(&steam_game_id(sigs, appid)).to_string()
 }
@@ -139,7 +157,8 @@ impl Detector {
     }
 
     fn steam_id(&self, appid: u32) -> String {
-        steam_identity(&self.sigs, &self.overrides, appid)
+        let base = steam_catalogue_id(&self.sigs, &self.detectable, appid);
+        self.overrides.resolve(&base).to_string()
     }
 
     fn steam_name(&self, appid: u32) -> String {
@@ -547,8 +566,9 @@ mod tests {
 
     #[test]
     fn steam_linked_game_has_one_id() {
-        // 24 Oct: 112 Operator was first seen by the detectable list, then a Steam
-        // rescan made the same process steam:793460. Every route now gives one id.
+        // The catalogue lists this Steam app id on one game, so the Steam copy,
+        // RunningAppID and the exe are that game. No manual merge, and a second
+        // catalogue game for the same app id would stay steam:N.
         let mut steam = SteamIndex::default();
         steam.insert(r"D:\SteamLibrary", 793460, "112 Operator", "112 Operator");
         let mut g = dgame(
@@ -577,12 +597,12 @@ mod tests {
         ] {
             let found = d.detect(&procs, Some(793460));
             assert_eq!(found.len(), 1, "{found:?}");
-            assert_eq!(found[0].game_id, "steam:793460");
+            assert_eq!(found[0].game_id, "112_operator");
             assert_eq!(found[0].name, "112 Operator");
         }
         assert_eq!(
             d.detect(&[steam_proc], Some(793460))[0].game_id,
-            "steam:793460"
+            "112_operator"
         );
         // not installed through Steam: the list's own id
         let mut d2 = d.clone();
@@ -606,6 +626,50 @@ mod tests {
         )];
         assert_eq!(d.detect(&procs, None)[0].game_id, "112_operator");
         assert_eq!(d.steam_id(793460), "112_operator");
+    }
+
+    #[test]
+    fn one_catalogue_steam_id_is_that_game_and_a_shared_id_is_not() {
+        use crate::detectable::{DGame, DetectableDb, DetectableFile};
+        let mut d = Detector::new(SignatureDb::builtin(), SteamIndex::default());
+        d.detectable = std::sync::Arc::new(DetectableDb::from_file(DetectableFile {
+            v: 1,
+            updated: "t".into(),
+            games: vec![
+                DGame {
+                    id: "1".into(),
+                    slug: "only_one".into(),
+                    name: "Only".into(),
+                    exes: vec![],
+                    steam: vec![42],
+                },
+                DGame {
+                    id: "2".into(),
+                    slug: "arc_raiders".into(),
+                    name: "ARC Raiders".into(),
+                    exes: vec![],
+                    steam: vec![1808500],
+                },
+                DGame {
+                    id: "3".into(),
+                    slug: "other_raiders".into(),
+                    name: "Other".into(),
+                    exes: vec![],
+                    steam: vec![1808500],
+                },
+                DGame {
+                    id: "4".into(),
+                    slug: "not_cs2".into(),
+                    name: "Not".into(),
+                    exes: vec![],
+                    steam: vec![730],
+                },
+            ],
+        }));
+        assert_eq!(d.steam_id(42), "only_one");
+        assert_eq!(d.steam_id(1808500), "steam:1808500");
+        assert_eq!(d.steam_id(730), "cs2");
+        assert_eq!(d.steam_id(999999), "steam:999999");
     }
 
     #[test]

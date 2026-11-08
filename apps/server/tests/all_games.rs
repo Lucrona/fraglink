@@ -209,3 +209,84 @@ async fn all_games_list_tracking_and_history(pool: PgPool) {
     assert_eq!(d["rows"][0]["by"], "allgboss");
     assert_eq!(d["rows"][0]["lifecycle"], "beta");
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn a_catalogue_steam_id_is_not_a_second_game(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let boss = signup(&app, "one@example.com", "onegame").await;
+    sqlx::query("UPDATE users SET role = 'admin' WHERE handle = 'onegame'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'onegame'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO games(id, name, steam_appid, verified) VALUES ('steam:730', 'Counter-Strike 2', 730, true)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s) VALUES (gen_random_uuid(), $1, 'steam:730', now() - interval '1 hour', now(), 3600)")
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let by_app = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games-all?q=730",
+        Some(&boss),
+        None,
+    )
+    .await
+    .json();
+    let ids: Vec<&str> = by_app["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["id"].as_str().unwrap())
+        .collect();
+    assert!(ids.contains(&"cs2"), "{ids:?}");
+    assert!(!ids.contains(&"steam:730"), "{ids:?}");
+    let cs = by_app["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "cs2")
+        .unwrap();
+    assert_eq!(cs["also_recorded"][0]["id"], "steam:730");
+    assert!(cs["also_recorded"][0]["total_min"].as_i64().unwrap() > 0);
+    assert_eq!(
+        cs["total_min"].as_i64().unwrap(),
+        0,
+        "the other id's hours are not added"
+    );
+    let by_id = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games-all?q=steam:730",
+        Some(&boss),
+        None,
+    )
+    .await
+    .json();
+    assert!(by_id["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["id"] == "steam:730"));
+    let hours = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games-all?flag=hours&q=cs2",
+        Some(&boss),
+        None,
+    )
+    .await
+    .json();
+    assert!(hours["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["id"] == "cs2"));
+}

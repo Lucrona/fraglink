@@ -63,6 +63,11 @@ struct Row {
     lifecycle: Option<String>,
     partial: bool,
     edited: bool,
+    /// This id is the same game as `folded_into` (a unique catalogue Steam id or
+    /// a known program). It stays in the data and is omitted from the browse list.
+    folded_into: Option<String>,
+    /// Saved rows under another id for this same game. Not added into `total_min`.
+    also: Vec<Value>,
 }
 
 impl Row {
@@ -129,6 +134,7 @@ impl Row {
             "partial": self.partial,
             "edited": self.edited,
             "icon": crate::icons::icon_path(&self.id, 32),
+            "also_recorded": self.also,
         })
     }
 }
@@ -382,7 +388,76 @@ async fn universe(st: &AppState) -> ApiResult<Vec<Row>> {
         })
         .collect();
     out.shrink_to_fit();
-    Ok(out)
+    fold_canonical(st, out).await
+}
+
+/// One browse row per catalogue game. `steam:N` or `exe:` that already means a
+/// catalogue id is not a second game. Hours on the other id stay stored there
+/// and are named on the catalogue row, not added to its total.
+async fn fold_canonical(st: &AppState, mut rows: Vec<Row>) -> ApiResult<Vec<Row>> {
+    let ids: HashSet<String> = rows.iter().map(|r| r.id.clone()).collect();
+    let aliases: Vec<(String, String)> =
+        sqlx::query_as("SELECT pattern, game_id FROM detection_aliases WHERE kind = 'steam'")
+            .fetch_all(&st.db)
+            .await?;
+    let mut steam_alias: HashMap<u32, String> = HashMap::new();
+    for (pattern, game) in aliases {
+        if let Ok(app) = pattern.parse() {
+            steam_alias.insert(app, game);
+        }
+    }
+    let mut owner_of: HashMap<String, String> = HashMap::new();
+    for r in &rows {
+        let owner = if let Some(app) = r.id.strip_prefix("steam:").and_then(|s| s.parse().ok()) {
+            steam_alias
+                .get(&app)
+                .cloned()
+                .or_else(|| st.sigs.by_steam_appid(app).map(|g| g.id.clone()))
+                .or_else(|| {
+                    crate::games::detectable_db(st)
+                        .and_then(|db| db.unique_steam(app).map(|g| g.slug.clone()))
+                })
+        } else if r.id.starts_with("exe:") {
+            let into = crate::names::list_id_for_exe(st, &r.id);
+            (into != r.id).then_some(into)
+        } else {
+            None
+        };
+        if let Some(owner) = owner {
+            if owner != r.id && ids.contains(&owner) {
+                owner_of.insert(r.id.clone(), owner);
+            }
+        }
+    }
+    let mut also: HashMap<String, Vec<Value>> = HashMap::new();
+    for (id, owner) in &owner_of {
+        if let Some(r) = rows.iter().find(|r| &r.id == id) {
+            also.entry(owner.clone()).or_default().push(json!({
+                "id": id,
+                "players": r.players,
+                "total_min": r.total_min,
+            }));
+        }
+    }
+    for r in &mut rows {
+        if let Some(extra) = also.remove(&r.id) {
+            r.also = extra;
+        }
+        r.folded_into = owner_of.get(&r.id).cloned();
+    }
+    Ok(rows)
+}
+
+/// A folded id stays out of the catalogue browse unless the search names that id.
+fn browse_row(r: &Row, needle: &str) -> bool {
+    if r.folded_into.is_none() {
+        return true;
+    }
+    if needle.is_empty() {
+        return false;
+    }
+    let id = r.id.to_lowercase();
+    id.contains(needle) && !r.appids.iter().any(|a| a.to_string() == needle)
 }
 
 fn status_keys(r: &Row) -> Vec<&'static str> {
@@ -405,7 +480,12 @@ fn status_keys(r: &Row) -> Vec<&'static str> {
 
 fn flag_ok(r: &Row, flag: &str, now: Dt) -> bool {
     match flag {
-        "hours" => r.total_min > 0,
+        "hours" => {
+            r.total_min > 0
+                || r.also
+                    .iter()
+                    .any(|a| a["total_min"].as_i64().unwrap_or(0) > 0)
+        }
         "edited" => r.edited,
         "unverified" => !r.verified,
         "new" => r.added().is_some_and(|a| now - a < Duration::days(7)) && !r.baseline,
@@ -422,7 +502,7 @@ pub async fn list(
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
     let all = universe(&st).await?;
-    let everything = all.len();
+    let everything = all.iter().filter(|r| browse_row(r, "")).count();
     let now = Utc::now();
     let needle = q.q.as_deref().unwrap_or("").trim().to_lowercase();
     let flags: Vec<&str> = q
@@ -435,6 +515,7 @@ pub async fn list(
         .collect();
     let base: Vec<Row> = all
         .into_iter()
+        .filter(|r| browse_row(r, &needle))
         .filter(|r| needle.is_empty() || r.matches(&needle))
         .filter(|r| flags.iter().all(|f| flag_ok(r, f, now)))
         .collect();

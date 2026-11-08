@@ -25,8 +25,7 @@ const TABS = [
   ["hours", "Hours review", can.hours, "To do"],
   ["hourscheck", "Hours checker", can.hours, "To do"],
   ["avatars", "Reported pictures", can.avatars, "To do"],
-  ["allgames", "All games", can.games, "Games"],
-  ["games", "Game library", can.games, "Games"],
+  ["games", "Games", can.games, "Games"],
   ["detection", "Detection rules", can.games, "Games"],
   ["suggested", "Suggested Merge", can.approvals || can.games, "Games"],
   ["detect", "Detection tester", can.games, "Games"],
@@ -58,11 +57,15 @@ let timer = null;
 function route() {
   clearInterval(timer);
   view.onclick = null; view.onchange = null;
-  const [tab, arg] = (location.hash.slice(1) || TABS[0][0]).split("/");
+  const hash = location.hash.slice(1) || TABS[0][0];
+  const slash = hash.indexOf("/");
+  const tab = slash < 0 ? hash : hash.slice(0, slash);
+  const arg = slash < 0 ? "" : hash.slice(slash + 1);
+  if (tab === "allgames") { location.replace("#games" + (arg ? "/" + arg : "")); return; }
   const t = tab === "user" ? "users" : tab;
   $$(".adm-side a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
   { const tb = TABS.find(x => x[0] === t); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
-  const fn = { approvals, allgames: allGames, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail, hourscheck: hoursCheck, bulk: bulkFixes, changelog, health, suggested: suggestedMerge, detect: detectTest, artwork: missingArt, checks: dataChecks, history: reviewHistory, undo: undoRecent }[tab];
+  const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail, hourscheck: hoursCheck, bulk: bulkFixes, changelog, health, suggested: suggestedMerge, detect: detectTest, artwork: missingArt, checks: dataChecks, history: reviewHistory, undo: undoRecent }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -229,7 +232,7 @@ const SEL = new Set(JSON.parse(sessionStorage.getItem("adm_bulk_ids") || "[]"));
 const saveSel = () => { sessionStorage.setItem("adm_bulk_ids", JSON.stringify([...SEL])); const b = $("#agsel"); if (b) { b.hidden = !SEL.size; $("b", b).textContent = num(SEL.size); } };
 const AG_SRC = [["games list", "Games list", "l"], ["built-in", "Built-in", "b"], ["steam", "Steam", "s"], ["folder rule", "Folder rule", "f"], ["fix-up", "Fix-up", "x"], ["extra exe", "Extra exe", "e"], ["approved", "Approved", "a"], ["unlisted", "Unlisted", "u"]];
 const AG_ST = { active: ["Active", "ok"], hidden: ["Hidden", "hid"], retired: ["Retired", "ret"], merged: ["Merged", "mer"] };
-const AG_FLAG = [["new", "New on Games list · 7 days"], ["changed", "Games list changed · 7 days"], ["edited", "Staff edited"], ["hours", "Has hours"], ["unverified", "Unverified"]];
+const AG_FLAG = [["new", "New on the list · 7 days"], ["changed", "List changed · 7 days"], ["edited", "Staff edited"], ["hours", "Has recorded hours"], ["unverified", "Unverified"]];
 const AG_ADDED = { fraglink: "first played on Fraglink", list: "first seen on the Games list", before_tracking: "on the Games list before tracking began" };
 const num = n => (n || 0).toLocaleString("en");
 const srcTag = k => { const s = AG_SRC.find(x => x[0] === k); return `<span class="src ${s ? s[2] : ""}">${esc(s ? s[1] : k)}</span>`; };
@@ -238,10 +241,17 @@ function stTag(r) {
   const life = r.lifecycle && r.lifecycle !== "live" ? ` <span class="st beta">${esc(LIFE[r.lifecycle] || r.lifecycle)}</span>` : "";
   return `<span class="st ${s[1]}">${esc(r.partial && r.status === "active" ? "Exe retired" : s[0])}</span>${life}`;
 }
-async function allGames(arg) {
-  if (arg) { AG.q = arg; AG.offset = 0; }
+async function games(arg) {
+  arg = arg || "";
+  try { arg = decodeURIComponent(arg); } catch (e) { /* the hash was already decoded */ }
+  if (arg.startsWith("id:")) {
+    AG.open = arg.slice(3); AG.q = AG.open; AG.offset = 0; AG.src = ""; AG.status = ""; AG.flag = "";
+  } else if (arg) { AG.q = arg; AG.offset = 0; AG.open = ""; }
+  return allGames();
+}
+async function allGames() {
   view.innerHTML = `<section class="panel" style="margin-bottom:12px"><h2>Where the list comes from</h2><div id="agfresh"><div class="body empty">Loading…</div></div></section>
-    <section class="panel"><h2>All games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+    <section class="panel"><h2>Games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
     <div class="ag-tb"><input class="in" type="search" id="agq" placeholder="Search name, id, exe, alias or Steam app id" value="${esc(AG.q)}" autocomplete="off" aria-label="Search games">
       <select class="in" id="agflag" aria-label="Show only"><option value="">Everything</option>${AG_FLAG.map(([k, v]) => `<option value="${k}"${AG.flag === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
       <select class="in" id="agsort" aria-label="Sort"><option value="updated">Last change first</option><option value="added">Newest added</option><option value="name">Name A–Z</option><option value="players">Most players</option><option value="hours">Most hours</option></select>
@@ -292,7 +302,7 @@ async function listAll() {
   if (!d.rows.length) { box.innerHTML = `<div class="body empty">No games match these filters.</div>`; return; }
   const th = (k, l, c) => `<th class="srt${AG.sort === k ? " on" : ""} ${c || ""}" data-agsort="${k}">${l}</th>`;
   box.innerHTML = `<table class="gl"><thead><tr><th class="ck"><input type="checkbox" data-sel="*" aria-label="Select this page"></th>${th("name", "Game")}<th>Sources</th><th>Exes</th><th>Status</th>${th("players", "Players", "nr")}${th("hours", "Hours", "nr")}${th("added", "Added")}${th("updated", "Last change")}</tr></thead><tbody>
-    ${d.rows.map(r => `<tr class="r" data-id="${esc(r.id)}"><td class="ck"><input type="checkbox" data-sel="${esc(r.id)}"${SEL.has(r.id) ? " checked" : ""} aria-label="Select ${esc(r.name)}"></td><td><div class="gm"><img src="${esc(r.icon)}" alt="" data-hide-broken><div><div class="nm">${esc(r.name)}${r.renamed ? ` <span class="pill warn" title="Official name: ${esc(r.official)}">renamed</span>` : ""}${r.verified ? "" : ` <span class="pill">unverified</span>`}</div><div class="id">${esc(r.id)}</div></div></div></td>
+    ${d.rows.map(r => `<tr class="r" data-id="${esc(r.id)}"><td class="ck"><input type="checkbox" data-sel="${esc(r.id)}"${SEL.has(r.id) ? " checked" : ""} aria-label="Select ${esc(r.name)}"></td><td><div class="gm"><img src="${esc(r.icon)}" alt="" data-hide-broken><div><div class="nm">${esc(r.name)}${r.renamed ? ` <span class="pill warn" title="Official name: ${esc(r.official)}">renamed</span>` : ""}${r.verified ? "" : ` <span class="pill">unverified</span>`}</div><div class="id">${esc(r.id)}</div>${(r.also_recorded || []).map(a => `<div class="sm">Also saved as <a href="#games/id:${encodeURIComponent(a.id)}">${esc(a.id)}</a>${a.total_min ? ` · ${hrs(a.total_min)}` : ""}</div>`).join("")}</div></div></td>
       <td>${r.sources.map(srcTag).join("")}</td>
       <td><div class="exes" title="${esc(r.exes.join(", "))}">${r.exes.length ? esc(r.exes.join(", ")) + (r.exe_count > r.exes.length ? ` +${r.exe_count - r.exes.length}` : "") : `<span class="dimt">-</span>`}</div>${r.folders || r.fixups ? `<div class="sm">${r.folders ? `${r.folders} folder hint${r.folders === 1 ? "" : "s"}` : ""}${r.folders && r.fixups ? " · " : ""}${r.fixups ? `${r.fixups} fix-up${r.fixups === 1 ? "" : "s"}` : ""}</div>` : ""}</td>
       <td>${stTag(r)}${r.removed_from_list ? `<div class="sm">off Games list ${day(r.removed_from_list)}</div>` : ""}</td>
@@ -354,7 +364,7 @@ async function toggleAll(tr, keep) {
   const names = [["Shown as", g ? (g.public_name || g.name || id) : id], ["Official", g ? g.name || "-" : "-"], ["Id", `<span class="mono">${esc(id)}</span>`, 1]];
   if ((o.aliases || []).length) names.push(["Also called", o.aliases.join(", ")]);
   const links = ((g && g.steam_appids) || []).map(a => `<a href="https://store.steampowered.com/app/${a}" target="_blank" rel="noopener">Steam store ${a}</a>`);
-  if (r && r.successor) links.push(`<a href="#allgames/${encodeURIComponent(r.successor)}">${r.merged ? "Merged into" : "New entry"} ${esc(r.successor)}</a>`);
+  if (r && r.successor) links.push(`<a href="#games/${encodeURIComponent(r.successor)}">${r.merged ? "Merged into" : "New entry"} ${esc(r.successor)}</a>`);
   const ev = h.events || [];
   ex.innerHTML = `<td colspan="9"><div class="xg">
     <div class="xb"><h4>How it's found <span>${rows.length} rule${rows.length === 1 ? "" : "s"}</span></h4>${rows.length ? `<table>${rows.map(x => `<tr><td style="width:96px">${esc(x[0])}</td><td class="mono">${esc(x[1])}</td><td class="rt">${esc(x[2])}</td></tr>`).join("")}</table>` : `<div class="xkv"><span class="dimt">No rules: only reported by the app as unlisted.</span></div>`}</div>
@@ -362,30 +372,11 @@ async function toggleAll(tr, keep) {
       <b>Players</b><span>${g ? `${num(g.players)} · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})` : "-"}</span>
       <b>Links</b><span>${links.join(" · ") || `<span class="dimt">none</span>`}</span></div></div>
     <div class="xb wide"><h4>History <span>${ev.length} event${ev.length === 1 ? "" : "s"} · staff, Steam sync and Games list</span></h4>${ev.length ? `<div class="lg">${ev.map(histLine).join("")}</div>` : `<div class="xkv"><span class="dimt">Nothing recorded yet.</span></div>`}</div></div>
-    <div class="xact"><span class="note">Edits save here with the same checks as the Game library, and they land in History.</span><a class="btn sm" href="#detection">Detection rules</a></div>
+    <div class="xact"><span class="note">Edits save here and land in History. Hours recorded under another id for this same game stay on that id.</span><a class="btn sm" href="#detection">Detection rules</a></div>
     <section class="panel inline-edit" id="gedit"><div class="body empty">Loading editor…</div></section></td>`;
   editGame(id).catch(e => { const box = $("#gedit"); if (box) box.innerHTML = `<h2>Edit game</h2><div class="alert err">${esc(e.message)}</div>`; });
 }
 
-/* ---------- 2. games ---------- */
-async function games(q) {
-  q = q || "";
-  const direct = q.startsWith("id:") ? q.slice(3) : "";
-  if (direct) q = direct;
-  view.innerHTML = `<div class="split"><section class="panel"><h2>Game library</h2>
-    <form method="post" action="/api/v1/form-fallback" class="tools" id="gs"><input class="in grow" name="q" value="${esc(q)}" placeholder="Search by name, id or exe" autocomplete="off">
-      <select class="in" id="gshow" aria-label="Show"><option value="">All games with hours</option><option value="edited">Edited / retired / status set</option><option value="no_steam">With hours, no Steam link</option><option value="steam">With hours, on Steam</option><option value="unverified">With hours, unverified</option></select></form>
-    <div id="gmeta"></div>
-    <div id="glist"><div class="body empty">Loading…</div></div></section>
-    <section class="panel" id="gedit"><h2>Edit game</h2><div class="body empty">Pick a game on the left.</div></section></div>`;
-  $("#gs").addEventListener("submit", e => { e.preventDefault(); history.replaceState(null, "", "#games/" + encodeURIComponent(e.target.q.value.trim())); listGames(e.target.q.value.trim()); });
-  liveSearch($("#gs"));
-  lastUpdated().then(h => { const e = $("#gmeta"); if (e) e.innerHTML = h; });
-  GS.offset = 0;
-  $("#gshow").onchange = e => { GS.show = e.target.value; GS.offset = 0; listGames($("#gs").q.value.trim()); };
-  listGames(q);
-  if (direct) editGame(direct).catch(e => { $("#gedit").innerHTML = `<h2>Edit game</h2><div class="alert err">${esc(e.message)}</div>`; });
-}
 const GS = { sort: "players", show: "", offset: 0, lastQ: "" };
 /* Search as you type (debounced); Enter still works. */
 function liveSearch(form) {
@@ -961,7 +952,34 @@ async function staff() {
   });
 }
 
-// Edit game > Merge into…: preview what moves, then a typed confirm.
+function previewHtml(p, o) {
+  const mins = list => (list || []).length ? list.map(n => hrs(n)).join(", ") : "none";
+  const moveTitle = p.effect === "merge" ? "Would move" : "Stays on this id";
+  const stayTitle = p.effect === "merge" ? "Stays" : "Catalogue game, unchanged";
+  const box = (title, g, rows) => `<div class="sm-card"><div class="k">${title}</div><div class="nm">${esc((g && g.name) || (g && g.id) || "")}</div><div class="id">${esc((g && g.id) || "")}</div>
+    <div class="sm">${g && g.in_database ? "Saved row" : "No database row"}${g && g.on_list ? " · on the catalogue" : ""}</div>
+    <dl><dt>Sessions</dt><dd>${num(rows.sessions)} · ${num(rows.session_seconds)} seconds</dd>
+    <dt>Imported rows</dt><dd>${mins(rows.imported_minutes)}</dd>
+    <dt>Estimated, stored</dt><dd>${rows.estimated_rows ? hrs(rows.estimated_minutes_stored) : "none"}</dd>
+    <dt>Steam snapshots</dt><dd>${mins(rows.steam_minutes)}</dd></dl></div>`;
+  const shown = p.projection && p.projection.status === "known" ? hrs(p.projection.display_minutes) : "not calculated";
+  return `<div class="sm-prev" role="status">
+    <div class="sm-cols">${box(moveTitle, p.moves, p.moving_rows)}${box(stayTitle, p.stays, p.staying_rows)}</div>
+    <p>${esc(p.change || "")}</p>
+    ${p.effect === "merge" ? `<p><b>Shown total if merged:</b> ${shown}. ${esc((p.projection && p.projection.rule) || "")}</p>` : ""}
+    ${((p.projection && p.projection.notes) || []).map(n => `<p>${esc(n)}</p>`).join("")}
+    ${(p.warnings || []).map(w => `<div class="alert">${esc(w)}</div>`).join("")}
+    ${(p.blocked || []).map(w => `<div class="alert err">${esc(w)}</div>`).join("")}
+    <p class="dimt">${num(p.aliases)} detection fix-up${p.aliases === 1 ? "" : "s"} on the first id. ${esc(p.alias_note || "")} Preview did not change any rows.</p>
+    ${p.can_merge ? `<form class="sm-confirm" data-confirm>
+      <label>Type <span class="mono">${esc(o.source)}</span> to merge into ${esc((p.stays && p.stays.name) || o.target)}
+      <input class="in" name="confirm" autocomplete="off" spellcheck="false" aria-label="Type the source id to confirm the merge"></label>
+      <button class="btn danger" type="submit" disabled>Merge</button></form>` : ""}
+    ${p.effect === "link" && o.link ? `<p><button class="btn" type="button" data-linkdo>Link, don't move hours</button></p>` : ""}
+  </div>`;
+}
+
+// Edit game > Merge into…: read-only preview, then a typed confirm only when a merge is safe.
 function wireMerge(id) {
   const q = $("#mrgq"); if (!q) return;
   const gid = "/admin/games/" + encodeURIComponent(id), out = $("#mrgout"), m = $("#mrgmsg");
@@ -971,20 +989,20 @@ function wireMerge(id) {
     const d = await api("/admin/games?q=" + encodeURIComponent(v)).catch(() => ({ games: [] }));
     $("#mrg-games").innerHTML = d.games.filter(x => x.id !== id).map(x => `<option value="${esc(x.id)}">${esc(x.public_name || x.name)}</option>`).join("");
   }, 250); });
-  const row = (label, t) => `<tr><td>${esc(label)}</td><td class="num">${t.players}</td><td class="num">${t.sessions}</td><td class="num">${hrs(t.tracked_min)}</td><td class="num">${hrs(t.imported_min)}</td><td class="num">${t.hidden_by}</td></tr>`;
   $("#mrgp").addEventListener("click", e => act(e.target, async () => {
     const into = q.value.trim(); if (!into) throw new Error("Pick the game to merge into.");
     const p = await api(gid + "/merge?into=" + encodeURIComponent(into));
-    out.innerHTML = `<table class="mrgt"><thead><tr><th></th><th class="num">Players</th><th class="num">Sessions</th><th class="num">Tracked</th><th class="num">Imported</th><th class="num">Hidden by</th></tr></thead><tbody>
-      ${row("Moves from " + (p.from.name || id), p.from.totals)}${row("Into " + (p.into.name || into) + " (now)", p.into.totals)}</tbody></table>
-      <div class="dimt">Everything above moves to <b>${esc(p.into.name || into)}</b> <span class="mono">${esc(into)}</span>. This entry is retired, and apps that still report <span class="mono">${esc(id)}</span> count for the target from now on. Logged in the audit log.</div>
-      <div class="row"><button class="btn danger" type="button" id="mrgdo">Merge…</button></div>`;
-    $("#mrgdo").addEventListener("click", ev => {
-      const typed = prompt(`Merge "${p.from.name || id}" into "${p.into.name || into}"? This can't be undone.\n\nType the id of the game being merged to confirm:\n${id}`);
-      if (typed === null) return;
-      if (typed.trim() !== id) return msg(m, "The id didn't match; nothing was merged.");
-      act(ev.target, async () => { await api(gid + "/merge", { method: "POST", body: { into, confirm: typed.trim() } }); relist(into); }).catch(x => msg(m, x.message));
-    });
+    out.innerHTML = previewHtml(p, { source: id, target: into, link: false });
+    const form = $("[data-confirm]", out);
+    if (form) {
+      const input = $("input", form), go = $("button", form);
+      input.addEventListener("input", () => { go.disabled = input.value.trim() !== id; });
+      form.addEventListener("submit", ev => {
+        ev.preventDefault();
+        if (input.value.trim() !== id) return msg(m, "The id didn't match; nothing was merged.");
+        act(go, async () => { await api(gid + "/merge", { method: "POST", body: { into, confirm: input.value.trim() } }); relist(into); }).catch(x => msg(m, x.message));
+      });
+    }
   }).catch(x => msg(m, x.message)));
 }
 
@@ -1244,7 +1262,7 @@ async function bulkFixes() {
       <label>Game ids, one per line<textarea name="ids" rows="6" class="mono" placeholder="Tick games in All games, or paste ids here">${esc([...SEL].join("\n"))}</textarea></label>
       <div class="row"><select class="in" name="lifecycle">${Object.entries(LIFE).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select><label style="margin:0">Expected end / launch <input type="date" name="date"></label><label style="margin:0;flex:1">Note<input class="in" type="text" name="note" maxlength="500" style="width:100%"></label></div>
       <label class="check"><input type="checkbox" name="checked" checked> Mark as checked now</label>
-      <div class="row"><button class="btn dl">Preview changes</button><span class="dimt" id="bstn"></span><a class="btn sm" href="#allgames">Pick in All games</a></div><div id="bstprev"></div><div class="alert" id="bstmsg" hidden></div></form></section>
+      <div class="row"><button class="btn dl">Preview changes</button><span class="dimt" id="bstn"></span><a class="btn sm" href="#games">Pick in Games</a></div><div id="bstprev"></div><div class="alert" id="bstmsg" hidden></div></form></section>
     ${can.games ? `<section class="panel"><h2>Upload icons or covers</h2><div class="body f"><p class="note">Name each file after its game id, e.g. <span class="mono">counter-strike-2.png</span>. Use <span class="mono">__</span> for a <span class="mono">:</span> in the id. PNG, JPG or WebP up to 1 MB each.</p>
       <div class="row"><select class="in" id="upk"><option value="icon">Icons</option><option value="cover">Covers</option></select><input type="file" id="upf" multiple accept="image/png,image/jpeg,image/webp"><button class="btn dl" id="upgo" disabled>Upload all</button></div>
       <div id="uplist"></div><div class="alert" id="upmsg" hidden></div></div></section>` : ""}`;
@@ -1335,30 +1353,64 @@ async function health() {
 async function suggestedMerge() {
   const d = await api("/admin/suggested-merge");
   const cov = (d.coverage && d.coverage.sources) || [];
+  const nm = (name, id) => name && name !== id ? name : id;
   view.innerHTML = `<section class="panel"><h2>Suggested Merge</h2>
-    <p class="note">Suggestions only. A shared launcher product id can propose a merge. A similar name is not enough, and a different edition or folder hint is not offered as a merge. Nothing here merges by itself.</p>
+    <p class="note">You do not need to merge a Steam id onto the games list. The list already is the catalogue. Link records a fix-up for future detection and leaves every saved session and hour where it is. Merge is a separate step, only when both entries already have saved rows, and it can change the shown total. Shared Steam id alone is not a merge. Editions and folder splits are not offered.</p>
     <div class="ag-fresh">${cov.map(s => `<div><div class="k">${esc(s.label)}</div><div class="v">${s.available ? "Available" : "Not available"}</div><div class="d">${esc(s.detail)}</div></div>`).join("")}</div></section>
     <section class="panel" style="margin-top:12px"><h2>Suggestions <span class="dimt">${num(d.open)} open · ${num(d.dismissed)} dismissed</span></h2>
-    ${d.rows.length ? `<table class="gl"><thead><tr><th>From</th><th>Into</th><th>Launcher</th><th>Why</th><th></th></tr></thead><tbody>
-      ${d.rows.map(r => `<tr data-key="${esc(r.key)}" data-src="${esc(r.source)}" data-into="${esc(r.target)}" data-op="${esc(r.op)}"><td class="mono">${esc(r.source)}</td><td class="mono">${esc(r.target)}</td><td>${esc(r.launcher)} ${esc(r.product)}</td><td>${esc(r.why)}</td>
-        <td class="rt">${r.op === "merge" ? `<button class="btn sm" data-prev>Preview</button>` : `<span class="dimt">No merge</span>`}${r.dismissed ? "" : ` <button class="btn sm" data-dismiss>Dismiss</button>`}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No suggestions for the launchers this server can see.</div>`}
-    <div id="smprev"></div></section>`;
+    ${d.rows.length ? `<table class="gl sm-suggest"><thead><tr><th>Would move</th><th>Stays</th><th>Evidence</th><th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr data-key="${esc(r.key)}" data-src="${esc(r.source)}" data-into="${esc(r.target)}" data-op="${esc(r.op)}">
+        <td><div class="nm">${esc(nm(r.source_name, r.source))}</div><div class="id">${esc(r.source)}</div></td>
+        <td><div class="nm">${esc(nm(r.target_name, r.target))} ${r.op === "merge" ? `<span class="pill ok">stays</span>` : ""}</div><div class="id">${esc(r.target)}</div></td>
+        <td><div>${esc(r.launcher)} ${esc(r.product)}</div><div class="sm">${num(r.source_records)} saved on the id · ${num(r.target_records)} on the game that stays</div></td>
+        <td><div class="sm-acts">${r.op === "merge" ? `<button class="btn sm" type="button" data-prev>Preview merge</button>` : r.op === "map" ? `<button class="btn sm" type="button" data-prev>Preview link</button>` : `<span class="dimt">Not a merge</span>`}${r.dismissed ? "" : ` <button class="btn sm" type="button" data-dismiss>Dismiss</button>`}</div></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">Nothing needs a merge. A Steam id the catalogue already names is not listed unless both sides have saved rows.</div>`}
+    </section>`;
   view.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
-    const tr = b.closest("tr"); if (!tr) return;
+    const tr = b.closest("tr[data-src]"); if (!tr) return;
     if (b.matches("[data-dismiss]")) {
       await act(b, async () => { await api("/admin/suggested-merge/dismiss", { method: "POST", body: { key: tr.dataset.key } }); suggestedMerge(); });
       return;
     }
     if (!b.matches("[data-prev]")) return;
-    const p = await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge?into=${encodeURIComponent(tr.dataset.into)}`).catch(x => { alert(x.message); return null; });
-    if (!p) return;
-    $("#smprev").innerHTML = `<div class="note">${esc(p.from.name || tr.dataset.src)} → ${esc(p.into.name || tr.dataset.into)}: ${p.from.totals.players} players, ${p.from.totals.sessions} sessions, ${hrs(p.from.totals.tracked_min)} tracked. This is a game merge. Type the source id to confirm.</div>
-      <div class="row"><input class="in" id="smok" placeholder="${esc(tr.dataset.src)}"><button class="btn danger" id="smdo">Merge</button></div>`;
-    $("#smdo").onclick = () => act($("#smdo"), async () => {
-      await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge`, { method: "POST", body: { into: tr.dataset.into, confirm: $("#smok").value.trim() } });
-      suggestedMerge();
-    });
+    let slot = tr.nextElementSibling;
+    if (!slot || !slot.classList.contains("sm-slot")) {
+      slot = document.createElement("tr");
+      slot.className = "sm-slot";
+      slot.innerHTML = `<td colspan="4"></td>`;
+      tr.after(slot);
+    }
+    const cell = $("td", slot);
+    cell.innerHTML = `<div class="sm-prev" role="status">Loading preview…</div>`;
+    b.setAttribute("aria-busy", "true");
+    b.disabled = true;
+    try {
+      const p = await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge?into=${encodeURIComponent(tr.dataset.into)}`);
+      cell.innerHTML = previewHtml(p, { source: tr.dataset.src, target: tr.dataset.into, link: true });
+      const form = $("[data-confirm]", cell);
+      if (form) {
+        const input = $("input", form), go = $("button", form);
+        input.addEventListener("input", () => { go.disabled = input.value.trim() !== tr.dataset.src; });
+        form.addEventListener("submit", ev => {
+          ev.preventDefault();
+          if (input.value.trim() !== tr.dataset.src) return;
+          act(go, async () => {
+            await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge`, { method: "POST", body: { into: tr.dataset.into, confirm: input.value.trim() } });
+            suggestedMerge();
+          });
+        });
+      }
+      const link = $("[data-linkdo]", cell);
+      if (link) link.onclick = () => act(link, async () => {
+        await api("/admin/suggested-merge/link", { method: "POST", body: { source: tr.dataset.src, into: tr.dataset.into } });
+        cell.innerHTML = `<div class="sm-prev" role="status">Linked. No sessions, imported hours, estimated hours, or Steam snapshots were moved.</div>`;
+      });
+    } catch (x) {
+      cell.innerHTML = `<div class="sm-prev alert err" role="alert">${esc(x.message || "Preview failed.")} Nothing was changed.</div>`;
+    } finally {
+      b.disabled = false;
+      b.removeAttribute("aria-busy");
+    }
   };
 }
 

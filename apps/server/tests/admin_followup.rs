@@ -190,6 +190,16 @@ async fn suggested_merge_needs_a_launcher_id_and_does_not_merge(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'smboss'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // A saved row makes the edition conflict visible. An empty Steam id is not a task.
+    sqlx::query("INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s) VALUES (gen_random_uuid(), $1, 'quest', now() - interval '1 hour', now(), 60)")
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
     let d = api(
         &app,
         "GET",
@@ -205,8 +215,10 @@ async fn suggested_merge_needs_a_launcher_id_and_does_not_merge(pool: PgPool) {
         quest["op"], "look",
         "edition names are not a merge: {quest}"
     );
-    let other = rows.iter().find(|r| r["product"] == "515151").unwrap();
-    assert_eq!(other["op"], "merge");
+    assert!(
+        rows.iter().all(|r| r["product"] != "515151"),
+        "a shared Steam id with no saved rows is not a task: {rows:?}"
+    );
     assert!(d["coverage"]["sources"]
         .as_array()
         .unwrap()
@@ -238,8 +250,8 @@ async fn suggested_merge_needs_a_launcher_id_and_does_not_merge(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(still, 0);
-    let key = other["key"].as_str().unwrap();
+    assert_eq!(still, 1);
+    let key = quest["key"].as_str().unwrap();
     let dsm = api(
         &app,
         "POST",
@@ -433,4 +445,225 @@ async fn data_checks_do_not_write(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(before, after);
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn steam_catalogue_id_is_not_a_merge_until_both_sides_have_rows(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let boss = signup(&app, "smb2@example.com", "raidboss").await;
+    role(&pool, "raidboss", "admin").await;
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'raidboss'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO games(id, name, steam_appid, verified) VALUES
+         ('steam:1808500', 'ARC Raiders', 1808500, true),
+         ('arc_raiders', 'ARC Raiders', 1808500, true)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let listed = api(
+        &app,
+        "GET",
+        "/api/v1/admin/suggested-merge",
+        Some(&boss),
+        None,
+    )
+    .await
+    .json();
+    assert!(
+        listed["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["product"] != "1808500"),
+        "no saved rows: {listed}"
+    );
+    for id in ["steam:1808500", "arc_raiders"] {
+        sqlx::query("INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s) VALUES (gen_random_uuid(), $1, $2, now() - interval '1 hour', now(), 3600)")
+            .bind(uid)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query("INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, captured_at) VALUES
+        (gen_random_uuid(), $1, 'steam:1808500', 'imported', 'manual', 100, timestamptz '2026-10-01'),
+        (gen_random_uuid(), $1, 'arc_raiders', 'imported', 'manual', 400, timestamptz '2026-10-02'),
+        (gen_random_uuid(), $1, 'steam:1808500', 'estimated', 'estimator', 50, timestamptz '2026-09-01')")
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let rows = api(
+        &app,
+        "GET",
+        "/api/v1/admin/suggested-merge",
+        Some(&boss),
+        None,
+    )
+    .await
+    .json();
+    let row = rows["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["product"] == "1808500")
+        .unwrap();
+    assert_eq!(row["op"], "merge", "{row}");
+    assert!(row["source_records"].as_i64().unwrap() > 0);
+    assert!(row["target_records"].as_i64().unwrap() > 0);
+    let before_sessions: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let before_hours: i64 =
+        sqlx::query_scalar("SELECT coalesce(sum(minutes),0) FROM hours_entries")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let preview = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games/steam%3A1808500/merge?into=arc_raiders",
+        Some(&boss),
+        None,
+    )
+    .await;
+    assert_eq!(preview.status, StatusCode::OK, "{}", preview.text);
+    let p = preview.json();
+    assert_eq!(p["read_only"], true);
+    assert_eq!(p["effect"], "merge", "{p}");
+    assert!(
+        p["change"].as_str().unwrap().contains("not added together"),
+        "{p}"
+    );
+    assert_eq!(p["can_merge"], true, "{p}");
+    assert_eq!(p["moving_rows"]["sessions"], 1);
+    assert_eq!(p["staying_rows"]["sessions"], 1);
+    assert!(
+        p["projection"]["imported_minutes_not_added"]
+            .as_i64()
+            .unwrap()
+            > 0,
+        "{p}"
+    );
+    assert_ne!(
+        p["projection"]["display_minutes"].as_i64().unwrap(),
+        100 + 400 + 120,
+        "shown total is not the sum of both imported counters plus both hours"
+    );
+    let after_sessions: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let after_hours: i64 = sqlx::query_scalar("SELECT coalesce(sum(minutes),0) FROM hours_entries")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(before_sessions, after_sessions);
+    assert_eq!(before_hours, after_hours);
+    let one_sided = api(
+        &app,
+        "POST",
+        "/api/v1/admin/games/steam:1808500/merge",
+        Some(&boss),
+        Some(json!({ "into": "no_such_catalogue_game", "confirm": "steam:1808500" })),
+    )
+    .await;
+    assert_ne!(one_sided.status, StatusCode::OK);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM sessions WHERE game_id = 'steam:1808500'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    sqlx::query(
+        "INSERT INTO games(id, name, steam_appid, verified) VALUES
+         ('steam:1808501', 'Side Game', 1808501, true),
+         ('side_game', 'Side Game', 1808501, true)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s) VALUES (gen_random_uuid(), $1, 'steam:1808501', now() - interval '30 minutes', now(), 600)")
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let side = api(
+        &app,
+        "GET",
+        "/api/v1/admin/suggested-merge",
+        Some(&boss),
+        None,
+    )
+    .await
+    .json();
+    let side_row = side["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["product"] == "1808501")
+        .unwrap();
+    assert_eq!(side_row["op"], "map", "{side_row}");
+    let side_preview = api(
+        &app,
+        "GET",
+        "/api/v1/admin/games/steam%3A1808501/merge?into=side_game",
+        Some(&boss),
+        None,
+    )
+    .await;
+    assert_eq!(side_preview.status, StatusCode::OK, "{}", side_preview.text);
+    let sp = side_preview.json();
+    assert_eq!(sp["read_only"], true);
+    assert_eq!(sp["effect"], "link", "{sp}");
+    assert_eq!(sp["can_merge"], false, "{sp}");
+    assert_eq!(sp["moving_rows"]["sessions"], 1);
+    assert_eq!(sp["staying_rows"]["sessions"], 0);
+    assert!(
+        sp["change"].as_str().unwrap().contains("would not move"),
+        "{sp}"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM sessions WHERE game_id = 'steam:1808501'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1,
+        "the link preview is read-only"
+    );
+    let linked = api(
+        &app,
+        "POST",
+        "/api/v1/admin/suggested-merge/link",
+        Some(&boss),
+        Some(json!({ "source": "steam:1808501", "into": "side_game" })),
+    )
+    .await;
+    assert_eq!(linked.status, StatusCode::OK, "{}", linked.text);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM sessions WHERE game_id = 'steam:1808501'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    let alias: String = sqlx::query_scalar(
+        "SELECT game_id FROM detection_aliases WHERE kind = 'steam' AND pattern = '1808501'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(alias, "side_game");
 }

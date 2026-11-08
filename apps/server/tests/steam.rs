@@ -200,6 +200,103 @@ async fn link_by_vanity_and_import(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn resync_keeps_an_existing_steam_snapshot_on_its_id(pool: PgPool) {
+    let (app, _) = app_with_mock(pool.clone(), Some(KEY)).await;
+    let t = signup(&app, "keep@example.com", "keeper").await;
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/steam/link",
+        Some(&t),
+        Some(json!({ "profile": "https://steamcommunity.com/id/gabelogannewell/" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'keeper'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO games(id, name, verified) VALUES ('steam:730', 'Counter-Strike 2', true)
+         ON CONFLICT DO NOTHING",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO steam_playtime(user_id, steam_appid, game_id, minutes_forever, minutes_2weeks, fetched_at)
+         VALUES ($1, 730, 'steam:730', 11, 0, now())",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s)
+         VALUES (gen_random_uuid(), $1, 'steam:730', now() - interval '1 hour', now(), 3600)",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, captured_at)
+         VALUES (gen_random_uuid(), $1, 'steam:730', 'imported', 'manual', 80, timestamptz '2026-10-01')",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let r = api(&app, "POST", "/api/v1/steam/sync", Some(&t), None).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let (gid, minutes): (String, i32) = sqlx::query_as(
+        "SELECT game_id, minutes_forever FROM steam_playtime WHERE steam_appid = 730",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(gid, "steam:730");
+    assert_eq!(
+        minutes, 61234,
+        "the Steam counter refreshes on the same row"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM steam_playtime WHERE steam_appid = 730 AND game_id = 'cs2'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sessions WHERE game_id = 'steam:730'")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT coalesce(sum(minutes),0) FROM hours_entries WHERE game_id = 'steam:730' AND tier = 'imported'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        80
+    );
+    let dota: String =
+        sqlx::query_scalar("SELECT game_id FROM steam_playtime WHERE steam_appid = 570")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        dota, "dota2",
+        "a snapshot that did not exist yet uses the signature id"
+    );
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn private_profile_explains_setting(pool: PgPool) {
     let (app, _) = app_with_mock(pool.clone(), Some(KEY)).await;
     let t = signup(&app, "p@example.com", "private").await;
