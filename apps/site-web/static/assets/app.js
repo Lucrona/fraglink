@@ -369,9 +369,13 @@ async function latest() {
 }
 async function fillDownload() {
   const btns = $$("[data-dl]"), vers = $$("[data-ver]");
+  /* staff can point the links somewhere else in Admin > Site settings (empty = built in) */
+  const links = await featuresReady.then(() => LINKS).catch(() => LINKS);
+  $$("[data-link]").forEach(a => { if (links[a.dataset.link]) a.href = links[a.dataset.link]; });
+  if (links.link_download) btns.forEach(b => { b.href = links.link_download; b.removeAttribute("aria-disabled"); });
   try {
     const l = await latest();
-    btns.forEach(b => { if (l.url) b.href = l.url; b.removeAttribute("aria-disabled"); });
+    btns.forEach(b => { if (l.url && !links.link_download) b.href = l.url; b.removeAttribute("aria-disabled"); });
     vers.forEach(v => { v.textContent = "Version " + l.version + (l.date ? " · " + fullDay(l.date) : "") + " · Windows 10/11, 64-bit"; });
   } catch (e) {
     vers.forEach(v => { v.textContent = "Download's not available right now. Try again in a few minutes."; });
@@ -459,9 +463,28 @@ const BRAND = { steam: ["Steam", "#66c0f4", "M11.979 0C5.678 0 .511 4.86.022 11.
 const pages = {};
 
 /* ---------- /changelog: All / App / Website tabs, 8 entries a page ---------- */
-pages.changelog = () => {
-  const PER = 8, secs = $$(".changelog section[data-k]"), tabs = $$(".cl-tabs button"), pager = $(".cl-pager");
+/* Entries staff publish in Admin > Changelog come from the API and slot in by date. */
+const clDate = s => { const t = Date.parse(s); return isNaN(t) ? 0 : t; };
+function clSection(e) {
+  const list = (h, items) => items && items.length ? `<h4>${h}</h4><ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+  const sec = document.createElement("section");
+  sec.className = "panel"; sec.dataset.k = e.area; sec.dataset.date = e.date;
+  sec.innerHTML = `<h2><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(e.label)}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new)}${list("Changes", e.changes)}${list("Fixes", e.fixes)}</div>`;
+  return sec;
+}
+pages.changelog = async () => {
+  const pager = $(".cl-pager");
   if (!pager) return;
+  try {
+    const r = await fetch(API + "/changelog");
+    const d = r.ok ? await r.json() : { entries: [] };
+    if (d.entries && d.entries.length) {
+      const fresh = d.entries.map(e => ({ el: clSection(e), t: Date.parse(e.date + "T00:00:00"), db: 1 }));
+      const old = $$(".changelog section[data-k]").map(el => ({ el, t: clDate(el.querySelector("h2").lastChild.textContent.trim()), db: 0 }));
+      [...fresh, ...old].sort((a, b) => b.t - a.t || b.db - a.db).forEach(x => pager.before(x.el));
+    }
+  } catch (e) { /* the shipped entries still show */ }
+  const PER = 8, secs = $$(".changelog section[data-k]"), tabs = $$(".cl-tabs button");
   let f = "All", p = 1;
   const render = () => {
     const shown = secs.filter(s => { s.hidden = true; return f === "All" || s.dataset.k === f; });
@@ -1858,7 +1881,8 @@ pages.admin = async () => {
 
 /* ---------- feature switches (Admin > Site settings; the server enforces them too) ---------- */
 const FEATURES = { signups: true, announcement: true, connect_steam: true, connect_bnet: true, connect_discord: true, friend_requests: true, public_profiles: true, wow_characters: false, maintenance: false };
-const featuresReady = fetch(API + "/features", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => { if (d && d.features) Object.assign(FEATURES, d.features); }).catch(() => {});
+const LINKS = {};
+const featuresReady = fetch(API + "/features", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => { if (d && d.features) Object.assign(FEATURES, d.features); if (d && d.links) Object.assign(LINKS, d.links); }).catch(() => {});
 function applyFeatures() {
   document.body.classList.toggle("ff-no-friendreq", !FEATURES.friend_requests);
   document.body.classList.toggle("ff-no-search", !FEATURES.public_profiles);

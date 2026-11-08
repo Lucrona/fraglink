@@ -20,6 +20,9 @@
 //! One choice setting, kept in `site_settings.value`: `home_counts` (`c1` odometer in the
 //! header, `c2` Community stats panel, `c4` stats bar under the tabs, `off`), default `off`
 //! (no user counts at launch).
+//!
+//! Download page links, also in `site_settings.value` ([`LINKS`]): empty means the built-in
+//! default. Served to everyone as `links` in `GET /api/v1/features`.
 
 use crate::error::{ApiResult, AppError};
 use crate::AppState;
@@ -108,9 +111,10 @@ pub async fn require(st: &AppState, key: &str, message: &'static str) -> ApiResu
 /// `GET /api/v1/features`: `{ "features": { key: bool, ... } }`. Public, cached 30 s.
 pub async fn public(State(st): State<AppState>) -> ApiResult<impl IntoResponse> {
     let m = all(&st).await?;
+    let l = links(&st).await;
     Ok((
         [(header::CACHE_CONTROL, "public, max-age=30")],
-        Json(json!({ "features": m })),
+        Json(json!({ "features": m, "links": l })),
     ))
 }
 
@@ -131,8 +135,17 @@ pub async fn admin_list(st: &AppState) -> ApiResult<Value> {
                     "updated_at": r.map(|r| r.1), "updated_by": r.and_then(|r| r.2.clone()) })
         })
         .collect();
+    let l = links(st).await;
+    let links_json: Vec<Value> = LINKS
+        .iter()
+        .map(|(k, label, help)| {
+            let r = rows.iter().find(|r| r.0 == *k);
+            json!({ "key": k, "label": label, "help": help, "value": l.get(*k).cloned().unwrap_or_default(),
+                    "updated_at": r.map(|r| r.1), "updated_by": r.and_then(|r| r.2.clone()) })
+        })
+        .collect();
     Ok(
-        json!({ "settings": items, "home_counts": home_counts(st).await,
+        json!({ "settings": items, "links": links_json, "home_counts": home_counts(st).await,
                "home_counts_options": HOME_COUNTS.iter().map(|(k, l)| json!({ "key": k, "label": l })).collect::<Vec<_>>() }),
     )
 }
@@ -193,6 +206,72 @@ pub async fn set_home_counts(st: &AppState, v: &str, by: uuid::Uuid) -> ApiResul
          ON CONFLICT (key) DO UPDATE SET value = $2, updated_by = $3, updated_at = now()",
     )
     .bind(HOME_COUNTS_KEY)
+    .bind(v)
+    .bind(by)
+    .execute(&st.db)
+    .await?;
+    Ok(())
+}
+
+/// (key, label, help) of the Download page links staff can change without a deploy.
+pub const LINKS: [(&str, &str, &str); 2] = [
+    (
+        "link_download",
+        "Download button link",
+        "Where the big Download button points. Leave empty to use the latest build (recommended).",
+    ),
+    (
+        "link_discord",
+        "Community chat link on the Download page",
+        "The \"let us know\" link under the Download button. Leave empty for the built-in invite.",
+    ),
+];
+
+pub fn is_link(k: &str) -> bool {
+    LINKS.iter().any(|l| l.0 == k)
+}
+
+/// Empty (use the default) or one https link of up to 200 characters.
+pub fn valid_link(v: &str) -> bool {
+    v.is_empty()
+        || (v.len() <= 200
+            && v.starts_with("https://")
+            && v.len() > "https://".len()
+            && !v.chars().any(|c| {
+                c.is_whitespace() || c.is_control() || matches!(c, '"' | '\'' | '<' | '>' | '\\')
+            }))
+}
+
+/// The links that are set (empty ones are left out).
+pub async fn links(st: &AppState) -> BTreeMap<String, String> {
+    let keys: Vec<&str> = LINKS.iter().map(|l| l.0).collect();
+    let rows: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT key, value FROM site_settings WHERE key = ANY($1)")
+            .bind(&keys)
+            .fetch_all(&st.db)
+            .await
+            .unwrap_or_default();
+    rows.into_iter()
+        .filter_map(|(k, v)| v.filter(|v| !v.is_empty() && valid_link(v)).map(|v| (k, v)))
+        .collect()
+}
+
+pub async fn set_link(st: &AppState, key: &str, v: &str, by: uuid::Uuid) -> ApiResult<()> {
+    let v = v.trim();
+    if !is_link(key) {
+        return Err(AppError::bad_request("unknown_setting", "No such setting."));
+    }
+    if !valid_link(v) {
+        return Err(AppError::bad_request(
+            "bad_link",
+            "Use one https:// link of up to 200 characters, or leave it empty.",
+        ));
+    }
+    sqlx::query(
+        "INSERT INTO site_settings(key, enabled, value, updated_by) VALUES($1, true, $2, $3)
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_by = $3, updated_at = now()",
+    )
+    .bind(key)
     .bind(v)
     .bind(by)
     .execute(&st.db)
@@ -264,5 +343,8 @@ mod tests {
             assert!(super::valid_home_counts(v));
         }
         assert!(!super::valid_home_counts("c3") && !super::valid_home_counts(""));
+        assert!(super::valid_link("") && super::valid_link("https://example.com/x"));
+        assert!(!super::valid_link("http://example.com") && !super::valid_link("https://a b"));
+        assert!(!super::valid_link("javascript:alert(1)") && !super::valid_link("https://"));
     }
 }

@@ -1157,3 +1157,26 @@ tr.exp>td{background:#0f1a27!important;border-bottom:2px solid var(--hd-orange);
 .pg button{min-width:26px;padding:2px 6px;border:1px solid #2f4660;border-radius:3px;color:#c3d0dd;background:#101822;font:12px var(--font);cursor:pointer}
 .pg button.on{background:linear-gradient(#f2b257,#c97a26);color:#1f1206;border-color:#7a4310;font-weight:700}.pg button[disabled]{opacity:.4;cursor:default}
 .pg .sp{margin-left:auto}
+.inline-edit{margin-top:12px}
+.inline-edit .body{max-width:860px}
+/* Admin: selection, changelog editor, hours checker, health */
+table.gl th.ck,table.gl td.ck{width:26px;padding-right:0;cursor:default}
+.ag-sel{display:flex;align-items:center;gap:8px;padding:7px 12px;background:#1d3753;border-bottom:1px solid #1c2836;font-size:12px;color:#dbe7f3}.ag-sel b{color:#ffd9a3}
+.cl-ed{align-items:start}.cl-ed textarea{width:100%;font:12.5px/1.45 var(--font);resize:vertical}
+.cl-ed .changelog .panel{margin:0}.cl-ed .changelog h4{margin:8px 0 4px}
+.danger-zone{border-color:#6a2c2a}.danger-zone h2{color:#e3b1ad}
+.hc-head{display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid;border-radius:4px;margin-bottom:12px;font-size:12.5px}
+.hc-head b{font-size:14px}.hc-head.ok{border-color:#2f5a2a;background:#111a10;color:#b8dcae}.hc-head.bad{border-color:#6a2c2a;background:#1d1010;color:#e3b1ad}
+.hc-3{display:grid;grid-template-columns:1fr 1.4fr 1.2fr;gap:12px;margin-bottom:12px}.hc-3 .panel{margin:0}
+.hc-big{font:700 30px var(--mono);color:#f0b060}
+.hc-bars{display:flex;gap:6px;align-items:flex-end;height:130px}
+.hc-bars .b{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:10.5px;color:#c3d0dd}
+.hc-bars .b i{display:block;width:100%;min-height:2px;background:linear-gradient(#f2b257,#c97a26);border-radius:2px 2px 0 0}
+.hc-bars .b em{font-style:normal;color:#8ea2b8}
+tr.hc-flag td{background:#1d1010}
+.hl-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.hl{border:1px solid #24384f;background:#111a25;border-radius:4px;padding:10px 12px;box-shadow:inset 3px 0 0 #3d4a5a;min-width:0}
+.hl.ok{box-shadow:inset 3px 0 0 #4caf50}.hl.bad{box-shadow:inset 3px 0 0 #d9534f}
+.hl .k{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--label);font-weight:700}
+.hl .v{color:#fff;font-weight:700;font-size:15px;margin-top:3px}.hl .d{font-size:11px;color:#8ea2b8;margin-top:2px;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1100px){.hc-3,.hl-row{grid-template-columns:1fr 1fr}}

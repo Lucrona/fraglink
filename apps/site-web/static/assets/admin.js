@@ -8,6 +8,7 @@ const root = $("#admin-root");
 const dt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const when = iso => iso ? dt.format(new Date(iso)) : "-";
 const day = iso => iso ? fullDate.format(new Date(iso)) : "-";
+const th = t => (Number(t || 0) / 10).toFixed(1) + " h";
 const hrs = min => (Math.round((min || 0) / 6) / 10).toLocaleString("en") + " h";
 const bytes = b => b == null ? "-" : b > 1e9 ? (b / 1e9).toFixed(1) + " GB" : (b / 1e6).toFixed(0) + " MB";
 const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
@@ -22,16 +23,20 @@ async function act(btn, fn) {
 const TABS = [
   ["approvals", "Game approvals", can.approvals, "To do"],
   ["hours", "Hours review", can.hours, "To do"],
+  ["hourscheck", "Hours checker", can.hours, "To do"],
   ["avatars", "Reported pictures", can.avatars, "To do"],
   ["allgames", "All games", can.games, "Games"],
   ["games", "Game library", can.games, "Games"],
   ["detection", "Detection rules", can.games, "Games"],
+  ["bulk", "Bulk fixes", can.bulk, "Games"],
   ["users", "Users", can.users, "Community"],
   ["news", "News", can.news, "Community"],
   ["polls", "Polls", can.news, "Community"],
+  ["changelog", "Changelog", can.changelog, "Community"],
   ["announcements", "Announcements", can.announcements, "Community"],
   ["incidents", "Status incidents", can.server, "Site"],
   ["server", "Server", can.server, "Site"],
+  ["health", "Health", can.health, "Site"],
   ["settings", "Site settings", can.settings, "Site"],
   ["staff", "Staff", can.staff, "Site"],
 ].filter(t => t[2]);
@@ -51,7 +56,7 @@ function route() {
   const t = tab === "user" ? "users" : tab;
   $$(".adm-side a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
   { const tb = TABS.find(x => x[0] === t); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
-  const fn = { approvals, allgames: allGames, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail }[tab];
+  const fn = { approvals, allgames: allGames, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail, hourscheck: hoursCheck, bulk: bulkFixes, changelog, health }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -218,6 +223,9 @@ function srcChips(g) {
 
 /* ---------- All games: everything Fraglink knows, from every source ---------- */
 const AG = { q: "", src: "", status: "", flag: "", sort: "updated", offset: 0, open: "" };
+/* ids ticked in All games, for Bulk fixes (kept for the browser tab) */
+const SEL = new Set(JSON.parse(sessionStorage.getItem("adm_bulk_ids") || "[]"));
+const saveSel = () => { sessionStorage.setItem("adm_bulk_ids", JSON.stringify([...SEL])); const b = $("#agsel"); if (b) { b.hidden = !SEL.size; $("b", b).textContent = num(SEL.size); } };
 const AG_SRC = [["games list", "Games list", "l"], ["built-in", "Built-in", "b"], ["steam", "Steam", "s"], ["folder rule", "Folder rule", "f"], ["fix-up", "Fix-up", "x"], ["extra exe", "Extra exe", "e"], ["approved", "Approved", "a"], ["unlisted", "Unlisted", "u"]];
 const AG_ST = { active: ["Active", "ok"], hidden: ["Hidden", "hid"], retired: ["Retired", "ret"], merged: ["Merged", "mer"] };
 const AG_FLAG = [["new", "New on Games list · 7 days"], ["changed", "Games list changed · 7 days"], ["edited", "Staff edited"], ["hours", "Has hours"], ["unverified", "Unverified"]];
@@ -237,6 +245,7 @@ async function allGames(arg) {
       <select class="in" id="agflag" aria-label="Show only"><option value="">Everything</option>${AG_FLAG.map(([k, v]) => `<option value="${k}"${AG.flag === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
       <select class="in" id="agsort" aria-label="Sort"><option value="updated">Last change first</option><option value="added">Newest added</option><option value="name">Name A–Z</option><option value="players">Most players</option><option value="hours">Most hours</option></select>
       <span class="dimt" style="margin-left:auto">50 per page · click a row to open it</span></div>
+    <div class="ag-sel" id="agsel" hidden><b>0</b> selected <a class="btn sm dl" href="#bulk">Fix in Bulk fixes ›</a><button class="btn sm" data-selclear>Clear</button></div>
     <div class="ag-flt" id="agsrc"></div><div class="ag-flt" id="agst"></div>
     <div id="aglist"><div class="body empty">Loading…</div></div></section>`;
   $("#agsort").value = AG.sort;
@@ -247,6 +256,9 @@ async function allGames(arg) {
     const c = e.target.closest("[data-agsrc]"); if (c) { AG.src = AG.src === c.dataset.agsrc ? "" : c.dataset.agsrc; AG.offset = 0; listAll(); return; }
     const s_ = e.target.closest("[data-agst]"); if (s_) { AG.status = AG.status === s_.dataset.agst ? "" : s_.dataset.agst; AG.offset = 0; listAll(); return; }
     const so = e.target.closest("th[data-agsort]"); if (so) { AG.sort = so.dataset.agsort; $("#agsort").value = AG.sort; AG.offset = 0; listAll(); return; }
+    if (e.target.closest("[data-selclear]")) { SEL.clear(); saveSel(); $$("#aglist input[data-sel]").forEach(c => { c.checked = false; }); return; }
+    const ck = e.target.closest("input[data-sel]"); if (ck) { if (ck.dataset.sel === "*") { $$("#aglist input[data-sel]:not([data-sel='*'])").forEach(c => { c.checked = ck.checked; SEL[ck.checked ? "add" : "delete"](c.dataset.sel); }); } else SEL[ck.checked ? "add" : "delete"](ck.dataset.sel); saveSel(); return; }
+    if (e.target.closest("td.ck")) return;
     const pg = e.target.closest("[data-agoff]"); if (pg) { AG.offset = +pg.dataset.agoff; AG.open = ""; listAll().then(() => $("#aglist").scrollIntoView({ block: "start" })); return; }
     if (e.target.closest("a,button,tr.exp")) return;
     const tr = e.target.closest("tr.r"); if (tr) toggleAll(tr);
@@ -278,8 +290,8 @@ async function listAll() {
     Object.keys({ ...AG_ST, ...ct }).map(k => `<button class="chip${AG.status === k ? " on" : ""}" data-agst="${esc(k)}"${ct[k] || AG.status === k ? "" : " disabled"}>${esc((AG_ST[k] || [{ partial: "Exe retired", removed: "Off Games list" }[k] || LIFE[k] || k])[0])} <b>${num(ct[k])}</b></button>`).join("");
   if (!d.rows.length) { box.innerHTML = `<div class="body empty">No games match these filters.</div>`; return; }
   const th = (k, l, c) => `<th class="srt${AG.sort === k ? " on" : ""} ${c || ""}" data-agsort="${k}">${l}</th>`;
-  box.innerHTML = `<table class="gl"><thead><tr>${th("name", "Game")}<th>Sources</th><th>Exes</th><th>Status</th>${th("players", "Players", "nr")}${th("hours", "Hours", "nr")}${th("added", "Added")}${th("updated", "Last change")}</tr></thead><tbody>
-    ${d.rows.map(r => `<tr class="r" data-id="${esc(r.id)}"><td><div class="gm"><img src="${esc(r.icon)}" alt="" data-hide-broken><div><div class="nm">${esc(r.name)}${r.renamed ? ` <span class="pill warn" title="Official name: ${esc(r.official)}">renamed</span>` : ""}${r.verified ? "" : ` <span class="pill">unverified</span>`}</div><div class="id">${esc(r.id)}</div></div></div></td>
+  box.innerHTML = `<table class="gl"><thead><tr><th class="ck"><input type="checkbox" data-sel="*" aria-label="Select this page"></th>${th("name", "Game")}<th>Sources</th><th>Exes</th><th>Status</th>${th("players", "Players", "nr")}${th("hours", "Hours", "nr")}${th("added", "Added")}${th("updated", "Last change")}</tr></thead><tbody>
+    ${d.rows.map(r => `<tr class="r" data-id="${esc(r.id)}"><td class="ck"><input type="checkbox" data-sel="${esc(r.id)}"${SEL.has(r.id) ? " checked" : ""} aria-label="Select ${esc(r.name)}"></td><td><div class="gm"><img src="${esc(r.icon)}" alt="" data-hide-broken><div><div class="nm">${esc(r.name)}${r.renamed ? ` <span class="pill warn" title="Official name: ${esc(r.official)}">renamed</span>` : ""}${r.verified ? "" : ` <span class="pill">unverified</span>`}</div><div class="id">${esc(r.id)}</div></div></div></td>
       <td>${r.sources.map(srcTag).join("")}</td>
       <td><div class="exes" title="${esc(r.exes.join(", "))}">${r.exes.length ? esc(r.exes.join(", ")) + (r.exe_count > r.exes.length ? ` +${r.exe_count - r.exes.length}` : "") : `<span class="dimt">-</span>`}</div>${r.folders || r.fixups ? `<div class="sm">${r.folders ? `${r.folders} folder hint${r.folders === 1 ? "" : "s"}` : ""}${r.folders && r.fixups ? " · " : ""}${r.fixups ? `${r.fixups} fix-up${r.fixups === 1 ? "" : "s"}` : ""}</div>` : ""}</td>
       <td>${stTag(r)}${r.removed_from_list ? `<div class="sm">off Games list ${day(r.removed_from_list)}</div>` : ""}</td>
@@ -287,8 +299,9 @@ async function listAll() {
       <td class="sm" title="${esc(AG_ADDED[r.added_kind] || "")}">${r.added_kind === "before_tracking" ? "before tracking" : r.added ? day(r.added) : "-"}</td>
       <td><div class="sm">${r.updated ? when(r.updated) : "-"}</div>${r.by ? `<div class="who">${esc(r.by)}</div>` : ""}</td></tr>`).join("")}</tbody></table>
     ${pagerAll(d)}`;
+  saveSel();
   const o = AG.open && box.querySelector(`tr.r[data-id="${CSS.escape(AG.open)}"]`);
-  if (o) toggleAll(o, true);
+  if (o) await toggleAll(o, true);
 }
 function pagerAll(d) {
   const pages = Math.ceil(d.total / d.page_size), cur = Math.floor(d.offset / d.page_size);
@@ -325,7 +338,7 @@ async function toggleAll(tr, keep) {
   $$("#aglist tr.exp").forEach(x => x.remove()); $$("#aglist tr.open").forEach(x => x.classList.remove("open"));
   const id = tr.dataset.id; AG.open = id; tr.classList.add("open");
   const ex = document.createElement("tr"); ex.className = "exp";
-  ex.innerHTML = `<td colspan="8"><div class="dimt">Loading…</div></td>`; tr.after(ex);
+  ex.innerHTML = `<td colspan="9"><div class="dimt">Loading…</div></td>`; tr.after(ex);
   const [g, h] = await Promise.all([api("/admin/games/" + encodeURIComponent(id)).catch(() => null), api(`/admin/games/${encodeURIComponent(id)}/history`).catch(() => ({ events: [] }))]);
   if (!ex.isConnected) return;
   const rows = [], d = (g && g.detection) || {}, o = (g && g.override) || {}, b = d.builtin;
@@ -342,13 +355,15 @@ async function toggleAll(tr, keep) {
   const links = ((g && g.steam_appids) || []).map(a => `<a href="https://store.steampowered.com/app/${a}" target="_blank" rel="noopener">Steam store ${a}</a>`);
   if (r && r.successor) links.push(`<a href="#allgames/${encodeURIComponent(r.successor)}">${r.merged ? "Merged into" : "New entry"} ${esc(r.successor)}</a>`);
   const ev = h.events || [];
-  ex.innerHTML = `<td colspan="8"><div class="xg">
+  ex.innerHTML = `<td colspan="9"><div class="xg">
     <div class="xb"><h4>How it's found <span>${rows.length} rule${rows.length === 1 ? "" : "s"}</span></h4>${rows.length ? `<table>${rows.map(x => `<tr><td style="width:96px">${esc(x[0])}</td><td class="mono">${esc(x[1])}</td><td class="rt">${esc(x[2])}</td></tr>`).join("")}</table>` : `<div class="xkv"><span class="dimt">No rules: only reported by the app as unlisted.</span></div>`}</div>
     <div class="xb"><h4>Names &amp; links</h4><div class="xkv">${names.map(n => `<b>${esc(n[0])}</b><span>${n[2] ? n[1] : esc(n[1])}</span>`).join("")}
       <b>Players</b><span>${g ? `${num(g.players)} · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})` : "-"}</span>
       <b>Links</b><span>${links.join(" · ") || `<span class="dimt">none</span>`}</span></div></div>
     <div class="xb wide"><h4>History <span>${ev.length} event${ev.length === 1 ? "" : "s"} · staff, Steam sync and Games list</span></h4>${ev.length ? `<div class="lg">${ev.map(histLine).join("")}</div>` : `<div class="xkv"><span class="dimt">Nothing recorded yet.</span></div>`}</div></div>
-    <div class="xact"><span class="note">Edits, retire, merge, icons and status live in the Game library editor.</span><a class="btn sm" href="#detection">Detection rules</a><a class="btn sm dl" href="#games/id:${encodeURIComponent(id)}">Open in editor ›</a></div></td>`;
+    <div class="xact"><span class="note">Edits save here with the same checks as the Game library, and they land in History.</span><a class="btn sm" href="#detection">Detection rules</a></div>
+    <section class="panel inline-edit" id="gedit"><div class="body empty">Loading editor…</div></section></td>`;
+  editGame(id).catch(e => { const box = $("#gedit"); if (box) box.innerHTML = `<h2>Edit game</h2><div class="alert err">${esc(e.message)}</div>`; });
 }
 
 /* ---------- 2. games ---------- */
@@ -402,6 +417,19 @@ async function listGames(q) {
     const pg = e.target.closest("[data-goff]"); if (pg) { GS.offset = +pg.dataset.goff; listGames(q).then(() => box.scrollIntoView({ block: "start" })); return; }
     const tr = e.target.closest("tr[data-id]"); if (tr) editGame(tr.dataset.id);
   };
+}
+/* Refresh the list this editor belongs to. On All games the open row is the editor. */
+async function relist(openId) {
+  const gs = $("#gs");
+  if (gs) {
+    listGames(gs.q.value.trim());
+    if (openId) await editGame(openId);
+    return;
+  }
+  if ($("#aglist")) {
+    AG.open = openId || "";
+    await listAll();
+  }
 }
 const LIFE = { live: "Live", beta: "Beta", test: "Test", early_access: "Early Access", ended: "Ended" };
 function statusHtml(g) {
@@ -471,7 +499,7 @@ async function editGame(id) {
   $("#gst").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
     try { await api(gid + "/status", { method: "POST", body: { lifecycle: f.lifecycle.value, date: f.date.value, note: f.note.value, checked: f.checked.checked } });
-      editGame(id); listGames($("#gs").q.value.trim());
+      relist(id);
     } catch (x) { msg($("#stmsg"), x.message); }
   });
   box.querySelectorAll("[data-goto]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); editGame(a.dataset.goto); }));
@@ -482,14 +510,14 @@ async function editGame(id) {
     const whole = pick.length === all.length;
     if (!confirm(whole ? `Retire ${g.public_name || g.name || id}?\n\nIts hours stay as they are; the next time ${pick.join(", ")} runs, play goes to a new entry (in Game approvals).`
       : `Detach ${pick.join(", ")} from ${g.public_name || g.name || id}?\n\nThose programs get new entries (in Game approvals); the game stays live with its other programs.`)) return;
-    act(ret, async () => { await api(gid + "/retire", { method: "POST", body: { exes: pick } }); editGame(id); listGames($("#gs").q.value.trim()); }).catch(x => msg($("#rmsg"), x.message));
+    act(ret, async () => { await api(gid + "/retire", { method: "POST", body: { exes: pick } }); relist(id); }).catch(x => msg($("#rmsg"), x.message));
   });
-  if (unret) unret.addEventListener("click", () => act(unret, async () => { await api(gid + "/unretire", { method: "POST" }); editGame(id); listGames($("#gs").q.value.trim()); }).catch(x => msg($("#rmsg"), x.message)));
+  if (unret) unret.addEventListener("click", () => act(unret, async () => { await api(gid + "/unretire", { method: "POST" }); relist(id); }).catch(x => msg($("#rmsg"), x.message)));
   $("#gf").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
     try {
       await api("/admin/games/" + encodeURIComponent(id), { method: "POST", body: { name: f.name.value.trim() || null, hidden: f.hidden.checked, extra_exes: f.exes.value.split(/\n|,/).map(s => s.trim()).filter(Boolean), aliases: f.aliases.value.split("\n").map(s => s.trim()).filter(Boolean), path_hints: f.hints.value.split("\n").map(s => s.trim()).filter(Boolean) } });
-      listGames($("#gs").q.value.trim()); await editGame(id); msg($("#gmsg"), "Saved.", true);
+      await relist(id); const sm = $("#gmsg"); if (sm) msg(sm, "Saved.", true);
     } catch (x) { msg($("#gmsg"), x.message); }
   });
   renderMedia(id, g);
@@ -497,7 +525,7 @@ async function editGame(id) {
   box.querySelectorAll("[data-rone]").forEach(b => b.addEventListener("click", () => {
     const e = b.dataset.rone;
     if (!confirm(`Detach only ${e} from ${g.public_name || g.name || id}?\n\nIt gets a new entry (in Game approvals); the game stays live with its other programs.`)) return;
-    act(b, async () => { await api(gid + "/retire", { method: "POST", body: { exes: [e] } }); editGame(id); }).catch(x => msg($("#rmsg"), x.message));
+    act(b, async () => { await api(gid + "/retire", { method: "POST", body: { exes: [e] } }); relist(id); }).catch(x => msg($("#rmsg"), x.message));
   }));
   const sc = $("#steamchk");
   if (sc) sc.addEventListener("click", () => act(sc, async () => {
@@ -509,7 +537,11 @@ async function editGame(id) {
     const typed = prompt(`Delete "${g.public_name || g.name || id}"${g.sessions ? ` and ${g.sessions} session(s) from ${g.players} player(s)` : ""}? This can't be undone.\n\nType the game id to confirm:\n${id}`);
     if (typed === null) return;
     if (typed.trim() !== id) return msg($("#dmsg"), "The id didn't match; nothing was deleted.");
-    act(gd, async () => { await api("/admin/games/" + encodeURIComponent(id) + "/delete", { method: "POST", body: { confirm: typed.trim() } }); $("#gedit").innerHTML = `<h2>Edit game</h2><div class="body empty">Deleted ${esc(id)}.</div>`; listGames($("#gs").q.value.trim()); }).catch(x => msg($("#dmsg"), x.message));
+    act(gd, async () => {
+      await api("/admin/games/" + encodeURIComponent(id) + "/delete", { method: "POST", body: { confirm: typed.trim() } });
+      if ($("#gs")) { $("#gedit").innerHTML = `<h2>Edit game</h2><div class="body empty">Deleted ${esc(id)}.</div>`; listGames($("#gs").q.value.trim()); }
+      else { AG.open = ""; listAll(); }
+    }).catch(x => msg($("#dmsg"), x.message));
   });
 }
 
@@ -523,14 +555,17 @@ async function users(q) {
   liveSearch($("#us"));
   listUsers(q);
 }
-async function listUsers(q) {
-  const d = await api("/admin/users?q=" + encodeURIComponent(q));
-  $("#ulist").innerHTML = d.users.length ? `<div class="note">${q ? "Matches" : "Newest accounts"}</div><table><thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Age</th><th>Joined</th><th>Status</th></tr></thead><tbody>
+async function listUsers(q, off) {
+  off = off || 0;
+  const d = await api("/admin/users?" + new URLSearchParams({ q, offset: off }));
+  const pages = Math.ceil(d.total / d.page_size);
+  const pager = pages > 1 ? `<div class="pg"><button data-uoff="${Math.max(0, off - d.page_size)}"${off ? "" : " disabled"}>‹ Prev</button><span class="sp">${num(off + 1)}–${num(Math.min(d.total, off + d.page_size))} of ${num(d.total)}</span><button data-uoff="${off + d.page_size}"${off + d.page_size < d.total ? "" : " disabled"}>Next ›</button></div>` : "";
+  $("#ulist").innerHTML = d.users.length ? `<div class="note">${q ? `${num(d.total)} match${d.total === 1 ? "" : "es"}` : `Newest accounts · ${num(d.total)} in all`}</div><table><thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Age</th><th>Joined</th><th>Status</th></tr></thead><tbody>
     ${d.users.map(u => `<tr class="click" data-id="${esc(u.id)}"><td><a href="#user/${esc(u.id)}">${esc(u.handle)}</a>${rolePill(u.role)}${u.is_test ? `<span class="pill" title="Test account: hidden from everyone else">test</span>` : ""}${u.banned ? `<span class="pill bad">banned</span>` : ""}${u.age_review_at ? `<span class="pill bad" title="Entered a birthday under 13. Can't sign in until reviewed.">age check</span>` : ""}${u.hours_flag_at ? `<span class="pill bad" title="Unusual tracked hours. Look at Sessions; nothing was removed.">hours</span>` : ""}</td>
       <td>${esc(u.display_name)}</td><td class="muted">${esc(u.email || "-")}</td><td>${u.is_minor ? `<span class="pill" title="Under 18: private by default; can go public">13–17</span>` : `<span class="dimt">18+</span>`}</td><td>${day(u.created_at)}</td>
       <td><span class="status"><i class="dot ${esc(u.status === "invisible" ? "offline" : u.status)}"></i>${esc(u.status)}</span>${u.last_seen ? ` <span class="dimt">${when(u.last_seen)}</span>` : ""}</td></tr>`).join("")}</tbody></table>`
-    : `<div class="body empty">No accounts match.</div>`;
-  $("#ulist").onclick = e => { const tr = e.target.closest("tr[data-id]"); if (tr && !e.target.closest("a")) location.hash = "user/" + tr.dataset.id; };
+    + pager : `<div class="body empty">No accounts match.</div>`;
+  $("#ulist").onclick = e => { const pb = e.target.closest("[data-uoff]"); if (pb) { listUsers(q, +pb.dataset.uoff); return; } const tr = e.target.closest("tr[data-id]"); if (tr && !e.target.closest("a")) location.hash = "user/" + tr.dataset.id; };
 }
 async function userDetail(id) {
   const u = await api("/admin/users/" + encodeURIComponent(id));
@@ -553,7 +588,7 @@ async function userDetail(id) {
       ${u.games.map(g => `<tr data-game="${esc(g.game_id)}"><td class="ic">${icon(g.game_id, g.name)}</td><td>${esc(g.name)}${g.name === "Unlisted game" && g.stored_name ? ` <span class="dimt">(${esc(g.stored_name)})</span>` : ""}<div class="mono dimt">${esc(g.game_id)}</div></td>
         <td class="num">${hrs(g.minutes_7d)}</td><td class="num">${hrs(g.display_min)}${g.display_tier !== "tracked" ? `<span class="tier">${esc(g.display_tier)}</span>` : ""}</td>
         <td class="num"><div class="acts"><button class="btn sm" data-cap>Lower…</button><button class="btn sm danger" data-remove>Remove</button></div></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No hours.</div>`}</section>
-    <section class="panel"><h2>Recent sessions</h2>${u.sessions.length ? `<table><thead><tr><th>Game</th><th>Started</th><th class="num">Length</th><th>Source</th><th></th></tr></thead><tbody>
+    <section class="panel"><h2>Recent sessions <span class="more"><a href="#hourscheck/${esc(u.id)}">Hours checker</a></span></h2>${u.sessions.length ? `<table><thead><tr><th>Game</th><th>Started</th><th class="num">Length</th><th>Source</th><th></th></tr></thead><tbody>
       ${u.sessions.map(s => `<tr data-sid="${esc(s.id)}"><td>${esc(s.name)}</td><td>${when(s.started_at)}</td><td class="num">${hrs(s.duration_s / 60)}${s.duration_s > 18 * 3600 ? `<span class="pill bad">long</span>` : ""}</td><td class="muted">${esc(s.source)}</td><td class="num"><button class="btn sm danger" data-delsess>Delete</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No sessions.</div>`}</section>
   </div><div class="col">
     <section class="panel"><h2>Actions</h2><div class="body f">
@@ -571,9 +606,19 @@ async function userDetail(id) {
       <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="rmav">Remove picture</button>${can.mfa_reset ? ` <button class="btn" id="mfareset">Reset two-step sign-in</button>` : ""}</div><small>Removing a picture resets it to the default and blocks that exact image. Resetting two-step sign-in lets them sign in with just their password (check it's really them first).</small>
       <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div><b>WoW hours</b></div><div class="row"><button class="btn" data-wowrc="wow" data-gname="WoW">Recount WoW</button><button class="btn" data-wowrc="wow_forever" data-gname="WoW Forever">Recount WoW Forever</button></div><small>Recounts from their characters' /played only: drops the menu-time extra carried on top. Deleted characters keep their hours. Logged in the audit log.</small>
       <div class="alert" id="amsg" hidden></div></div></section>
+    ${can.staff && u.role !== "owner" && u.handle !== who.handle ? `<section class="panel"><h2>Staff role</h2><div class="body f"><div class="row"><select class="in" id="newrole"><option value="none"${u.role ? "" : " selected"}>No staff role</option><option value="moderator"${u.role === "moderator" ? " selected" : ""}>Moderator</option>${can.manage_admins || u.role === "admin" ? `<option value="admin"${u.role === "admin" ? " selected" : ""}${can.manage_admins ? "" : " disabled"}>Admin</option>` : ""}</select><button class="btn" id="setrole">Save role</button></div><small>Moderators handle approvals, users and hours. Only the owner adds or removes admins. Logged in the audit log.</small></div></section>` : ""}
+    ${can.user_delete && !u.role && u.handle !== who.handle ? `<section class="panel danger-zone"><h2>Delete account</h2><div class="body f"><p class="note">Deletes the account and everything in it for good: hours, sessions, friends, pictures and sign-ins. It can't be undone. Ban instead if you might need it back.</p>
+      <label>Type <b class="mono">${esc(u.handle)}</b> to confirm<input type="text" id="delconfirm" autocomplete="off" spellcheck="false"></label><div class="row"><button class="btn danger" id="deluser" disabled>Delete account for good</button></div><div class="alert" id="delmsg" hidden></div></div></section>` : ""}
     <section class="panel"><h2>Signed-in devices</h2>${u.devices.length ? u.devices.map(d => `<div class="fr"><div class="who"><div class="nm">${esc(d.name || (d.kind === "web" ? "Web browser" : "Fraglink desktop"))} <small>${esc(d.kind)}</small></div><div class="gm">signed in ${day(d.created_at)} · last used ${when(d.last_used_at)}</div></div></div>`).join("") : `<div class="body empty">None.</div>`}</section>
   </div></div>`;
   const amsg = $("#amsg");
+  const sr = $("#setrole");
+  if (sr) sr.addEventListener("click", () => { const r = $("#newrole").value; if ((r === "none" ? !u.role : r === u.role) || !confirm(r === "none" ? `Remove ${u.handle}'s staff role?` : `Make ${u.handle} ${r === "admin" ? "an admin" : "a moderator"}?`)) return; act(sr, async () => { await api("/admin/staff", { method: "POST", body: { handle: u.handle, role: r } }); userDetail(id); }); });
+  const dc = $("#delconfirm"), du = $("#deluser");
+  if (dc) {
+    dc.addEventListener("input", () => { du.disabled = dc.value.trim().toLowerCase() !== u.handle.toLowerCase(); });
+    du.addEventListener("click", () => { if (!confirm(`Delete ${u.handle} for good? This can't be undone.`)) return; act(du, async () => { try { await api(`/admin/users/${encodeURIComponent(u.id)}/delete`, { method: "POST", body: { confirm: dc.value.trim() } }); location.hash = "users"; } catch (x) { msg($("#delmsg"), x.message); } }); });
+  }
   const ban = $("#ban"), unban = $("#unban"), reset = $("#resetpw");
   const chh = $("#chhandle");
   if (chh) chh.addEventListener("click", () => { const nh = $("#newhandle").value.trim(); if (nh && nh !== u.handle && confirm(`Change username ${u.handle} → ${nh}? Their profile address changes; the old one redirects.`)) act(chh, async () => { await api(`/admin/users/${id}/handle`, { method: "POST", body: { handle: nh } }); userDetail(id); }); });
@@ -669,7 +714,7 @@ async function server() {
 /* ---------- site settings (feature switches) ---------- */
 async function siteSettings() {
   const edit = !!can.settings_edit;
-  const [d, al] = await Promise.all([api("/admin/settings"), edit ? api("/admin/alerts").catch(() => null) : null]);
+  const [d, al, an] = await Promise.all([api("/admin/settings"), edit ? api("/admin/alerts").catch(() => null) : null, can.announcements ? api("/admin/announcements").catch(() => null) : null]);
   const row = (s, kind) => `<tr><td style="width:56px"><label class="switch"><input type="checkbox" data-${kind}="${esc(s.key)}" ${s.enabled ? "checked" : ""} ${edit ? "" : "disabled"}><i></i></label></td>
     <td><b>${esc(s.label)}</b>${s.key === "maintenance" && s.enabled ? ` <span class="pill bad">ON</span>` : ""}${s.default !== undefined && s.enabled !== s.default ? ` <span class="pill">changed</span>` : ""}<div class="dimt">${esc(s.help)}</div></td>
     <td class="dimt" style="white-space:nowrap">${s.updated_at ? `${when(s.updated_at)}${s.updated_by ? " by " + esc(s.updated_by) : ""}` : "default"}</td></tr>`;
@@ -685,7 +730,16 @@ async function siteSettings() {
     <p class="note">Switches apply to the website and the desktop app within about 30 seconds, and the server enforces them (hiding a button is not the only effect). Every change is written to the audit log.${edit ? "" : " Only admins can change them."}</p>
     <table class="settings"><tbody>${d.settings.map(s => row(s, "key")).join("")}</tbody></table></div></section>
     <section class="panel" id="hc"><h2>Home page user counts</h2><div class="body"><p class="note">How the registered and online player counts show at the top of the home page.</p>
-    ${(d.home_counts_options || []).map(o => `<label style="display:block;margin:4px 0"><input type="radio" name="home_counts" value="${esc(o.key)}" ${o.key === d.home_counts ? "checked" : ""} ${edit ? "" : "disabled"}> <b>${esc(o.key.toUpperCase())}</b> · ${esc(o.label)}</label>`).join("")}</div></section>${alerts}`;
+    ${(d.home_counts_options || []).map(o => `<label style="display:block;margin:4px 0"><input type="radio" name="home_counts" value="${esc(o.key)}" ${o.key === d.home_counts ? "checked" : ""} ${edit ? "" : "disabled"}> <b>${esc(o.key.toUpperCase())}</b> · ${esc(o.label)}</label>`).join("")}</div></section>
+    ${notice(an)}
+    <section class="panel" id="links"><h2>Download page links</h2><div class="body"><p class="note">Change where the Download page points without a deploy. Live within about 30 seconds. Leave a box empty to use the built-in link.</p>
+    ${(d.links || []).map(l => `<form method="post" action="/api/v1/form-fallback" class="f" data-link="${esc(l.key)}" style="max-width:640px;margin-bottom:12px"><label>${esc(l.label)}<div class="row"><input class="in" type="url" name="v" value="${esc(l.value)}" maxlength="200" placeholder="https://… (empty: built-in)" style="flex:1" ${edit ? "" : "disabled"}>${edit ? `<button class="btn">Save</button>` : ""}</div></label><div class="dimt">${esc(l.help)}${l.updated_at && l.value !== undefined ? ` · changed ${when(l.updated_at)}${l.updated_by ? " by " + esc(l.updated_by) : ""}` : ""}</div><div class="alert" hidden></div></form>`).join("")}</div></section>${alerts}`;
+  $$("form[data-link]").forEach(f => f.addEventListener("submit", async e => {
+    e.preventDefault();
+    try { await api("/admin/settings", { method: "POST", body: { key: f.dataset.link, value: f.v.value.trim() } }); msg($(".alert", f), "Saved. Live within about 30 seconds.", true); }
+    catch (x) { msg($(".alert", f), x.message); }
+  }));
+  wireNotice(siteSettings);
   view.onchange = async e => {
     const a = e.target.closest("input[data-alert]");
     if (a) {
@@ -718,6 +772,25 @@ async function siteSettings() {
     const r = await api("/admin/alerts/test", { method: "POST" });
     await siteSettings(); alert(r.test_sent ? "Test alert sent to " + r.recipient + "." : "Not sent: " + ((r.recent[0] && r.recent[0].error) || "unknown reason"));
   }));
+}
+
+/* Site notice: the one-line banner (same as Announcements), from Site settings. */
+function notice(an) {
+  if (!an) return "";
+  const a = an.active;
+  return `<section class="panel" id="notice"><h2>Site notice <span class="more"><a href="#announcements">Full options</a></span></h2><div class="body">
+    ${a ? `<p class="muted">Showing now (${esc(a.style)}${a.ends_at ? ", ends " + when(a.ends_at) : ", no end time"}):</p><div class="announce ${esc(a.style)}" style="border:1px solid;border-radius:3px"><div class="wrap" style="padding:6px 10px"><span>${esc(a.message)}</span></div></div><div class="row" style="margin-top:8px"><button class="btn sm danger" id="nclr">Clear notice</button></div>` : `<p class="empty" style="padding:0 0 8px">No notice is showing.</p>`}
+    <form method="post" action="/api/v1/form-fallback" class="f" id="nf" style="max-width:640px;margin-top:10px"><label>Banner text<input type="text" name="message" maxlength="300" required placeholder="Servers restart at 10 pm AEDT for an update."></label>
+      <div class="row"><select class="in" name="style"><option value="info">Info (blue)</option><option value="warning">Warning (amber)</option></select><label style="margin:0">Ends (optional) <input class="in" type="datetime-local" name="ends"></label><button class="btn dl">Show notice</button></div>
+      <div class="dimt">Shows at the top of every website page and in the app within a few minutes. Replaces the current one.</div><div class="alert" id="nmsg" hidden></div></form></div></section>`;
+}
+function wireNotice(again) {
+  const c = $("#nclr"); if (c) c.addEventListener("click", () => { if (confirm("Clear the site notice?")) act(c, async () => { await api("/admin/announcements/clear", { method: "POST" }); again(); }); });
+  const f = $("#nf"); if (f) f.addEventListener("submit", async e => {
+    e.preventDefault();
+    try { await api("/admin/announcements", { method: "POST", body: { message: f.message.value.trim(), style: f.style.value, link: null, ends_at: f.ends.value ? new Date(f.ends.value).toISOString() : null } }); again(); }
+    catch (x) { msg($("#nmsg"), x.message); }
+  });
 }
 
 /* ---------- 6. announcements ---------- */
@@ -894,7 +967,7 @@ function wireMerge(id) {
       const typed = prompt(`Merge "${p.from.name || id}" into "${p.into.name || into}"? This can't be undone.\n\nType the id of the game being merged to confirm:\n${id}`);
       if (typed === null) return;
       if (typed.trim() !== id) return msg(m, "The id didn't match; nothing was merged.");
-      act(ev.target, async () => { await api(gid + "/merge", { method: "POST", body: { into, confirm: typed.trim() } }); listGames($("#gs").q.value.trim()); editGame(into); }).catch(x => msg(m, x.message));
+      act(ev.target, async () => { await api(gid + "/merge", { method: "POST", body: { into, confirm: typed.trim() } }); relist(into); }).catch(x => msg(m, x.message));
     });
   }).catch(x => msg(m, x.message)));
 }
@@ -938,7 +1011,7 @@ async function renderMedia(id, g) {
     if (v("art") === "custom" && !m.art.custom) throw new Error("Add banner art by link or upload first.");
     const sid = $("#msteam").value.trim();
     await api(gid + "/media", { method: "POST", body: { icon: v("icon"), art: v("art"), steam_appid: sid ? +sid : 0 } });
-    renderMedia(id, g); listGames($("#gs").q.value.trim());
+    renderMedia(id, g); const gs = $("#gs"); if (gs) listGames(gs.q.value.trim()); else if ($("#aglist")) listAll();
   }).catch(x => msg($("#mmsg"), x.message)));
   box.querySelectorAll(".mpick").forEach(p => {
     const k = p.dataset.k, out = $("[data-msg]", p);
@@ -1008,6 +1081,238 @@ async function incidents() {
     if (act === "delete" && !confirm("Delete this incident from the Status page?")) return;
     try { await api(`/admin/incidents/${id}/${act}`, { method: "POST" }); incidents(); } catch (x) { alert(x.message); }
   };
+}
+
+/* ---------- Changelog: write, preview and publish /changelog entries ---------- */
+const CL = { offset: 0, q: "" };
+const clLines = v => v.split("\n").map(l => l.replace(/^\s*[-*•]\s*/, "").trim()).filter(Boolean);
+const clLabel = d => { const t = new Date(d + "T00:00:00"); return isNaN(t) ? d : t.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); };
+function clPreview(e) {
+  const list = (h, items) => items.length ? `<h4>${h}</h4><ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+  return `<section class="panel"><h2><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(clLabel(e.date))}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new)}${list("Changes", e.changes)}${list("Fixes", e.fixes)}${e.new.length + e.changes.length + e.fixes.length ? "" : `<p class="dimt">Add at least one line.</p>`}</div></section>`;
+}
+function clText(e) {
+  const part = (h, items) => items.length ? `**${h}**\n${items.map(i => "- " + i).join("\n")}\n` : "";
+  return `**Fraglink ${e.area === "App" ? "app" : "website"} · ${clLabel(e.date)}${e.version ? " · " + e.version : ""}**\n${part("New", e.new)}${part("Changes", e.changes)}${part("Fixes", e.fixes)}`.trim();
+}
+async function changelog(arg) {
+  const today = new Date().toLocaleDateString("en-CA");
+  view.innerHTML = `<div class="split cl-ed"><section class="panel"><h2 id="clh">New entry</h2><form method="post" action="/api/v1/form-fallback" class="f body" id="clf">
+      <input type="hidden" name="eid" value="">
+      <div class="row"><label style="margin:0">Area<select class="in" name="area" style="min-width:110px"><option>Website</option><option>App</option></select></label><label style="margin:0">Date<input class="in" type="date" name="date" value="${today}" required></label><label style="margin:0;flex:1">Version (app only)<input class="in" type="text" name="version" maxlength="40" placeholder="0.3.0-beta.11"></label></div>
+      <label>New<textarea name="new" rows="4" placeholder="One short line each"></textarea></label>
+      <label>Changes<textarea name="changes" rows="4"></textarea></label>
+      <label>Fixes<textarea name="fixes" rows="4"></textarea></label>
+      <div class="dimt">One bullet per line, terse. Saved as a draft until you publish it. Shows on /changelog with the shipped entries, newest first.</div>
+      <div class="row"><button class="btn">Save draft</button><button type="button" class="btn dl" id="clpub">Save and publish</button><button type="button" class="btn" id="clcopy">Copy for Discord</button><button type="button" class="btn" id="clnew" hidden>New entry</button></div>
+      <div class="alert" id="clmsg" hidden></div></form></section>
+    <section class="panel"><h2>Preview <span class="more">as it shows on /changelog</span></h2><div class="body changelog" id="clprev"></div></section></div>
+    <section class="panel" style="margin-top:12px"><h2>Entries <span class="dimt" id="clcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+      <div class="ag-tb"><input class="in" type="search" id="clq" placeholder="Search the entries" value="${esc(CL.q)}"><span class="dimt" style="margin-left:auto">Only entries written here. The shipped ones stay in the site files.</span></div><div id="cllist"><div class="body empty">Loading…</div></div></section>`;
+  const f = $("#clf");
+  const cur = () => ({ area: f.area.value, date: f.date.value, version: f.version.value.trim(), new: clLines(f.new.value), changes: clLines(f.changes.value), fixes: clLines(f.fixes.value) });
+  const prev = () => { $("#clprev").innerHTML = clPreview(cur()); };
+  f.addEventListener("input", prev); prev();
+  const fill = e => {
+    f.eid.value = e ? e.id : ""; f.area.value = e ? e.area : "Website"; f.date.value = e ? e.date : today; f.version.value = e ? e.version || "" : "";
+    f.new.value = e ? e.new.join("\n") : ""; f.changes.value = e ? e.changes.join("\n") : ""; f.fixes.value = e ? e.fixes.join("\n") : "";
+    $("#clh").textContent = e ? `Edit entry · ${e.published_at ? "published" : "draft"}` : "New entry"; $("#clnew").hidden = !e; prev();
+  };
+  const save = async publish => {
+    const b = { ...cur() }; if (f.eid.value) b.id = +f.eid.value; if (!b.version) b.version = null;
+    try {
+      const r = await api("/admin/changelog", { method: "POST", body: b });
+      if (publish) await api(`/admin/changelog/${r.entry.id}/publish`, { method: "POST", body: { publish: true } });
+      fill({ ...r.entry, published_at: publish || r.entry.published_at });
+      msg($("#clmsg"), publish ? "Published. It's on /changelog within a minute." : "Draft saved.", true); listCl();
+    } catch (x) { msg($("#clmsg"), x.message); }
+  };
+  f.addEventListener("submit", e => { e.preventDefault(); save(false); });
+  $("#clpub").onclick = () => { if (confirm("Publish this entry on /changelog?")) save(true); };
+  $("#clnew").onclick = () => fill(null);
+  $("#clcopy").onclick = async () => { try { await navigator.clipboard.writeText(clText(cur())); msg($("#clmsg"), "Copied. Paste it into Discord yourself.", true); } catch (x) { msg($("#clmsg"), "Couldn't copy: " + x.message); } };
+  let t; $("#clq").oninput = e => { clearTimeout(t); t = setTimeout(() => { CL.q = e.target.value.trim(); CL.offset = 0; listCl(); }, 300); };
+  let rows = [];
+  async function listCl() {
+    const d = await api("/admin/changelog?" + new URLSearchParams({ offset: CL.offset, q: CL.q }));
+    rows = d.rows; $("#clcount").textContent = `· ${num(d.total)}${d.drafts ? ` · ${num(d.drafts)} draft${d.drafts === 1 ? "" : "s"}` : ""}`;
+    const n = r => r.new.length + r.changes.length + r.fixes.length;
+    $("#cllist").innerHTML = rows.length ? `<table class="gl"><thead><tr><th>Date</th><th>Area</th><th>Version</th><th>First line</th><th class="nr">Lines</th><th>Status</th><th>Last edit</th><th></th></tr></thead><tbody>${rows.map(r => `<tr data-id="${r.id}"><td>${esc(r.label)}</td><td><span class="cl-tag ${esc(r.area)}">${esc(r.area)}</span></td><td class="mono">${esc(r.version || "-")}</td><td><div class="exes">${esc((r.new[0] || r.changes[0] || r.fixes[0] || ""))}</div></td><td class="nr">${n(r)}</td>
+      <td>${r.published_at ? `<span class="st ok">Published</span><div class="sm">${when(r.published_at)}</div>` : `<span class="st hid">Draft</span>`}</td><td><div class="sm">${when(r.updated_at)}</div>${r.updated_by ? `<div class="who">${esc(r.updated_by)}</div>` : ""}</td>
+      <td class="rt" style="white-space:nowrap"><button class="btn sm" data-cl="edit">Edit</button> <button class="btn sm${r.published_at ? "" : " dl"}" data-cl="${r.published_at ? "unpublish" : "publish"}">${r.published_at ? "Unpublish" : "Publish"}</button> <button class="btn sm danger" data-cl="delete">Delete</button></td></tr>`).join("")}</tbody></table>
+      ${d.total > d.page_size ? `<div class="pg"><button data-cloff="${Math.max(0, d.offset - d.page_size)}"${d.offset ? "" : " disabled"}>‹ Prev</button><span class="sp">${num(d.offset + 1)}–${num(Math.min(d.total, d.offset + d.page_size))} of ${num(d.total)}</span><button data-cloff="${d.offset + d.page_size}"${d.offset + d.page_size < d.total ? "" : " disabled"}>Next ›</button></div>` : ""}`
+      : `<div class="body empty">${CL.q ? "No entries match." : "No entries written here yet."}</div>`;
+  }
+  $("#cllist").onclick = async e => {
+    const pg = e.target.closest("[data-cloff]"); if (pg) { CL.offset = +pg.dataset.cloff; listCl(); return; }
+    const b = e.target.closest("button[data-cl]"); if (!b) return;
+    const r = rows.find(x => String(x.id) === b.closest("tr").dataset.id), a = b.dataset.cl;
+    if (a === "edit") { fill(r); f.scrollIntoView({ block: "start" }); return; }
+    let confirmWord = "";
+    if (a === "delete") {
+      const typed = prompt(`Delete the ${r.area} entry for ${r.label}? This can't be undone.\n\nType delete to confirm:`);
+      if (typed == null) return;
+      if (typed.trim().toLowerCase() !== "delete") { alert("Nothing was deleted."); return; }
+      confirmWord = typed.trim();
+    }
+    if (a === "unpublish" && !confirm("Take this entry off /changelog? It stays here as a draft.")) return;
+    await act(b, async () => {
+      await api(`/admin/changelog/${r.id}/${a === "delete" ? "delete" : "publish"}`, { method: "POST", body: a === "delete" ? { confirm: confirmWord } : { publish: a === "publish" } });
+      if (String(f.eid.value) === String(r.id)) fill(a === "delete" ? null : { ...r, published_at: a === "publish" ? new Date().toISOString() : null });
+      listCl();
+    }).catch(x => alert(x.message));
+  };
+  await listCl();
+  if (arg) { const r = rows.find(x => String(x.id) === arg); if (r) fill(r); }
+}
+
+/* ---------- Hours checker: does every view of one player's week agree? ---------- */
+async function hoursCheck(arg) {
+  if (!arg) {
+    view.innerHTML = `<section class="panel"><h2>Hours checker</h2><div class="body"><p class="note">Pick a player to compare their weekly headline, daily bars and per-game totals side by side, find bad sessions, and close a stuck one. Every fix needs a reason and is logged.</p>
+      <input class="in" type="search" id="hcq" placeholder="Search handle, name or email" autocomplete="off" style="max-width:420px"></div><div id="hclist"></div></section>`;
+    const go = async q => { const d = await api("/admin/users?" + new URLSearchParams({ q })); $("#hclist").innerHTML = d.users.length ? `<table><thead><tr><th>Handle</th><th>Name</th><th>Last seen</th></tr></thead><tbody>${d.users.map(u => `<tr data-id="${esc(u.id)}" style="cursor:pointer"><td><a href="#hourscheck/${esc(u.id)}">${esc(u.handle)}</a> ${rolePill(u.role)}</td><td>${esc(u.display_name)}</td><td class="sm">${when(u.last_seen)}</td></tr>`).join("")}</tbody></table>${d.total > d.users.length ? `<div class="note">Showing ${d.users.length} of ${num(d.total)}. Search to narrow it down.</div>` : ""}` : `<div class="body empty">No accounts match.</div>`; };
+    let t; $("#hcq").oninput = e => { clearTimeout(t); t = setTimeout(() => go(e.target.value.trim()), 250); };
+    $("#hclist").onclick = e => { const tr = e.target.closest("tr[data-id]"); if (tr && !e.target.closest("a")) location.hash = "hourscheck/" + tr.dataset.id; };
+    return go("");
+  }
+  const d = await api(`/admin/users/${encodeURIComponent(arg)}/hours_check`);
+  await loadIcons(d.games.map(g => g.game_id));
+  const h1 = s => (Math.round(s / 360) / 10).toLocaleString("en") + " h";
+  const FLAG = { long: "over 18 h", future: "in the future", overlap: "overlaps another", duration: "length doesn't match start/end" };
+  const max = Math.max(1, ...d.days.map(x => x.seconds));
+  const o = d.open_session;
+  view.innerHTML = `<p><a href="#hourscheck">← Hours checker</a> · <a href="#user/${esc(d.user.id)}">${esc(d.user.handle)}'s account</a></p>
+    <div class="hc-head ${d.mismatches ? "bad" : "ok"}"><b>${d.mismatches ? `${d.mismatches} mismatch${d.mismatches === 1 ? "" : "es"}` : "Everything agrees"}</b><span>${esc(d.user.handle)} · this week ${day(d.from)} – ${day(d.to)} (${esc(d.zone)})${d.problems ? ` · ${d.problems} session${d.problems === 1 ? "" : "s"} flagged` : ""}</span></div>
+    <div class="hc-3">
+      <section class="panel"><h2>Weekly headline</h2><div class="body"><div class="hc-big">${th(d.headline.tenths)}</div><div class="dimt">What the profile shows · ${num(d.headline.seconds)} s</div><div class="dimt" style="margin-top:6px">Rolling 7 days: ${hrs(d.rolling_7d_minutes)}</div></div></section>
+      <section class="panel"><h2>Daily bars <span class="more">${th(d.days.reduce((a, x) => a + x.tenths, 0))}</span></h2><div class="body hc-bars">${d.days.map(x => `<div class="b"><i style="height:${Math.round(x.seconds / max * 100)}%"></i><span>${(x.tenths / 10).toFixed(1)}</span><em>${esc(x.label)}</em></div>`).join("")}</div></section>
+      <section class="panel"><h2>Per game <span class="more">${th(d.games.reduce((a, x) => a + x.tenths, 0))}</span></h2><div class="body">${d.games.length ? `<table>${d.games.map(g => `<tr><td><span class="gm">${icon(g.game_id, g.name)} ${esc(g.name)}</span></td><td class="nr">${th(g.tenths)}</td></tr>`).join("")}</table>` : `<div class="empty">No games this week.</div>`}</div></section></div>
+    <section class="panel"><h2>Checks</h2><table><thead><tr><th>Compare</th><th class="nr">Headline</th><th class="nr">Other view</th><th>Result</th></tr></thead><tbody>${d.checks.map(c => `<tr><td>${esc(c.label)}</td><td class="nr">${c.unit === "tenths" ? th(c.a) : num(c.a) + " s"}</td><td class="nr">${c.unit === "tenths" ? th(c.b) : num(c.b) + " s"}</td><td>${c.ok ? `<span class="st ok">Match</span>` : `<span class="st ret">Off by ${c.unit === "tenths" ? th(Math.abs(c.a - c.b)) : num(Math.abs(c.a - c.b)) + " s"}</span>`}</td></tr>`).join("")}</tbody></table></section>
+    <section class="panel"><h2>Open session</h2><div class="body">${o ? `<dl class="kv"><dt>Game</dt><dd>${esc(o.name)}${o.hidden ? " (hidden)" : ""}</dd><dt>Started</dt><dd>${when(o.started_at)}</dd><dt>Last heartbeat</dt><dd>${o.heartbeat_at ? when(o.heartbeat_at) : "none"}</dd><dt>Length so far</dt><dd>${h1(o.seconds)}${o.counting ? " · counting in the week" : ""}</dd></dl>
+      ${o.stuck ? `<div class="alert err">Stuck: no heartbeat for a while. Closing keeps play up to the last heartbeat (${when(o.would_end_at)}).</div>` : ""}
+      ${d.may_edit ? `<div class="row"><button class="btn${o.stuck ? " dl" : ""}" data-close="keep">Close and keep time to last heartbeat</button><button class="btn danger" data-close="drop">Close and drop it</button></div>` : ""}` : `<div class="empty" style="padding:0">No open session.</div>`}<div class="alert" id="hcmsg" hidden></div></div></section>
+    <section class="panel"><h2>Sessions this week <span class="more">${d.sessions.length}</span></h2>${d.sessions.length ? `<table><thead><tr><th>Game</th><th>Start</th><th>End</th><th class="nr">Length</th><th>Source</th><th>Flags</th><th></th></tr></thead><tbody>${d.sessions.map(s => `<tr data-sid="${s.id}"${s.flags.length ? ` class="hc-flag"` : ""}><td>${esc(s.name)}</td><td class="sm">${when(s.started_at)}</td><td class="sm">${when(s.ended_at)}</td><td class="nr">${h1(s.duration_s)}</td><td class="sm">${esc(s.source)}</td><td>${s.flags.map(f => `<span class="pill bad">${esc(FLAG[f] || f)}</span>`).join(" ")}</td><td class="rt">${d.may_edit ? `<button class="btn sm danger" data-rm>Remove</button>` : ""}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No sessions this week.</div>`}</section>`;
+  const uid = `/admin/users/${encodeURIComponent(d.user.id)}`;
+  view.onclick = async e => {
+    const c = e.target.closest("[data-close]"), r = e.target.closest("[data-rm]");
+    if (!c && !r) return;
+    const reason = prompt(c ? "Why close this session? (logged)" : "Why remove this session? (logged)");
+    if (reason == null) return;
+    if (reason.trim().length < 3) { alert("Add a short reason."); return; }
+    await act(c || r, async () => {
+      if (c) await api(uid + "/open_session/close", { method: "POST", body: { reason: reason.trim(), keep: c.dataset.close === "keep" } });
+      else await api(`${uid}/sessions/${r.closest("tr").dataset.sid}/remove`, { method: "POST", body: { reason: reason.trim() } });
+      hoursCheck(arg);
+    }).catch(x => msg($("#hcmsg"), x.message));
+  };
+}
+
+/* ---------- Bulk fixes: the same audited actions, many games at a time ---------- */
+async function runAll(items, out, fn) {
+  let ok = 0, bad = []; out.hidden = false; out.className = "alert";
+  for (let i = 0; i < items.length; i++) {
+    out.textContent = `Working… ${i + 1} of ${items.length}`;
+    try { await fn(items[i]); ok++; } catch (x) { bad.push(`${items[i].label || items[i]}: ${x.message}`); }
+  }
+  out.className = "alert " + (bad.length ? "err" : "ok");
+  out.textContent = `${ok} done${bad.length ? `, ${bad.length} failed:\n` + bad.slice(0, 20).join("\n") + (bad.length > 20 ? `\n…and ${bad.length - 20} more` : "") : "."}`;
+  out.style.whiteSpace = "pre-line";
+}
+async function bulkFixes() {
+  const sug = can.approvals ? await api("/admin/suggestions").catch(() => ({ suggestions: [] })) : { suggestions: [] };
+  const s = sug.suggestions || [];
+  view.innerHTML = `<section class="panel"><h2>Approve submitted games <span class="more">${s.length} waiting</span></h2>${s.length ? `<div class="body"><div class="row"><label class="check" style="margin:0"><input type="checkbox" id="sgall"> Select all</label><button class="btn dl" id="sgok" disabled>Approve selected</button><a class="btn sm" href="#approvals">One at a time in Approvals</a></div></div>
+      <table class="gl"><thead><tr><th class="ck"></th><th>Exe</th><th>Name to approve</th><th class="nr">Reports</th><th class="nr">Players</th><th>First seen</th></tr></thead><tbody>${s.map((x, i) => `<tr data-i="${i}"><td class="ck"><input type="checkbox" data-sg></td><td class="mono">${esc(x.exe)}</td><td><input class="in" type="text" data-nm value="${esc(x.names[0] ? x.names[0].name : "")}" maxlength="120" style="width:100%"></td><td class="nr">${num(x.reports)}</td><td class="nr">${num(x.users)}</td><td class="sm">${when(x.first_seen)}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">Nothing waiting.</div>`}<div class="body"><div class="alert" id="sgmsg" hidden></div></div></section>
+    <section class="panel"><h2>Set status for many games</h2><form method="post" action="/api/v1/form-fallback" class="f body" id="bst">
+      <label>Game ids, one per line<textarea name="ids" rows="6" class="mono" placeholder="Tick games in All games, or paste ids here">${esc([...SEL].join("\n"))}</textarea></label>
+      <div class="row"><select class="in" name="lifecycle">${Object.entries(LIFE).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select><label style="margin:0">Expected end / launch <input type="date" name="date"></label><label style="margin:0;flex:1">Note<input class="in" type="text" name="note" maxlength="500" style="width:100%"></label></div>
+      <label class="check"><input type="checkbox" name="checked" checked> Mark as checked now</label>
+      <div class="row"><button class="btn dl">Preview changes</button><span class="dimt" id="bstn"></span><a class="btn sm" href="#allgames">Pick in All games</a></div><div id="bstprev"></div><div class="alert" id="bstmsg" hidden></div></form></section>
+    ${can.games ? `<section class="panel"><h2>Upload icons or covers</h2><div class="body f"><p class="note">Name each file after its game id, e.g. <span class="mono">counter-strike-2.png</span>. Use <span class="mono">__</span> for a <span class="mono">:</span> in the id. PNG, JPG or WebP up to 1 MB each.</p>
+      <div class="row"><select class="in" id="upk"><option value="icon">Icons</option><option value="cover">Covers</option></select><input type="file" id="upf" multiple accept="image/png,image/jpeg,image/webp"><button class="btn dl" id="upgo" disabled>Upload all</button></div>
+      <div id="uplist"></div><div class="alert" id="upmsg" hidden></div></div></section>` : ""}`;
+  const ids = () => [...new Set($("#bst").ids.value.split(/[\s,]+/).map(x => x.trim()).filter(Boolean))];
+  const cnt = () => { $("#bstn").textContent = `${ids().length} game${ids().length === 1 ? "" : "s"}`; }; cnt();
+  $("#bst").ids.addEventListener("input", () => { cnt(); const p = $("#bstprev"); if (p) p.innerHTML = ""; });
+  $("#bst").addEventListener("submit", async e => {
+    e.preventDefault(); const f = e.target, list = ids();
+    if (!list.length) return;
+    if (list.length > 100) { msg($("#bstmsg"), "Preview at most 100 games at a time."); return; }
+    const body = { ids: list, lifecycle: f.lifecycle.value, date: f.date.value, note: f.note.value, checked: f.checked.checked };
+    let p;
+    try { p = await api("/admin/bulk/preview", { method: "POST", body }); }
+    catch (x) { msg($("#bstmsg"), x.message); return; }
+    const life = LIFE[p.lifecycle] || p.lifecycle;
+    const before = r => r.before ? (LIFE[r.before.lifecycle] || r.before.lifecycle) : "Live (not saved yet)";
+    const afterBits = [life, p.date ? `date ${p.date}` : "date cleared", p.note ? `note “${p.note}”` : "note cleared", p.checked ? "mark checked" : "don't stamp checked"].join(" · ");
+    $("#bstprev").innerHTML = `<table class="gl"><thead><tr><th>Game</th><th>Now</th><th>Will write</th></tr></thead><tbody>${p.rows.map(r => `<tr><td>${r.found ? esc(r.name) : `<span class="pill bad">Not found</span>`} <span class="mono dimt">${esc(r.id)}</span></td><td>${r.found ? esc(before(r)) + (r.before && r.before.note ? ` · ${esc(r.before.note)}` : "") : "-"}</td><td>${r.found ? esc(afterBits) : "skipped"}</td></tr>`).join("")}</tbody></table>
+      <p class="note">${p.missing ? `${num(p.missing)} id${p.missing === 1 ? "" : "s"} won't be changed because Fraglink doesn't know them. ` : ""}Nothing is saved until you apply. Each change is written to the audit log.</p>
+      <label>Type <b>APPLY</b> to set ${esc(life)} on the ${num(p.rows.length - p.missing)} found game${p.rows.length - p.missing === 1 ? "" : "s"}<input type="text" id="bstok" autocomplete="off" spellcheck="false"></label>
+      <div class="row"><button type="button" class="btn dl" id="bstgo" disabled>Apply these changes</button></div>`;
+    const ok = $("#bstok"), go = $("#bstgo");
+    ok.addEventListener("input", () => { go.disabled = ok.value.trim() !== "APPLY"; });
+    go.addEventListener("click", async () => {
+      if (ok.value.trim() !== "APPLY") return;
+      const found = p.rows.filter(r => r.found);
+      await runAll(found.map(r => ({ id: r.id, label: r.name })), $("#bstmsg"), x => api("/admin/games/" + encodeURIComponent(x.id) + "/status", { method: "POST", body: { lifecycle: p.lifecycle, date: p.date || "", note: p.note || "", checked: p.checked } }));
+    });
+  });
+  if (s.length) {
+    const boxes = () => $$("input[data-sg]"), upd = () => { const n = boxes().filter(b => b.checked).length; $("#sgok").disabled = !n; $("#sgok").textContent = n ? `Approve ${n}` : "Approve selected"; };
+    $("#sgall").onchange = e => { boxes().forEach(b => { b.checked = e.target.checked; }); upd(); };
+    view.addEventListener("change", e => { if (e.target.matches("input[data-sg]")) upd(); });
+    $("#sgok").onclick = async () => {
+      const pick = boxes().filter(b => b.checked).map(b => { const tr = b.closest("tr"); return { exe: s[+tr.dataset.i].exe, name: $("input[data-nm]", tr).value.trim(), label: s[+tr.dataset.i].exe }; });
+      if (pick.some(p => !p.name)) { alert("Every selected game needs a name."); return; }
+      if (!confirm(`Approve ${pick.length} game${pick.length === 1 ? "" : "s"}?`)) return;
+      await runAll(pick, $("#sgmsg"), p => api("/admin/suggestions/approve", { method: "POST", body: { exe: p.exe, name: p.name } }));
+      badge("approvals", 0);
+    };
+  }
+  const upf = $("#upf");
+  if (upf) {
+    let files = [];
+    upf.onchange = () => {
+      files = [...upf.files].map(file => ({ file, id: file.name.replace(/\.[^.]+$/, "").replace(/__/g, ":"), label: file.name }));
+      $("#uplist").innerHTML = files.length ? `<table><thead><tr><th>File</th><th>Game id</th><th class="nr">Size</th><th></th></tr></thead><tbody>${files.map(x => `<tr><td>${esc(x.file.name)}</td><td class="mono">${esc(x.id)}</td><td class="nr">${(x.file.size / 1024).toFixed(0)} KB</td><td>${x.file.size > 1048576 ? `<span class="pill bad">over 1 MB</span>` : ""}</td></tr>`).join("")}</tbody></table>` : "";
+      $("#upgo").disabled = !files.length;
+    };
+    $("#upgo").onclick = async () => {
+      const k = $("#upk").value;
+      if (!confirm(`Upload ${files.length} ${k === "icon" ? "icon" : "cover"}${files.length === 1 ? "" : "s"}? Each replaces the current one.`)) return;
+      await runAll(files, $("#upmsg"), async x => {
+        if (x.file.size > 1048576) throw new Error("over 1 MB");
+        const r = await fetch(window.FL.API + "/admin/games/" + encodeURIComponent(x.id) + (k === "icon" ? "/icon" : "/art"), { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": x.file.type || "application/octet-stream" }, body: x.file });
+        if (!r.ok) { let m = r.status + ""; try { m = (await r.json()).error || m; } catch (_) { /* not json */ } throw new Error(m); }
+      });
+    };
+  }
+}
+
+/* ---------- Health: is the server, its jobs, backups and email all right? ---------- */
+async function health() {
+  const d = await api("/admin/health");
+  const ago = iso => { if (!iso) return "never"; const m = (Date.now() - new Date(iso)) / 60000; return m < 90 ? `${Math.round(m)} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+  const b = d.backups || {}, nb = b.newest, e = d.email || {}, jobs = d.jobs || [];
+  const bOld = nb ? (Date.now() - new Date(nb.modified)) / 3600e3 > 30 : false;
+  const jbad = jobs.filter(j => j.failing || j.stale).length;
+  const listJob = jobs.some(j => j.job === "games_list");
+  const tile = (k, v, sub, cls) => `<div class="hl ${cls || ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${sub}</div></div>`;
+  const jobLabel = jobs.length ? (jbad ? `${jbad} need a look` : "Recorded runs OK") : "None recorded";
+  const jobSub = jobs.length ? `${num(jobs.length)} stored${listJob ? "" : " · games list check not recorded"}` : "No job runs stored. That is not a pass.";
+  const emailLabel = e.live ? "Sending" : e.enabled ? "Configured, not sending" : "Off";
+  view.innerHTML = `<div class="hl-row">
+      ${tile("Server", esc(d.version), d.started_at ? `up since ${when(d.started_at)}` : "start time not recorded", d.started_at ? "ok" : "")}
+      ${tile("Files on disk", d.deploy.binary_at ? ago(d.deploy.binary_at) : "Unknown", `server binary ${d.deploy.binary_at ? when(d.deploy.binary_at) : "unknown"} · site ${d.deploy.site_at ? when(d.deploy.site_at) : "unknown"}`)}
+      ${tile("Last backup", !b.readable ? "Can't read" : nb ? ago(nb.modified) : "None", !b.readable ? esc(b.error || b.dir || "") : nb ? `${esc(nb.name)} · ${bytes(nb.bytes)} · ${num(b.count)} kept` : esc(b.dir || "no dumps"), !b.readable || bOld ? "bad" : nb ? "ok" : "")}
+      ${tile("Jobs", jobLabel, jobSub, jobs.length ? (jbad ? "bad" : "ok") : "")}
+      ${tile("Email", emailLabel, `${e.provider ? esc(e.provider) : "no provider"} · ${num(e.alerts_sent_24h)} staff alerts sent 24 h${e.alerts_failed_7d ? ` · ${num(e.alerts_failed_7d)} failed 7 d` : ""}`, e.alerts_failed_7d ? "bad" : e.live ? "ok" : "")}</div>
+    <div class="split" style="margin-top:12px"><section class="panel"><h2>Background jobs</h2>${jobs.length ? `<table><thead><tr><th>Job</th><th>Last run</th><th>Last OK</th><th>Detail</th><th>State</th></tr></thead><tbody>${jobs.map(j => `<tr><td class="mono">${esc(j.job)}</td><td class="sm">${when(j.last_run_at)}</td><td class="sm">${when(j.last_ok_at)}</td><td class="sm"><div class="exes" title="${esc(j.detail || "")}">${esc(j.detail || "-")}</div></td><td>${j.failing ? `<span class="st ret">Failing</span>` : j.stale ? `<span class="st beta">Late</span>` : j.scheduled ? `<span class="st ok">OK</span>` : `<span class="st hid">Recorded</span>`}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No job runs recorded yet. An empty list is not a healthy result.</div>`}</section>
+    <section class="panel"><h2>Server details</h2><div class="body"><dl class="kv"><dt>Version</dt><dd class="mono">${esc(d.version)}</dd><dt>Started</dt><dd>${d.started_at ? when(d.started_at) : "not recorded"}</dd><dt>Database</dt><dd>migration ${d.migration ? `${esc(String(d.migration.version))} · ${esc(d.migration.description)} (${when(d.migration.installed_on)})` : "-"}</dd>
+      <dt>Backups</dt><dd>${esc(b.dir || "-")}${b.readable === false ? " · not readable" : ""}</dd><dt>Email</dt><dd>${e.live ? "live" : "not live"} · last alert sent ${when(e.last_ok_at)}${e.last_failure ? `<div class="dimt">Last failure: ${esc(e.last_failure.error || "")} ${when(e.last_failure.at)}</div>` : ""}</dd></dl>
+      <p class="dimt">Email counts cover staff alerts only; other mail isn't logged. Releases and deploys aren't run from Admin.</p></div></section></div>
+    <section class="panel" style="margin-top:12px"><h2>Recent warnings and errors (48 h)</h2>${d.errors == null ? `<div class="body empty">The journal isn't readable by the server.</div>` : d.errors.length ? `<pre class="log">${esc(d.errors.map(l => l.replace(/ \S+ fraglink-server\[\d+\]: \S+Z /, "  ")).join("\n"))}</pre>` : `<div class="body empty">None.</div>`}</section>`;
 }
 
 route();

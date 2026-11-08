@@ -8,6 +8,7 @@ pub mod account;
 pub mod achievements;
 pub mod activity;
 pub mod admin;
+pub mod admin_tools;
 pub mod alerts;
 pub mod all_games;
 pub mod api;

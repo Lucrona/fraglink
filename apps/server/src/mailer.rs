@@ -226,6 +226,14 @@ pub fn live(st: &AppState) -> bool {
     st.cfg.mail_enabled && settings().provider.is_some()
 }
 
+/// Which provider is configured (no keys), for Admin > Health.
+pub fn provider_name() -> Option<&'static str> {
+    settings().provider.as_ref().map(|p| match p {
+        Provider::Resend { .. } => "Resend",
+        Provider::Cloudflare { .. } => "Cloudflare",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
