@@ -28,6 +28,10 @@ const TABS = [
   ["allgames", "All games", can.games, "Games"],
   ["games", "Game library", can.games, "Games"],
   ["detection", "Detection rules", can.games, "Games"],
+  ["suggested", "Suggested Merge", can.approvals || can.games, "Games"],
+  ["detect", "Detection tester", can.games, "Games"],
+  ["artwork", "Missing artwork", can.games, "Games"],
+  ["checks", "Data checks", can.games, "Games"],
   ["bulk", "Bulk fixes", can.bulk, "Games"],
   ["users", "Users", can.users, "Community"],
   ["news", "News", can.news, "Community"],
@@ -38,6 +42,8 @@ const TABS = [
   ["server", "Server", can.server, "Site"],
   ["health", "Health", can.health, "Site"],
   ["settings", "Site settings", can.settings, "Site"],
+  ["history", "Review history", can.audit, "Site"],
+  ["undo", "Undo", can.audit, "Site"],
   ["staff", "Staff", can.staff, "Site"],
 ].filter(t => t[2]);
 const GROUPS = [...new Set(TABS.map(t => t[3]))];
@@ -56,7 +62,7 @@ function route() {
   const t = tab === "user" ? "users" : tab;
   $$(".adm-side a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
   { const tb = TABS.find(x => x[0] === t); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
-  const fn = { approvals, allgames: allGames, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail, hourscheck: hoursCheck, bulk: bulkFixes, changelog, health }[tab];
+  const fn = { approvals, allgames: allGames, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail, hourscheck: hoursCheck, bulk: bulkFixes, changelog, health, suggested: suggestedMerge, detect: detectTest, artwork: missingArt, checks: dataChecks, history: reviewHistory, undo: undoRecent }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
   Promise.resolve(fn(arg && decodeURIComponent(arg))).catch(e => { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
@@ -69,13 +75,8 @@ async function approvals() {
   const d = await api("/admin/suggestions" + (decided ? "?status=decided" : ""));
   const rows = d.suggestions;
   const unk = decided ? [] : (await api("/admin/unknown_games").catch(() => ({ unknown: [] }))).unknown;
-  const mrg = decided ? [] : (await api("/admin/merge_suggestions").catch(() => ({ merges: [] }))).merges;
-  if (!decided) badge("approvals", rows.length + unk.length + mrg.length);
-  const mrgHtml = mrg.length ? `<section class="panel"><h2>Suggested merges (${mrg.length})</h2>
-    <div class="note">Programs players added themselves that are now on the games list. Merge moves their sessions and hours into the list game (same as Admin &gt; Game library &gt; Merge) and future play counts there. Dismiss keeps them apart.</div>
-    <table><thead><tr><th>Program</th><th>Merge into</th><th class="num">Players</th><th class="num">Hours</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
-    ${mrg.map(m => `<tr data-mrg="${esc(m.game_id)}" data-into="${esc(m.into)}"><td><span class="mono">${esc(m.exe)}</span>${m.name ? `<div class="dimt">${esc(m.name)}</div>` : ""}</td><td>${esc(m.into_name || m.into)} <span class="mono dimt">${esc(m.into)}</span></td><td class="num">${m.players}</td><td class="num">${hrs(m.seconds / 60)}</td><td>${day(m.first_seen)}</td>
-      <td class="num"><div class="acts"><button class="btn sm dl" data-merge>Merge</button><button class="btn sm danger" data-dismiss>Dismiss</button></div></td></tr>`).join("")}</tbody></table></section>` : "";
+  if (!decided) badge("approvals", rows.length + unk.length);
+  const mrgHtml = `<section class="panel"><h2>Suggested Merge</h2><div class="body"><p class="note">Programs the games list now detects, and catalogue rows that share a launcher id, are in <a href="#suggested">Suggested Merge</a>. Nothing is merged from this page.</p></div></section>`;
   const unkHtml = unk.length ? `<section class="panel"><h2>Unknown game IDs from the app (${unk.length})</h2>
     <div class="note">The app reported a game id the server doesn't know. Until you decide, it shows as "Playing a game". Map it to an existing game (moves its sessions, and future reports go there), approve it as a new game, or reject it.</div>
     <table><thead><tr><th>Game id</th><th>Exe</th><th class="num">Players</th><th class="num">Hours</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
@@ -674,16 +675,31 @@ const FLAG = { day_over_20h: "Over 20 h in a day", session_over_18h: "Session ov
   wow_impossible: "WoW: /played grew faster than real time", wow_bnet_mismatch: "WoW: level doesn't match Battle.net", wow_clock: "WoW: timestamp in the future", wow_old_addon: "WoW: retired addon version" };
 async function hoursReview(days) {
   days = Number(days) || 30;
-  const d = await api("/admin/hours/flags?days=" + days);
+  const show = (location.hash.split("/")[2]) || "open";
+  const d = await api("/admin/hours/flags?" + new URLSearchParams({ days, show }));
   view.innerHTML = `<section class="panel"><h2>Hours review</h2>
-    <div class="tools"><span class="muted">Suspicious totals in the last</span><select class="in" id="hd">${[7, 30, 90, 365].map(n => `<option ${n === days ? "selected" : ""}>${n}</option>`).join("")}</select><span class="muted">days. Days are UTC.</span></div>
+    <div class="tools"><span class="muted">Suspicious totals in the last</span><select class="in" id="hd">${[7, 30, 90, 365].map(n => `<option ${n === days ? "selected" : ""}>${n}</option>`).join("")}</select><span class="muted">days. Days are UTC.</span>
+      <a class="btn sm${show === "reviewed" ? " dl" : ""}" href="#hours/${days}/reviewed">Reviewed (${num(d.reviewed || 0)})</a>
+      <a class="btn sm${show === "open" ? " dl" : ""}" href="#hours/${days}/open">Open (${num(d.open || 0)})</a></div>
+    <p class="note">Mark as reviewed hides a flag only while the hours it was judging are unchanged. It does not delete sessions or change totals. A later session brings the flag back.</p>
     ${d.flags.length ? `<table><thead><tr><th>Flag</th><th>User</th><th>Game</th><th class="num">Hours</th><th>When</th><th>Detail</th><th></th></tr></thead><tbody>
-    ${d.flags.map(f => `<tr><td><span class="pill warn">${esc(FLAG[f.kind] || f.kind)}</span></td><td><a href="#user/${esc(f.user_id)}">${esc(f.handle)}</a></td>
-      <td>${esc(f.game_name || "-")}</td><td class="num">${hrs(f.minutes)}</td><td>${f.kind === "day_over_20h" ? esc(f.when) : when(f.when)}</td><td class="muted">${esc(f.detail)}</td>
-      <td class="num">${f.session_id ? `<button class="btn sm danger" data-sid="${esc(f.session_id)}" data-uid="${esc(f.user_id)}">Delete session</button>` : `<a class="btn sm" href="#user/${esc(f.user_id)}">Review</a>`}</td></tr>`).join("")}</tbody></table>`
-    : `<div class="body empty">Nothing suspicious.</div>`}</section>`;
-  $("#hd").addEventListener("change", e => { location.hash = "hours/" + e.target.value; });
-  view.onclick = e => { const b = e.target.closest("button[data-sid]"); if (b && confirm("Delete this session?")) act(b, async () => { await api(`/admin/users/${b.dataset.uid}/sessions/${b.dataset.sid}`, { method: "DELETE" }); hoursReview(days); }); };
+    ${d.flags.map(f => `<tr data-key="${esc(f.flag_key)}"><td><span class="pill warn">${esc(FLAG[f.kind] || f.kind)}</span></td><td><a href="#user/${esc(f.user_id)}">${esc(f.handle)}</a></td>
+      <td>${esc(f.game_name || "-")}</td><td class="num">${hrs(f.minutes)}</td><td>${f.kind === "day_over_20h" ? esc(f.when) : when(f.when)}</td><td class="muted">${esc(f.detail)}${f.review && f.review.matches ? `<div class="dimt">Reviewed ${when(f.review.at)}${f.review.by ? " by " + esc(f.review.by) : ""}${f.review.reason ? " · " + esc(f.review.reason) : ""}</div>` : ""}</td>
+      <td class="num"><div class="acts">${f.review && f.review.matches ? `<button class="btn sm" data-reopen>Open again</button>` : `<button class="btn sm" data-reviewed>Mark as reviewed</button>`}${f.session_id ? ` <button class="btn sm danger" data-sid="${esc(f.session_id)}" data-uid="${esc(f.user_id)}">Delete session</button>` : ` <a class="btn sm" href="#user/${esc(f.user_id)}">Account</a>`}</div></td></tr>`).join("")}</tbody></table>`
+    : `<div class="body empty">${show === "reviewed" ? "Nothing is marked reviewed for the current evidence." : "Nothing suspicious."}</div>`}</section>`;
+  $("#hd").addEventListener("change", e => { location.hash = "hours/" + e.target.value + "/" + show; });
+  view.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.matches("[data-sid]")) { if (confirm("Delete this session?")) act(b, async () => { await api(`/admin/users/${b.dataset.uid}/sessions/${b.dataset.sid}`, { method: "DELETE" }); hoursReview(days); }); return; }
+    const key = b.closest("tr") && b.closest("tr").dataset.key;
+    if (b.matches("[data-reviewed]")) {
+      const reason = prompt("Optional note (saved with the review). Leave blank to skip.");
+      if (reason == null) return;
+      act(b, async () => { await api("/admin/hours/flags/review", { method: "POST", body: { flag_key: key, days, reason } }); hoursReview(days); });
+    } else if (b.matches("[data-reopen]")) {
+      act(b, async () => { await api("/admin/hours/flags/reopen", { method: "POST", body: { flag_key: key, days } }); hoursReview(days); });
+    }
+  };
 }
 
 /* ---------- 5. server ---------- */
@@ -727,7 +743,7 @@ async function siteSettings() {
     ${al.recent.length ? `<h3 style="margin:16px 0 6px">Recent alerts</h3><table class="t"><tbody>${al.recent.map(r => `<tr><td class="dimt" style="white-space:nowrap">${when(r.at)}</td><td>${esc(r.subject)}</td><td>${r.ok ? `<span class="pill ok">sent</span>` : `<span class="pill warn" title="${esc(r.error || "")}">not sent</span>`}</td></tr>`).join("")}</tbody></table>` : ""}
     </div></section>` : "";
   view.innerHTML = `<section class="panel"><h2>Site settings</h2><div class="body">
-    <p class="note">Switches apply to the website and the desktop app within about 30 seconds, and the server enforces them (hiding a button is not the only effect). Every change is written to the audit log.${edit ? "" : " Only admins can change them."}</p>
+    <p class="note">Switches apply to the website and the desktop app within about 30 seconds, and the server enforces them (hiding a button is not the only effect). Every change is written to the audit log.${edit ? "" : " Only admins can change them."} <a href="#suggested">Suggested Merge</a> compares the catalogue with launcher ids we actually have.</p>
     <table class="settings"><tbody>${d.settings.map(s => row(s, "key")).join("")}</tbody></table></div></section>
     <section class="panel" id="hc"><h2>Home page user counts</h2><div class="body"><p class="note">How the registered and online player counts show at the top of the home page.</p>
     ${(d.home_counts_options || []).map(o => `<label style="display:block;margin:4px 0"><input type="radio" name="home_counts" value="${esc(o.key)}" ${o.key === d.home_counts ? "checked" : ""} ${edit ? "" : "disabled"}> <b>${esc(o.key.toUpperCase())}</b> · ${esc(o.label)}</label>`).join("")}</div></section>
@@ -1315,7 +1331,127 @@ async function health() {
     <section class="panel" style="margin-top:12px"><h2>Recent warnings and errors (48 h)</h2>${d.errors == null ? `<div class="body empty">The journal isn't readable by the server.</div>` : d.errors.length ? `<pre class="log">${esc(d.errors.map(l => l.replace(/ \S+ fraglink-server\[\d+\]: \S+Z /, "  ")).join("\n"))}</pre>` : `<div class="body empty">None.</div>`}</section>`;
 }
 
+/* ---------- Suggested Merge ---------- */
+async function suggestedMerge() {
+  const d = await api("/admin/suggested-merge");
+  const cov = (d.coverage && d.coverage.sources) || [];
+  view.innerHTML = `<section class="panel"><h2>Suggested Merge</h2>
+    <p class="note">Suggestions only. A shared launcher product id can propose a merge. A similar name is not enough, and a different edition or folder hint is not offered as a merge. Nothing here merges by itself.</p>
+    <div class="ag-fresh">${cov.map(s => `<div><div class="k">${esc(s.label)}</div><div class="v">${s.available ? "Available" : "Not available"}</div><div class="d">${esc(s.detail)}</div></div>`).join("")}</div></section>
+    <section class="panel" style="margin-top:12px"><h2>Suggestions <span class="dimt">${num(d.open)} open · ${num(d.dismissed)} dismissed</span></h2>
+    ${d.rows.length ? `<table class="gl"><thead><tr><th>From</th><th>Into</th><th>Launcher</th><th>Why</th><th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr data-key="${esc(r.key)}" data-src="${esc(r.source)}" data-into="${esc(r.target)}" data-op="${esc(r.op)}"><td class="mono">${esc(r.source)}</td><td class="mono">${esc(r.target)}</td><td>${esc(r.launcher)} ${esc(r.product)}</td><td>${esc(r.why)}</td>
+        <td class="rt">${r.op === "merge" ? `<button class="btn sm" data-prev>Preview</button>` : `<span class="dimt">No merge</span>`}${r.dismissed ? "" : ` <button class="btn sm" data-dismiss>Dismiss</button>`}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No suggestions for the launchers this server can see.</div>`}
+    <div id="smprev"></div></section>`;
+  view.onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const tr = b.closest("tr"); if (!tr) return;
+    if (b.matches("[data-dismiss]")) {
+      await act(b, async () => { await api("/admin/suggested-merge/dismiss", { method: "POST", body: { key: tr.dataset.key } }); suggestedMerge(); });
+      return;
+    }
+    if (!b.matches("[data-prev]")) return;
+    const p = await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge?into=${encodeURIComponent(tr.dataset.into)}`).catch(x => { alert(x.message); return null; });
+    if (!p) return;
+    $("#smprev").innerHTML = `<div class="note">${esc(p.from.name || tr.dataset.src)} → ${esc(p.into.name || tr.dataset.into)}: ${p.from.totals.players} players, ${p.from.totals.sessions} sessions, ${hrs(p.from.totals.tracked_min)} tracked. This is a game merge. Type the source id to confirm.</div>
+      <div class="row"><input class="in" id="smok" placeholder="${esc(tr.dataset.src)}"><button class="btn danger" id="smdo">Merge</button></div>`;
+    $("#smdo").onclick = () => act($("#smdo"), async () => {
+      await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge`, { method: "POST", body: { into: tr.dataset.into, confirm: $("#smok").value.trim() } });
+      suggestedMerge();
+    });
+  };
+}
+
+/* ---------- Detection tester ---------- */
+async function detectTest() {
+  view.innerHTML = `<section class="panel"><h2>Detection tester</h2>
+    <form method="post" action="/api/v1/form-fallback" class="f body" id="dtf">
+      <div class="row"><label style="margin:0">Exe<input class="in" name="exe" placeholder="Wow.exe" required></label>
+        <label style="margin:0;flex:1">Folder<input class="in" name="folder" placeholder="D:\\World of Warcraft\\_retail_" style="width:100%"></label>
+        <button class="btn dl">Test</button></div>
+      <p class="note">Read only. Uses the folder rules, signatures, games list and fix-ups the app uses. It cannot see that PC's Steam library or other launcher folders.</p>
+    </form><div id="dtout"></div></section>`;
+  $("#dtf").addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      const d = await api("/admin/detect-test", { method: "POST", body: { exe: f.exe.value.trim(), folder: f.folder.value.trim() } });
+      const m = d.matched;
+      $("#dtout").innerHTML = `<section class="panel"><h2>${m ? esc(m.name) : "No game"}</h2><div class="body">
+        ${m ? `<p><span class="st ok">${esc(m.source)}</span> <span class="mono">${esc(m.game_id)}</span></p>` : `<p>No rule matched this exe and folder.</p>`}
+        ${d.ambiguous ? `<div class="alert err">${esc(d.ambiguous)}</div>` : ""}
+        <table><tbody>${d.steps.map(s => `<tr><td>${esc(s.layer)}</td><td>${s.hit ? "matched" : "no"}</td><td class="mono">${typeof s.detail === "string" ? esc(s.detail) : esc(JSON.stringify(s.detail))}</td></tr>`).join("")}</tbody></table>
+        <h3>Not reproduced on the server</h3>
+        <ul>${d.not_reproduced.map(n => `<li><b>${esc(n.label)}</b> — ${esc(n.detail)}</li>`).join("")}</ul>
+      </div></section>`;
+    } catch (x) { $("#dtout").innerHTML = `<div class="alert err">${esc(x.message)}</div>`; }
+  });
+}
+
+/* ---------- Missing artwork ---------- */
+async function missingArt() {
+  const d = await api("/admin/artwork");
+  view.innerHTML = `<section class="panel"><h2>Missing artwork <span class="dimt">${num(d.total)}</span></h2>
+    <p class="note">${esc(d.note)} Replace one icon from the game editor. There is no bulk replace.</p>
+    ${d.rows.length ? `<table class="gl"><thead><tr><th>Game</th><th>Status</th><th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr><td>${esc(r.name)} <span class="mono dimt">${esc(r.id)}</span></td><td>${esc(r.status)}<div class="dimt">${esc(r.detail)}</div></td><td class="rt"><a class="btn sm" href="#games/id:${encodeURIComponent(r.id)}">Edit artwork</a></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No missing icons in this page.</div>`}
+    </section>`;
+}
+
+/* ---------- Data checks ---------- */
+async function dataChecks() {
+  const d = await api("/admin/data-checks");
+  const dup = d.duplicate_launchers || [], rules = d.conflicting_rules || [], hours = d.hours || {};
+  view.innerHTML = `<section class="panel"><h2>Data checks</h2><p class="note">${esc(d.note)}</p></section>
+    <section class="panel"><h2>Duplicate launcher ids <span class="dimt">${dup.length}</span></h2>
+      ${dup.length ? `<table><thead><tr><th>Launcher</th><th>Id</th><th>Games</th></tr></thead><tbody>${dup.map(r => `<tr><td>${esc(r.launcher)}</td><td class="mono">${esc(String(r.product))}</td><td class="mono">${esc((r.ids || []).join(", "))}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No duplicate Steam app ids in game rows or fix-ups.</div>`}</section>
+    <section class="panel"><h2>Conflicting detection rules <span class="dimt">${rules.length}</span></h2>
+      ${rules.length ? `<table><tbody>${rules.map(r => `<tr><td class="mono">${esc(r.kind)} ${esc(r.pattern)}</td><td>${esc((r.ids || []).join(", "))}</td><td>${esc(r.detail)}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No pattern points at two games.</div>`}</section>
+    <section class="panel"><h2>Hours</h2>
+      <p class="note">${esc(hours.week_note || "")}</p>
+      ${(hours.length_mismatches || []).length ? `<table><tbody>${hours.length_mismatches.map(r => `<tr><td class="mono">${esc(r.session_id)}</td><td>${esc(r.detail)}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No session whose stored length disagrees with its start and end.</div>`}
+      ${(hours.week_mismatches || []).length ? `<table><tbody>${hours.week_mismatches.map(r => `<tr><td class="mono">${esc(r.user_id)}</td><td>${esc(r.detail)} (${r.week_seconds} vs ${r.sql_seconds})</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">The checked players' local weeks match the shared total.</div>`}</section>`;
+}
+
+/* ---------- Review history ---------- */
+async function reviewHistory() {
+  const d = await api("/admin/review-history");
+  view.innerHTML = `<section class="panel"><h2>Review history</h2>
+    <p class="note">${esc(d.note)}</p>
+    <div class="tools"><a class="btn sm" href="#" data-g="">All</a><a class="btn sm" href="#" data-g="reviewed">Reviewed</a><a class="btn sm" href="#" data-g="dismissed">Dismissed</a><a class="btn sm" href="#" data-g="merged">Merged</a><a class="btn sm" href="#" data-g="corrected">Corrected</a></div>
+    <div id="hist">${histTable(d)}</div></section>`;
+  view.onclick = async e => {
+    const a = e.target.closest("[data-g]"); if (!a) return;
+    e.preventDefault();
+    const d2 = await api("/admin/review-history?" + new URLSearchParams({ group: a.dataset.g }));
+    $("#hist").innerHTML = histTable(d2);
+  };
+}
+function histTable(d) {
+  if (!d.rows.length) return `<div class="body empty">Nothing in the audit log for this filter.</div>`;
+  return `<table class="gl"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th></tr></thead><tbody>
+    ${d.rows.map(r => `<tr><td class="sm">${when(r.at)}</td><td>${r.by ? esc(r.by) : `<span class="dimt">not recorded</span>`}</td><td class="mono">${esc(r.action)}</td><td class="mono">${esc(r.target || "")}</td></tr>`).join("")}</tbody></table>`;
+}
+
+/* ---------- Undo ---------- */
+async function undoRecent() {
+  const d = await api("/admin/undo");
+  view.innerHTML = `<section class="panel"><h2>Undo</h2>
+    <p class="note">Only edits whose before and after were stored, and which still match that after, can be put back. Merges, deleted sessions and deleted accounts are not undone here.</p>
+    <table class="gl"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Can undo</th><th></th></tr></thead><tbody>
+    ${d.rows.map(r => `<tr data-id="${r.id}"><td class="sm">${when(r.at)}</td><td>${esc(r.by || "")}</td><td class="mono">${esc(r.action)}</td><td>${r.undo ? "Yes" : "No"}<div class="dimt">${esc(r.why)}</div></td>
+      <td>${r.undo ? `<button class="btn sm" data-undo>Undo…</button>` : ""}</td></tr>`).join("")}</tbody></table></section>`;
+  view.onclick = e => {
+    const b = e.target.closest("[data-undo]"); if (!b) return;
+    const id = +b.closest("tr").dataset.id;
+    const typed = prompt("Type UNDO to put this edit back. If the row has changed since, nothing happens.");
+    if (typed == null) return;
+    act(b, async () => { await api("/admin/undo", { method: "POST", body: { id, confirm: typed.trim() } }); undoRecent(); });
+  };
+}
+
 route();
-if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] })), api("/admin/merge_suggestions").catch(() => ({ merges: [] }))]).then(([d, u, m]) => badge("approvals", d.suggestions.length + u.unknown.length + m.merges.length)).catch(() => {});
+if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] }))]).then(([d, u]) => badge("approvals", d.suggestions.length + u.unknown.length)).catch(() => {});
+api("/admin/suggested-merge").then(d => badge("suggested", d.open)).catch(() => {});
 };
 
