@@ -425,6 +425,25 @@ pub async fn import(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> 
 /// A games row as a Steam sync sees it: (name, Steam app id, icon hash).
 type SteamRow = (String, Option<i32>, Option<String>);
 
+/// Where a new Steam snapshot is stored. A staff fix-up wins. Otherwise a signature
+/// or the single catalogue game that lists the app id. Two catalogue games do not
+/// pick a winner. Existing rows under another id are left where they are.
+fn steam_row_id(state: &AppState, ids: &crate::detection_aliases::SteamIds, appid: u32) -> String {
+    let minted = fraglink_core::detector::steam_game_id(sigs(), appid);
+    let aliased = ids.id(&minted);
+    if aliased != minted {
+        return aliased;
+    }
+    if minted.starts_with("steam:") {
+        if let Some(db) = crate::games::detectable_db(state) {
+            if let Some(g) = db.unique_steam(appid) {
+                return g.slug.clone();
+            }
+        }
+    }
+    aliased
+}
+
 async fn import_inner(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult> {
     let row: Option<(String, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
         "SELECT provider_uid, last_sync_at FROM linked_accounts WHERE user_id = $1 AND provider = 'steam'",
@@ -473,7 +492,7 @@ async fn import_inner(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult
     let gids: Vec<String> = games
         .iter()
         .filter(|g| g.playtime_forever > 0)
-        .map(|g| ids.id(&fraglink_core::detector::steam_game_id(sigs(), g.appid)))
+        .map(|g| steam_row_id(state, &ids, g.appid))
         .collect();
     let before: std::collections::HashMap<String, SteamRow> =
         sqlx::query_as::<_, (String, String, Option<i32>, Option<String>)>(
@@ -488,7 +507,7 @@ async fn import_inner(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult
     let mut changed: Vec<(String, Option<SteamRow>, SteamRow)> = vec![];
     for g in games.iter().filter(|g| g.playtime_forever > 0) {
         let minted = fraglink_core::detector::steam_game_id(sigs(), g.appid);
-        let gid = ids.id(&minted);
+        let gid = steam_row_id(state, &ids, g.appid);
         let after: Option<SteamRow> = if gid != minted {
             // counted as a game staff picked: keep that game's row as it is
             sqlx::query_as(

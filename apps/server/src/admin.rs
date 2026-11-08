@@ -2834,8 +2834,19 @@ async fn totals_of(st: &AppState, id: &str) -> ApiResult<Value> {
 }
 
 /// Why `id` can't be merged into `into`, if it can't.
+fn minted_id(id: &str) -> bool {
+    id.starts_with("steam:")
+        || id.starts_with("exe:")
+        || id.starts_with("epic:")
+        || id.starts_with("gog:")
+}
+
 async fn merge_check(st: &AppState, id: &str, into: &str) -> ApiResult<(Value, Value)> {
-    let from = game_info(st, id).await?.ok_or_else(AppError::not_found)?;
+    let from = match game_info(st, id).await? {
+        Some(v) => v,
+        None if minted_id(id) => json!({ "id": id, "name": id, "public_name": id }),
+        None => return Err(AppError::not_found()),
+    };
     let to = game_info(st, into)
         .await?
         .ok_or_else(|| bad("bad_target", "Pick an existing game to merge into."))?;
@@ -2867,11 +2878,21 @@ async fn merge_preview(
     Query(q): Query<MergeQ>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
-    let (from, to) = merge_check(&st, &id, q.into.trim()).await?;
-    Ok(Json(json!({
-        "from": { "id": id, "name": from["public_name"].as_str().or(from["name"].as_str()), "totals": totals_of(&st, &id).await? },
-        "into": { "id": q.into.trim(), "name": to["public_name"].as_str().or(to["name"].as_str()), "totals": totals_of(&st, q.into.trim()).await? },
-    })))
+    let into = q.into.trim();
+    let mut v = crate::merge_preview::build(&st, &id, into).await?;
+    // The game editor still reads these stats-view totals. They are not the projected
+    // total after the merge; that is `projection`.
+    v["from"] = json!({
+        "id": v["moves"]["id"],
+        "name": v["moves"]["name"],
+        "totals": totals_of(&st, &id).await?,
+    });
+    v["into"] = json!({
+        "id": v["stays"]["id"],
+        "name": v["stays"]["name"],
+        "totals": totals_of(&st, into).await?,
+    });
+    Ok(Json(v))
 }
 
 #[derive(Deserialize)]
@@ -2896,6 +2917,15 @@ async fn merge_into(
             "confirm",
             "Type the id of the game being merged to confirm.",
         ));
+    }
+    let preview = crate::merge_preview::build(&st, &id, &into).await?;
+    if preview["can_merge"] != true {
+        let why = preview["blocked"]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|v| v.as_str())
+            .unwrap_or("This merge isn't safe to run.");
+        return Err(bad("blocked", why));
     }
     let before = totals_of(&st, &id).await?;
     names::ensure_game_row(&st, &into).await?;

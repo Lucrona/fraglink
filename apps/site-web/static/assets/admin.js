@@ -1335,30 +1335,96 @@ async function health() {
 async function suggestedMerge() {
   const d = await api("/admin/suggested-merge");
   const cov = (d.coverage && d.coverage.sources) || [];
+  const nm = (name, id) => name && name !== id ? name : id;
   view.innerHTML = `<section class="panel"><h2>Suggested Merge</h2>
-    <p class="note">Suggestions only. A shared launcher product id can propose a merge. A similar name is not enough, and a different edition or folder hint is not offered as a merge. Nothing here merges by itself.</p>
+    <p class="note">You do not need to merge a Steam id onto the games list. The list already is the catalogue. Link records a fix-up for future detection and leaves every saved session and hour where it is. Merge is a separate step, only when both entries already have saved rows, and it can change the shown total. Shared Steam id alone is not a merge. Editions and folder splits are not offered.</p>
     <div class="ag-fresh">${cov.map(s => `<div><div class="k">${esc(s.label)}</div><div class="v">${s.available ? "Available" : "Not available"}</div><div class="d">${esc(s.detail)}</div></div>`).join("")}</div></section>
     <section class="panel" style="margin-top:12px"><h2>Suggestions <span class="dimt">${num(d.open)} open · ${num(d.dismissed)} dismissed</span></h2>
-    ${d.rows.length ? `<table class="gl"><thead><tr><th>From</th><th>Into</th><th>Launcher</th><th>Why</th><th></th></tr></thead><tbody>
-      ${d.rows.map(r => `<tr data-key="${esc(r.key)}" data-src="${esc(r.source)}" data-into="${esc(r.target)}" data-op="${esc(r.op)}"><td class="mono">${esc(r.source)}</td><td class="mono">${esc(r.target)}</td><td>${esc(r.launcher)} ${esc(r.product)}</td><td>${esc(r.why)}</td>
-        <td class="rt">${r.op === "merge" ? `<button class="btn sm" data-prev>Preview</button>` : `<span class="dimt">No merge</span>`}${r.dismissed ? "" : ` <button class="btn sm" data-dismiss>Dismiss</button>`}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No suggestions for the launchers this server can see.</div>`}
-    <div id="smprev"></div></section>`;
+    ${d.rows.length ? `<table class="gl sm-suggest"><thead><tr><th>Would move</th><th>Stays</th><th>Evidence</th><th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr data-key="${esc(r.key)}" data-src="${esc(r.source)}" data-into="${esc(r.target)}" data-op="${esc(r.op)}">
+        <td><div class="nm">${esc(nm(r.source_name, r.source))}</div><div class="id">${esc(r.source)}</div></td>
+        <td><div class="nm">${esc(nm(r.target_name, r.target))} ${r.op === "merge" ? `<span class="pill ok">stays</span>` : ""}</div><div class="id">${esc(r.target)}</div></td>
+        <td><div>${esc(r.launcher)} ${esc(r.product)}</div><div class="sm">${num(r.source_records)} saved on the id · ${num(r.target_records)} on the game that stays</div></td>
+        <td><div class="sm-acts">${r.op === "merge" ? `<button class="btn sm" type="button" data-prev>Preview merge</button>` : r.op === "map" ? `<button class="btn sm" type="button" data-link>Link</button>` : `<span class="dimt">Not a merge</span>`}${r.dismissed ? "" : ` <button class="btn sm" type="button" data-dismiss>Dismiss</button>`}</div></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">Nothing needs a merge. A Steam id the catalogue already names is not listed unless both sides have saved rows.</div>`}
+    </section>`;
+  const mins = list => (list || []).length ? (list || []).map(n => hrs(n)).join(", ") : "none";
+  const box = (title, g, rows) => `<div class="sm-card"><div class="k">${title}</div><div class="nm">${esc(g.name || g.id)}</div><div class="id">${esc(g.id)}</div>
+    <div class="sm">${g.in_database ? "Saved row" : "No database row"}${g.on_list ? " · on the catalogue" : ""}</div>
+    <dl><dt>Sessions</dt><dd>${num(rows.sessions)} · ${num(rows.session_seconds)} seconds</dd>
+    <dt>Imported rows</dt><dd>${mins(rows.imported_minutes)}</dd>
+    <dt>Estimated, stored</dt><dd>${rows.estimated_rows ? hrs(rows.estimated_minutes_stored) : "none"}</dd>
+    <dt>Steam snapshots</dt><dd>${mins(rows.steam_minutes)}</dd></dl></div>`;
   view.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
-    const tr = b.closest("tr"); if (!tr) return;
+    const tr = b.closest("tr[data-src]"); if (!tr) return;
     if (b.matches("[data-dismiss]")) {
       await act(b, async () => { await api("/admin/suggested-merge/dismiss", { method: "POST", body: { key: tr.dataset.key } }); suggestedMerge(); });
       return;
     }
+    if (b.matches("[data-link]")) {
+      let slot = tr.nextElementSibling;
+      if (!slot || !slot.classList.contains("sm-slot")) {
+        slot = document.createElement("tr");
+        slot.className = "sm-slot";
+        slot.innerHTML = `<td colspan="4"></td>`;
+        tr.after(slot);
+      }
+      const cell = $("td", slot);
+      cell.innerHTML = `<div class="sm-prev" role="status"><p><b>Link</b> ${esc(tr.dataset.src)} to ${esc(tr.dataset.into)}. Future detection can use the catalogue game. Sessions, imported hours, estimated hours and Steam snapshots stay on their current ids. This does not merge them.</p>
+        <button class="btn" type="button" data-linkdo>Link, don't move hours</button></div>`;
+      $("[data-linkdo]", cell).onclick = () => act($("[data-linkdo]", cell), async () => {
+        await api("/admin/suggested-merge/link", { method: "POST", body: { source: tr.dataset.src, into: tr.dataset.into } });
+        cell.innerHTML = `<div class="sm-prev" role="status">Linked. No hour rows were moved.</div>`;
+      });
+      return;
+    }
     if (!b.matches("[data-prev]")) return;
-    const p = await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge?into=${encodeURIComponent(tr.dataset.into)}`).catch(x => { alert(x.message); return null; });
-    if (!p) return;
-    $("#smprev").innerHTML = `<div class="note">${esc(p.from.name || tr.dataset.src)} → ${esc(p.into.name || tr.dataset.into)}: ${p.from.totals.players} players, ${p.from.totals.sessions} sessions, ${hrs(p.from.totals.tracked_min)} tracked. This is a game merge. Type the source id to confirm.</div>
-      <div class="row"><input class="in" id="smok" placeholder="${esc(tr.dataset.src)}"><button class="btn danger" id="smdo">Merge</button></div>`;
-    $("#smdo").onclick = () => act($("#smdo"), async () => {
-      await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge`, { method: "POST", body: { into: tr.dataset.into, confirm: $("#smok").value.trim() } });
-      suggestedMerge();
-    });
+    let slot = tr.nextElementSibling;
+    if (!slot || !slot.classList.contains("sm-slot")) {
+      slot = document.createElement("tr");
+      slot.className = "sm-slot";
+      slot.innerHTML = `<td colspan="4"></td>`;
+      tr.after(slot);
+    }
+    const cell = $("td", slot);
+    cell.innerHTML = `<div class="sm-prev" role="status">Loading preview…</div>`;
+    b.setAttribute("aria-busy", "true");
+    b.disabled = true;
+    try {
+      const p = await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge?into=${encodeURIComponent(tr.dataset.into)}`);
+      const proj = p.projection || {};
+      const shown = proj.status === "known" ? hrs(proj.display_minutes) : "not calculated";
+      cell.innerHTML = `<div class="sm-prev" role="status">
+        <div class="sm-cols">${box("Would move", p.moves, p.moving_rows)}${box("Stays", p.stays, p.staying_rows)}</div>
+        <p><b>Shown total if merged:</b> ${shown}. ${esc(proj.rule || "")}</p>
+        ${(proj.notes || []).map(n => `<p>${esc(n)}</p>`).join("")}
+        ${(p.warnings || []).map(w => `<div class="alert">${esc(w)}</div>`).join("")}
+        ${(p.blocked || []).map(w => `<div class="alert err">${esc(w)}</div>`).join("")}
+        <p class="dimt">${num(p.aliases)} detection fix-up${p.aliases === 1 ? "" : "s"} on the id that would move. ${esc(p.alias_note || "")}</p>
+        ${p.can_merge ? `<form class="sm-confirm" data-confirm>
+          <label>Type <span class="mono">${esc(tr.dataset.src)}</span> to merge into ${esc((p.stays && p.stays.name) || tr.dataset.into)}
+          <input class="in" name="confirm" autocomplete="off" spellcheck="false" aria-label="Type the source id to confirm the merge"></label>
+          <button class="btn danger" type="submit" disabled>Merge</button></form>` : `<p class="dimt">Merging is closed for this pair. Preview did not change any rows.</p>`}
+      </div>`;
+      const form = $("[data-confirm]", cell);
+      if (form) {
+        const input = $("input", form), go = $("button", form);
+        input.addEventListener("input", () => { go.disabled = input.value.trim() !== tr.dataset.src; });
+        form.addEventListener("submit", ev => {
+          ev.preventDefault();
+          if (input.value.trim() !== tr.dataset.src) return;
+          act(go, async () => {
+            await api(`/admin/games/${encodeURIComponent(tr.dataset.src)}/merge`, { method: "POST", body: { into: tr.dataset.into, confirm: input.value.trim() } });
+            suggestedMerge();
+          });
+        });
+      }
+    } catch (x) {
+      cell.innerHTML = `<div class="sm-prev alert err" role="alert">${esc(x.message || "Preview failed.")} Nothing was changed.</div>`;
+    } finally {
+      b.disabled = false;
+      b.removeAttribute("aria-busy");
+    }
   };
 }
 
