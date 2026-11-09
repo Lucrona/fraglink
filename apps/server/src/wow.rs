@@ -48,8 +48,9 @@ pub const GAMES: [(&str, &str); 2] = [
     ("wow", "World of Warcraft"),
     ("wow_forever", "World of Warcraft: Forever"),
 ];
-/// Flavours taking /played uploads now. Forever isn't released: app-tracked only.
-pub const UPLOADS_OPEN: [&str; 1] = ["wow"];
+/// Flavours taking /played uploads. Forever uses its own path and does not write
+/// an imported game total. Retail is unchanged.
+pub const UPLOADS_OPEN: [&str; 2] = ["wow", "wow_forever"];
 const REGIONS: [&str; 4] = ["us", "eu", "kr", "tw"];
 /// Slack for clocks and the game's rounding when comparing growth with real time.
 const SLACK_S: i64 = 300;
@@ -181,6 +182,164 @@ pub struct Reject {
 
 fn rej(kind: &'static str, detail: String, flag: bool) -> Reject {
     Reject { kind, detail, flag }
+}
+
+enum Class {
+    Retail,
+    Forever,
+    Quarantine(&'static str),
+}
+
+/// Retail stays realm + name. Live Forever is project 18, a tested "not a beta"
+/// answer, and a first name plus surname. Anything less is quarantined.
+fn classify(e: &CharEntry) -> Class {
+    let flav = e.flavour.as_str();
+    if flav == "retail" || (flav.is_empty() && e.sv < 2 && !e.realm.trim().is_empty()) {
+        return Class::Retail;
+    }
+    if flav == "forever"
+        && e.project == 18
+        && e.beta == 0
+        && e.confirmed == 1
+        && !e.first.trim().is_empty()
+        && !e.surname.trim().is_empty()
+    {
+        return Class::Forever;
+    }
+    Class::Quarantine(if flav == "forever_beta" || e.beta == 1 {
+        "forever_beta"
+    } else if flav == "forever_unconfirmed" || (flav == "forever" && e.confirmed != 1) {
+        "forever_unconfirmed"
+    } else if flav == "forever" {
+        "incomplete_identity"
+    } else {
+        "flavour_ambiguous"
+    })
+}
+
+async fn quarantine(st: &AppState, uid: Uuid, game: &str, e: &CharEntry, reason: &str) {
+    let payload = json!({
+        "region": e.region, "realm": e.realm, "name": e.name, "class": e.class,
+        "level": e.level, "played": e.played, "at": e.at, "flavour": e.flavour,
+        "project": e.project, "build": e.build, "first": e.first, "surname": e.surname,
+        "beta": e.beta, "confirmed": e.confirmed,
+    });
+    let _ = sqlx::query(
+        "INSERT INTO wow_played_quarantine(id, user_id, claimed_game, reason, detail, payload)
+         SELECT $1, $2, $3, $4, $5, $6
+         WHERE NOT EXISTS (
+             SELECT 1 FROM wow_played_quarantine
+             WHERE user_id = $2 AND reason = $4 AND payload->>'name' = $7
+               AND payload->>'played' = $8 AND payload->>'at' = $9)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(uid)
+    .bind(game)
+    .bind(reason)
+    .bind("kept for review; no character or hours row was written")
+    .bind(&payload)
+    .bind(&e.name)
+    .bind(e.played.to_string())
+    .bind(e.at.to_string())
+    .execute(&st.db)
+    .await
+    .inspect_err(|err| tracing::warn!("wow quarantine: insert for {uid}: {err}"));
+}
+
+/// Public Forever profile. A miss does not delete the character or any hour row.
+/// Ownership is not decided here.
+async fn refresh_forever_profile(st: &AppState, id: Uuid, e: &CharEntry) {
+    if !forever_lookup_enabled() {
+        return;
+    }
+    let due: Option<bool> = sqlx::query_scalar(
+        "SELECT bnet_checked_at IS NULL OR bnet_checked_at < now() - interval '6 hours'
+         FROM wow_characters WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await
+    .ok()
+    .flatten();
+    if due == Some(false) {
+        return;
+    }
+    if !fetch_forever_profile(st, id, e).await {
+        let st = st.clone();
+        let region = e.region.clone();
+        let first = e.first.clone();
+        let surname = e.surname.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(15 * 60)).await;
+            let again = CharEntry {
+                region,
+                first,
+                surname,
+                ..empty_entry()
+            };
+            let _ = fetch_forever_profile(&st, id, &again).await;
+        });
+    }
+}
+
+fn empty_entry() -> CharEntry {
+    CharEntry {
+        region: String::new(),
+        realm: String::new(),
+        name: String::new(),
+        class: String::new(),
+        level: 0,
+        played: 0,
+        at: 0,
+        sv: 2,
+        battletag: String::new(),
+        flavour: String::new(),
+        project: 0,
+        build: String::new(),
+        first: String::new(),
+        surname: String::new(),
+        beta: 0,
+        confirmed: 0,
+        sig: String::new(),
+    }
+}
+
+/// Returns true when Battle.net answered. A failure leaves the last good fields.
+async fn fetch_forever_profile(st: &AppState, id: Uuid, e: &CharEntry) -> bool {
+    let Some(tok) = app_token().await else {
+        return false;
+    };
+    let Some(http) = http() else { return false };
+    let url = forever_profile_url(&e.region, &e.first, &e.surname);
+    let Ok(resp) = http.get(&url).bearer_auth(tok).send().await else {
+        return false;
+    };
+    if !resp.status().is_success() {
+        let _ = sqlx::query("UPDATE wow_characters SET bnet_checked_at = now() WHERE id = $1")
+            .bind(id)
+            .execute(&st.db)
+            .await;
+        return false;
+    }
+    let Ok(v) = resp.json::<Value>().await else {
+        return false;
+    };
+    let level = v["level"].as_i64();
+    let _ = sqlx::query(
+        "UPDATE wow_characters SET bnet_level = coalesce($2, bnet_level),
+                bnet_spec = coalesce($3, bnet_spec), race = coalesce($4, race),
+                gender = coalesce($5, gender), bnet_checked_at = now()
+         WHERE id = $1",
+    )
+    .bind(id)
+    .bind(level.map(|l| l as i32))
+    .bind(name_of(&v["active_spec"]))
+    .bind(name_of(&v["race"]))
+    .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
+    .execute(&st.db)
+    .await
+    .inspect_err(|err| tracing::warn!("forever profile: update {id}: {err}"));
+    true
 }
 
 /// The checks of one entry against the character's previous upload `(played_s, at)`.
@@ -371,7 +530,7 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
     if !UPLOADS_OPEN.contains(gid) {
         return Err(AppError::bad_request(
             "forever_not_open",
-            "Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app.",
+            "That WoW version is not taking /played uploads.",
         ));
     }
     if chars.len() > 200 {
@@ -393,6 +552,16 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
     for e in chars {
         let who = label(e);
         let slug = realm_slug(&e.realm);
+        let stored_name = if *gid == "wow_forever" {
+            format!("{} {}", e.first.trim(), e.surname.trim())
+        } else {
+            e.name.clone()
+        };
+        let stored_realm = if *gid == "wow_forever" {
+            ""
+        } else {
+            e.realm.as_str()
+        };
         let prev: Option<(Uuid, i64, DateTime<Utc>)> = sqlx::query_as(
             "SELECT id, played_s, played_at FROM wow_characters
              WHERE user_id = $1 AND game_id = $2 AND region = $3 AND lower(realm) = lower($4)
@@ -401,10 +570,26 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
         .bind(uid)
         .bind(gid)
         .bind(&e.region)
-        .bind(&e.realm)
-        .bind(&e.name)
+        .bind(stored_realm)
+        .bind(&stored_name)
         .fetch_optional(&st.db)
         .await?;
+        match classify(e) {
+            Class::Retail if *gid == "wow" => {}
+            Class::Forever if *gid == "wow_forever" => {}
+            other => {
+                let why = match other {
+                    Class::Quarantine(w) => w,
+                    _ => "flavour_mismatch",
+                };
+                quarantine(st, uid, gid, e, why).await;
+                rejected.push(json!({ "character": label(e), "name": e.name, "realm": e.realm,
+                    "region": e.region, "class": e.class, "level": e.level,
+                    "played_min": e.played / 60, "reason": why,
+                    "detail": "This entry was kept for review and was not stored as a character." }));
+                continue;
+            }
+        }
         let checked = check_entry(
             e,
             prev.map(|p| (p.1, p.2.timestamp())),
@@ -415,6 +600,9 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
             Err(x) => {
                 if x.flag {
                     flag(st, uid, gid, &who, &x, e.played).await;
+                }
+                if *gid == "wow_forever" {
+                    quarantine(st, uid, gid, e, x.kind).await;
                 }
                 rejected.push(json!({ "character": who, "name": e.name, "realm": e.realm,
                     "region": e.region, "class": e.class, "level": e.level,
@@ -432,28 +620,45 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
             Ok(true) => {}
         }
         let at = Utc.timestamp_opt(e.at, 0).single().unwrap_or_else(Utc::now);
+        let (realm, slug, name) = if *gid == "wow_forever" {
+            (String::new(), String::new(), stored_name.clone())
+        } else {
+            (
+                e.realm.chars().take(64).collect(),
+                slug,
+                stored_name.clone(),
+            )
+        };
         let id: Uuid = sqlx::query_scalar(
             "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class,
-                                        level, played_s, played_at, battletag)
-             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                                        level, played_s, played_at, battletag, flavour, project_id,
+                                        client_build, first_name, surname, verified)
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false)
              ON CONFLICT (user_id, game_id, region, lower(realm), lower(name)) DO UPDATE
                SET class = excluded.class, level = excluded.level, played_s = excluded.played_s,
                    played_at = excluded.played_at, uploaded_at = now(), realm_slug = excluded.realm_slug,
-                   battletag = excluded.battletag
+                   battletag = excluded.battletag, flavour = excluded.flavour,
+                   project_id = excluded.project_id, client_build = excluded.client_build,
+                   first_name = excluded.first_name, surname = excluded.surname
              RETURNING id",
         )
         .bind(Uuid::new_v4())
         .bind(uid)
         .bind(gid)
         .bind(e.region.chars().take(8).collect::<String>())
-        .bind(e.realm.chars().take(64).collect::<String>())
+        .bind(realm.chars().take(64).collect::<String>())
         .bind(&slug)
-        .bind(e.name.chars().take(32).collect::<String>())
+        .bind(name.chars().take(64).collect::<String>())
         .bind(e.class.chars().take(24).collect::<String>())
         .bind(e.level as i32)
         .bind(e.played)
         .bind(at)
         .bind(e.battletag.chars().take(64).collect::<String>())
+        .bind(e.flavour.chars().take(32).collect::<String>())
+        .bind(e.project as i32)
+        .bind(e.build.chars().take(32).collect::<String>())
+        .bind(e.first.chars().take(32).collect::<String>())
+        .bind(e.surname.chars().take(32).collect::<String>())
         .fetch_one(&st.db)
         .await?;
         sqlx::query("INSERT INTO wow_played_snaps(char_id, played_s, at) VALUES($1, $2, $3) ON CONFLICT DO NOTHING")
@@ -466,13 +671,22 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
             json!({ "name": e.name, "realm": e.realm, "region": e.region,
             "delta_s": prev.map(|p| (e.played - p.1).max(0)), "first": prev.is_none() }),
         );
-        check_bnet_level(st, uid, gid, id, e).await;
+        if *gid == "wow" {
+            check_bnet_level(st, uid, gid, id, e).await;
+        } else {
+            // Public profile only, and only when the flag is on. It does not verify ownership.
+            refresh_forever_profile(st, id, e).await;
+        }
         accepted += 1;
     }
-    // every character of the user, so renames, transfers and sales are seen on each upload;
-    // the total is stored once here, so the whole upload's /played gain meets the tracked time
-    set_verified(st, uid, None).await;
-    let (total_min, kept_min) = record_total(st, uid, gid, Recount::KeepHigher).await?;
+    // Retail stores one imported total from verified characters. Forever does not:
+    // a character's /played stays on that character and is not an imported game total.
+    let (total_min, kept_min) = if *gid == "wow" {
+        set_verified(st, uid, None).await;
+        record_total(st, uid, gid, Recount::KeepHigher).await?
+    } else {
+        (0, None)
+    };
     let verified: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM wow_characters WHERE user_id = $1 AND game_id = $2 AND verified",
     )
@@ -590,6 +804,11 @@ async fn record_total(
     gid: &str,
     mode: Recount,
 ) -> ApiResult<(i64, Option<i64>)> {
+    // Forever /played is stored on the character. It is not an imported game total,
+    // so it is never added to app-tracked sessions for wow_forever.
+    if gid == "wow_forever" {
+        return Ok((0, None));
+    }
     let rows: Vec<(String, i64)> = sqlx::query_as(COUNTED)
         .bind(uid)
         .bind(gid)
@@ -721,15 +940,49 @@ pub(crate) fn http() -> Option<reqwest::Client> {
         .ok()
 }
 
-/// Profile namespace of a game in a region. Forever's isn't known before launch:
-/// `BNET_FOREVER_NAMESPACE` (e.g. `profile-forever-{region}`) turns it on.
+fn flag_on(key: &str) -> bool {
+    matches!(
+        std::env::var(key).ok().as_deref().map(str::trim),
+        Some("on") | Some("1")
+    )
+}
+
+/// The user-token account list for Forever. Off until that endpoint has been tested.
+/// A public profile is not this flag and never marks a character verified.
+pub(crate) fn forever_account_enabled() -> bool {
+    flag_on("BNET_FOREVER_ACCOUNT")
+}
+
+/// Public Forever profile lookups. Off leaves imports working and keeps the last
+/// good profile fields. It does not verify ownership.
+pub(crate) fn forever_lookup_enabled() -> bool {
+    flag_on("BNET_FOREVER_LOOKUP")
+}
+
+/// `profile-forever-{region}` and `/profile/wow/character/{first}-{surname}`.
+/// Not the Retail realm-slug URL.
+pub(crate) fn forever_profile_url(region: &str, first: &str, surname: &str) -> String {
+    let part = |s: &str| {
+        s.trim()
+            .to_lowercase()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect::<String>()
+    };
+    format!(
+        "https://{region}.api.blizzard.com/profile/wow/character/{}-{}?namespace=profile-forever-{region}&locale=en_US",
+        part(first),
+        part(surname)
+    )
+}
+
+/// Profile namespace of a game in a region. Forever's account list stays off
+/// unless `BNET_FOREVER_ACCOUNT=on`.
 pub(crate) fn namespace(game: &str, region: &str) -> Option<String> {
     match game {
         "wow" => Some(format!("profile-{region}")),
-        _ => std::env::var("BNET_FOREVER_NAMESPACE")
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .map(|t| t.replace("{region}", region)),
+        "wow_forever" if forever_account_enabled() => Some(format!("profile-forever-{region}")),
+        _ => None,
     }
 }
 
@@ -778,16 +1031,27 @@ pub async fn sync_characters(
             any_ok = true;
             for acct in v["wow_accounts"].as_array().into_iter().flatten() {
                 for c in acct["characters"].as_array().into_iter().flatten() {
-                    let (Some(name), Some(slug)) =
-                        (c["name"].as_str(), c["realm"]["slug"].as_str())
-                    else {
+                    let Some(name) = c["name"].as_str() else {
                         continue;
+                    };
+                    // Forever's account list has no realm. Retail still requires one.
+                    // This loop only runs for Forever when BNET_FOREVER_ACCOUNT=on.
+                    let (slug, realm_name) = if game == "wow_forever" {
+                        (String::new(), String::new())
+                    } else {
+                        let Some(slug) = c["realm"]["slug"].as_str() else {
+                            continue;
+                        };
+                        (
+                            slug.to_string(),
+                            c["realm"]["name"].as_str().unwrap_or_default().to_string(),
+                        )
                     };
                     rows.push((
                         game.to_string(),
                         r.to_string(),
-                        slug.to_string(),
-                        c["realm"]["name"].as_str().unwrap_or_default().to_string(),
+                        slug,
+                        realm_name,
                         name.to_string(),
                         c["level"].as_i64().map(|l| l as i32),
                         [
@@ -1256,6 +1520,13 @@ mod tests {
             at,
             sv: 1,
             battletag: tag.into(),
+            flavour: String::new(),
+            project: 0,
+            build: String::new(),
+            first: String::new(),
+            surname: String::new(),
+            beta: 0,
+            confirmed: 0,
             sig: String::new(),
         };
         c.sig = sign_with(SIG_KEYS[0].1, &c);
@@ -1263,6 +1534,18 @@ mod tests {
     }
 
     const NOW: i64 = 1_800_000_000;
+
+    #[test]
+    fn forever_profile_url_has_no_realm() {
+        let url = forever_profile_url("eu", "Vale", "Mocken");
+        assert_eq!(
+            url,
+            "https://eu.api.blizzard.com/profile/wow/character/vale-mocken?namespace=profile-forever-eu&locale=en_US"
+        );
+        assert!(!url.contains("realm"));
+        assert!(!forever_account_enabled());
+        assert!(!forever_lookup_enabled());
+    }
 
     #[test]
     fn slugs() {

@@ -1,8 +1,8 @@
-## Interface: 120105, 120107, 16001
+## Interface: 16001
 ## Title: Fraglink /played
-## Notes: Saves each character's /played total for the Fraglink app. Nothing leaves your PC from the game.
+## Notes: Saves each Forever character's /played total for the Fraglink app. Nothing leaves your PC from the game.
 ## Author: Fraglink
-## Version: 1.0.1
+## Version: 1.1.0
 ## X-Website: https://playfraglink.com
 ## X-Curse-Project-ID: 1766775
 ## SavedVariables: FraglinkPlayedDB

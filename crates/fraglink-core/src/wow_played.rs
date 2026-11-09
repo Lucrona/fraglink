@@ -15,12 +15,16 @@ use std::collections::BTreeMap;
 /// Addon folder name (also the SavedVariables file stem).
 pub const ADDON: &str = "FraglinkPlayed";
 /// Current addon release (CurseForge project 1766775). The app no longer installs it.
-pub const ADDON_VERSION: &str = "1.0.1";
+pub const ADDON_VERSION: &str = "1.1.0";
 
 /// Checksum keys by signature version. Every addon release that bumps
 /// `SIG_VERSION` adds its key here; the server accepts only listed versions, so an
-/// old key is retired by deleting its row.
-pub const SIG_KEYS: &[(i64, &str)] = &[(1, "OlApFDIsED1aJE04makEnBj7W6DZwvYG")];
+/// old key is retired by deleting its row. Version 1 is the Retail entry. Version 2
+/// also signs flavour, project, build, and Forever's first name and surname.
+pub const SIG_KEYS: &[(i64, &str)] = &[
+    (1, "OlApFDIsED1aJE04makEnBj7W6DZwvYG"),
+    (2, "K7mQ2pL9xR4vN8cW1dF6hJ3sT5yB0aUe"),
+];
 
 /// WoW flavour folder -> Fraglink game id. Only these two count.
 pub const FLAVOURS: &[(&str, &str)] = &[("_retail_", "wow"), ("_forever_", "wow_forever")];
@@ -42,6 +46,27 @@ pub struct CharEntry {
     /// The player's BattleTag (BNGetInfo), checked against the linked Battle.net account.
     #[serde(default)]
     pub battletag: String,
+    /// `retail`, `forever`, `forever_beta`, `forever_unconfirmed`, or empty on a v1 file.
+    #[serde(default)]
+    pub flavour: String,
+    /// `WOW_PROJECT_ID`. Camelot / Forever is 18. Empty on a v1 file.
+    #[serde(default)]
+    pub project: i64,
+    /// `GetBuildInfo` build. Not used to tell live Forever from the beta.
+    #[serde(default)]
+    pub build: String,
+    /// Forever given name. Empty for Retail.
+    #[serde(default)]
+    pub first: String,
+    /// Forever surname. Empty for Retail.
+    #[serde(default)]
+    pub surname: String,
+    /// 1 when a beta/test client API said this client is a test build.
+    #[serde(default)]
+    pub beta: i64,
+    /// 1 when the addon could actually ask the beta/test client APIs.
+    #[serde(default)]
+    pub confirmed: i64,
     pub sig: String,
 }
 
@@ -57,7 +82,7 @@ fn hash(s: &[u8]) -> String {
 
 /// The addon's checksum of an entry with `key`.
 pub fn sign_with(key: &str, e: &CharEntry) -> String {
-    let fields = [
+    let mut parts = vec![
         e.region.clone(),
         e.realm.clone(),
         e.name.clone(),
@@ -67,8 +92,19 @@ pub fn sign_with(key: &str, e: &CharEntry) -> String {
         e.at.to_string(),
         e.sv.to_string(),
         e.battletag.clone(),
-    ]
-    .join("|");
+    ];
+    if e.sv >= 2 {
+        parts.extend([
+            e.flavour.clone(),
+            e.project.to_string(),
+            e.build.clone(),
+            e.first.clone(),
+            e.surname.clone(),
+            e.beta.to_string(),
+            e.confirmed.to_string(),
+        ]);
+    }
+    let fields = parts.join("|");
     let inner = hash(format!("{key}|{fields}").as_bytes());
     hash(format!("{key}{inner}").as_bytes())
 }
@@ -330,7 +366,7 @@ pub fn entries_from_saved(text: &str) -> Vec<CharEntry> {
         .filter_map(|c| {
             Some(CharEntry {
                 region: c.str("region")?,
-                realm: c.str("realm")?,
+                realm: c.str("realm").unwrap_or_default(),
                 name: c.str("name")?,
                 class: c.str("class").unwrap_or_default(),
                 level: c.int("level").unwrap_or(0),
@@ -338,10 +374,21 @@ pub fn entries_from_saved(text: &str) -> Vec<CharEntry> {
                 at: c.int("at")?,
                 sv: c.int("sv")?,
                 battletag: c.str("battletag").unwrap_or_default(),
+                flavour: c.str("flavour").unwrap_or_default(),
+                project: c.int("project").unwrap_or(0),
+                build: c.str("build").unwrap_or_default(),
+                first: c.str("first").unwrap_or_default(),
+                surname: c.str("surname").unwrap_or_default(),
+                beta: c.int("beta").unwrap_or(0),
+                confirmed: c.int("confirmed").unwrap_or(0),
                 sig: c.str("sig")?,
             })
         })
-        .filter(|e| e.played > 0 && !e.realm.is_empty() && !e.name.is_empty())
+        .filter(|e| {
+            e.played > 0
+                && !e.name.is_empty()
+                && (!e.realm.is_empty() || e.flavour.starts_with("forever"))
+        })
         .collect()
 }
 
@@ -360,6 +407,13 @@ mod tests {
             at: 1_793_000_000,
             sv: 1,
             battletag: "Thrall#1234".into(),
+            flavour: String::new(),
+            project: 0,
+            build: String::new(),
+            first: String::new(),
+            surname: String::new(),
+            beta: 0,
+            confirmed: 0,
             sig: String::new(),
         }
     }
@@ -399,6 +453,34 @@ mod tests {
         want.sig = got[0].sig.clone();
         assert_eq!(got[0], want);
         assert_eq!(verify(&got[0]), SigCheck::Ok);
+    }
+
+    #[test]
+    fn forever_v2_signature_includes_the_surname() {
+        let mut e = entry();
+        e.sv = 2;
+        e.realm.clear();
+        e.name = "Vale Mocken".into();
+        e.flavour = "forever".into();
+        e.project = 18;
+        e.build = "16001".into();
+        e.first = "Vale".into();
+        e.surname = "Mocken".into();
+        e.beta = 0;
+        e.confirmed = 1;
+        e.sig = sign_with(SIG_KEYS[1].1, &e);
+        assert_eq!(verify(&e), SigCheck::Ok);
+        let mut renamed = e.clone();
+        renamed.surname = "Other".into();
+        assert_eq!(verify(&renamed), SigCheck::Bad);
+        let text = format!(
+            "FraglinkPlayedDB = {{ chars = {{ [\"us/forever/Vale Mocken\"] = {{ region = \"us\", realm = \"\", name = \"Vale Mocken\", class = \"SHAMAN\", level = 80, played = 1234567, at = 1793000000, sv = 2, battletag = \"Thrall#1234\", flavour = \"forever\", project = 18, build = \"16001\", first = \"Vale\", surname = \"Mocken\", beta = 0, confirmed = 1, sig = \"{}\" }} }} }}\n",
+            e.sig
+        );
+        let got = entries_from_saved(&text);
+        assert_eq!(got.len(), 1);
+        assert_eq!(verify(&got[0]), SigCheck::Ok);
+        assert!(got[0].realm.is_empty());
     }
 
     #[test]
