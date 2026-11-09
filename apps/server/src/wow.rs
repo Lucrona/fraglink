@@ -679,14 +679,10 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
         }
         accepted += 1;
     }
-    // Retail stores one imported total from verified characters. Forever does not:
-    // a character's /played stays on that character and is not an imported game total.
-    let (total_min, kept_min) = if *gid == "wow" {
-        set_verified(st, uid, None).await;
-        record_total(st, uid, gid, Recount::KeepHigher).await?
-    } else {
-        (0, None)
-    };
+    // Same path for Retail and Forever. `gid` is the game being uploaded, so a
+    // Forever file writes wow_forever only and a Retail file writes wow only.
+    set_verified(st, uid, None).await;
+    let (total_min, kept_min) = record_total(st, uid, gid, Recount::KeepHigher).await?;
     let verified: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM wow_characters WHERE user_id = $1 AND game_id = $2 AND verified",
     )
@@ -730,7 +726,7 @@ pub(crate) async fn last_import(
         "WITH i AS (SELECT minutes, carry_min, captured_at FROM hours_entries
                     WHERE user_id = $1 AND game_id = $2 AND tier = 'imported'
                     ORDER BY captured_at DESC, created_at DESC LIMIT 1)
-         SELECT i.minutes::bigint, i.carry_min::bigint,
+         SELECT i.minutes::bigint, coalesce(i.carry_min, 0)::bigint,
                 coalesce((SELECT (sum(LEAST(x.duration_s::numeric,
                     extract(epoch FROM x.ended_at - GREATEST(x.started_at, i.captured_at)))) / 60)::bigint
                   FROM play_sessions x WHERE x.user_id = $1 AND x.game_id = $2 AND x.ended_at > i.captured_at), 0)::bigint
@@ -751,8 +747,8 @@ async fn tracked_between(
     to: DateTime<Utc>,
 ) -> ApiResult<i64> {
     Ok(sqlx::query_scalar(
-        "SELECT coalesce((sum(GREATEST(0, LEAST(x.duration_s::numeric,
-                    extract(epoch FROM LEAST(x.ended_at, $4) - GREATEST(x.started_at, $3))))) / 60)::bigint, 0)::bigint
+        "SELECT coalesce(sum(GREATEST(0, LEAST(x.duration_s::numeric,
+                    extract(epoch FROM LEAST(x.ended_at, $4) - GREATEST(x.started_at, $3))))), 0)::bigint / 60
          FROM play_sessions x
          WHERE x.user_id = $1 AND x.game_id = $2 AND x.ended_at > $3 AND x.started_at < $4",
     )
@@ -760,8 +756,9 @@ async fn tracked_between(
     .bind(gid)
     .bind(from)
     .bind(to)
-    .fetch_one(&st.db)
-    .await?)
+    .fetch_optional(&st.db)
+    .await?
+    .unwrap_or(0))
 }
 
 /// The shown imported total: latest import + carried extra + tracked play after it.
@@ -772,6 +769,8 @@ pub(crate) async fn imported_floor(st: &AppState, uid: Uuid, gid: &str) -> ApiRe
 /// The characters that count toward a user's game, one per Battle.net character id
 /// (row id, /played seconds):
 /// - verified ones (on the linked account's newest listing, see `set_verified`);
+/// - accepted Forever characters that are not verified yet (the Forever account list
+///   is still off, so they have no tick, but their /played is this game's imported total);
 /// - ones verified before that are on nobody's listing any more (deleted: they keep their
 ///   hours) while Battle.net is linked;
 /// - never one another user's Battle.net lists now (sold or moved), and a renamed or
@@ -780,7 +779,11 @@ const COUNTED: &str = "
     WITH c AS (
       SELECT c.id, c.bnet_id, c.played_s, c.verified FROM wow_characters c
       WHERE c.user_id = $1 AND c.game_id = $2
-        AND (c.verified OR (c.ever_verified
+        AND (c.verified
+             OR (c.game_id = 'wow_forever' AND (c.bnet_id IS NULL OR NOT EXISTS (
+                  SELECT 1 FROM bnet_characters b WHERE b.game_id = c.game_id AND b.region = c.region
+                    AND b.bnet_id = c.bnet_id AND b.user_id <> c.user_id)))
+             OR (c.ever_verified
              AND EXISTS (SELECT 1 FROM linked_accounts l WHERE l.user_id = c.user_id
                            AND l.provider = 'bnet' AND l.verified)
              AND (c.bnet_id IS NULL OR NOT EXISTS (
@@ -804,11 +807,6 @@ async fn record_total(
     gid: &str,
     mode: Recount,
 ) -> ApiResult<(i64, Option<i64>)> {
-    // Forever /played is stored on the character. It is not an imported game total,
-    // so it is never added to app-tracked sessions for wow_forever.
-    if gid == "wow_forever" {
-        return Ok((0, None));
-    }
     let rows: Vec<(String, i64)> = sqlx::query_as(COUNTED)
         .bind(uid)
         .bind(gid)
@@ -824,7 +822,8 @@ async fn record_total(
     .await?;
     let now_map: std::collections::BTreeMap<String, i64> = rows.into_iter().collect();
     let sum = (now_map.values().sum::<i64>() / 60).min(i32::MAX as i64);
-    let last: Option<(i32, Value)> = sqlx::query_as(
+    // Older imported rows have no per-character inputs. That is not an error.
+    let last: Option<(i32, Option<Value>)> = sqlx::query_as(
         "SELECT minutes, inputs FROM hours_entries WHERE user_id = $1 AND game_id = $2 AND source = 'wow_addon'
          ORDER BY created_at DESC, id DESC LIMIT 1",
     )
@@ -834,18 +833,22 @@ async fn record_total(
     .await?;
     let prev_map: Option<std::collections::BTreeMap<String, i64>> = last
         .as_ref()
-        .and_then(|(_, i)| serde_json::from_value(i["chars"].clone()).ok());
+        .and_then(|(_, i)| i.as_ref())
+        .and_then(|i| serde_json::from_value(i["chars"].clone()).ok());
     // The time this total is "as of": the newest snapshot among the counted characters,
     // never before the last stored total and never in the future. Not the upload time:
     // after a WoW crash the addon's file still holds the /played from before that
     // session, so play between the snapshot and the upload would be carried as menu
     // time and then counted again once a later snapshot's /played includes it.
     let ids: Vec<&String> = now_map.keys().collect();
-    let (as_of, prev_at): (DateTime<Utc>, Option<DateTime<Utc>>) = sqlx::query_as(
+    let (as_of, prev_at): (Option<DateTime<Utc>>, Option<DateTime<Utc>>) = sqlx::query_as(
         "WITH p AS (SELECT max(captured_at) AS at FROM hours_entries
                     WHERE user_id = $1 AND game_id = $2 AND tier = 'imported')
-         SELECT LEAST(now(), GREATEST(p.at, (SELECT max(played_at) FROM wow_characters
-                    WHERE user_id = $1 AND game_id = $2 AND id::text = ANY($3)))), p.at
+         SELECT LEAST(now(), coalesce(
+                    GREATEST(p.at, (SELECT max(played_at) FROM wow_characters
+                        WHERE user_id = $1 AND game_id = $2 AND id::text = ANY($3))),
+                    p.at, now())),
+                p.at
          FROM p",
     )
     .bind(uid)
@@ -853,6 +856,7 @@ async fn record_total(
     .bind(&ids)
     .fetch_one(&st.db)
     .await?;
+    let as_of = as_of.unwrap_or_else(Utc::now);
     let mut carry = 0i64;
     let store = match mode {
         Recount::Reset => last.is_some() || sum > 0,

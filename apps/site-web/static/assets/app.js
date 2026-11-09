@@ -510,10 +510,10 @@ pages.wowupload = async () => {
   const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
   const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
   el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
-    <p class="sub">Upload a character's /played from the addon. Retail keeps its current rules. Forever /played stays on that character and is not added to hours the app tracked.</p></div></div>
+    <p class="sub">Upload a character's /played from the addon. Retail and Forever each store that total on their own game. Shown hours use the imported total plus play after that snapshot, or the app's tracked time if that is higher. The two are not added together.</p></div></div>
     <form class="wu-form" data-form>
       <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
-      <p class="sub">Retail /played is unchanged. Forever /played is saved on the character and is not added to hours the app tracked. A Forever character stays unverified until Battle.net's Forever account list confirms it. That check is off until it has been tested.</p>
+      <p class="sub">Retail and Forever are separate. A Forever character stays unverified until Battle.net's Forever account list confirms it. That check is off until it has been tested.</p>
       <div class="alert info"><b>Before you upload: log in to every character.</b> The addon only saves a character's /played when you log in to it (then log out or <code>/reload</code>). Characters you skip keep the hours from their last upload, and Fraglink always keeps your higher total, so a partial upload never lowers your hours.</div>
       <label class="check wu-row"><input type="checkbox" name="all" required> I've logged in to each of my characters with the addon on since my last upload</label>
       <div class="wu-row"><span class="wu-l">File</span><input type="file" name="f" accept=".lua" required> <button class="btn blue" type="submit">Upload and check</button></div>
@@ -653,7 +653,7 @@ pages.bnet = async () => {
         <select data-vis aria-label="Shown or hidden"><option value="">Shown + hidden</option><option value="shown">Shown only</option><option value="hidden">Hidden only</option></select></div>
       <div data-list><p class="empty" style="padding:20px 12px">Loading…</p></div>
       <div class="bn-more"><span class="sub" data-cnt></span><button class="btn" type="button" data-more hidden>Show 25 more</button></div></section>
-    <p class="sub">Retail characters Battle.net confirms are listed with a tick and count toward Retail hours. Forever characters are listed from the addon without that tick until the Forever account list has been tested, and their /played is not added to tracked hours.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} ${s.unverified === 1 ? "isn't" : "aren't"} verified yet, so ${s.unverified === 1 ? "it doesn't" : "they don't"} count.` : ""} Hidden characters are not shown on your profile.${FEATURES.wow_characters ? "" : " Character details aren't shown on profiles right now; your profile shows only your WoW hours."}</p>`;
+    <p class="sub">Retail characters Battle.net confirms are listed with a tick. Forever characters are listed from the addon without that tick until the Forever account list has been tested. Shown hours follow the same rule for both: the imported total is not added on top of tracked time.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} ${s.unverified === 1 ? "isn't" : "aren't"} verified yet.` : ""} Hidden characters are not shown on your profile.${FEATURES.wow_characters ? "" : " Character details aren't shown on profiles right now; your profile shows only your WoW hours."}</p>`;
   const msgBox = $("[data-msg]", el), list = $("[data-list]", el), more = $("[data-more]", el), cnt = $("[data-cnt]", el);
   const st = { q: "", sort: "hours", class: "", vis: "", items: [], data: null, seq: 0 };
   const row = c => {

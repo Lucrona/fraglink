@@ -103,6 +103,7 @@ async fn forever_import_does_not_touch_retail_hours(pool: PgPool) {
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     assert_eq!(r.json()["accepted"], 1, "{}", r.text);
     assert_eq!(r.json()["verified"], 0);
+    assert_eq!(r.json()["total_min"], 180, "{}", r.text);
 
     let again = post(&app, &t, "wow_forever", &e).await;
     assert_eq!(again.json()["accepted"], 0, "{}", again.text);
@@ -145,9 +146,16 @@ async fn forever_import_does_not_touch_retail_hours(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(
-        forever_hours, 0,
-        "forever /played is not an imported game total"
+        forever_hours, 1,
+        "a duplicate upload does not add a second total"
     );
+    let forever_min: i32 = sqlx::query_scalar(
+        "SELECT minutes FROM hours_entries WHERE game_id = 'wow_forever' AND tier = 'imported'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(forever_min, 180);
     let tracked: i64 = sqlx::query_scalar(
         "SELECT coalesce(sum(duration_s),0) FROM sessions WHERE game_id = 'wow_forever'",
     )
@@ -239,4 +247,131 @@ async fn forever_import_does_not_touch_retail_hours(pool: PgPool) {
         .await
         .unwrap();
     assert!(realm.is_empty());
+}
+
+/// Shown hours for Forever use Retail's rule: the imported /played total and the
+/// app's tracked time are not added together. Play before the snapshot is already
+/// inside /played. Only tracked play after that snapshot is added, and only on the
+/// imported side; display then keeps the higher of that and the full tracked time.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn forever_display_follows_the_retail_rule(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "fd@example.com", "fdisplay").await;
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'fdisplay'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO games(id, name) VALUES ('wow', 'World of Warcraft'), ('wow_forever', 'World of Warcraft: Forever') ON CONFLICT DO NOTHING",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes, captured_at)
+         VALUES (gen_random_uuid(), $1, 'wow', 'imported', 'wow_addon', 400, timestamptz '2026-01-01')",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // 30 minutes tracked, entirely before the /played snapshot.
+    sqlx::query(
+        "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s)
+         VALUES (gen_random_uuid(), $1, 'wow_forever',
+                 timestamptz '2026-02-01 00:00:00+00', timestamptz '2026-02-01 00:30:00+00', 1800)",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let at = chrono::DateTime::parse_from_rfc3339("2026-03-01T00:00:00Z")
+        .unwrap()
+        .timestamp();
+    let e = forever("Vale Mocken", "Vale", "Mocken", 7_200, at, "For#1");
+    let r = post(&app, &t, "wow_forever", &e).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["total_min"], 120, "{}", r.text);
+
+    let (tracked, imported, display): (i64, i64, i64) = sqlx::query_as(
+        "SELECT tracked_min, imported_min, display_min FROM user_game_stats
+         WHERE user_id = $1 AND game_id = 'wow_forever'",
+    )
+    .bind(uid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(tracked, 30);
+    assert_eq!(imported, 120);
+    assert_eq!(display, 120, "display is not tracked 30 plus imported 120");
+    let retail: i32 = sqlx::query_scalar("SELECT minutes FROM hours_entries WHERE game_id = 'wow'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(retail, 400);
+
+    let again = post(&app, &t, "wow_forever", &e).await;
+    assert_eq!(again.json()["unchanged"].as_array().unwrap().len(), 1);
+    let rows: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM hours_entries WHERE game_id = 'wow_forever'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(rows, 1);
+    let display_again: i64 = sqlx::query_scalar(
+        "SELECT display_min FROM user_game_stats WHERE user_id = $1 AND game_id = 'wow_forever'",
+    )
+    .bind(uid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(display_again, 120);
+
+    // A Retail upload must not move the Forever total. This character is on the
+    // linked account, so Retail's own total can update; Forever's row must not.
+    sqlx::query(
+        "INSERT INTO linked_accounts(user_id, provider, provider_uid, display, verified, scopes)
+         SELECT id, 'bnet', 'fd', 'For#1', true, 'openid wow.profile' FROM users WHERE handle = 'fdisplay'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, name)
+         SELECT id, 'wow', 'us', 'area-52', 'Retail Kin' FROM users WHERE handle = 'fdisplay'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut retail_char = forever("Retail Kin", "Retail", "Kin", 3_600, at, "For#1");
+    retail_char.region = "us".into();
+    retail_char.realm = "Area 52".into();
+    retail_char.name = "Retail Kin".into();
+    retail_char.flavour.clear();
+    retail_char.project = 0;
+    retail_char.sv = 1;
+    retail_char.first.clear();
+    retail_char.surname.clear();
+    retail_char.confirmed = 0;
+    retail_char.beta = 0;
+    retail_char.sig = sign_with(SIG_KEYS[0].1, &retail_char);
+    let rr = post(&app, &t, "wow", &retail_char).await;
+    assert_eq!(rr.status, StatusCode::OK, "{}", rr.text);
+    let forever_after: i32 = sqlx::query_scalar(
+        "SELECT minutes FROM hours_entries WHERE game_id = 'wow_forever' AND tier = 'imported'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(forever_after, 120);
+    let retail_kept: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM hours_entries WHERE game_id = 'wow' AND minutes = 400",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        retail_kept, 1,
+        "the existing Retail import row is not rewritten"
+    );
 }
