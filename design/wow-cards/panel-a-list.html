@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Option A — compact list</title>
+<style>
+:root{--bg:#0c0e11;--text:#c8ced6;--muted:#8a939e;--dim:#626b76;--orange:#d9893b;--guild:#a7d08c;--link:#8db4d9;--font:system-ui,Segoe UI,Roboto,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(1200px 400px at 50% -120px,#1a2533,transparent 70%),var(--bg);color:var(--text);font:13px/1.35 var(--font)}
+.sample{background:#2a1c0e;color:#f0c58e;text-align:center;padding:7px 12px;font-size:12px}
+.top{background:linear-gradient(#171b21,#111418);border-bottom:1px solid #000}.top .wrap{display:flex;align-items:center;gap:18px;height:46px}
+.logo{font-weight:700;color:#eef2f6}.nav{display:flex;gap:14px;color:#b9bec5;font-weight:600}.nav .on{color:#fff;border-bottom:2px solid var(--orange);padding:12px 0}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px}main{padding:16px 0 28px}
+.who{display:flex;gap:10px;align-items:center;margin-bottom:12px}.av{width:44px;height:44px;border-radius:4px;background:#22374d;display:grid;place-items:center;font-weight:700;border:1px solid #000}
+h1{margin:0;font-size:20px;color:#eef2f6;font-weight:600}.sub{color:var(--muted);font-size:12px}
+.panel{background:linear-gradient(#141b24,#11161d);border:1px solid #24384f;border-radius:4px;overflow:hidden}
+h2{margin:0;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:6px 12px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:#e89a48;background:linear-gradient(90deg,#22374d 0,#1a2a3b 160px,#12171e)}
+.seg{display:flex;border:1px solid #3d5168;border-radius:3px;overflow:hidden;text-transform:none;letter-spacing:0}
+.seg button{background:transparent;color:#c5d0db;border:0;border-right:1px solid #3d5168;padding:4px 10px;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+.seg button:last-child{border:0}.seg button.on{background:#2c4d6b;color:#fff}
+.row{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid #1a2532}
+.port{width:36px;height:36px;border-radius:4px;border:1px solid #000;display:grid;place-items:center;font-size:11px;font-weight:700;color:#eef2f6}
+.name{color:#eef2f6;font-weight:700}.meta{font-size:12px}.guild{color:var(--guild)}
+.tick{color:#8fdc79;font-weight:700;font-size:15px}
+.foot{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;color:var(--dim);font-size:12px}
+a.more{color:var(--link);font-weight:650}
+@media(max-width:640px){.nav{display:none}}
+</style>
+</head>
+<body>
+<div class="sample"><b>OPTION A</b> · compact list · SAMPLE · visitors can switch · default is the player's setting</div>
+<header class="top"><div class="wrap"><span class="logo">Fraglink</span><nav class="nav"><span class="on">Profile</span><span>Games</span></nav></div></header>
+<main><div class="wrap">
+  <div class="who"><div class="av">SM</div><div><h1>Samplemock</h1><div class="sub">SAMPLE account</div></div></div>
+  <section class="panel">
+    <h2><span>WoW characters</span>
+      <div class="seg" role="tablist"><button class="on" type="button">Retail</button><button type="button">Forever</button></div>
+    </h2>
+    <div class="row"><div class="port" style="background:#3a5f86">Mo</div><div><div class="name">Mockrend</div><div class="meta"><span style="color:#69ccf0">Mage</span> · <span class="guild">&lt;Samplekeep&gt;</span></div></div><span class="tick" title="On the linked Battle.net account">✓</span></div>
+    <div class="row"><div class="port" style="background:#3d5340">Sa</div><div><div class="name">Samplekin</div><div class="meta"><span style="color:#abd473">Hunter</span></div></div><span></span></div>
+    <div class="row"><div class="port" style="background:#5a3a3a">Br</div><div><div class="name">Bramble Mock</div><div class="meta"><span style="color:#ff7d0a">Druid</span> · <span class="guild">&lt;Samplekeep&gt;</span></div></div><span class="tick" title="On the linked Battle.net account">✓</span></div>
+    <div class="row"><div class="port" style="background:#4a3d62">Ny</div><div><div class="name">Nyx Sample</div><div class="meta"><span style="color:#fff569">Rogue</span></div></div><span></span></div>
+    <div class="row"><div class="port" style="background:#5a4632">Pa</div><div><div class="name">Pala Mock</div><div class="meta"><span style="color:#f58cba">Paladin</span> · <span class="guild">&lt;Dawn Sample&gt;</span></div></div><span class="tick" title="On the linked Battle.net account">✓</span></div>
+    <div class="row"><div class="port" style="background:#3a3f46">Sh</div><div><div class="name">Shade Sample</div><div class="meta"><span style="color:#9482c9">Warlock</span></div></div><span></span></div>
+    <div class="row"><div class="port" style="background:#2f4a62">Ti</div><div><div class="name">Tide Mock</div><div class="meta"><span style="color:#0070de">Shaman</span></div></div><span class="tick" title="On the linked Battle.net account">✓</span></div>
+    <div class="row"><div class="port" style="background:#3a5348">Pe</div><div><div class="name">Pebble Sample</div><div class="meta"><span style="color:#00ff96">Monk</span></div></div><span></span></div>
+    <div class="foot"><span>Eight shown. Missing guild or class is left out.</span><a class="more" href="view-all.html">View all</a></div>
+  </section>
+</div></main>
+</body></html>

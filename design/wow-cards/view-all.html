@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>View all — WoW characters</title>
+<style>
+:root{--bg:#0c0e11;--text:#c8ced6;--muted:#8a939e;--dim:#626b76;--orange:#d9893b;--guild:#a7d08c;--font:system-ui,Segoe UI,Roboto,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(1200px 400px at 50% -120px,#1a2533,transparent 70%),var(--bg);color:var(--text);font:13px/1.35 var(--font)}
+.sample{background:#2a1c0e;color:#f0c58e;text-align:center;padding:7px 12px;font-size:12px}
+.top{background:linear-gradient(#171b21,#111418);border-bottom:1px solid #000}.top .wrap{display:flex;align-items:center;gap:18px;height:46px}
+.logo{font-weight:700;color:#eef2f6}.nav{display:flex;gap:14px;color:#b9bec5;font-weight:600}.nav .on{color:#fff;border-bottom:2px solid var(--orange);padding:12px 0}
+.wrap{max-width:880px;margin:0 auto;padding:0 16px}main{padding:16px 0 28px}
+a.back{color:#8db4d9;font-size:12px}
+h1{margin:8px 0 12px;font-size:20px;color:#eef2f6;font-weight:600}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.seg{display:flex;border:1px solid #3d5168;border-radius:3px;overflow:hidden}
+.seg button{background:transparent;color:#c5d0db;border:0;border-right:1px solid #3d5168;padding:6px 14px;font:inherit;font-weight:650}
+.seg button:last-child{border:0}.seg button.on{background:#2c4d6b;color:#fff}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.card{background:linear-gradient(#182230,#121820);border:1px solid #24384f;border-radius:6px;padding:12px 10px;text-align:center}
+.port{width:64px;height:64px;margin:0 auto 8px;border-radius:6px;border:1px solid #000;display:grid;place-items:center;font-weight:700;color:#eef2f6;font-size:16px}
+.name{color:#eef2f6;font-weight:700}.tick{color:#8fdc79}
+.cls{font-size:12px;margin-top:2px}.guild{color:var(--guild);font-size:12px;margin-top:2px}
+@media(max-width:640px){.nav{display:none}.grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="sample"><b>VIEW ALL</b> · characters only · SAMPLE · no hours · no past names · no timeline</div>
+<header class="top"><div class="wrap"><span class="logo">Fraglink</span><nav class="nav"><span class="on">Profile</span><span>Games</span></nav></div></header>
+<main><div class="wrap">
+  <a class="back" href="panel-b-gallery.html">← Samplemock</a>
+  <div class="bar"><h1>WoW characters</h1>
+    <div class="seg" role="tablist" aria-label="Which roster to show"><button class="on" type="button">Retail</button><button type="button">Forever</button></div>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="port" style="background:#3a5f86">Mo</div><div class="name">Mockrend <span class="tick" title="On the linked Battle.net account">✓</span></div><div class="cls" style="color:#69ccf0">Mage</div><div class="guild">&lt;Samplekeep&gt;</div></div>
+    <div class="card"><div class="port" style="background:#3d5340">Sa</div><div class="name">Samplekin</div><div class="cls" style="color:#abd473">Hunter</div></div>
+    <div class="card"><div class="port" style="background:#5a3a3a">Br</div><div class="name">Bramble Mock <span class="tick">✓</span></div><div class="cls" style="color:#ff7d0a">Druid</div><div class="guild">&lt;Samplekeep&gt;</div></div>
+    <div class="card"><div class="port" style="background:#4a3d62">Ny</div><div class="name">Nyx Sample</div><div class="cls" style="color:#fff569">Rogue</div></div>
+    <div class="card"><div class="port" style="background:#5a4632">Pa</div><div class="name">Pala Mock <span class="tick">✓</span></div><div class="cls" style="color:#f58cba">Paladin</div><div class="guild">&lt;Dawn Sample&gt;</div></div>
+    <div class="card"><div class="port" style="background:#3a3f46">Sh</div><div class="name">Shade Sample</div><div class="cls" style="color:#9482c9">Warlock</div></div>
+    <div class="card"><div class="port" style="background:#2f4a62">Ti</div><div class="name">Tide Mock <span class="tick">✓</span></div><div class="cls" style="color:#0070de">Shaman</div></div>
+    <div class="card"><div class="port" style="background:#3a5348">Pe</div><div class="name">Pebble Sample</div><div class="cls" style="color:#00ff96">Monk</div></div>
+    <div class="card"><div class="port" style="background:#5a3038">Ke</div><div class="name">Kestrel Mock</div><div class="cls" style="color:#c79c6e">Warrior</div></div>
+    <div class="card"><div class="port" style="background:#3a3a55">Or</div><div class="name">Orchid Sample <span class="tick">✓</span></div><div class="cls" style="color:#ffffff">Priest</div><div class="guild">&lt;Dawn Sample&gt;</div></div>
+  </div>
+</div></main>
+</body></html>

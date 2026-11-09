@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manager option B — one table</title>
+<style>
+:root{--font:system-ui,Segoe UI,Roboto,sans-serif;--text:#c8ced6;--muted:#8a939e}
+*{box-sizing:border-box}body{margin:0;background:#0c0e11;color:var(--text);font:13px/1.4 var(--font)}
+.sample{background:#2a1c0e;color:#f0c58e;text-align:center;padding:7px 12px;font-size:12px}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+.panel{background:#15181d;border:1px solid #24384f;border-radius:4px;overflow:hidden}
+.head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 12px;background:linear-gradient(90deg,#22374d,#12171e);color:#e89a48;font-size:11px;letter-spacing:.8px;text-transform:uppercase}
+.tools{display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;color:#c8ced6;font-size:12px}
+button{background:#1c2836;color:#d6dee8;border:1px solid #3d5168;border-radius:3px;padding:5px 8px;font:inherit}
+.seg{display:inline-flex;border:1px solid #3d5168;border-radius:3px;overflow:hidden}
+.seg b{background:#2c4d6b;color:#fff;padding:3px 8px}.seg span{padding:3px 8px}
+table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;border-bottom:1px solid #1a2532;text-align:left;vertical-align:top}
+th{color:#8a939e;font-weight:600;font-size:11px}
+.tick{color:#8fdc79}.dim{color:#8a939e;font-size:12px}
+.sw{width:28px;height:16px;border-radius:8px;background:#2f5a2a;position:relative;display:inline-block}
+.sw i{position:absolute;top:2px;left:14px;width:12px;height:12px;border-radius:50%;background:#8fdc79}
+.note{padding:8px 12px;color:#8a939e;font-size:12px}
+</style>
+</head>
+<body>
+<div class="sample"><b>MANAGER B</b> · one table · SAMPLE · profile default sits with the account</div>
+<main class="wrap">
+<section class="panel">
+  <div class="head"><span>WoW · Samplemock#1234 linked</span>
+    <div class="tools">Profile default <div class="seg"><b>Retail</b><span>Forever</span></div>
+      <button>Add from Armory</button><button>Upload /played</button></div>
+  </div>
+  <table>
+    <thead><tr><th>Character</th><th>Flavour</th><th>/played</th><th>Last import</th><th>Verified</th><th>On profile</th></tr></thead>
+    <tbody>
+      <tr><td><b>Mockrend</b><div class="dim">Mage · formerly Mossrend</div></td><td>Retail</td><td>1,284 h</td><td>8 Nov</td><td class="tick">✓</td><td><span class="sw"><i></i></span></td></tr>
+      <tr><td><b>Vale Mocken</b><div class="dim">Warrior</div></td><td>Forever</td><td>86 h</td><td>7 Nov</td><td class="dim">—</td><td><span class="sw"><i></i></span></td></tr>
+      <tr><td><b>Samplekin</b><div class="dim">Held for review · lower /played, not saved</div></td><td>Retail</td><td class="dim">unchanged</td><td>2 Nov</td><td class="dim">—</td><td class="dim">—</td></tr>
+    </tbody>
+  </table>
+  <div class="note">Visitors can still switch Retail and Forever on the profile. Past names stay on this page only.</div>
+</section>
+</main>
+</body></html>
