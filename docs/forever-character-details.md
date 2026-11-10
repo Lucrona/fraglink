@@ -22,8 +22,12 @@ Forever profiles were Lucrona Ashborne and Lucroner Ashborne on the US host with
 | static-forever-us item media | 200 for all 25 distinct equipped item ids | icon assets, including numeric file-data ids |
 
 The existing icon proxy's US CDN path was checked with a Forever numeric icon and
-returned 200 too. The probe did not establish a public Forever Armory website URL,
-so there is no guessed Armory link or Retail Wowhead item lookup in Forever popups.
+returned 200 too. The official Forever Armory route was subsequently verified with both characters:
+`https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/character/<first>-<surname>`.
+Both pages returned HTTP 200 with the correct character title and Blizzard id in
+the HTML (Lucrona Ashborne / 1119743 and Lucroner Ashborne / 1395710). No redirect
+was needed. Forever uses that realmless route, not Retail's realm-based path.
+There is no Retail Wowhead item lookup in Forever popups.
 
 ## Popup
 
@@ -52,7 +56,7 @@ The full achievements payload is intentionally not fetched by the popup.
 `/u/<handle>/wow/retail/<Fraglink character UUID>`
 `/u/<handle>/wow/forever/<Fraglink character UUID>`
 
-Opening pushes a share URL and offers Copy link; closing returns to the previous
+Opening pushes a share URL and offers Share (copies the link, then briefly says Link copied); closing returns to the previous
 profile/gallery URL. A direct visit opens the profile with the popup; closing a
 direct visit stays on the profile rather than navigating away. Browser back and
 forward are supported. The character name is not part of the stable identifier.
@@ -72,3 +76,5 @@ name or image in the HTML. Images re-check visibility and are served no-store.
 
 No new migration for these popup/share additions; migration 0062 from the first
 part of PR 35 remains the only migration. Nothing is enabled or released here.
+
+The footer keeps Share and View on Armory together on one line for both versions.

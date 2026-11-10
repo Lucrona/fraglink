@@ -721,7 +721,13 @@ pub fn summarise_forever(
     )
     .trim());
     out["realm"] = Value::Null;
-    out["armory"] = Value::Null; // no tested public Forever Armory URL
+    out["armory"] = json!(format!(
+        "https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/character/{}",
+        crate::wow::forever_slug(
+            root["name"].as_str().unwrap_or(""),
+            root["surname"].as_str().unwrap_or("")
+        )
+    ));
     out["avatar_src"] = media["assets"]
         .as_array()
         .and_then(|a| a.iter().find(|x| x["key"] == "avatar"))

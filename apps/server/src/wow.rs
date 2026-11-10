@@ -1363,9 +1363,8 @@ pub(crate) fn forever_lookup_enabled() -> bool {
     flag_on("BNET_FOREVER_LOOKUP")
 }
 
-/// `profile-forever-{region}` and `/profile/wow/character/{first}-{surname}`.
-/// Not the Retail realm-slug URL.
-pub(crate) fn forever_profile_url(region: &str, first: &str, surname: &str) -> String {
+/// Realmless slug shared by the Forever public API and official Armory.
+pub(crate) fn forever_slug(first: &str, surname: &str) -> String {
     let part = |s: &str| {
         s.trim()
             .to_lowercase()
@@ -1373,11 +1372,12 @@ pub(crate) fn forever_profile_url(region: &str, first: &str, surname: &str) -> S
             .filter(|c| c.is_ascii_alphanumeric())
             .collect::<String>()
     };
-    format!(
-        "https://{region}.api.blizzard.com/profile/wow/character/{}-{}?namespace=profile-forever-{region}&locale=en_US",
-        part(first),
-        part(surname)
-    )
+    format!("{}-{}", part(first), part(surname))
+}
+
+/// `profile-forever-{region}`, never the Retail realm-slug URL.
+pub(crate) fn forever_profile_url(region: &str, first: &str, surname: &str) -> String {
+    format!("https://{region}.api.blizzard.com/profile/wow/character/{}?namespace=profile-forever-{region}&locale=en_US", forever_slug(first, surname))
 }
 
 /// Namespace for generic realm-based Retail requests. Forever must use its

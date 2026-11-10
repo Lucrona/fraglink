@@ -1293,4 +1293,4 @@ tr.hc-flag td{background:#1d1010}
 .seg.wow-version-switch button[aria-selected="true"]:hover{background:#355a7c}
 .seg.wow-version-switch button:focus-visible{outline:2px solid #86afcf;outline-offset:-3px}
 
-.cp-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.cp-actions input{max-width:240px}.cp-avatar{float:right;margin:0 0 8px 12px;border-radius:4px}
+.cp-ft{flex-wrap:nowrap}.cp-ft>.sub{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cp-actions{display:flex;align-items:center;gap:12px;flex:0 0 auto;flex-wrap:nowrap;white-space:nowrap}.cp-actions button{flex:0 0 auto;min-width:86px}.cp-actions a{display:inline-flex;flex:0 0 auto;white-space:nowrap}.cp-actions input{position:absolute;bottom:42px;right:18px;width:240px;max-width:calc(100% - 36px)}.cp-avatar{float:right;margin:0 0 8px 12px;border-radius:4px}

@@ -185,7 +185,10 @@ fn forever_maps_probed_shapes_without_retail_filler() {
     assert_eq!(d["stats"][0]["value"], 508.0);
     assert_eq!(d["professions"][0]["name"], "Mining");
     assert!(d["render"].as_bool().unwrap());
-    assert!(d["armory"].is_null());
+    assert_eq!(
+        d["armory"],
+        "https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/character/sample-character"
+    );
     assert!(d["mplus"]["rating"].is_null());
     assert!(d["raids"]["current"].is_null());
     let n = Value::Null;

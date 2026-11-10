@@ -2213,7 +2213,7 @@ const WOWPOP = (() => {
       ${d.guild ? `<div class="cp-gu">&lt;${esc(d.guild.name)}&gt;${d.guild.rank != null ? ` · ${d.guild.rank === 0 ? "Guild Master" : "Rank " + d.guild.rank}` : ""}</div>` : ""}
       <div class="cp-sts">${d.ilvl != null ? stat("Item level", nf.format(d.ilvl)) : ""}${d.achievement_points > 0 ? stat("Achievements", nf.format(d.achievement_points)) : ""}${mp.rating != null ? stat("M+ rating", nf.format(Math.round(mp.rating))) : ""}</div></div></div>
       ${sections.length ? `<div class="cp-bd">${sections.join("")}</div>` : ""}
-      <div class="cp-ft"><span class="sub">${d.updated_at ? "Updated " + ago(d.updated_at) : ""}</span><div class="cp-actions"><button class="btn sm" type="button" data-copychar>Copy link</button>${d.armory && !forever ? ` <a href="${esc(d.armory)}" target="_blank" rel="noopener">View on Armory ↗</a>` : ""}</div></div>`;
+      <div class="cp-ft"><span class="sub">${d.updated_at ? "Updated " + ago(d.updated_at) : ""}</span><div class="cp-actions"><button class="btn sm" type="button" data-copychar>Share</button>${d.armory ? ` <a href="${esc(d.armory)}" target="_blank" rel="noopener">View on Armory ↗</a>` : ""}</div></div>`;
   };
   // Touch devices: tap a gear row to show Wowhead's tooltip for it inline (sanitised), tap again/elsewhere to hide.
   const TT = new Map(), OKT = new Set(["TABLE", "TBODY", "TR", "TD", "TH", "B", "BR", "SPAN", "DIV", "SMALL", "I", "UL", "LI"]);
@@ -2240,7 +2240,7 @@ const WOWPOP = (() => {
     box.innerHTML = `<div class="cp" role="dialog" aria-modal="true" aria-label="${esc(c.name)}"><button class="cp-x" type="button" aria-label="Close">×</button><div class="cp-in"><p class="empty cp-pad">Loading ${esc(c.name)}…</p></div></div>`;
     document.body.appendChild(box); document.body.classList.add("cp-lock");
     box.onclick = async e => { const copy = e.target.closest("[data-copychar]");
-      if (copy) { const link = siteBase() + WOWLINK.path(handle, c); try { await navigator.clipboard.writeText(link); copy.textContent = "Copied"; setTimeout(() => { if (copy.isConnected) copy.textContent = "Copy link"; }, 1500); }
+      if (copy) { const link = siteBase() + WOWLINK.path(handle, c); try { await navigator.clipboard.writeText(link); copy.textContent = "Link copied"; setTimeout(() => { if (copy.isConnected) copy.textContent = "Share"; }, 1500); }
         catch (_) { const input = document.createElement("input"); input.value = link; input.readOnly = true; input.setAttribute("aria-label", "Character link"); copy.after(input); input.focus(); input.select(); } return; }
       if (e.target === box || e.target.closest(".cp-x")) return close(); const r = e.target.closest(".cp-slot[data-whi]"); if (r) return tip(r); if (!e.target.closest(".cp-tip")) tipOff(); };
     box.onkeydown = e => { const r = (e.key === "Enter" || e.key === " ") && e.target.closest && e.target.closest(".cp-slot[data-whi]"); if (r) { e.preventDefault(); tip(r); } };
