@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Release overview</title>
+<style>
+:root{
+  --bg:#0c0e11; --panel:#15181d; --row:#181c22; --row-alt:#1d2229;
+  --line:#262c35; --line2:#303844;
+  --hd1:#22374d; --hd2:#1a2a3b; --hd-orange:#e89a48;
+  --text:#c8ced6; --muted:#8a939e; --dim:#626b76;
+  --link:#8db4d9; --label:#c99a62; --orange:#d9893b; --silver:#b9bec5;
+  --online:#6fbf5a;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--text);font:13px/1.45 var(--font);background:var(--bg)}
+a{color:var(--link);text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+.top{background:#14181d;border-bottom:1px solid #000;box-shadow:0 1px 0 #232931}
+.top .wrap{display:flex;align-items:center;gap:16px;height:48px}
+.logo{color:#eef2f6;font-weight:800;letter-spacing:1.4px;font-size:14px}
+.beta{margin-left:6px;background:#8a2a22;color:#f3d2cc;font-size:9px;letter-spacing:.6px;padding:1px 4px;border-radius:2px;vertical-align:2px}
+.crumb{color:var(--silver);font-weight:600}
+.who{margin-left:auto;color:var(--silver);font-weight:600}
+main{padding:18px 0 40px}
+.lead{margin:0 0 14px;color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;margin:0 0 16px}
+.panel>h2{margin:0;display:flex;align-items:center;gap:8px;min-height:32px;padding:7px 12px;font-size:11.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--hd-orange);
+  background:linear-gradient(90deg,var(--hd1) 0,var(--hd2) 180px,#141b24 220px,#12171e);border-bottom:1px solid #0b1118}
+.panel>h2 .more{margin-left:auto;letter-spacing:0;text-transform:none;font-weight:600;font-size:12px;color:#a9c3dd}
+.later>h2 .more{color:#e7c27a}
+.item{padding:14px 14px 16px;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item h3{margin:0 0 4px;font-size:15px;font-weight:650;color:#eef2f6}
+.item p{margin:0;max-width:72em}
+.figs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.figs.one{grid-template-columns:1fr}
+figure{margin:0}
+figure img{width:100%;display:block;background:#0c0e11;border:1px solid var(--line);border-radius:3px}
+figure.crop img{height:240px;object-fit:cover;object-position:top center}
+figure.tall img{height:320px;object-fit:cover;object-position:center 12%}
+figcaption{margin-top:4px;color:var(--dim);font-size:11.5px}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-size:11px;font-weight:650;letter-spacing:.4px;text-transform:uppercase}
+tr:nth-child(even) td{background:var(--row-alt)}
+.tick{color:var(--online);font-weight:700}
+.group{padding:12px 14px 4px}
+.group h3{margin:0 0 8px;font-size:13px;color:#eef2f6}
+.group ol,.group ul{margin:0 0 12px;padding-left:18px}
+.group li{margin:0 0 4px}
+.group li span{color:var(--dim)}
+@media(max-width:640px){
+  .figs{grid-template-columns:1fr}
+  .top .crumb{display:none}
+  figure.crop img,figure.tall img{height:200px}
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap"><div class="logo">FRAGLINK <span class="beta">BETA</span></div><div class="crumb">Release overview</div><div class="who">Samplemock</div></div></header>
+<main class="wrap">
+<p class="lead">Fixture only. Samplemock, Mockrend and Vale Mocken are made-up characters. This page is a review sheet, not a live screen.</p>
+
+<section class="panel">
+  <h2>Goes live on release <span class="more">PR 26 + 28 + 29</span></h2>
+
+  <article class="item">
+    <h3>Forever /played imports</h3>
+    <p>Forever /played counts the same way as Retail and keeps its own total: a repeat upload does not add the hours again, a lower total is rejected, and a bad file is quarantined. The Forever endpoint flags stay off until the checks after release pass.</p>
+    <table>
+      <thead><tr><th>Character</th><th>Retail</th><th>Forever</th></tr></thead>
+      <tbody>
+        <tr><td>Mockrend</td><td>21 hours</td><td>—</td></tr>
+        <tr><td>Vale Mocken</td><td>—</td><td>1 hour</td></tr>
+      </tbody>
+    </table>
+    <div class="figs one"><figure class="crop"><img src="img/upload.png" alt="Upload page with a Retail and Forever choice"><figcaption>The upload page keeps the two files apart. Forever stays unverified until its account list is switched on.</figcaption></figure></div>
+  </article>
+
+  <article class="item">
+    <h3>Rename merge</h3>
+    <p>A verified character with the same Blizzard id is one character after a rename. The hours and the past name stay, and every merge is recorded.</p>
+    <table>
+      <thead><tr><th>Name</th><th>Past name</th><th>Hours</th><th>Record</th></tr></thead>
+      <tbody>
+        <tr><td>Mockrend <span class="tick">✓</span></td><td>Mossrend</td><td>21 hours</td><td>Kept</td></tr>
+      </tbody>
+    </table>
+  </article>
+
+  <article class="item">
+    <h3>Profile cards</h3>
+    <p>Each card shows the name, guild, “Level 80 Mage” in the class colour, the avatar, and a Verified tick. Clicking a card opens the gear popup.</p>
+    <div class="figs">
+      <figure><img src="img/cards.png" alt="Samplemock profile cards, Retail roster"><figcaption>Samplemock’s profile. Retail is the roster that opens.</figcaption></figure>
+      <figure class="tall"><img src="img/popup.png" alt="Gear popup for Mockrend, opened from View all"><figcaption>Mockrend’s gear, raids and Mythic+, opened from a card.</figcaption></figure>
+    </div>
+  </article>
+
+  <article class="item">
+    <h3>View all</h3>
+    <p>The full roster is a gallery at /u/samplemock/wow.</p>
+    <div class="figs one"><figure><img src="img/view-all.png" alt="View all gallery for Samplemock"><figcaption>/u/samplemock/wow. Same cards, no hours and no past names.</figcaption></figure></div>
+  </article>
+
+  <article class="item">
+    <h3>Profile page display</h3>
+    <p>The owner picks Retail only, Forever only, or Both, and which roster the profile opens on.</p>
+    <div class="figs one"><figure><img src="img/display.png" alt="Profile page display setting on the manager"><figcaption>This only changes the public profile. Hours and the character list stay as they are.</figcaption></figure></div>
+  </article>
+
+  <article class="item">
+    <h3>Character manager</h3>
+    <p>Retail and Forever each have a tab. Add by name and realm uses the Armory and verifies the character when it is on the linked Battle.net account. Upload /played follows the open tab.</p>
+    <div class="figs">
+      <figure class="crop"><img src="img/manager-retail.png" alt="Manager on the Retail tab"><figcaption>Retail tab. Name, realm, Add character.</figcaption></figure>
+      <figure class="crop"><img src="img/manager-forever.png" alt="Manager on the Forever tab"><figcaption>Forever tab. First name and surname. Same upload button, Forever file.</figcaption></figure>
+    </div>
+  </article>
+
+  <article class="item">
+    <h3>Migrations</h3>
+    <p>0056, 0057 and 0058 only add columns and tables. No existing hours change.</p>
+    <table>
+      <thead><tr><th>Migration</th><th>Adds</th></tr></thead>
+      <tbody>
+        <tr><td>0056</td><td>Forever import columns on the character row</td></tr>
+        <tr><td>0057</td><td>Past names, and a row for each rename merge</td></tr>
+        <tr><td>0058</td><td>Profile page display: what shows, and what opens first</td></tr>
+      </tbody>
+    </table>
+  </article>
+</section>
+
+<section class="panel later">
+  <h2>Coming next <span class="more">Not built yet</span></h2>
+
+  <div class="group">
+    <h3>After release</h3>
+    <ol>
+      <li>Forever endpoint checks.</li>
+      <li>Lucrona’s in-game Forever /played test.</li>
+      <li>CurseForge addon 1.1.0 for Retail and Forever.</li>
+    </ol>
+  </div>
+
+  <div class="group">
+    <h3>Manager polish</h3>
+    <ul>
+      <li>Show the import as a date.</li>
+      <li>Remember the last tab.</li>
+      <li>After an upload, open the tab that matches the file.</li>
+      <li>Move the Verified explanation into the row menu.</li>
+    </ul>
+  </div>
+
+  <div class="group">
+    <h3>Blizzard API</h3>
+    <ul>
+      <li>Item level, or the Mythic+ score, on the cards.</li>
+      <li>The same popup for Forever characters.</li>
+      <li>Guild pages.</li>
+      <li>Picking a main.</li>
+    </ul>
+  </div>
+
+  <div class="group">
+    <h3>Desktop</h3>
+    <ul>
+      <li>The game name under your own name is cut off. Show the full width, and the rest on hover.</li>
+      <li>Curated icons.</li>
+    </ul>
+  </div>
+</section>
+</main>
+</body>
+</html>
