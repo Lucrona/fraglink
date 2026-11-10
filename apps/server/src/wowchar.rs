@@ -32,7 +32,113 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/users/{handle}/wow/{id}", get(detail))
         .route("/api/v1/users/{handle}/wow/{id}/render.png", get(render))
         .route("/api/v1/users/{handle}/wow/{id}/share", get(share))
+        .route("/api/v1/users/{handle}/wow/{id}/avatar", get(avatar))
         .route("/api/v1/me/wow/{id}/guild", post(set_guild))
+}
+
+// Avatar lookups are media-only: no character, /played or persistent cache writes.
+// Reuse warm popup media; otherwise cache the public URL only in bounded memory.
+type AvatarCache = Mutex<HashMap<String, (Option<String>, Instant)>>;
+fn avatar_cache() -> &'static AvatarCache {
+    static CACHE: OnceLock<AvatarCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn avatar_url_ok(s: &str) -> bool {
+    s.starts_with("https://render.worldofwarcraft.com/")
+        && (s.ends_with(".jpg") || s.ends_with(".png"))
+        && !s.contains("..")
+}
+
+pub fn forever_media_avatar(media: &Value, expected_id: Option<i64>) -> Option<String> {
+    if expected_id.is_some_and(|id| media["character"]["id"].as_i64() != Some(id)) {
+        return None;
+    }
+    media["assets"]
+        .as_array()?
+        .iter()
+        .find(|a| a["key"] == "avatar")?["value"]
+        .as_str()
+        .filter(|s| avatar_url_ok(s))
+        .map(str::to_owned)
+}
+
+async fn avatar(
+    State(st): State<AppState>,
+    m: MaybeUser,
+    headers: HeaderMap,
+    Path((handle, id)): Path<(String, Uuid)>,
+) -> ApiResult<(HeaderMap, Json<Value>)> {
+    let nf = || {
+        AppError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "That character isn't shown on this profile.",
+        )
+    };
+    if !crate::wow::forever_lookup_enabled() {
+        return Err(nf());
+    }
+    let viewer = m.0.as_ref().map(|a| a.user.id);
+    let key = viewer
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| crate::client_ip(&headers));
+    st.rate_limit(format!("wowavatar:{key}"), 480, Duration::from_secs(600))?;
+    // Managers may see their own hidden characters. Everyone else must pass the
+    // existing profile visibility checks before even reading cached media.
+    let owner: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users u JOIN wow_characters c ON c.user_id=u.id WHERE u.id=$1 AND lower(u.handle)=lower($2) AND c.id=$3)")
+        .bind(viewer).bind(&handle).bind(id).fetch_one(&st.db).await?;
+    if !owner {
+        visible_char(&st, viewer, &handle, id).await?;
+    }
+    let row: Option<(String, String, Option<i64>, Option<String>)> = sqlx::query_as(
+        "SELECT c.name,c.region,c.bnet_id,(SELECT d.data->>'avatar_src' FROM wow_char_details d WHERE d.char_id=c.id AND d.status='ok' AND d.fetched_at > now()-interval '12 hours') FROM wow_characters c WHERE c.id=$1 AND c.game_id='wow_forever'"
+    ).bind(id).fetch_optional(&st.db).await?;
+    let Some((name, region, bnet_id, warm)) = row else {
+        return Err(nf());
+    };
+    let mut src = warm.filter(|s| avatar_url_ok(s));
+    if src.is_none() && region == "us" {
+        if let Some((first, surname)) = crate::wow::forever_parts(&name) {
+            let base = crate::wow::forever_profile_url("us", &first, &surname);
+            let (path, query) = base
+                .split_once('?')
+                .expect("Forever helper includes namespace");
+            let url = format!("{path}/character-media?{query}");
+            let key = format!("{url}:{bnet_id:?}");
+            let lock = lock_for(id);
+            let _guard = lock.lock().await;
+            let cached = avatar_cache()
+                .lock()
+                .ok()
+                .and_then(|c| c.get(&key).cloned())
+                .filter(|(v, at)| {
+                    at.elapsed() < Duration::from_secs(if v.is_some() { 43200 } else { 600 })
+                });
+            if let Some((value, _)) = cached {
+                src = value;
+            } else {
+                if let (Some(token), Some(client)) = (app_token().await, http()) {
+                    if let Ok(response) = client.get(&url).bearer_auth(token).send().await {
+                        if response.status().is_success() {
+                            if let Ok(media) = response.json::<Value>().await {
+                                src = forever_media_avatar(&media, bnet_id);
+                            }
+                        }
+                    }
+                }
+                if let Ok(mut cache) = avatar_cache().lock() {
+                    cache.retain(|_, (_, at)| at.elapsed() < Duration::from_secs(43200));
+                    if cache.len() < 1024 {
+                        cache.insert(key, (src.clone(), Instant::now()));
+                    }
+                }
+            }
+        }
+    }
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CACHE_CONTROL, "private, no-store".parse().unwrap());
+    Ok((headers, Json(json!({"avatar_src": src}))))
 }
 
 // ------------------------------------------------------------------ access
