@@ -1,6 +1,8 @@
+# Retail 12.1.5 (120105), Retail test 12.1.7 (120107), Forever 1.60.1 (16001).
+# One toc. Both clients load this file when no flavour toc is beside it.
 ## Interface: 120105, 120107, 16001
 ## Title: Fraglink /played
-## Notes: Saves each character's /played total for the Fraglink app. Nothing leaves your PC from the game.
+## Notes: Saves each character's /played for Fraglink. Retail and WoW Forever. Nothing leaves your PC from the game.
 ## Author: Fraglink
 ## Version: 1.1.0
 ## X-Website: https://playfraglink.com

@@ -49,13 +49,23 @@ local function unmute()
   muted = {}
 end
 
+local function later(seconds, fn)
+  if C_Timer and C_Timer.After then
+    C_Timer.After(seconds, fn)
+  end
+end
+
 local function ask()
-  if pending then return end
+  if pending or type(RequestTimePlayed) ~= "function" then return end
   pending = true
   mute()
-  RequestTimePlayed()
+  if not pcall(RequestTimePlayed) then
+    pending = false
+    unmute()
+    return
+  end
   -- never leave the chat frames muted if the answer doesn't come
-  C_Timer.After(15, function()
+  later(15, function()
     if pending then
       pending = false
       unmute()
@@ -70,12 +80,14 @@ local function client_facts()
   local project = tonumber(WOW_PROJECT_ID) or 0
   local camelot = tonumber(WOW_PROJECT_CAMELOT) or 18
   local build = ""
-  if GetBuildInfo then
-    local _, b = GetBuildInfo()
-    build = tostring(b or "")
+  if type(GetBuildInfo) == "function" then
+    local ok, _, b = pcall(GetBuildInfo)
+    if ok then build = tostring(b or "") end
   end
   local saw = (IsBetaBuild ~= nil) or (IsPublicTestClient ~= nil) or (IsTestBuild ~= nil)
-  local beta = (IsBetaBuild and IsBetaBuild()) or (IsPublicTestClient and IsPublicTestClient()) or (IsTestBuild and IsTestBuild())
+  local beta = (IsBetaBuild and IsBetaBuild())
+    or (IsPublicTestClient and IsPublicTestClient())
+    or (IsTestBuild and IsTestBuild())
   local flavour, confirmed = "unknown", 0
   if project == camelot or project == 18 then
     if beta then
@@ -109,9 +121,9 @@ local function save(total)
   local played = math.floor(total or 0)
   local at = time()
   local battletag = ""
-  if BNGetInfo then
-    local _, bt = BNGetInfo()
-    battletag = bt or ""
+  if type(BNGetInfo) == "function" then
+    local ok, _, bt = pcall(BNGetInfo)
+    if ok then battletag = bt or "" end
   end
   if name == "" or played <= 0 then return false end
   if not forever and realm == "" then return false end
@@ -130,6 +142,11 @@ local function save(total)
   })
   FraglinkPlayedDB.chars = FraglinkPlayedDB.chars or {}
   local key = forever and (region .. "/forever/" .. name) or (region .. "/" .. realm .. "/" .. name)
+  local prev = FraglinkPlayedDB.chars[key]
+  -- A lower answer must not replace the total already saved on this PC.
+  if type(prev) == "table" and type(prev.played) == "number" and played < prev.played then
+    return false
+  end
   FraglinkPlayedDB.chars[key] = e
   FraglinkPlayedDB.version = 2
   return true, forever and name or (name .. "-" .. realm)
@@ -147,7 +164,8 @@ end
 SLASH_FRAGQ1 = "/fragq"
 SlashCmdList.FRAGQ = function()
   FraglinkPlayedDB.quiet = not FraglinkPlayedDB.quiet
-  DEFAULT_CHAT_FRAME:AddMessage("|cffd4a017Fraglink|r: login message " .. (FraglinkPlayedDB.quiet and "hidden. Type /fragq to show it again." or "shown."))
+  local state = FraglinkPlayedDB.quiet and "hidden. Type /fragq to show it again." or "shown."
+  DEFAULT_CHAT_FRAME:AddMessage("|cffd4a017Fraglink|r: login message " .. state)
 end
 
 local f = CreateFrame("Frame")
@@ -161,16 +179,18 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
     if pending then
       pending = false
       -- re-enable chat after this event has gone past every frame
-      C_Timer.After(0, unmute)
+      if C_Timer and C_Timer.After then later(0, unmute) else unmute() end
     end
   elseif event == "PLAYER_ENTERING_WORLD" then
     if a1 or a2 then -- first login or /reload
       if a1 then announced = false end -- the chat line is once per login, not per /reload
-      C_Timer.After(5, ask)
+      later(5, ask)
     end
   elseif event == "PLAYER_LEVEL_UP" then
-    C_Timer.After(2, ask)
+    later(2, ask)
   end
 end)
 
-C_Timer.NewTicker(REFRESH, ask)
+if C_Timer and C_Timer.NewTicker then
+  C_Timer.NewTicker(REFRESH, ask)
+end

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fraglink /played · project page preview</title>
+<style>
+:root{--bg:#121212;--panel:#1b1b1b;--line:#2c2c2c;--text:#e6e6e6;--muted:#a3a3a3;--orange:#ff7849;--link:#7eb6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,sans-serif}
+.bar{background:#0e0e0e;border-bottom:1px solid #000;padding:10px 20px;color:var(--muted);font-size:12px}
+.wrap{max-width:980px;margin:0 auto;padding:20px 16px 40px}
+.head{display:flex;gap:16px;align-items:flex-start}
+.icon{width:72px;height:72px;background:#2a2118;border:1px solid #4a3824;border-radius:6px;flex:none}
+h1{margin:0;font-size:28px;font-weight:650}
+.by{color:var(--muted);margin:2px 0 8px}
+.summary{margin:0;max-width:40em}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.tags span{border:1px solid #3a3a3a;background:#222;border-radius:3px;padding:2px 8px;font-size:12px;color:#ddd}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:16px;margin-top:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px}
+h2{margin:18px 0 8px;font-size:16px}
+h2:first-child{margin-top:0}
+p{margin:0 0 10px}
+ol{margin:0 0 10px;padding-left:18px}
+a{color:var(--link)}
+.side h3{margin:0 0 8px;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--orange)}
+.side li{margin:0 0 4px}
+.side ul{margin:0;padding-left:16px;color:#ddd}
+.file{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:13px}
+.note{margin-top:14px;color:var(--muted);font-size:12px}
+@media(max-width:700px){.layout{grid-template-columns:1fr}.head{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="bar">Preview only. This is not the live CurseForge page, and nothing here has been published.</div>
+<main class="wrap">
+  <div class="head">
+    <div class="icon" aria-hidden="true"></div>
+    <div>
+      <h1>Fraglink /played</h1>
+      <div class="by">by Fraglink · 1.1.0</div>
+      <p class="summary">Saves Retail and WoW Forever /played on your PC for Fraglink. Uploads only add time and never lower your hours.</p>
+      <div class="tags"><span>Retail 12.1.5</span><span>Retail 12.1.7</span><span>Forever 1.60.1</span></div>
+    </div>
+  </div>
+  <div class="layout">
+    <article class="panel">
+      <h2>Description</h2>
+      <p>Fraglink /played saves each character's /played time on your PC. You upload that file at <a href="https://playfraglink.com">playfraglink.com</a>. The addon does not send anything while you are in game.</p>
+      <p>It is one addon for Retail and WoW Forever. When you log in, it asks the game for /played and marks the saved file Retail or Forever.</p>
+      <p>An upload only adds time. A file with a lower total is refused, and the hours already stored are left as they are. Retail and Forever stay separate.</p>
+      <h2>Install</h2>
+      <ol>
+        <li>Download the zip.</li>
+        <li>Unzip it into World of Warcraft/_retail_/Interface/AddOns and World of Warcraft/_forever_/Interface/AddOns. Each should contain a FraglinkPlayed folder.</li>
+        <li>Restart the game, or type /reload. Enable Fraglink /played on the addon list if it is off.</li>
+      </ol>
+      <h2>Use</h2>
+      <ol>
+        <li>Log in to each character once. Type /reload or log out so the game writes the file.</li>
+        <li>On playfraglink.com, open the WoW page, pick Retail or Forever, and upload WTF/Account/&lt;ACCOUNT&gt;/SavedVariables/FraglinkPlayed.lua.</li>
+        <li>Link Battle.net so a Retail character can be verified. Forever characters stay unverified until that check is turned on. The file on your PC is kept either way, so you can upload it again later.</li>
+      </ol>
+      <p>A line in chat says when a character was recorded. /fragq hides that line.</p>
+    </article>
+    <aside class="panel side">
+      <h3>Game versions</h3>
+      <ul>
+        <li>Retail 12.1.5</li>
+        <li>Retail 12.1.7</li>
+        <li>Forever 1.60.1</li>
+      </ul>
+      <div class="file"><b>FraglinkPlayed-1.1.0.zip</b><br>Release</div>
+      <p class="note">Flavours to tick on the file: Retail and Forever. Not Classic.</p>
+    </aside>
+  </div>
+</main>
+</body>
+</html>
