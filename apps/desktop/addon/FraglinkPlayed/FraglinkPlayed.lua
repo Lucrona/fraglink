@@ -6,8 +6,8 @@
 -- Each entry carries a checksum so hand-edited totals are spotted. It is a deterrent,
 -- not security: leaderboards also need the character verified through Battle.net.
 
-local SIG_VERSION = 2 -- bump with KEY on every release that changes it
-local KEY = "K7mQ2pL9xR4vN8cW1dF6hJ3sT5yB0aUe"
+local SIG_VERSION = 3 -- bump with KEY on every release that changes it
+local KEY = "G6vP9cN2rT8mK4wQ1xH5bD7sL3fA0eYz"
 local REFRESH = 600
 
 FraglinkPlayedDB = FraglinkPlayedDB or {}
@@ -108,12 +108,28 @@ local function save(total)
   local flavour, project, build, beta, confirmed = client_facts()
   local forever = flavour == "forever" or flavour == "forever_beta" or flavour == "forever_unconfirmed"
   local realm = forever and "" or (GetRealmName() or "")
-  local name = UnitName("player") or ""
-  local first, surname = "", ""
+  local name, second = UnitName("player")
+  name = name or ""
+  local first, surname, guid = "", "", ""
   if forever then
-    first, surname = name:match("^(%S+)%s+(.+)$")
-    first = first or name
-    surname = surname or ""
+    -- Forever's second UnitName/UnitFullName result is the surname, not a realm.
+    first, surname = name, type(second) == "string" and second or ""
+    if surname == "" and type(UnitFullName) == "function" then
+      local ok, given, family = pcall(UnitFullName, "player")
+      if ok and given == first and type(family) == "string" then surname = family end
+    end
+    if surname == "" and type(GetUnitName) == "function" then
+      local ok, full = pcall(GetUnitName, "player")
+      local prefix = first .. " "
+      if ok and type(full) == "string" and full:sub(1, #prefix) == prefix then
+        surname = full:sub(#prefix + 1)
+      end
+    end
+    name = surname ~= "" and (first .. " " .. surname) or first
+    if type(UnitGUID) == "function" then
+      local ok, value = pcall(UnitGUID, "player")
+      if ok and type(value) == "string" then guid = value end
+    end
   end
   local _, class = UnitClass("player")
   class = class or ""
@@ -131,24 +147,43 @@ local function save(total)
     region = region, realm = realm, name = name, class = class,
     level = level, played = played, at = at, sv = SIG_VERSION, battletag = battletag,
     flavour = flavour, project = project, build = build,
-    first = first, surname = surname, beta = beta, confirmed = confirmed,
+    first = first, surname = surname, guid = guid, beta = beta, confirmed = confirmed,
   }
   e.sig = sign({
     region, realm, name, class,
     string.format("%d", level), string.format("%d", played), string.format("%d", at),
     string.format("%d", SIG_VERSION), battletag,
     flavour, string.format("%d", project), build, first, surname,
-    string.format("%d", beta), string.format("%d", confirmed),
+    string.format("%d", beta), string.format("%d", confirmed), guid,
   })
   FraglinkPlayedDB.chars = FraglinkPlayedDB.chars or {}
-  local key = forever and (region .. "/forever/" .. name) or (region .. "/" .. realm .. "/" .. name)
+  local key = forever and (region .. "/forever/" .. (guid ~= "" and guid or first)) or (region .. "/" .. realm .. "/" .. name)
+  -- Reuse a single compatible legacy slot, including 1.1.0's missing surname.
+  -- Never combine different GUIDs or guess between two legacy characters.
+  if forever and not FraglinkPlayedDB.chars[key] then
+    local found, ambiguous
+    for oldkey, old in pairs(FraglinkPlayedDB.chars) do
+      if type(old) == "table" and old.region == region and old.first == first
+        and ((guid ~= "" and old.guid == guid)
+          or ((old.guid == nil or old.guid == "")
+            and (old.surname == nil or old.surname == "" or old.surname == surname))) then
+        if found then ambiguous = true else found = oldkey end
+      end
+    end
+    if found and not ambiguous then key = found end
+    if ambiguous and guid == "" then return false end
+  end
   local prev = FraglinkPlayedDB.chars[key]
+  -- Without a GUID, a changed known surname is not enough to identify a character.
+  if forever and guid == "" and type(prev) == "table"
+    and type(prev.surname) == "string" and prev.surname ~= ""
+    and surname ~= "" and prev.surname ~= surname then return false end
   -- A lower answer must not replace the total already saved on this PC.
   if type(prev) == "table" and type(prev.played) == "number" and played < prev.played then
     return false
   end
   FraglinkPlayedDB.chars[key] = e
-  FraglinkPlayedDB.version = 2
+  FraglinkPlayedDB.version = 3
   return true, forever and name or (name .. "-" .. realm)
 end
 

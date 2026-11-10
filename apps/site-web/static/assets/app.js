@@ -516,7 +516,7 @@ pages.wowupload = async () => {
   const raw = (asked.get("version") || asked.get("game") || "retail").toLowerCase();
   let game = raw === "forever" || raw === "wow_forever" ? "wow_forever" : "wow";
   el.innerHTML = `<div class="wu-page">
-    <div class="bn-tabs" role="tablist" aria-label="Which version to upload"><button type="button" data-ver="wow">Retail</button><button type="button" data-ver="wow_forever">Forever</button></div>
+    <div class="seg wow-version-switch" role="tablist" aria-label="Which version to upload"><button type="button" role="tab" data-ver="wow">Retail</button><button type="button" role="tab" data-ver="wow_forever">Forever</button></div>
     <h2 data-title>Upload Retail /played</h2>
     <p class="sub">Log in to each character with the addon on, then /reload or log out so WoW saves the file.</p>
     <div class="wu-paths" data-paths></div>
@@ -695,7 +695,7 @@ async function wowManager(el) {
   el.innerHTML = `<section class="${Sec}"><${Hx}>Battle.net</${Hx}><div data-msg></div>${head}</section>
     <section class="${Sec}"><${Hx}>Profile page display${handle ? `<a class="bn-view" href="/u/${encodeURIComponent(handle)}">View profile</a>` : ""}</${Hx}>
       ${flavSeg}${s.linked ? `<div data-feat></div>` : ""}</section>
-    <section class="${Sec}"><div class="bn-tabs" data-tabs role="tablist"></div></section>
+    <section class="${Sec} wow-version-control"><div class="seg wow-version-switch" data-tabs role="tablist" aria-label="Character version"></div></section>
     <section class="${Sec}"><${Hx}>Add characters</${Hx}>
       <div class="bn-addblock"><div data-addbox></div><div class="bn-upload"><div><b>Upload /played</b><p class="sub">From the Fraglink /played addon.</p></div><div class="bn-upload-actions"><a class="btn" data-upload href="/connect/wow?version=${def === "wow_forever" ? "forever" : "retail"}">Upload ${def === "wow_forever" ? "Forever" : "Retail"} /played</a><a class="sub" href="https://www.curseforge.com/wow/addons/fraglink-played" target="_blank" rel="noopener">Get the addon</a></div></div></div></section>
     <section class="${Sec}"><${Hx}>Your characters</${Hx}>

@@ -456,7 +456,7 @@ enum Class {
 }
 
 /// Retail stays realm + name. Live Forever is project 18, a tested "not a beta"
-/// answer, and a first name plus surname. Anything less is quarantined.
+/// answer, and a first name. A surname is optional; unknown client identity is quarantined.
 fn classify(e: &CharEntry) -> Class {
     let flav = e.flavour.as_str();
     if flav == "retail" || (flav.is_empty() && e.sv < 2 && !e.realm.trim().is_empty()) {
@@ -467,7 +467,6 @@ fn classify(e: &CharEntry) -> Class {
         && e.beta == 0
         && e.confirmed == 1
         && !e.first.trim().is_empty()
-        && !e.surname.trim().is_empty()
     {
         return Class::Forever;
     }
@@ -482,12 +481,110 @@ fn classify(e: &CharEntry) -> Class {
     })
 }
 
+struct ForeverIdentity {
+    previous: Option<(Uuid, i64, DateTime<Utc>)>,
+    name: String,
+    surname: String,
+    guid: Option<String>,
+}
+
+/// A signed GUID is the strongest identity. Legacy files can fill the surname
+/// only when the first-name match is unambiguous; never merge character rows.
+async fn forever_identity(
+    st: &AppState,
+    uid: Uuid,
+    e: &CharEntry,
+) -> ApiResult<Option<ForeverIdentity>> {
+    #[derive(sqlx::FromRow)]
+    struct Candidate {
+        id: Uuid,
+        played_s: i64,
+        played_at: DateTime<Utc>,
+        name: String,
+        surname: Option<String>,
+        addon_guid: Option<String>,
+    }
+    let first = e.first.trim();
+    let surname = e.surname.trim();
+    // GUID was not covered by the v1/v2 checksum. Never use an unsigned extra field.
+    let guid = (e.sv >= 3 && !e.guid.is_empty()).then_some(e.guid.as_str());
+    let display = if surname.is_empty() {
+        first.to_string()
+    } else {
+        format!("{first} {surname}")
+    };
+    let rows: Vec<Candidate> = sqlx::query_as(
+        "SELECT id, played_s, played_at, name, surname, addon_guid FROM wow_characters
+         WHERE user_id=$1 AND game_id='wow_forever' AND region=$2 AND realm=''
+           AND (lower(btrim(first_name))=lower($3) OR addon_guid=$4 OR lower(name)=lower($5))",
+    )
+    .bind(uid)
+    .bind(&e.region)
+    .bind(first)
+    .bind(guid)
+    .bind(&display)
+    .fetch_all(&st.db)
+    .await?;
+    let exact: Vec<_> = rows
+        .iter()
+        .filter(|r| guid.is_some() && r.addon_guid.as_deref() == guid)
+        .collect();
+    let compatible: Vec<_> = if !exact.is_empty() {
+        exact
+    } else {
+        rows.iter()
+            .filter(|r| {
+                // Different known GUIDs are different characters, even with the same first name.
+                if guid.is_some() && r.addon_guid.is_some() && r.addon_guid.as_deref() != guid {
+                    return false;
+                }
+                let old_surname = r.surname.as_deref().unwrap_or("").trim();
+                surname.is_empty()
+                    || old_surname.is_empty()
+                    || old_surname.eq_ignore_ascii_case(surname)
+            })
+            .collect()
+    };
+    if compatible.len() > 1 {
+        return Ok(None);
+    }
+    let previous = compatible.first().copied();
+    let surname = if surname.is_empty() {
+        previous
+            .and_then(|r| r.surname.as_deref())
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    } else {
+        surname.to_string()
+    };
+    let name = if surname.is_empty() {
+        first.to_string()
+    } else {
+        format!("{first} {surname}")
+    };
+    if rows
+        .iter()
+        .any(|r| Some(r.id) != previous.map(|p| p.id) && r.name.eq_ignore_ascii_case(&name))
+    {
+        return Ok(None); // a display-name conflict is not permission to combine identities
+    }
+    Ok(Some(ForeverIdentity {
+        previous: previous.map(|r| (r.id, r.played_s, r.played_at)),
+        name,
+        surname,
+        guid: previous
+            .and_then(|r| r.addon_guid.clone())
+            .or_else(|| guid.map(str::to_string)),
+    }))
+}
+
 async fn quarantine(st: &AppState, uid: Uuid, game: &str, e: &CharEntry, reason: &str) {
     let payload = json!({
         "region": e.region, "realm": e.realm, "name": e.name, "class": e.class,
         "level": e.level, "played": e.played, "at": e.at, "flavour": e.flavour,
         "project": e.project, "build": e.build, "first": e.first, "surname": e.surname,
-        "beta": e.beta, "confirmed": e.confirmed,
+        "beta": e.beta, "confirmed": e.confirmed, "guid": e.guid,
     });
     let _ = sqlx::query(
         "INSERT INTO wow_played_quarantine(id, user_id, claimed_game, reason, detail, payload)
@@ -563,6 +660,7 @@ fn empty_entry() -> CharEntry {
         build: String::new(),
         first: String::new(),
         surname: String::new(),
+        guid: String::new(),
         beta: 0,
         confirmed: 0,
         sig: String::new(),
@@ -818,28 +916,6 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
     for e in chars {
         let who = label(e);
         let slug = realm_slug(&e.realm);
-        let stored_name = if *gid == "wow_forever" {
-            format!("{} {}", e.first.trim(), e.surname.trim())
-        } else {
-            e.name.clone()
-        };
-        let stored_realm = if *gid == "wow_forever" {
-            ""
-        } else {
-            e.realm.as_str()
-        };
-        let prev: Option<(Uuid, i64, DateTime<Utc>)> = sqlx::query_as(
-            "SELECT id, played_s, played_at FROM wow_characters
-             WHERE user_id = $1 AND game_id = $2 AND region = $3 AND lower(realm) = lower($4)
-               AND lower(name) = lower($5)",
-        )
-        .bind(uid)
-        .bind(gid)
-        .bind(&e.region)
-        .bind(stored_realm)
-        .bind(&stored_name)
-        .fetch_optional(&st.db)
-        .await?;
         match classify(e) {
             Class::Retail if *gid == "wow" => {}
             Class::Forever if *gid == "wow_forever" => {}
@@ -856,12 +932,68 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
                 continue;
             }
         }
+        // Authenticate the entry before using any optional identity metadata.
+        if *gid == "wow_forever" {
+            if let Err(x) = check_entry(e, None, link.as_ref().map(|l| l.0.as_str()), now) {
+                if x.flag {
+                    flag(st, uid, gid, &who, &x, e.played).await;
+                }
+                quarantine(st, uid, gid, e, x.kind).await;
+                rejected.push(json!({"character":who,"name":e.name,"realm":e.realm,"region":e.region,
+                    "class":e.class,"level":e.level,"played_min":e.played/60,"reason":x.kind,"detail":x.detail}));
+                continue;
+            }
+        }
+        let identity = if *gid == "wow_forever" {
+            let Some(identity) = forever_identity(st, uid, e).await? else {
+                quarantine(st, uid, gid, e, "ambiguous_identity").await;
+                rejected.push(json!({"character":who,"name":e.name,"realm":e.realm,"region":e.region,
+                    "reason":"ambiguous_identity","detail":"More than one character could match this entry."}));
+                continue;
+            };
+            Some(identity)
+        } else {
+            None
+        };
+        let stored_name = identity
+            .as_ref()
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| e.name.clone());
+        let prev: Option<(Uuid, i64, DateTime<Utc>)> = if let Some(identity) = &identity {
+            identity.previous
+        } else {
+            sqlx::query_as(
+                "SELECT id, played_s, played_at FROM wow_characters
+                 WHERE user_id=$1 AND game_id=$2 AND region=$3 AND lower(realm)=lower($4) AND lower(name)=lower($5)",
+            ).bind(uid).bind(gid).bind(&e.region).bind(&e.realm).bind(&stored_name).fetch_optional(&st.db).await?
+        };
         let checked = check_entry(
             e,
             prev.map(|p| (p.1, p.2.timestamp())),
             link.as_ref().map(|l| l.0.as_str()),
             now,
         );
+        if checked.is_ok() {
+            if let Some(identity) = &identity {
+                if let Some((id, _, at)) = identity.previous {
+                    // A newer addon can enrich the same snapshot, but an older file
+                    // cannot put stale display metadata back over a newer upload.
+                    if e.at >= at.timestamp() {
+                        let updated = sqlx::query("UPDATE wow_characters SET name=$2, first_name=$3, surname=$4, addon_guid=$5
+                            WHERE id=$1 AND user_id=$6 AND (addon_guid IS NULL OR addon_guid IS NOT DISTINCT FROM $5)
+                              AND ($5::text IS NOT NULL OR surname IS NULL OR surname='' OR lower(surname)=lower($4) OR $4='')")
+                            .bind(id).bind(&identity.name).bind(e.first.trim()).bind(&identity.surname).bind(&identity.guid).bind(uid)
+                            .execute(&st.db).await?;
+                        if updated.rows_affected() == 0 {
+                            quarantine(st, uid, gid, e, "ambiguous_identity").await;
+                            rejected.push(json!({"character":who,"name":e.name,"realm":e.realm,"region":e.region,
+                                "reason":"ambiguous_identity","detail":"The character identity changed during this upload."}));
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
         match checked {
             Err(x) => {
                 if x.flag {
@@ -898,14 +1030,15 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
         let id: Uuid = sqlx::query_scalar(
             "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class,
                                         level, played_s, played_at, battletag, flavour, project_id,
-                                        client_build, first_name, surname, verified)
-             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false)
+                                        client_build, first_name, surname, verified, addon_guid)
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false, $18)
              ON CONFLICT (user_id, game_id, region, lower(realm), lower(name)) DO UPDATE
                SET class = excluded.class, level = excluded.level, played_s = excluded.played_s,
                    played_at = excluded.played_at, uploaded_at = now(), realm_slug = excluded.realm_slug,
                    battletag = excluded.battletag, flavour = excluded.flavour,
                    project_id = excluded.project_id, client_build = excluded.client_build,
-                   first_name = excluded.first_name, surname = excluded.surname
+                   first_name = excluded.first_name, surname = excluded.surname,
+                   addon_guid = coalesce(wow_characters.addon_guid, excluded.addon_guid)
              RETURNING id",
         )
         .bind(Uuid::new_v4())
@@ -914,7 +1047,7 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
         .bind(e.region.chars().take(8).collect::<String>())
         .bind(realm.chars().take(64).collect::<String>())
         .bind(&slug)
-        .bind(name.chars().take(64).collect::<String>())
+        .bind(if *gid == "wow_forever" { name.clone() } else { name.chars().take(64).collect::<String>() })
         .bind(e.class.chars().take(24).collect::<String>())
         .bind(e.level as i32)
         .bind(e.played)
@@ -923,8 +1056,9 @@ async fn ingest(st: &AppState, uid: Uuid, game_id: &str, chars: &[CharEntry]) ->
         .bind(e.flavour.chars().take(32).collect::<String>())
         .bind(e.project as i32)
         .bind(e.build.chars().take(32).collect::<String>())
-        .bind(e.first.chars().take(32).collect::<String>())
-        .bind(e.surname.chars().take(32).collect::<String>())
+        .bind(e.first.trim())
+        .bind(identity.as_ref().map(|i| i.surname.clone()).unwrap_or_else(|| e.surname.trim().to_string()))
+        .bind(identity.as_ref().and_then(|i| i.guid.as_deref()))
         .fetch_one(&st.db)
         .await?;
         sqlx::query("INSERT INTO wow_played_snaps(char_id, played_s, at) VALUES($1, $2, $3) ON CONFLICT DO NOTHING")
@@ -2287,6 +2421,7 @@ mod tests {
             build: String::new(),
             first: String::new(),
             surname: String::new(),
+            guid: String::new(),
             beta: 0,
             confirmed: 0,
             sig: String::new(),

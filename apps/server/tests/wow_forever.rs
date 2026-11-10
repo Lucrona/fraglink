@@ -22,6 +22,7 @@ fn forever(name: &str, first: &str, surname: &str, played: i64, at: i64, tag: &s
         build: "16099".into(),
         first: first.into(),
         surname: surname.into(),
+        guid: String::new(),
         beta: 0,
         confirmed: 1,
         sig: String::new(),
@@ -374,4 +375,232 @@ async fn forever_display_follows_the_retail_rule(pool: PgPool) {
         retail_kept, 1,
         "the existing Retail import row is not rewritten"
     );
+}
+
+async fn retail_snapshot(pool: &PgPool, uid: uuid::Uuid) -> serde_json::Value {
+    sqlx::query_scalar(
+        "SELECT jsonb_build_object(
+          'characters', (SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id) FROM wow_characters c WHERE user_id=$1 AND game_id='wow'),
+          'hours', (SELECT jsonb_agg(to_jsonb(h) ORDER BY h.id) FROM hours_entries h WHERE user_id=$1 AND game_id='wow'),
+          'sessions', (SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id) FROM sessions s WHERE user_id=$1 AND game_id='wow'))",
+    ).bind(uid).fetch_one(pool).await.unwrap()
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn forever_optional_surnames_keep_exact_identities_and_retail_intact(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "nosurname@example.com", "nosurname").await;
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle='nosurname'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO games(id,name) VALUES('wow','World of Warcraft'),('wow_forever','World of Warcraft: Forever') ON CONFLICT DO NOTHING")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO linked_accounts(user_id,provider,provider_uid,display,verified,scopes) VALUES($1,'bnet','optional-surname','For#1',true,'openid wow.profile')")
+        .bind(uid).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO wow_characters(id,user_id,game_id,region,realm,name,played_s,played_at) VALUES(gen_random_uuid(),$1,'wow','us','Area 52','Vale',7200,now())")
+        .bind(uid).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO hours_entries(id,user_id,game_id,tier,source,minutes,captured_at) VALUES(gen_random_uuid(),$1,'wow','imported','wow_addon',400,now())")
+        .bind(uid).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO sessions(id,user_id,game_id,started_at,ended_at,duration_s) VALUES(gen_random_uuid(),$1,'wow',now()-interval '1 hour',now(),900)")
+        .bind(uid).execute(&pool).await.unwrap();
+    let retail_before = retail_snapshot(&pool, uid).await;
+    let at = chrono::Utc::now().timestamp() - 120;
+    let e = forever("Vale", "Vale", "", 10_800, at, "For#1");
+    let first = post(&app, &t, "wow_forever", &e).await;
+    assert_eq!(first.status, StatusCode::OK, "{}", first.text);
+    assert_eq!(first.json()["accepted"], 1, "{}", first.text);
+    assert_eq!(first.json()["verified"], 0);
+    assert_eq!(first.json()["total_min"], 180);
+    // Missing surname deserializes as empty and signs identically; it is the same character.
+    let mut missing = json!(e);
+    missing.as_object_mut().unwrap().remove("surname");
+    let again = api(
+        &app,
+        "POST",
+        "/api/v1/hours/wow_played",
+        Some(&t),
+        Some(json!({"game_id":"wow_forever","characters":[missing]})),
+    )
+    .await;
+    assert_eq!(again.json()["accepted"], 0, "{}", again.text);
+    assert_eq!(again.json()["unchanged"].as_array().unwrap().len(), 1);
+    // A new character with an omitted field is accepted too.
+    let mut rina = json!(forever("Rina", "Rina", "", 7200, at, "For#1"));
+    rina.as_object_mut().unwrap().remove("surname");
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/hours/wow_played",
+        Some(&t),
+        Some(json!({"game_id":"wow_forever","characters":[rina]})),
+    )
+    .await;
+    assert_eq!(r.json()["accepted"], 1, "{}", r.text);
+    let imports_before: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM hours_entries WHERE user_id=$1 AND game_id='wow_forever'",
+    )
+    .bind(uid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let legacy_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM wow_characters WHERE user_id=$1 AND game_id='wow_forever' AND name='Vale'",
+    )
+    .bind(uid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    // 1.1.1 learns the real surname and signs its GUID. Enrich the same snapshot,
+    // same row and same hours, even though the display name has changed.
+    let mut full = forever("Vale Mocken", "Vale", "Mocken", 10_800, at, "For#1");
+    full.sv = 3;
+    full.guid = "Player-70-00000001".into();
+    full.sig = sign_with(SIG_KEYS[2].1, &full);
+    let r = post(&app, &t, "wow_forever", &full).await;
+    assert_eq!(r.json()["accepted"], 0, "{}", r.text);
+    assert_eq!(r.json()["unchanged"].as_array().unwrap().len(), 1);
+    assert_eq!(r.json()["total_min"], 300, "{}", r.text);
+    let new_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM wow_characters WHERE user_id=$1 AND game_id='wow_forever' AND name='Vale Mocken'")
+        .bind(uid).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        legacy_id, new_id,
+        "surname arrival must not create a second character"
+    );
+    let imports_after: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM hours_entries WHERE user_id=$1 AND game_id='wow_forever'",
+    )
+    .bind(uid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        imports_before, imports_after,
+        "surname metadata must not add an import total"
+    );
+    let trailing = forever("Vale ", "Vale", "", 10_800, at, "For#1");
+    let r = post(&app, &t, "wow_forever", &trailing).await;
+    assert_eq!(r.json()["accepted"], 0, "{}", r.text);
+    assert_eq!(r.json()["unchanged"].as_array().unwrap().len(), 1);
+    // Different GUIDs prove these are separate characters despite sharing a first name.
+    let mut other = forever("Vale Other", "Vale", "Other", 3600, at, "For#1");
+    other.sv = 3;
+    other.guid = "Player-70-00000002".into();
+    other.sig = sign_with(SIG_KEYS[2].1, &other);
+    let r = post(&app, &t, "wow_forever", &other).await;
+    assert_eq!(r.json()["accepted"], 1, "{}", r.text);
+    assert_eq!(r.json()["total_min"], 360, "{}", r.text);
+    let mut lower = full.clone();
+    lower.played = 3600;
+    lower.at += 30;
+    lower.sig = sign_with(SIG_KEYS[2].1, &lower);
+    let r = post(&app, &t, "wow_forever", &lower).await;
+    assert_eq!(
+        r.json()["rejected"][0]["reason"],
+        "wow_decrease",
+        "{}",
+        r.text
+    );
+    // A legacy first-name-only file is now ambiguous. Do not guess or merge.
+    let mut unsigned_guid = trailing.clone();
+    unsigned_guid.guid = full.guid.clone();
+    let r = post(&app, &t, "wow_forever", &unsigned_guid).await;
+    assert_eq!(
+        r.json()["rejected"][0]["reason"],
+        "ambiguous_identity",
+        "{}",
+        r.text
+    );
+    // GUID tampering is covered by the new checksum, not merely trusted metadata.
+    let mut tampered = full.clone();
+    tampered.guid = "Player-70-00000009".into();
+    let r = post(&app, &t, "wow_forever", &tampered).await;
+    assert_eq!(
+        r.json()["rejected"][0]["reason"],
+        "wow_checksum",
+        "{}",
+        r.text
+    );
+    let rows: Vec<(String,String,String,bool,i64)> = sqlx::query_as("SELECT name,first_name,surname,verified,played_s FROM wow_characters WHERE user_id=$1 AND game_id='wow_forever' ORDER BY name")
+        .bind(uid).fetch_all(&pool).await.unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            ("Rina".into(), "Rina".into(), "".into(), false, 7200),
+            (
+                "Vale Mocken".into(),
+                "Vale".into(),
+                "Mocken".into(),
+                false,
+                10_800
+            ),
+            (
+                "Vale Other".into(),
+                "Vale".into(),
+                "Other".into(),
+                false,
+                3600
+            )
+        ]
+    );
+    let minutes: i32 = sqlx::query_scalar("SELECT minutes FROM hours_entries WHERE user_id=$1 AND game_id='wow_forever' ORDER BY captured_at DESC,created_at DESC,id DESC LIMIT 1")
+        .bind(uid).fetch_one(&pool).await.unwrap();
+    assert_eq!(minutes, 360);
+    let snaps: i64 = sqlx::query_scalar("SELECT count(*) FROM wow_played_snaps s JOIN wow_characters c ON c.id=s.char_id WHERE c.user_id=$1 AND c.game_id='wow_forever'")
+        .bind(uid).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        snaps, 3,
+        "metadata enrichment and replay must not add a snapshot"
+    );
+    assert_eq!(retail_before, retail_snapshot(&pool, uid).await);
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn optional_surname_does_not_bypass_forever_validation(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "guardforever@example.com", "guardforever").await;
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle='guardforever'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO linked_accounts(user_id,provider,provider_uid,display,verified,scopes) VALUES($1,'bnet','surname-guards','For#1',true,'openid wow.profile')")
+        .bind(uid).execute(&pool).await.unwrap();
+    let at = chrono::Utc::now().timestamp() - 120;
+    let base = forever("Guard", "Guard", "", 7200, at, "For#1");
+    let mut bad_sig = base.clone();
+    bad_sig.sig = "bad".into();
+    let bad_tag = forever("Wrongtag", "Wrongtag", "", 7200, at, "Other#9");
+    let beta = flavoured(base.clone(), "forever", 1, 1);
+    let unconfirmed = flavoured(base.clone(), "forever", 0, 0);
+    let mut wrong_project = base.clone();
+    wrong_project.project = 1;
+    wrong_project.sig = sign_with(SIG_KEYS[1].1, &wrong_project);
+    let missing_first = forever("Missing", "", "", 7200, at, "For#1");
+    for (entry, reason) in [
+        (bad_sig, "wow_checksum"),
+        (bad_tag, "wow_battletag"),
+        (beta, "forever_beta"),
+        (unconfirmed, "forever_unconfirmed"),
+        (wrong_project, "incomplete_identity"),
+        (missing_first, "incomplete_identity"),
+    ] {
+        let r = post(&app, &t, "wow_forever", &entry).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+        assert_eq!(r.json()["accepted"], 0, "{}", r.text);
+        assert_eq!(r.json()["rejected"][0]["reason"], reason, "{}", r.text);
+    }
+    let chars: i64 = sqlx::query_scalar("SELECT count(*) FROM wow_characters WHERE user_id=$1")
+        .bind(uid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(chars, 0);
+    let minutes: i64 = sqlx::query_scalar(
+        "SELECT coalesce(sum(minutes),0)::bigint FROM hours_entries WHERE user_id=$1",
+    )
+    .bind(uid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(minutes, 0);
 }

@@ -4,7 +4,7 @@
 ## Title: Fraglink /played
 ## Notes: Saves each character's /played for Fraglink. Retail and WoW Forever. Nothing leaves your PC from the game.
 ## Author: Fraglink
-## Version: 1.1.0
+## Version: 1.1.1
 ## X-Website: https://playfraglink.com
 ## X-Curse-Project-ID: 1766775
 ## SavedVariables: FraglinkPlayedDB

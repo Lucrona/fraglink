@@ -20,7 +20,9 @@ function CreateFrame()
 end
 function GetCurrentRegion() return 1 end
 function GetRealmName() return "Area 52" end
-function UnitName() return "Thrallé" end
+function UnitName() return "Thrallé", "Area 52" end
+WOW_PROJECT_ID = 1
+function IsBetaBuild() return false end
 function UnitClass() return "Shaman", "SHAMAN" end
 function UnitLevel() return 80 end
 function BNGetInfo() return 1, "Thrall#1234" end
@@ -55,9 +57,13 @@ assert(#lines == 2, "quiet: only the toggle reply")
 SlashCmdList.FRAGQ("")
 assert(FraglinkPlayedDB.quiet == false)
 timers = {}
--- the fixture keeps the first answer
+-- A stale lower answer must not replace the highest saved answer.
 handlers(nil, "TIME_PLAYED_MSG", 1234567, 1000)
 
+assert(FraglinkPlayedDB.chars["us/Area 52/Thrallé"].surname == "", "Retail realm is not a surname")
+assert(FraglinkPlayedDB.chars["us/Area 52/Thrallé"].guid == "", "Retail GUID identity unchanged")
+assert(FraglinkPlayedDB.chars["us/Area 52/Thrallé"].sv == 3, "v3 signature")
+assert(FraglinkPlayedDB.chars["us/Area 52/Thrallé"].played == 1234800, "highest total retained")
 local function ser(v, ind)
   if type(v) == "table" then
     local keys = {}
