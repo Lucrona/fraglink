@@ -53,6 +53,7 @@ pub mod turnstile;
 pub mod web;
 pub mod week;
 pub mod wow;
+mod wow_forever_account;
 pub mod wowchar;
 pub mod wowpage;
 

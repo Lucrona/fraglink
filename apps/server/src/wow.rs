@@ -1363,9 +1363,8 @@ pub(crate) fn forever_lookup_enabled() -> bool {
     flag_on("BNET_FOREVER_LOOKUP")
 }
 
-/// `profile-forever-{region}` and `/profile/wow/character/{first}-{surname}`.
-/// Not the Retail realm-slug URL.
-pub(crate) fn forever_profile_url(region: &str, first: &str, surname: &str) -> String {
+/// Realmless slug shared by the Forever public API and official Armory.
+pub(crate) fn forever_slug(first: &str, surname: &str) -> String {
     let part = |s: &str| {
         s.trim()
             .to_lowercase()
@@ -1373,19 +1372,19 @@ pub(crate) fn forever_profile_url(region: &str, first: &str, surname: &str) -> S
             .filter(|c| c.is_ascii_alphanumeric())
             .collect::<String>()
     };
-    format!(
-        "https://{region}.api.blizzard.com/profile/wow/character/{}-{}?namespace=profile-forever-{region}&locale=en_US",
-        part(first),
-        part(surname)
-    )
+    format!("{}-{}", part(first), part(surname))
 }
 
-/// Profile namespace of a game in a region. Forever's account list stays off
-/// unless `BNET_FOREVER_ACCOUNT=on`.
+/// `profile-forever-{region}`, never the Retail realm-slug URL.
+pub(crate) fn forever_profile_url(region: &str, first: &str, surname: &str) -> String {
+    format!("https://{region}.api.blizzard.com/profile/wow/character/{}?namespace=profile-forever-{region}&locale=en_US", forever_slug(first, surname))
+}
+
+/// Namespace for generic realm-based Retail requests. Forever must use its
+/// dedicated realmless account/profile helpers, never this path.
 pub(crate) fn namespace(game: &str, region: &str) -> Option<String> {
     match game {
         "wow" => Some(format!("profile-{region}")),
-        "wow_forever" if forever_account_enabled() => Some(format!("profile-forever-{region}")),
         _ => None,
     }
 }
@@ -1411,69 +1410,64 @@ pub async fn sync_characters(
         Option<i64>,
     )> = Vec::new();
     let mut any_ok = false;
-    for (game, _) in GAMES {
-        for r in REGIONS {
-            let Some(ns) = namespace(game, r) else {
-                continue;
-            };
-            let url = format!(
-                "https://{r}.api.blizzard.com/profile/user/wow?namespace={ns}&locale=en_US"
-            );
-            let Ok(resp) = http.get(&url).bearer_auth(token).send().await else {
-                continue;
-            };
-            if resp.status() == StatusCode::NOT_FOUND {
-                any_ok = true; // no characters in this region
-                continue;
-            }
-            let Ok(v) = resp.error_for_status() else {
-                continue;
-            };
-            let Ok(v) = v.json::<Value>().await else {
-                continue;
-            };
-            any_ok = true;
-            for acct in v["wow_accounts"].as_array().into_iter().flatten() {
-                for c in acct["characters"].as_array().into_iter().flatten() {
-                    let Some(name) = c["name"].as_str() else {
-                        continue;
-                    };
-                    // Forever's account list has no realm. Retail still requires one.
-                    // This loop only runs for Forever when BNET_FOREVER_ACCOUNT=on.
-                    let (slug, realm_name) = if game == "wow_forever" {
-                        (String::new(), String::new())
-                    } else {
-                        let Some(slug) = c["realm"]["slug"].as_str() else {
-                            continue;
-                        };
-                        (
-                            slug.to_string(),
-                            c["realm"]["name"].as_str().unwrap_or_default().to_string(),
-                        )
-                    };
-                    rows.push((
-                        game.to_string(),
-                        r.to_string(),
-                        slug,
-                        realm_name,
-                        name.to_string(),
-                        c["level"].as_i64().map(|l| l as i32),
-                        [
-                            name_of(&c["playable_race"]),
-                            c["gender"]["type"].as_str().map(|g| g.to_lowercase()),
-                            name_of(&c["playable_class"]),
-                        ],
-                        c["id"].as_i64(),
-                    ));
-                }
+    // Forever has a separate, non-reconciling account path below.
+    let game = "wow";
+    for r in REGIONS {
+        let Some(ns) = namespace(game, r) else {
+            continue;
+        };
+        let url =
+            format!("https://{r}.api.blizzard.com/profile/user/wow?namespace={ns}&locale=en_US");
+        let Ok(resp) = http.get(&url).bearer_auth(token).send().await else {
+            continue;
+        };
+        if resp.status() == StatusCode::NOT_FOUND {
+            any_ok = true; // no characters in this region
+            continue;
+        }
+        let Ok(v) = resp.error_for_status() else {
+            continue;
+        };
+        let Ok(v) = v.json::<Value>().await else {
+            continue;
+        };
+        any_ok = true;
+        for acct in v["wow_accounts"].as_array().into_iter().flatten() {
+            for c in acct["characters"].as_array().into_iter().flatten() {
+                let Some(name) = c["name"].as_str() else {
+                    continue;
+                };
+                let Some(slug) = c["realm"]["slug"].as_str() else {
+                    continue;
+                };
+                let slug = slug.to_string();
+                let realm_name = c["realm"]["name"].as_str().unwrap_or_default().to_string();
+                rows.push((
+                    game.to_string(),
+                    r.to_string(),
+                    slug,
+                    realm_name,
+                    name.to_string(),
+                    c["level"].as_i64().map(|l| l as i32),
+                    [
+                        name_of(&c["playable_race"]),
+                        c["gender"]["type"].as_str().map(|g| g.to_lowercase()),
+                        name_of(&c["playable_class"]),
+                    ],
+                    c["id"].as_i64(),
+                ));
             }
         }
     }
+    let forever = super::wow_forever_account::sync(st, uid, token).await;
     if !any_ok {
+        if let Some(count) = forever {
+            return Some(vec![("wow_forever".into(), "us".into()); count]);
+        }
         tracing::warn!("bnet characters: no region answered for {uid}");
         return None;
     }
-    let _ = sqlx::query("DELETE FROM bnet_characters WHERE user_id = $1")
+    let _ = sqlx::query("DELETE FROM bnet_characters WHERE user_id = $1 AND game_id = 'wow'")
         .bind(uid)
         .execute(&st.db)
         .await
@@ -1503,7 +1497,11 @@ pub async fn sync_characters(
     tracing::info!("bnet characters: {} for {uid}", rows.len());
     reverify(st, uid).await;
     crate::wowpage::after_sync(st, uid).await;
-    Some(rows.into_iter().map(|r| (r.0, r.1)).collect())
+    let mut found: Vec<_> = rows.into_iter().map(|r| (r.0, r.1)).collect();
+    if let Some(count) = forever {
+        found.extend(vec![("wow_forever".into(), "us".into()); count]);
+    }
+    Some(found)
 }
 
 /// The account listing's levels onto the user's uploaded characters (`shown_level!`).
@@ -1511,7 +1509,7 @@ pub async fn sync_characters(
 pub async fn copy_bnet_levels(db: &sqlx::PgPool, uid: Uuid) {
     let _ = sqlx::query(
         "UPDATE wow_characters c SET bnet_level = b.level FROM bnet_characters b
-         WHERE c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
+         WHERE c.game_id = 'wow' AND c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
            AND (b.bnet_id = c.bnet_id OR (b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name)))
            AND b.level > 0 AND c.bnet_level IS DISTINCT FROM b.level",
     )
@@ -1594,17 +1592,12 @@ fn forever_parts(name: &str) -> Option<(String, String)> {
     }
 }
 
-/// Rename or combine verified characters that share a Blizzard id.
-///
-/// Called from the Battle.net refresh (`set_verified`), after ids are copied off
-/// the linked account list. `include_forever` is `BNET_FOREVER_ACCOUNT`. That flag
-/// stays off until the Forever account list has been shown to return a stable
-/// character id for the same character across two calls, including after a rename,
-/// and a different id for a different account.
+/// Retail rename/merge reconciliation only. Forever ownership verification must
+/// never enter this path, even when its account feature is enabled.
 pub async fn reconcile_linked_characters(
     st: &AppState,
     uid: Uuid,
-    include_forever: bool,
+    _include_forever: bool,
 ) -> ApiResult<()> {
     let tag: Option<String> = sqlx::query_scalar(
         "SELECT display FROM linked_accounts
@@ -1616,17 +1609,14 @@ pub async fn reconcile_linked_characters(
     let Some(tag) = tag.filter(|t| !t.trim().is_empty()) else {
         return Ok(());
     };
-    let mut games = vec!["wow"];
-    if include_forever {
-        games.push("wow_forever");
-    }
-    for gid in games {
-        reconcile_game(st, uid, gid, &tag).await?;
-    }
+    reconcile_game(st, uid, "wow", &tag).await?;
     Ok(())
 }
 
 async fn reconcile_game(st: &AppState, uid: Uuid, gid: &str, tag: &str) -> ApiResult<()> {
+    if gid != "wow" {
+        return Ok(());
+    }
     let accounts: Vec<AcctName> = sqlx::query_as(
         "SELECT region, realm_slug, realm_name, name, bnet_id FROM bnet_characters
          WHERE user_id = $1 AND game_id = $2 AND bnet_id IS NOT NULL",
@@ -2006,11 +1996,11 @@ async fn apply_rename(
 /// character ids are rechecked too, so a sold character leaves the old owner's total.
 /// `mode` None: the caller stores this user's totals itself (an upload).
 async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
-    // ids from this user's listing onto their uploaded rows. This is the only
-    // place a Blizzard id is copied, and only from the linked account list.
+    // Retail ids from this user's listing onto their uploaded rows.
+    // Forever uses its own ownership-only path below.
     let _ = sqlx::query(
         "UPDATE wow_characters c SET bnet_id = b.bnet_id FROM bnet_characters b
-         WHERE c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
+         WHERE c.game_id = 'wow' AND c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
            AND b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name) AND b.bnet_id IS NOT NULL
            AND c.bnet_id IS DISTINCT FROM b.bnet_id",
     )
@@ -2018,14 +2008,19 @@ async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
     .execute(&st.db)
     .await
     .inspect_err(|e| tracing::warn!("bnet characters: id copy for {uid}: {e}"));
-    // Same refresh as verification. Retail always. Forever only when its account list is on.
-    if let Err(e) = reconcile_linked_characters(st, uid, forever_account_enabled()).await {
+    // Forever never enters Retail reconciliation or total recording.
+    if forever_account_enabled() {
+        if let Err(e) = super::wow_forever_account::verify_cached(&st.db, uid).await {
+            tracing::warn!("Forever verification for {uid}: {e}");
+        }
+    }
+    if let Err(e) = reconcile_linked_characters(st, uid, false).await {
         tracing::warn!("wow rename: {uid}: {e:?}");
     }
     let mut users: Vec<Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT o.user_id FROM wow_characters o JOIN wow_characters c
            ON c.user_id = $1 AND o.game_id = c.game_id AND o.region = c.region AND o.bnet_id = c.bnet_id
-         WHERE o.user_id <> $1",
+         WHERE o.user_id <> $1 AND c.game_id = 'wow'",
     )
     .bind(uid)
     .fetch_all(&st.db)
@@ -2045,7 +2040,7 @@ async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
                     AND o.fetched_at > coalesce((SELECT max(m.fetched_at) FROM bnet_characters m
                         WHERE m.user_id = c.user_id AND m.game_id = c.game_id AND m.region = c.region
                           AND m.bnet_id = c.bnet_id), '-infinity')))
-         WHERE c.user_id = ANY($1)",
+         WHERE c.user_id = ANY($1) AND c.game_id = 'wow'",
     )
     .bind(&users)
     .execute(&st.db)
@@ -2053,7 +2048,7 @@ async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
     .inspect_err(|e| tracing::warn!("bnet characters: verified update: {e}"));
     let _ = sqlx::query(
         "UPDATE wow_characters SET ever_verified = true
-         WHERE user_id = ANY($1) AND verified AND NOT ever_verified",
+         WHERE user_id = ANY($1) AND game_id = 'wow' AND verified AND NOT ever_verified",
     )
     .bind(&users)
     .execute(&st.db)
@@ -2066,9 +2061,7 @@ async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
             (0, Some(m)) => m,
             _ => Recount::KeepHigher,
         };
-        for (gid, _) in GAMES {
-            let _ = record_total(st, *u, gid, m).await;
-        }
+        let _ = record_total(st, *u, "wow", m).await;
     }
 }
 
@@ -2086,7 +2079,14 @@ pub async fn on_unlink(st: &AppState, uid: Uuid) {
         .execute(&st.db)
         .await
         .inspect_err(|e| tracing::warn!("bnet characters: clear on unlink for {uid}: {e}"));
-    // Unverified characters must stop counting, so store the exact (lower) sum here.
+    // Unlink revokes Forever ownership only; its hours and history stay untouched.
+    let _ = sqlx::query(
+        "UPDATE wow_characters SET verified = false WHERE user_id = $1 AND game_id = 'wow_forever'",
+    )
+    .bind(uid)
+    .execute(&st.db)
+    .await;
+    // Retail keeps its existing exact recount on unlink.
     set_verified(st, uid, Some(Recount::Exact)).await;
 }
 
@@ -2119,6 +2119,9 @@ pub(crate) async fn app_token() -> Option<String> {
 /// Sanity check of a verified character against Blizzard's public profile (at most every
 /// 6 hours): Blizzard saw a later login with a lower level than the addon claims -> flag.
 async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &CharEntry) {
+    if gid != "wow" {
+        return; // Forever metadata uses its guarded realmless lookup.
+    }
     let due: Option<bool> = sqlx::query_scalar(
         "SELECT verified AND (bnet_checked_at IS NULL OR bnet_checked_at < now() - interval '6 hours')
          FROM wow_characters WHERE id = $1",
@@ -2261,6 +2264,7 @@ pub async fn characters(
             json!({ "id": c.id, "game_id": c.game_id, "region": c.region, "realm": c.realm,
                 "name": c.name, "class": c.class, "level": c.level, "played_min": c.played_s / 60,
                 "played_at": c.played_at, "verified": c.verified, "hidden": c.hid, "race": c.race,
+                "details_enabled": c.game_id == "wow" && c.verified || c.game_id == "wow_forever" && forever_lookup_enabled(),
                 "gender": c.gender, "spec": c.spec, "show_guild": c.show_guild, "guild": c.guild,
                 "featured": c.featured, "faction": c.faction })
         })
@@ -2340,7 +2344,7 @@ pub async fn backfill_ids(st: AppState) {
     tokio::time::sleep(std::time::Duration::from_secs(30)).await;
     let rows: Vec<(Uuid, Uuid, String, String, String, String)> = sqlx::query_as(
         "SELECT id, user_id, game_id, region, realm_slug, name FROM wow_characters
-         WHERE bnet_id IS NULL AND bnet_id_tried_at IS NULL ORDER BY user_id LIMIT 2000",
+         WHERE game_id = 'wow' AND bnet_id IS NULL AND bnet_id_tried_at IS NULL ORDER BY user_id LIMIT 2000",
     )
     .fetch_all(&st.db)
     .await
@@ -2451,6 +2455,13 @@ mod tests {
             None
         );
         assert_eq!(profile_faction(&json!({})), None);
+    }
+
+    #[test]
+    fn generic_namespace_never_routes_forever_through_realm_urls() {
+        assert_eq!(namespace("wow", "us").as_deref(), Some("profile-us"));
+        assert!(namespace("wow_forever", "us").is_none());
+        assert!(namespace("wow_forever", "eu").is_none());
     }
 
     #[test]

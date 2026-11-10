@@ -482,7 +482,7 @@ pub fn specs_of(class: &str) -> &'static [&'static str] {
 pub async fn after_sync(st: &AppState, uid: Uuid) {
     let _ = sqlx::query(
         "UPDATE wow_characters c SET race = coalesce(b.race, c.race), gender = coalesce(b.gender, c.gender)
-         FROM bnet_characters b WHERE c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id
+         FROM bnet_characters b WHERE c.game_id = 'wow' AND c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id
            AND b.region = c.region AND b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name)",
     )
     .bind(uid)
@@ -518,7 +518,7 @@ fn backfill(st: &AppState, uid: Uuid) {
 async fn fill_specs(st: &AppState, uid: Uuid) {
     let rows: Vec<(Uuid, String, String, String, String)> = sqlx::query_as(
         "SELECT id, game_id, region, realm_slug, name FROM wow_characters
-         WHERE user_id = $1 AND verified AND (bnet_spec IS NULL OR race IS NULL)
+         WHERE user_id = $1 AND game_id = 'wow' AND verified AND (bnet_spec IS NULL OR race IS NULL)
          ORDER BY played_s DESC LIMIT 60",
     )
     .bind(uid)

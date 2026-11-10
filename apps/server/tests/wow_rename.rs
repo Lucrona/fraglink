@@ -549,7 +549,7 @@ async fn unverified_and_inconsistent_counters_do_not_merge(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn forever_rename_stays_off_until_the_account_flag(pool: PgPool) {
+async fn forever_rename_is_never_enabled_by_the_account_flag(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let _t = signup(&app, "fv@example.com", "foreverer").await;
     let uid = link(&pool, "foreverer", "Vale#1").await;
@@ -564,6 +564,11 @@ async fn forever_rename_stays_off_until_the_account_flag(pool: PgPool) {
     .await
     .unwrap();
     account(&pool, uid, "wow_forever", "", "", "Vale Renamed", Some(18)).await;
+    let before: Value = sqlx::query_scalar("SELECT to_jsonb(c) FROM wow_characters c WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     let st = state(pool.clone());
     fraglink_server::wow::reverify(&st, uid).await;
     let name: String = sqlx::query_scalar("SELECT name FROM wow_characters WHERE id = $1")
@@ -584,9 +589,9 @@ async fn forever_rename_stays_off_until_the_account_flag(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(row.0, "Vale Renamed");
+    assert_eq!(row.0, "Vale Mocken");
     assert_eq!(row.1, "Vale");
-    assert_eq!(row.2, "Renamed");
+    assert_eq!(row.2, "Mocken");
     fraglink_server::wow::reconcile_linked_characters(&st, uid, true)
         .await
         .unwrap();
@@ -596,7 +601,27 @@ async fn forever_rename_stays_off_until_the_account_flag(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(history, 1);
+    assert_eq!(history, 0);
+    let after: Value = sqlx::query_scalar("SELECT to_jsonb(c) FROM wow_characters c WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        before, after,
+        "Retail refresh and forced reconciliation cannot touch Forever"
+    );
+    let imports: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM hours_entries WHERE user_id=$1 AND game_id='wow_forever'",
+    )
+    .bind(uid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        imports, 0,
+        "verification cannot record a Forever hours entry"
+    );
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]

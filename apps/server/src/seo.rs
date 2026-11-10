@@ -14,6 +14,7 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
+use serde_json::Value;
 
 /// Profiles per sitemap file (the protocol allows 50,000).
 pub const PROFILES_PER_FILE: i64 = 5000;
@@ -202,6 +203,62 @@ pub fn profile_head(base: &str, seo: &ProfileSeo) -> String {
     }
 }
 
+/// Stable character links contain a Fraglink UUID, not a mutable character name.
+pub fn character_path(rest: &str) -> Option<(&str, &str, uuid::Uuid)> {
+    let bits: Vec<_> = rest.trim_end_matches('/').split('/').collect();
+    if bits.len() != 4 || bits[1] != "wow" || bits[0].is_empty() {
+        return None;
+    }
+    let game = match bits[2] {
+        "retail" => "wow",
+        "forever" => "wow_forever",
+        _ => return None,
+    };
+    Some((bits[0], game, uuid::Uuid::parse_str(bits[3]).ok()?))
+}
+
+fn character_head(base: &str, handle: &str, c: &Value) -> String {
+    let version = if c["game_id"] == "wow_forever" {
+        "forever"
+    } else {
+        "retail"
+    };
+    let url = format!(
+        "{base}/u/{}/wow/{version}/{}",
+        enc(handle),
+        c["id"].as_str().unwrap_or("")
+    );
+    let title = format!(
+        "{} · {} · Fraglink",
+        c["name"].as_str().unwrap_or(""),
+        if version == "forever" {
+            "Forever"
+        } else {
+            "Retail"
+        }
+    );
+    let desc = format!(
+        "Level {} {}{} · @{}",
+        c["level"],
+        c["class"].as_str().unwrap_or(""),
+        c["guild"]
+            .as_str()
+            .map(|g| format!(" · <{g}>"))
+            .unwrap_or_default(),
+        handle
+    );
+    let image = if c["render"] == true {
+        format!(
+            "{base}/api/v1/users/{}/wow/{}/render.png",
+            enc(handle),
+            c["id"].as_str().unwrap_or("")
+        )
+    } else {
+        format!("{base}/assets/og-card.png")
+    };
+    format!("<title>{t}</title><meta name=\"robots\" content=\"noindex\"><meta name=\"description\" content=\"{d}\">\n<link rel=\"canonical\" href=\"{u}\"><meta property=\"og:type\" content=\"profile\"><meta property=\"og:site_name\" content=\"Fraglink\"><meta property=\"og:title\" content=\"{t}\"><meta property=\"og:description\" content=\"{d}\"><meta property=\"og:url\" content=\"{u}\"><meta property=\"og:image\" content=\"{i}\"><meta name=\"twitter:card\" content=\"summary_large_image\">",t=esc(&title),d=esc(&desc),u=esc(&url),i=esc(&image))
+}
+
 /// `GET /u/<name>`: the website's profile page (`u.html` from the site files) with the right
 /// robots header and head tags. The page itself is still drawn by the site's script.
 async fn profile_page(State(st): State<AppState>, Path(rest): Path<String>) -> Response {
@@ -209,6 +266,21 @@ async fn profile_page(State(st): State<AppState>, Path(rest): Path<String>) -> R
     let mut seo = match profile_seo(&st, name).await {
         Ok(s) => s,
         Err(e) => return e.into_response(),
+    };
+    // Only anonymous/public visibility may contribute character-specific tags.
+    // Hidden/private/unknown ids all get the same generic profile response.
+    let character_head = if matches!(seo, ProfileSeo::Index { .. }) {
+        if let Some((handle, game, id)) = character_path(&rest) {
+            crate::wowchar::share_metadata(&st, handle, id)
+                .await
+                .ok()
+                .filter(|c| c["game_id"] == game)
+                .map(|c| character_head(base(&st), handle, &c))
+        } else {
+            None
+        }
+    } else {
+        None
     };
     // /u/<name>/wow is the character gallery, not the profile search engines index.
     if rest.contains('/') && !matches!(seo, ProfileSeo::Missing) {
@@ -218,7 +290,7 @@ async fn profile_page(State(st): State<AppState>, Path(rest): Path<String>) -> R
         Ok(p) => p,
         Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
-    let head = profile_head(base(&st), &seo);
+    let head = character_head.unwrap_or_else(|| profile_head(base(&st), &seo));
     let html = match (page.find(SEO_START), page.find(SEO_END)) {
         (Some(a), Some(z)) if a < z => {
             format!("{}{head}{}", &page[..a], &page[z + SEO_END.len()..])
