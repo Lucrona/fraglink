@@ -48,3 +48,12 @@ test('gallery omits realm on cards; profile retains it; upload follows active ta
   assert.ok(source.includes('up.textContent = "Upload " + (st.game === "wow_forever" ? "Forever" : "Retail") + " /played"'));
   assert.ok(source.includes('up.href = "/connect/wow?version=" + (st.game === "wow_forever" ? "forever" : "retail")'));
 });
+test('manager and uploader share the filled, bordered version switch', () => {
+  assert.ok(source.includes('class="seg wow-version-switch" data-tabs'));
+  assert.ok(source.includes('class="seg wow-version-switch" role="tablist" aria-label="Which version to upload"'));
+  const css = readFileSync(__dirname + '/../static/assets/site.css','utf8');
+  assert.ok(css.includes('.seg.wow-version-switch button[aria-selected="true"]{background:#2c4d6b;color:#fff}'));
+  assert.ok(css.includes('.seg.wow-version-switch button:hover'));
+  assert.ok(css.includes('.wow-version-control{padding:10px 12px}'));
+  assert.ok(!css.includes('.bn-tabs button.on'));
+});

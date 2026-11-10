@@ -15,15 +15,17 @@ use std::collections::BTreeMap;
 /// Addon folder name (also the SavedVariables file stem).
 pub const ADDON: &str = "FraglinkPlayed";
 /// Current addon release (CurseForge project 1766775). The app no longer installs it.
-pub const ADDON_VERSION: &str = "1.1.0";
+pub const ADDON_VERSION: &str = "1.1.1";
 
 /// Checksum keys by signature version. Every addon release that bumps
 /// `SIG_VERSION` adds its key here; the server accepts only listed versions, so an
 /// old key is retired by deleting its row. Version 1 is the Retail entry. Version 2
 /// also signs flavour, project, build, and Forever's first name and surname.
 pub const SIG_KEYS: &[(i64, &str)] = &[
+    // v3 also covers the opaque player GUID; older entries remain accepted.
     (1, "OlApFDIsED1aJE04makEnBj7W6DZwvYG"),
     (2, "K7mQ2pL9xR4vN8cW1dF6hJ3sT5yB0aUe"),
+    (3, "G6vP9cN2rT8mK4wQ1xH5bD7sL3fA0eYz"),
 ];
 
 /// WoW flavour folder -> Fraglink game id. Only these two count.
@@ -61,6 +63,9 @@ pub struct CharEntry {
     /// Forever surname. Empty for Retail.
     #[serde(default)]
     pub surname: String,
+    /// Opaque Forever player GUID. Signed only by v3 and later.
+    #[serde(default)]
+    pub guid: String,
     /// 1 when a beta/test client API said this client is a test build.
     #[serde(default)]
     pub beta: i64,
@@ -103,6 +108,9 @@ pub fn sign_with(key: &str, e: &CharEntry) -> String {
             e.beta.to_string(),
             e.confirmed.to_string(),
         ]);
+    }
+    if e.sv >= 3 {
+        parts.push(e.guid.clone());
     }
     let fields = parts.join("|");
     let inner = hash(format!("{key}|{fields}").as_bytes());
@@ -379,6 +387,7 @@ pub fn entries_from_saved(text: &str) -> Vec<CharEntry> {
                 build: c.str("build").unwrap_or_default(),
                 first: c.str("first").unwrap_or_default(),
                 surname: c.str("surname").unwrap_or_default(),
+                guid: c.str("guid").unwrap_or_default(),
                 beta: c.int("beta").unwrap_or(0),
                 confirmed: c.int("confirmed").unwrap_or(0),
                 sig: c.str("sig")?,
@@ -412,6 +421,7 @@ mod tests {
             build: String::new(),
             first: String::new(),
             surname: String::new(),
+            guid: String::new(),
             beta: 0,
             confirmed: 0,
             sig: String::new(),
@@ -452,9 +462,38 @@ mod tests {
         let got = entries_from_saved(include_str!("../tests/fixtures/FraglinkPlayed.lua"));
         assert_eq!(got.len(), 1);
         let mut want = entry();
+        want.played = 1_234_800;
+        want.sv = 3;
+        want.flavour = "retail".into();
+        want.project = 1;
+        want.confirmed = 1;
         want.sig = got[0].sig.clone();
         assert_eq!(got[0], want);
         assert_eq!(verify(&got[0]), SigCheck::Ok);
+    }
+
+    #[test]
+    fn forever_lua_v3_and_rust_agree_on_guid_and_surname() {
+        let entries =
+            entries_from_saved(include_str!("../tests/fixtures/FraglinkPlayed-forever.lua"));
+        assert_eq!(entries.len(), 1);
+        let e = &entries[0];
+        assert_eq!(e.sv, 3);
+        assert_eq!(e.first, "Vale");
+        assert_eq!(e.surname, "Mocken");
+        assert!(!e.guid.is_empty());
+        assert_eq!(verify(e), SigCheck::Ok);
+    }
+
+    #[test]
+    fn forever_v3_signature_covers_the_guid() {
+        let mut e = entry();
+        e.sv = 3;
+        e.guid = "Player-70-00000001".into();
+        e.sig = sign_with(SIG_KEYS[2].1, &e);
+        assert_eq!(verify(&e), SigCheck::Ok);
+        e.guid = "Player-70-00000002".into();
+        assert_eq!(verify(&e), SigCheck::Bad);
     }
 
     #[test]

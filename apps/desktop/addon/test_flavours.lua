@@ -45,8 +45,17 @@ end
 
 dofile(arg and arg[0]:gsub("test_flavours%.lua$", "") .. "FraglinkPlayed/FraglinkPlayed.lua")
 
-local function play(name, total, project)
-  UnitName = function() return name end
+local ids, nextid = {}, 0
+local function play(name, total, project, options)
+  options = options or {}
+  local first, surname = name:match("^(%S+)%s+(.+)$")
+  first = first or name
+  if project ~= 18 then first, surname = name, "Area 52" end
+  UnitName = function() if options.fallback then return first end; return first, surname end
+  UnitFullName = options.fallback == "tuple" and function() return first, surname end or nil
+  GetUnitName = options.fallback == "full" and function() return name end or nil
+  if not ids[name] then nextid = nextid + 1; ids[name] = "Player-70-" .. string.format("%08x", nextid) end
+  UnitGUID = function() if options.no_guid then return nil end; return options.guid or ids[name] end
   WOW_PROJECT_ID = project
   timers = {}
   handlers(nil, "PLAYER_ENTERING_WORLD", true, false)
@@ -67,7 +76,8 @@ eq(asked > 0, true, "retail asked for /played")
 
 GetBuildInfo = function() return "1.60.1", "70790", "Nov 4 2026", 16001 end
 play("Vale Mocken", 3600, 18)
-local forever = FraglinkPlayedDB.chars["eu/forever/Vale Mocken"]
+local function ff(name) return FraglinkPlayedDB.chars["eu/forever/" .. ids[name]] end
+local forever = ff("Vale Mocken")
 if not forever then fail("forever key missing") end
 eq(forever.flavour, "forever", "forever flavour")
 eq(forever.project, 18, "forever project")
@@ -80,21 +90,47 @@ eq(retail.played, 7200, "retail row left alone")
 
 IsBetaBuild = function() return true end
 play("Beta Kin", 1000, 18)
-eq(FraglinkPlayedDB.chars["eu/forever/Beta Kin"].flavour, "forever_beta", "beta flavour")
-eq(FraglinkPlayedDB.chars["eu/forever/Beta Kin"].beta, 1, "beta flag")
+eq(ff("Beta Kin").flavour, "forever_beta", "beta flavour")
+eq(ff("Beta Kin").beta, 1, "beta flag")
 
 IsBetaBuild, IsPublicTestClient, IsTestBuild = nil, nil, nil
 play("Quiet Kin", 1000, 18)
-eq(FraglinkPlayedDB.chars["eu/forever/Quiet Kin"].flavour, "forever_unconfirmed", "unconfirmed flavour")
-eq(FraglinkPlayedDB.chars["eu/forever/Quiet Kin"].confirmed, 0, "unconfirmed flag")
+eq(ff("Quiet Kin").flavour, "forever_unconfirmed", "unconfirmed flavour")
+eq(ff("Quiet Kin").confirmed, 0, "unconfirmed flag")
 
 IsBetaBuild = function() return false end
 IsPublicTestClient = function() return false end
 IsTestBuild = function() return false end
 play("Vale Mocken", 5000, 18)
-eq(FraglinkPlayedDB.chars["eu/forever/Vale Mocken"].played, 5000, "higher total kept")
+eq(ff("Vale Mocken").played, 5000, "higher total kept")
 play("Vale Mocken", 4000, 18)
-eq(FraglinkPlayedDB.chars["eu/forever/Vale Mocken"].played, 5000, "lower total ignored")
+eq(ff("Vale Mocken").played, 5000, "lower total ignored")
+
+-- Tuple APIs expose the surname as their second result, not a realm.
+play("Tuple Family", 1000, 18, { fallback = "tuple" })
+eq(ff("Tuple Family").surname, "Family", "UnitFullName fallback")
+play("Display Family", 1000, 18, { fallback = "full" })
+eq(ff("Display Family").surname, "Family", "GetUnitName full-name fallback")
+-- Upgrade an actual 1.1.0-shaped slot in place without losing its higher total.
+FraglinkPlayedDB.chars["eu/forever/Legacy"] = {
+  region = "eu", first = "Legacy", surname = "", name = "Legacy", played = 7000,
+}
+play("Legacy Family", 6500, 18)
+eq(FraglinkPlayedDB.chars["eu/forever/Legacy"].played, 7000, "legacy lower answer ignored")
+play("Legacy Family", 7200, 18)
+eq(FraglinkPlayedDB.chars["eu/forever/Legacy"].surname, "Family", "legacy surname filled")
+eq(FraglinkPlayedDB.chars["eu/forever/Legacy"].guid, ids["Legacy Family"], "legacy GUID filled")
+eq(FraglinkPlayedDB.chars["eu/forever/" .. ids["Legacy Family"]], nil, "no duplicate legacy slot")
+play("Twin Alpha", 1000, 18)
+play("Twin Beta", 2000, 18)
+eq(ff("Twin Alpha").surname, "Alpha", "different GUIDs stay separate")
+eq(ff("Twin Beta").surname, "Beta", "different GUIDs stay separate")
+
+-- A missing GUID must not let a shared first name overwrite another surname.
+play("Noid Alpha", 3000, 18, { no_guid = true })
+play("Noid Beta", 4000, 18, { no_guid = true })
+eq(FraglinkPlayedDB.chars["eu/forever/Noid"].surname, "Alpha", "unknown GUID surname conflict kept separate")
+eq(FraglinkPlayedDB.chars["eu/forever/Noid"].played, 3000, "surname conflict cannot overwrite hours")
 
 local before = FraglinkPlayedDB.chars["eu/Area 52/Mockrend"].played
 RequestTimePlayed = nil
@@ -108,3 +144,18 @@ eq(ok, true, "missing timer and request does not error")
 eq(FraglinkPlayedDB.chars["eu/Area 52/Mockrend"].played, before, "retail hours unchanged")
 
 io.write("flavours ok\n")
+
+-- Optional cross-language fixture: run with its output path as the first arg.
+if arg and arg[1] then
+  local file = assert(io.open(arg[1], "w"))
+  file:write("FraglinkPlayedDB = { chars = { sample = {\n")
+  local keys = {}
+  for key in pairs(forever) do keys[#keys + 1] = key end
+  table.sort(keys)
+  for _, key in ipairs(keys) do
+    local value = forever[key]
+    file:write("[", string.format("%q", key), "] = ", type(value) == "string" and string.format("%q", value) or tostring(value), ",\n")
+  end
+  file:write("} } }\n")
+  file:close()
+end

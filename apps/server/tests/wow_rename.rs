@@ -23,6 +23,7 @@ fn entry(name: &str, realm: &str, played: i64, at: i64, tag: &str) -> CharEntry 
         build: String::new(),
         first: String::new(),
         surname: String::new(),
+        guid: String::new(),
         beta: 0,
         confirmed: 0,
         sig: String::new(),

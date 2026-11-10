@@ -21,6 +21,7 @@ fn entry(name: &str, played: i64, at: i64) -> CharEntry {
         build: String::new(),
         first: String::new(),
         surname: String::new(),
+        guid: String::new(),
         beta: 0,
         confirmed: 0,
         sig: String::new(),

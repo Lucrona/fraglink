@@ -3,7 +3,7 @@
 set -eu
 cd "$(dirname "$0")"
 ver=$(sed -n 's/^## Version: //p' FraglinkPlayed/FraglinkPlayed.toc)
-test "$ver" = "1.1.0"
+test "$ver" = "1.1.1"
 if ls FraglinkPlayed/*_*.toc >/dev/null 2>&1; then
   echo "flavour toc files must not ship" >&2
   exit 1
@@ -31,7 +31,7 @@ extra = [n for n in names if n.endswith(".toc") and n != "FraglinkPlayed/Fraglin
 if missing or extra:
     raise SystemExit(f"bad zip missing={missing} extra_tocs={extra} names={sorted(names)}")
 toc = z.read("FraglinkPlayed/FraglinkPlayed.toc").decode()
-for needle in ("## Version: 1.1.0", "## Interface: 120105, 120107, 16001"):
+for needle in ("## Version: 1.1.1", "## Interface: 120105, 120107, 16001"):
     if needle not in toc:
         raise SystemExit("toc missing " + needle)
 print("zip ok", sys.argv[1])

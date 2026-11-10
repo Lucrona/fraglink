@@ -21,6 +21,7 @@ fn entry(name: &str, played: i64, at: i64, tag: &str) -> CharEntry {
         build: String::new(),
         first: String::new(),
         surname: String::new(),
+        guid: String::new(),
         beta: 0,
         confirmed: 0,
         sig: String::new(),
@@ -284,15 +285,11 @@ async fn wow_total(pool: &PgPool) -> Option<i32> {
     .unwrap()
 }
 
-/// The site-settings flag cache is process-wide: tests switching flags take turns.
-static FLAGS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
 /// Only Battle.net-verified characters count toward hours and show on the profile.
 /// Unverified ones are stored and start counting once they verify.
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn only_verified_characters_count(pool: PgPool) {
-    let _flags = FLAGS.lock().await;
     fraglink_server::features::forget();
     let app = fraglink_server::router(state(pool.clone()));
     let t = signup(&app, "v@example.com", "onlyverified").await;
@@ -656,7 +653,6 @@ async fn a_crashed_session_is_counted_once(pool: PgPool) {
 
 #[sqlx::test]
 async fn featured_characters_lead_the_profile(pool: PgPool) {
-    let _flags = FLAGS.lock().await;
     fraglink_server::features::forget();
     let app = fraglink_server::router(state(pool.clone()));
     let (t, _) = two_chars(&app, &pool, "feat").await;
@@ -666,16 +662,12 @@ async fn featured_characters_lead_the_profile(pool: PgPool) {
         .unwrap();
     fraglink_server::features::forget();
     let names = || async {
-        fraglink_server::features::forget(); // the flag cache is shared with parallel tests
-        let p: Value = serde_json::from_str(
-            &api(&app, "GET", "/api/v1/users/feat/profile", Some(&t), None)
-                .await
-                .text,
-        )
-        .unwrap();
+        let response = api(&app, "GET", "/api/v1/users/feat/profile", Some(&t), None).await;
+        assert_eq!(response.status, StatusCode::OK, "{}", response.text);
+        let p = response.json();
         p["wow_characters"]
             .as_array()
-            .unwrap()
+            .unwrap_or_else(|| panic!("expected WoW character cards: {p}"))
             .iter()
             .filter(|c| c["hidden"] != true)
             .map(|c| c["name"].as_str().unwrap().to_string())
@@ -981,17 +973,16 @@ async fn staff_recount(
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn cards_show_the_newer_of_armory_and_played_level(pool: PgPool) {
-    let _flags = FLAGS.lock().await;
     let app = fraglink_server::router(state(pool.clone()));
     let (t, _) = two_chars(&app, &pool, "lvl").await;
     sqlx::query("INSERT INTO site_settings(key, enabled) VALUES('wow_characters', true)")
         .execute(&pool)
         .await
         .unwrap();
+    fraglink_server::features::forget(); // SQL fixture changed this app's settings.
     let get = |path: &'static str| {
         let (app, t) = (app.clone(), t.clone());
         async move {
-            fraglink_server::features::forget(); // the flag cache is shared with parallel tests
             let r = api(&app, "GET", path, Some(&t), None).await;
             assert_eq!(r.status, 200, "{}", r.text);
             serde_json::from_str::<Value>(&r.text).unwrap()

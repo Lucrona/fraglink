@@ -1,3 +1,7 @@
+## 1.1.1
+
+- Fixed Forever surnames and kept character identity stable when a surname appears.
+
 # Changelog
 
 ## 1.1.0

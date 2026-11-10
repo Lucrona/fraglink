@@ -33,7 +33,8 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// (key, default, label, help) in display order.
@@ -52,14 +53,24 @@ pub const SWITCHES: [(&str, bool, &str, &str); 10] = [
 
 const TTL: Duration = Duration::from_secs(10);
 
-fn cache() -> &'static Mutex<Option<(Instant, BTreeMap<String, bool>)>> {
-    static C: std::sync::OnceLock<Mutex<Option<(Instant, BTreeMap<String, bool>)>>> =
-        std::sync::OnceLock::new();
-    C.get_or_init(|| Mutex::new(None))
+// Cache snapshots belong to one AppState (shared by its clones), never to an
+// unrelated database/app in the same process. SQLx tests each have their own DB.
+#[derive(Clone, Default)]
+pub(crate) struct Cache(Arc<Mutex<Option<Snapshot>>>);
+
+struct Snapshot {
+    generation: u64,
+    at: Instant,
+    switches: BTreeMap<String, bool>,
 }
 
+// Preserve the existing process-wide invalidation API without sharing values.
+// A query racing with forget() stores the old generation and cannot rewarm a
+// valid stale cache after invalidation.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
 pub fn forget() {
-    *cache().lock().unwrap_or_else(|e| e.into_inner()) = None;
+    GENERATION.fetch_add(1, Ordering::AcqRel);
 }
 
 pub fn is_key(k: &str) -> bool {
@@ -68,9 +79,16 @@ pub fn is_key(k: &str) -> bool {
 
 /// Every switch with its current value.
 pub async fn all(st: &AppState) -> ApiResult<BTreeMap<String, bool>> {
-    if let Some((at, m)) = cache().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        if at.elapsed() < TTL {
-            return Ok(m.clone());
+    let generation = GENERATION.load(Ordering::Acquire);
+    if let Some(snapshot) = st
+        .feature_cache
+        .0
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+    {
+        if snapshot.generation == generation && snapshot.at.elapsed() < TTL {
+            return Ok(snapshot.switches.clone());
         }
     }
     let rows: Vec<(String, bool)> = sqlx::query_as("SELECT key, enabled FROM site_settings")
@@ -82,7 +100,11 @@ pub async fn all(st: &AppState) -> ApiResult<BTreeMap<String, bool>> {
             m.insert(k, v);
         }
     }
-    *cache().lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), m.clone()));
+    *st.feature_cache.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(Snapshot {
+        generation,
+        at: Instant::now(),
+        switches: m.clone(),
+    });
     Ok(m)
 }
 

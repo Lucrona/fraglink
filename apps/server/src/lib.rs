@@ -71,6 +71,8 @@ pub struct AppState {
     pub db: PgPool,
     pub cfg: Arc<Config>,
     pub steam: steam::SteamClient,
+    /// Site switches cached only for this app/database.
+    pub(crate) feature_cache: features::Cache,
     /// Failed logins per lower-case email (in-memory, per process).
     pub login_failures: Arc<Mutex<HashMap<String, Vec<Instant>>>>,
     /// Last zip export per user (at most one per hour).
@@ -102,6 +104,7 @@ impl AppState {
             db,
             cfg: Arc::new(cfg),
             steam,
+            feature_cache: features::Cache::default(),
             login_failures: Arc::new(Mutex::new(HashMap::new())),
             export_log: Arc::new(Mutex::new(HashMap::new())),
             hub: Arc::new(presence::Hub::default()),
