@@ -1121,6 +1121,483 @@ pub async fn copy_bnet_levels(db: &sqlx::PgPool, uid: Uuid) {
     .inspect_err(|e| tracing::warn!("bnet characters: level copy for {uid}: {e}"));
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct AcctName {
+    region: String,
+    realm_slug: String,
+    realm_name: String,
+    name: String,
+    bnet_id: i64,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct OwnedChar {
+    id: Uuid,
+    region: String,
+    name: String,
+    realm: String,
+    realm_slug: String,
+    played_s: i64,
+    played_at: DateTime<Utc>,
+    verified: bool,
+    ever_verified: bool,
+    battletag: String,
+    created_at: DateTime<Utc>,
+    bnet_id: Option<i64>,
+}
+
+fn same_character(row: &OwnedChar, acct: &AcctName) -> bool {
+    row.region == acct.region
+        && row.realm_slug == acct.realm_slug
+        && row.name.eq_ignore_ascii_case(&acct.name)
+}
+
+fn tag_matches(row: &OwnedChar, tag: &str) -> bool {
+    !tag.is_empty() && row.battletag.eq_ignore_ascii_case(tag)
+}
+
+/// The newest /played is lower than an older one. Those two counters are not combined.
+fn counters_disagree(rows: &[OwnedChar]) -> bool {
+    let Some(newest) = rows.iter().max_by_key(|r| r.played_at) else {
+        return false;
+    };
+    rows.iter().any(|r| r.played_s > newest.played_s)
+}
+
+fn display_realm(gid: &str, acct: &AcctName, rows: &[&OwnedChar]) -> String {
+    if gid == "wow_forever" {
+        return String::new();
+    }
+    if !acct.realm_name.is_empty() {
+        return acct.realm_name.clone();
+    }
+    if let Some(row) = rows
+        .iter()
+        .find(|r| r.realm_slug == acct.realm_slug && !r.realm.is_empty())
+    {
+        return row.realm.clone();
+    }
+    rows.iter()
+        .find(|r| !r.realm.is_empty())
+        .map(|r| r.realm.clone())
+        .unwrap_or_default()
+}
+
+fn forever_parts(name: &str) -> Option<(String, String)> {
+    let mut parts = name.split_whitespace();
+    let first = parts.next()?.trim();
+    let surname = parts.collect::<Vec<_>>().join(" ");
+    if first.is_empty() || surname.trim().is_empty() {
+        None
+    } else {
+        Some((first.to_string(), surname.trim().to_string()))
+    }
+}
+
+/// Rename or combine verified characters that share a Blizzard id.
+///
+/// Called from the Battle.net refresh (`set_verified`), after ids are copied off
+/// the linked account list. `include_forever` is `BNET_FOREVER_ACCOUNT`. That flag
+/// stays off until the Forever account list has been shown to return a stable
+/// character id for the same character across two calls, including after a rename,
+/// and a different id for a different account.
+pub async fn reconcile_linked_characters(
+    st: &AppState,
+    uid: Uuid,
+    include_forever: bool,
+) -> ApiResult<()> {
+    let tag: Option<String> = sqlx::query_scalar(
+        "SELECT display FROM linked_accounts
+         WHERE user_id = $1 AND provider = 'bnet' AND verified LIMIT 1",
+    )
+    .bind(uid)
+    .fetch_optional(&st.db)
+    .await?;
+    let Some(tag) = tag.filter(|t| !t.trim().is_empty()) else {
+        return Ok(());
+    };
+    let mut games = vec!["wow"];
+    if include_forever {
+        games.push("wow_forever");
+    }
+    for gid in games {
+        reconcile_game(st, uid, gid, &tag).await?;
+    }
+    Ok(())
+}
+
+async fn reconcile_game(st: &AppState, uid: Uuid, gid: &str, tag: &str) -> ApiResult<()> {
+    let accounts: Vec<AcctName> = sqlx::query_as(
+        "SELECT region, realm_slug, realm_name, name, bnet_id FROM bnet_characters
+         WHERE user_id = $1 AND game_id = $2 AND bnet_id IS NOT NULL",
+    )
+    .bind(uid)
+    .bind(gid)
+    .fetch_all(&st.db)
+    .await?;
+    if accounts.is_empty() {
+        return Ok(());
+    }
+    let mut mine: Vec<OwnedChar> = sqlx::query_as(
+        "SELECT id, region, name, realm, realm_slug, played_s, played_at, verified, ever_verified,
+                battletag, created_at, bnet_id
+         FROM wow_characters WHERE user_id = $1 AND game_id = $2",
+    )
+    .bind(uid)
+    .bind(gid)
+    .fetch_all(&st.db)
+    .await?;
+    let mut merged = false;
+    let mut seen = Vec::<i64>::new();
+    for acct in &accounts {
+        if seen.contains(&acct.bnet_id) {
+            continue;
+        }
+        seen.push(acct.bnet_id);
+        if gid == "wow_forever" && forever_parts(&acct.name).is_none() {
+            hold(
+                st,
+                uid,
+                gid,
+                acct,
+                "rename_forever_name",
+                "Forever account name has no surname, so it was not applied.",
+            )
+            .await?;
+            continue;
+        }
+        let locals: Vec<OwnedChar> = mine
+            .iter()
+            .filter(|r| {
+                r.region == acct.region
+                    && r.bnet_id == Some(acct.bnet_id)
+                    && (r.verified || r.ever_verified)
+                    && tag_matches(r, tag)
+            })
+            .cloned()
+            .collect();
+        if locals.is_empty() {
+            continue;
+        }
+        let target = mine.iter().find(|r| same_character(r, acct)).cloned();
+        let other_owner: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM wow_characters
+               WHERE user_id <> $1 AND game_id = $2 AND region = $3 AND bnet_id = $4)",
+        )
+        .bind(uid)
+        .bind(gid)
+        .bind(&acct.region)
+        .bind(acct.bnet_id)
+        .fetch_one(&st.db)
+        .await?;
+        let target_is_local = target
+            .as_ref()
+            .is_some_and(|t| locals.iter().any(|r| r.id == t.id));
+        let would_change = locals.iter().any(|r| !same_character(r, acct))
+            || locals.len() > 1
+            || matches!(&target, Some(t) if !target_is_local);
+        if other_owner && would_change {
+            hold(
+                st,
+                uid,
+                gid,
+                acct,
+                "rename_other_owner",
+                "Another account already has this Blizzard character id.",
+            )
+            .await?;
+            continue;
+        }
+        if let Some(t) = &target {
+            if t.bnet_id.is_some() && t.bnet_id != Some(acct.bnet_id) {
+                hold(
+                    st,
+                    uid,
+                    gid,
+                    acct,
+                    "rename_other_id",
+                    "The new name already belongs to a different Blizzard character id.",
+                )
+                .await?;
+                continue;
+            }
+            let on_account = tag_matches(t, tag);
+            if !target_is_local && !on_account {
+                hold(
+                    st,
+                    uid,
+                    gid,
+                    acct,
+                    "rename_unverified",
+                    "The new name is on a character that is not verified to this account.",
+                )
+                .await?;
+                continue;
+            }
+        }
+        let mut pool = locals;
+        if let Some(t) = &target {
+            if !pool.iter().any(|r| r.id == t.id) && tag_matches(t, tag) {
+                pool.push(t.clone());
+            }
+        }
+        if counters_disagree(&pool) {
+            hold(
+                st,
+                uid,
+                gid,
+                acct,
+                "rename_counters",
+                "The newer /played is lower than an older one, so the rows were left as they are.",
+            )
+            .await?;
+            continue;
+        }
+        let Some(keep) = pool
+            .iter()
+            .filter(|r| !same_character(r, acct))
+            .min_by_key(|r| (r.created_at, r.id))
+            .cloned()
+            .or_else(|| pool.iter().min_by_key(|r| (r.created_at, r.id)).cloned())
+        else {
+            continue;
+        };
+        let drops: Vec<OwnedChar> = pool.into_iter().filter(|r| r.id != keep.id).collect();
+        if drops.is_empty() && same_character(&keep, acct) {
+            continue;
+        }
+        let dropped_ids: Vec<Uuid> = drops.iter().map(|d| d.id).collect();
+        let played_s = std::iter::once(&keep)
+            .chain(drops.iter())
+            .map(|r| r.played_s)
+            .max()
+            .unwrap_or(keep.played_s);
+        apply_rename(st, uid, gid, acct, &keep, &drops).await?;
+        mine.retain(|r| r.id != keep.id && !dropped_ids.contains(&r.id));
+        let mut now = keep.clone();
+        now.name = acct.name.clone();
+        let realm_rows = std::iter::once(&keep)
+            .chain(drops.iter())
+            .collect::<Vec<_>>();
+        now.realm = display_realm(gid, acct, &realm_rows);
+        now.realm_slug = if gid == "wow_forever" {
+            String::new()
+        } else {
+            acct.realm_slug.clone()
+        };
+        now.played_s = played_s;
+        now.bnet_id = Some(acct.bnet_id);
+        mine.push(now);
+        merged = merged || !dropped_ids.is_empty();
+    }
+    if merged {
+        record_total(st, uid, gid, Recount::KeepHigher).await?;
+    }
+    Ok(())
+}
+
+async fn hold(
+    st: &AppState,
+    uid: Uuid,
+    gid: &str,
+    acct: &AcctName,
+    reason: &str,
+    detail: &str,
+) -> ApiResult<()> {
+    let bid = acct.bnet_id.to_string();
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM wow_played_quarantine
+           WHERE user_id = $1 AND claimed_game = $2 AND reason = $3
+             AND payload->>'bnet_id' = $4 AND payload->>'region' = $5)",
+    )
+    .bind(uid)
+    .bind(gid)
+    .bind(reason)
+    .bind(&bid)
+    .bind(&acct.region)
+    .fetch_one(&st.db)
+    .await?;
+    if exists {
+        return Ok(());
+    }
+    sqlx::query(
+        "INSERT INTO wow_played_quarantine(id, user_id, claimed_game, reason, detail, payload)
+         VALUES($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(uid)
+    .bind(gid)
+    .bind(reason)
+    .bind(detail)
+    .bind(json!({
+        "bnet_id": acct.bnet_id,
+        "region": acct.region,
+        "name": acct.name,
+        "realm_slug": acct.realm_slug,
+    }))
+    .execute(&st.db)
+    .await?;
+    Ok(())
+}
+
+async fn remember_name<'e, E>(
+    ex: E,
+    char_id: Uuid,
+    uid: Uuid,
+    name: &str,
+    realm: &str,
+    realm_slug: &str,
+) -> ApiResult<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    sqlx::query(
+        "INSERT INTO wow_character_names(char_id, user_id, name, realm, realm_slug)
+         SELECT $1, $2, $3, $4, $5
+         WHERE NOT EXISTS (
+             SELECT 1 FROM wow_character_names
+             WHERE char_id = $1 AND lower(name) = lower($3) AND lower(realm) = lower($4))",
+    )
+    .bind(char_id)
+    .bind(uid)
+    .bind(name)
+    .bind(realm)
+    .bind(realm_slug)
+    .execute(ex)
+    .await?;
+    Ok(())
+}
+
+async fn apply_rename(
+    st: &AppState,
+    uid: Uuid,
+    gid: &str,
+    acct: &AcctName,
+    keep: &OwnedChar,
+    drops: &[OwnedChar],
+) -> ApiResult<()> {
+    let new_slug = if gid == "wow_forever" {
+        String::new()
+    } else {
+        acct.realm_slug.clone()
+    };
+    let realm_rows = std::iter::once(keep)
+        .chain(drops.iter())
+        .collect::<Vec<_>>();
+    let new_realm = display_realm(gid, acct, &realm_rows);
+    let new_name = acct.name.chars().take(64).collect::<String>();
+    let (first, surname) = if gid == "wow_forever" {
+        forever_parts(&new_name).unwrap_or_default()
+    } else {
+        (String::new(), String::new())
+    };
+    let max_played = std::iter::once(keep)
+        .chain(drops.iter())
+        .map(|r| r.played_s)
+        .max()
+        .unwrap_or(keep.played_s);
+    let played_at = std::iter::once(keep)
+        .chain(drops.iter())
+        .max_by_key(|r| (r.played_s, r.played_at))
+        .map(|r| r.played_at)
+        .unwrap_or(keep.played_at);
+    let mut tx = st.db.begin().await?;
+    let name_changed = !keep.name.eq_ignore_ascii_case(&new_name)
+        || keep.realm != new_realm
+        || keep.realm_slug != new_slug;
+    if name_changed {
+        remember_name(
+            &mut *tx,
+            keep.id,
+            uid,
+            &keep.name,
+            &keep.realm,
+            &keep.realm_slug,
+        )
+        .await?;
+    }
+    for drop in drops {
+        if !drop.name.eq_ignore_ascii_case(&new_name) || drop.realm != new_realm {
+            remember_name(
+                &mut *tx,
+                keep.id,
+                uid,
+                &drop.name,
+                &drop.realm,
+                &drop.realm_slug,
+            )
+            .await?;
+        }
+        let before: Value =
+            sqlx::query_scalar("SELECT to_jsonb(c) FROM wow_characters c WHERE id = $1")
+                .bind(drop.id)
+                .fetch_one(&mut *tx)
+                .await?;
+        sqlx::query(
+            "INSERT INTO wow_played_snaps(char_id, played_s, at)
+             SELECT $1, played_s, at FROM wow_played_snaps WHERE char_id = $2
+             ON CONFLICT (char_id, at) DO UPDATE
+               SET played_s = GREATEST(wow_played_snaps.played_s, EXCLUDED.played_s)",
+        )
+        .bind(keep.id)
+        .bind(drop.id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE wow_character_names SET char_id = $1 WHERE char_id = $2")
+            .bind(keep.id)
+            .bind(drop.id)
+            .execute(&mut *tx)
+            .await?;
+        let after = json!({
+            "kept_id": keep.id,
+            "name": new_name,
+            "realm": new_realm,
+            "played_s": max_played,
+        });
+        sqlx::query(
+            "INSERT INTO wow_character_merges(user_id, kept_id, dropped_id, before, after)
+             VALUES($1, $2, $3, $4, $5)",
+        )
+        .bind(uid)
+        .bind(keep.id)
+        .bind(drop.id)
+        .bind(&before)
+        .bind(&after)
+        .execute(&mut *tx)
+        .await?;
+        let removed = sqlx::query("DELETE FROM wow_characters WHERE id = $1 AND user_id = $2")
+            .bind(drop.id)
+            .bind(uid)
+            .execute(&mut *tx)
+            .await?;
+        if removed.rows_affected() != 1 {
+            return Err(AppError::bad_request(
+                "rename_failed",
+                "The duplicate character was not removed.",
+            ));
+        }
+    }
+    sqlx::query(
+        "UPDATE wow_characters SET name = $2, realm = $3, realm_slug = $4, played_s = $5, played_at = $6,
+                first_name = CASE WHEN $7 = '' THEN first_name ELSE $7 END,
+                surname = CASE WHEN $8 = '' THEN surname ELSE $8 END
+         WHERE id = $1 AND user_id = $9",
+    )
+    .bind(keep.id)
+    .bind(&new_name)
+    .bind(&new_realm)
+    .bind(&new_slug)
+    .bind(max_played)
+    .bind(played_at)
+    .bind(&first)
+    .bind(&surname)
+    .bind(uid)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 /// A character is verified while it is on the linked Battle.net account (its `wow.profile`
 /// list), its latest accepted entry was saved under that account's BattleTag, and no other
 /// user's Battle.net listed the same character id more recently (sold or moved: the
@@ -1129,7 +1606,8 @@ pub async fn copy_bnet_levels(db: &sqlx::PgPool, uid: Uuid) {
 /// character ids are rechecked too, so a sold character leaves the old owner's total.
 /// `mode` None: the caller stores this user's totals itself (an upload).
 async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
-    // ids from this user's listing onto their uploaded rows
+    // ids from this user's listing onto their uploaded rows. This is the only
+    // place a Blizzard id is copied, and only from the linked account list.
     let _ = sqlx::query(
         "UPDATE wow_characters c SET bnet_id = b.bnet_id FROM bnet_characters b
          WHERE c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
@@ -1140,6 +1618,10 @@ async fn set_verified(st: &AppState, uid: Uuid, mode: Option<Recount>) {
     .execute(&st.db)
     .await
     .inspect_err(|e| tracing::warn!("bnet characters: id copy for {uid}: {e}"));
+    // Same refresh as verification. Retail always. Forever only when its account list is on.
+    if let Err(e) = reconcile_linked_characters(st, uid, forever_account_enabled()).await {
+        tracing::warn!("wow rename: {uid}: {e:?}");
+    }
     let mut users: Vec<Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT o.user_id FROM wow_characters o JOIN wow_characters c
            ON c.user_id = $1 AND o.game_id = c.game_id AND o.region = c.region AND o.bnet_id = c.bnet_id
@@ -1549,6 +2031,31 @@ mod tests {
         assert!(!url.contains("realm"));
         assert!(!forever_account_enabled());
         assert!(!forever_lookup_enabled());
+    }
+
+    #[test]
+    fn rename_rules() {
+        assert_eq!(forever_parts("Vale Renamed").unwrap().1, "Renamed");
+        assert!(forever_parts("Vale").is_none());
+        let row = |played_s, played_at| OwnedChar {
+            id: Uuid::nil(),
+            region: "us".into(),
+            name: "A".into(),
+            realm: "Area 52".into(),
+            realm_slug: "area-52".into(),
+            played_s,
+            played_at,
+            verified: true,
+            ever_verified: true,
+            battletag: "A#1".into(),
+            created_at: played_at,
+            bnet_id: Some(1),
+        };
+        let older = row(9_000, Utc.timestamp_opt(NOW - 5_000, 0).unwrap());
+        let newer_lower = row(4_000, Utc.timestamp_opt(NOW - 1_000, 0).unwrap());
+        let newer_higher = row(12_000, Utc.timestamp_opt(NOW - 1_000, 0).unwrap());
+        assert!(counters_disagree(&[older.clone(), newer_lower]));
+        assert!(!counters_disagree(&[older, newer_higher]));
     }
 
     #[test]

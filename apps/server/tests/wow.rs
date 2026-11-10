@@ -844,12 +844,19 @@ async fn renames_and_realm_transfers_are_one_character(pool: PgPool) {
     .await;
     assert_eq!(r["total_min"], 6_060, "{r}");
     assert_eq!(total_of(&pool, h).await, 6_060);
-    // the old rows stay in the list but don't count
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM wow_characters WHERE bnet_id = 9001")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(n, 3);
+    // one Blizzard id is one row: the earlier names are history, and every snapshot is kept
+    let row: (String, String, i64, i64) = sqlx::query_as(
+        "SELECT name, realm, played_s,
+                (SELECT count(*) FROM wow_played_snaps s WHERE s.char_id = c.id)
+         FROM wow_characters c WHERE bnet_id = 9001",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "Zqxnewname");
+    assert_eq!(row.1, "Moon Guard");
+    assert_eq!(row.2, 363_600);
+    assert_eq!(row.3, 3);
 }
 
 /// Sold (or moved to another Battle.net): the user Battle.net lists it under now gets the
