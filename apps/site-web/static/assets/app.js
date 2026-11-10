@@ -643,12 +643,12 @@ pages.bnet = async () => {
   const flavSeg = `<div class="bn-def"><div class="seg" role="radiogroup" aria-label="What the profile shows"><button type="button" data-show="wow" aria-pressed="${show === "wow"}">Retail only</button><button type="button" data-show="wow_forever" aria-pressed="${show === "wow_forever"}">Forever only</button><button type="button" data-show="both" aria-pressed="${show === "both"}">Both</button></div><div data-opener ${show === "both" ? "" : "hidden"}><span>Opens on</span><div class="seg" role="radiogroup" aria-label="Which roster opens first"><button type="button" data-def="wow" aria-pressed="${def === "wow"}">Retail</button><button type="button" data-def="wow_forever" aria-pressed="${def === "wow_forever"}">Forever</button></div><span class="sub">Visitors can still switch.</span></div></div>`;
   const head = s.linked
     ? `<div class="bn-head"><div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">${esc(s.battletag)} ${s.needs_reconnect ? `<span class="srbadge">Reconnect to verify</span>` : `<span class="vbadge">✓ Verified</span>`}</div>
-        <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") + (s.regions.length === 1 ? " region" : " regions") : "", s.last_verified ? "last verified " + ago(s.last_verified) : "not verified yet"].filter(Boolean).join(" · ")}</div></div>
+        <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") + (s.regions.length === 1 ? " region" : " regions") : "", s.last_verified ? "last checked " + ago(s.last_verified) : "not checked yet"].filter(Boolean).join(" · ")}</div></div>
         <div class="bn-acts"><a class="btn blue" href="/connect/battlenet/verify">Verify</a><button class="btn bn-unlink" type="button" data-unlink>Unlink</button></div></div>${flavSeg}</div>`
     : `<div class="bn-head"><div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify Retail characters.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} waiting.` : ""}</div></div>
         <div class="bn-acts"><button class="btn blue" type="button" data-link>Link Battle.net</button></div></div>${flavSeg}</div>`;
   el.innerHTML = `<section class="panel bn-box"><h2>Battle.net</h2><div data-msg></div>${head}</section>
-    <section class="panel bn-box"><h2>Add or import</h2><div class="bn-split"><div><b>Add character</b><p class="sub">From the addon file. An Armory name alone does not add a character and never verifies one.</p><a class="btn" href="/connect/wow">Add from the addon</a></div><div><b>Upload /played</b><p class="sub">Retail or Forever. Each game keeps its own total. Hours stay on this page.</p><a class="btn" href="/connect/wow">Upload</a></div></div></section>
+    <section class="panel bn-box"><h2>Add or import</h2><div class="bn-split"><div><b>Add character</b><p class="sub">Add by name and realm. It's verified automatically when it matches your linked Battle.net account.</p><form class="bn-add" data-addchar><select name="region" aria-label="Region"><option value="us">US</option><option value="eu">EU</option><option value="kr">KR</option><option value="tw">TW</option></select><input name="realm" placeholder="Realm" aria-label="Realm" required maxlength="64"><input name="name" placeholder="Name" aria-label="Character name" required maxlength="24"><button class="btn" type="submit">Add character</button></form><p class="sub"><a href="/connect/wow">Or add from the addon file</a></p></div><div><b>Upload /played</b><p class="sub">Retail or Forever file from the addon. Each game keeps its own total.</p><a class="btn" href="/connect/wow">Upload</a></div></div></section>
     ${s.linked ? `<section class="panel bn-box" data-feat><h2>Featured on profile</h2><p class="sub" style="padding:0 12px">Up to 3 characters show first, in this order.</p><div data-fbox><p class="empty" style="padding:8px 12px">Loading…</p></div></section>` : ""}
     <section class="panel bn-box"><h2><span data-ttl>WoW characters</span><label class="bn-sw bn-hd"><span>Hide all from profile</span><input type="checkbox" data-hideall ${s.hide_all ? "checked" : ""}><i class="bn-tg"></i></label></h2>
       <div class="bn-tools"><input type="search" data-q placeholder="Search name or realm" aria-label="Search name or realm" maxlength="64">
@@ -658,7 +658,7 @@ pages.bnet = async () => {
       <div data-list><p class="empty" style="padding:20px 12px">Loading…</p></div>
       <div class="bn-more"><span class="sub" data-cnt></span><button class="btn" type="button" data-more hidden>Show 25 more</button></div></section>
     <section class="panel bn-box" data-review hidden><h2>Held for review</h2><div class="bn-review" data-rev></div></section>
-    <p class="sub">A tick means the character is on the linked Battle.net account. Forever stays without that tick until its account list has been tested. Hours on this page are not added on top of tracked time.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} ${s.unverified === 1 ? "isn't" : "aren't"} verified yet.` : ""}</p>`;
+    <p class="sub">A tick means Battle.net lists that character on your linked account. Forever gets the tick when its account list is on. Shown hours use the imported total or tracked time, whichever is higher.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} still to verify.` : ""}</p>`;
   const msgBox = $("[data-msg]", el), list = $("[data-list]", el), more = $("[data-more]", el), cnt = $("[data-cnt]", el);
   const st = { q: "", sort: "hours", class: "", vis: "", items: [], data: null, seq: 0 };
   const row = c => {
@@ -675,7 +675,7 @@ pages.bnet = async () => {
     const d = st.data;
     $("[data-ttl]", el).textContent = `WoW characters (${nf.format(d.total)})`;
     list.innerHTML = st.items.length ? st.items.map(row).join("")
-      : `<p class="empty" style="padding:20px 12px">${d.total ? "No characters match." : s.linked ? "No verified characters yet. Verify your WoW characters, or upload /played if you haven't." : "Link Battle.net to verify your characters."}</p>`;
+      : `<p class="empty" style="padding:20px 12px">${d.total ? "No characters match." : "No characters yet. Add one by name and realm, or upload /played."}</p>`;
     cnt.textContent = d.total && !d.matched ? `No characters match (${nf.format(d.total)} in all) · ${hours(d.total_min, { zero: true })} total` : d.total ? `Showing ${nf.format(st.items.length)} of ${plural(d.matched, "character")}${d.matched === d.total ? "" : ` (${nf.format(d.total)} in all)`} · ${hours(d.total_min, { zero: true })} total` : "";
     const left = d.matched - st.items.length;
     more.hidden = left <= 0; more.textContent = `Show ${nf.format(Math.min(25, left))} more`;
@@ -712,6 +712,18 @@ pages.bnet = async () => {
     const r = bt.closest(".bn-ch"), c = st.items.find(x => x.id === r.dataset.id); bt.disabled = true;
     try { const x = await api(`/me/wow/${c.id}/spec`, { method: "POST", body: { spec: bt.dataset.spec } }); c.spec = x.spec; c.spec_picked = true; r.outerHTML = row(c); }
     catch (x) { bt.disabled = false; showErr(msgBox, x); }
+  });
+  el.addEventListener("submit", async e => {
+    const f = e.target.closest("[data-addchar]"); if (!f) return;
+    e.preventDefault();
+    const btn = $("button[type=submit]", f); btn.disabled = true;
+    try {
+      const r = await api("/me/wow/armory", { method: "POST", body: { region: f.region.value, realm: f.realm.value.trim(), name: f.name.value.trim() } });
+      showOk(msgBox, r.verified ? `${r.name} added and verified.` : `${r.name} added. It verifies when it matches your linked Battle.net account.`);
+      f.name.value = "";
+      await load(false);
+    } catch (x) { showErr(msgBox, x); }
+    finally { btn.disabled = false; }
   });
   el.addEventListener("click", async e => {
     const sh = e.target.closest("[data-show]");

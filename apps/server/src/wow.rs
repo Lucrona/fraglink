@@ -62,6 +62,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/hours/wow_played", post(upload))
         .route("/api/v1/hours/wow_played/file", post(upload_file))
         .route("/api/v1/me/wow", get(mine))
+        .route("/api/v1/me/wow/armory", post(add_armory))
         .route("/api/v1/me/wow/{id}", post(set_hidden))
         .route("/api/v1/wow/verify/fetch", post(verify_fetch))
         .route("/api/v1/wow/verify/match", post(verify_match))
@@ -151,6 +152,230 @@ async fn verify_signatures(State(st): State<AppState>, a: AuthUser) -> ApiResult
     .await?;
     Ok(Json(json!({ "signed_ok": ok,
         "refused": refused.into_iter().map(|(c, k)| json!({ "character": c, "reason": k })).collect::<Vec<_>>() })))
+}
+
+#[derive(Deserialize)]
+struct ArmoryAdd {
+    region: String,
+    realm: String,
+    name: String,
+}
+
+fn clean_label(s: &str, max: usize) -> String {
+    s.trim()
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(max)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+fn class_token(v: &Value) -> String {
+    name_of(&v["playable_class"])
+        .or_else(|| name_of(&v["character_class"]))
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_uppercase()
+}
+
+/// Save a Retail character from an Armory profile. `/played` is not touched.
+/// The existing account-list check sets the tick when the name and realm are on
+/// the linked Battle.net account. A lookup by itself does not.
+pub async fn add_armory_character(
+    st: &AppState,
+    uid: Uuid,
+    region: &str,
+    realm_input: &str,
+    name_input: &str,
+    profile: &Value,
+) -> ApiResult<Value> {
+    let region = region.trim().to_lowercase();
+    if !matches!(region.as_str(), "us" | "eu" | "kr" | "tw") {
+        return Err(AppError::bad_request(
+            "invalid_region",
+            "Choose US, EU, KR, or TW.",
+        ));
+    }
+    let name = clean_label(profile["name"].as_str().unwrap_or(name_input), 24);
+    let realm = clean_label(
+        name_of(&profile["realm"]).as_deref().unwrap_or(realm_input),
+        64,
+    );
+    if name.chars().count() < 2 || realm.chars().count() < 2 {
+        return Err(AppError::bad_request(
+            "invalid_character",
+            "Enter the character's realm and name.",
+        ));
+    }
+    let slug = realm_slug(&realm);
+    if slug.is_empty() {
+        return Err(AppError::bad_request(
+            "invalid_realm",
+            "Enter the character's realm and name.",
+        ));
+    }
+    let class = class_token(profile);
+    let level = profile["level"].as_i64().unwrap_or(0).clamp(0, 200) as i32;
+    let race = name_of(&profile["race"]);
+    let gender = profile["gender"]["type"].as_str().map(|g| g.to_lowercase());
+    let spec = name_of(&profile["active_spec"]);
+    let bnet_id = profile["id"].as_i64();
+    let tag: String = sqlx::query_scalar(
+        "SELECT display FROM linked_accounts
+         WHERE user_id = $1 AND provider = 'bnet' AND verified LIMIT 1",
+    )
+    .bind(uid)
+    .fetch_optional(&st.db)
+    .await?
+    .unwrap_or_default();
+    let existing: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM wow_characters
+         WHERE user_id = $1 AND game_id = 'wow' AND region = $2
+           AND lower(realm) = lower($3) AND lower(name) = lower($4)",
+    )
+    .bind(uid)
+    .bind(&region)
+    .bind(&realm)
+    .bind(&name)
+    .fetch_optional(&st.db)
+    .await?;
+    let id = if let Some(id) = existing {
+        sqlx::query(
+            "UPDATE wow_characters SET
+                class = CASE WHEN $2 <> '' THEN $2 ELSE class END,
+                level = GREATEST(level, $3),
+                race = coalesce(race, $4),
+                gender = coalesce(gender, $5),
+                bnet_spec = coalesce(bnet_spec, $6),
+                bnet_id = coalesce(bnet_id, $7),
+                battletag = CASE WHEN battletag = '' THEN $8 ELSE battletag END
+             WHERE id = $1 AND user_id = $9",
+        )
+        .bind(id)
+        .bind(&class)
+        .bind(level)
+        .bind(&race)
+        .bind(&gender)
+        .bind(&spec)
+        .bind(bnet_id)
+        .bind(tag.chars().take(64).collect::<String>())
+        .bind(uid)
+        .execute(&st.db)
+        .await?;
+        id
+    } else {
+        let id = Uuid::new_v4();
+        // played_at is early so a later addon snapshot is the newer /played, not a stale one.
+        let played_at = Utc.timestamp_opt(1_000_000_000, 0).single().unwrap();
+        sqlx::query(
+            "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class,
+                                        level, played_s, played_at, battletag, race, gender, bnet_spec,
+                                        bnet_id, verified)
+             VALUES($1, $2, 'wow', $3, $4, $5, $6, $7, $8, 0, $9, $10, $11, $12, $13, $14, false)",
+        )
+        .bind(id)
+        .bind(uid)
+        .bind(&region)
+        .bind(&realm)
+        .bind(&slug)
+        .bind(&name)
+        .bind(&class)
+        .bind(level)
+        .bind(played_at)
+        .bind(tag.chars().take(64).collect::<String>())
+        .bind(&race)
+        .bind(&gender)
+        .bind(&spec)
+        .bind(bnet_id)
+        .execute(&st.db)
+        .await?;
+        id
+    };
+    // Same check as a Battle.net refresh. Does not store a new hours total for this user.
+    set_verified(st, uid, None).await;
+    let verified: bool =
+        sqlx::query_scalar("SELECT verified FROM wow_characters WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(uid)
+            .fetch_one(&st.db)
+            .await?;
+    Ok(json!({
+        "ok": true,
+        "id": id,
+        "name": name,
+        "realm": realm,
+        "region": region,
+        "verified": verified,
+        "created": existing.is_none(),
+    }))
+}
+
+async fn fetch_armory_profile(region: &str, realm: &str, name: &str) -> ApiResult<Value> {
+    let Some(tok) = app_token().await else {
+        return Err(AppError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "armory_unavailable",
+            "Armory lookup isn't available right now.",
+        ));
+    };
+    let Some(http) = http() else {
+        return Err(AppError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "armory_unavailable",
+            "Armory lookup isn't available right now.",
+        ));
+    };
+    let url = format!(
+        "https://{}.api.blizzard.com/profile/wow/character/{}/{}?namespace=profile-{}&locale=en_US",
+        region.trim().to_lowercase(),
+        realm_slug(realm),
+        name.trim().to_lowercase(),
+        region.trim().to_lowercase(),
+    );
+    let resp = http.get(&url).bearer_auth(tok).send().await.map_err(|_| {
+        AppError::new(
+            StatusCode::BAD_GATEWAY,
+            "armory_unavailable",
+            "The Armory didn't answer. Try again in a moment.",
+        )
+    })?;
+    if resp.status().as_u16() == 404 {
+        return Err(AppError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "No character with that name on that realm.",
+        ));
+    }
+    if !resp.status().is_success() {
+        return Err(AppError::new(
+            StatusCode::BAD_GATEWAY,
+            "armory_unavailable",
+            "The Armory didn't answer. Try again in a moment.",
+        ));
+    }
+    resp.json::<Value>().await.map_err(|_| {
+        AppError::new(
+            StatusCode::BAD_GATEWAY,
+            "armory_unavailable",
+            "The Armory didn't answer. Try again in a moment.",
+        )
+    })
+}
+
+async fn add_armory(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<ArmoryAdd>,
+) -> ApiResult<Json<Value>> {
+    api::check_origin(&a, &headers, &st)?;
+    let profile = fetch_armory_profile(&r.region, &r.realm, &r.name).await?;
+    Ok(Json(
+        add_armory_character(&st, a.user.id, &r.region, &r.realm, &r.name, &profile).await?,
+    ))
 }
 
 /// Blizzard's realm slug: "Area 52" -> "area-52", "Kel'Thas" -> "kelthas".
