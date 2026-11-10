@@ -607,6 +607,33 @@ pages.wowupload = async () => {
 
 /* ---------- /connect/battlenet/verify: the real verification steps, shown as they run ---------- */
 /* ---------- WoW icons (Blizzard render CDN through /api/v1/wow/icons, cached by the server) ---------- */
+// Faction comes from Blizzard, never from a character's race or class.
+const factionCrest = value => {
+  const faction = String(value || "").toUpperCase();
+  if (faction !== "HORDE" && faction !== "ALLIANCE") return "";
+  const name = faction === "HORDE" ? "Horde" : "Alliance";
+  const path = faction === "HORDE"
+    ? '<path d="M12 2 8 7l2 3-3 4-2-7-3 6 4 7 4-2 2 4 2-4 4 2 4-7-3-6-2 7-3-4 2-3Zm0 6 2 7-2 3-2-3Z" fill-rule="evenodd"/>'
+    : '<path d="M12 1 3 4v8c0 5 4 8 9 11 5-3 9-6 9-11V4Zm-1 4 6 2-2 3 3 2-3 2 1 4-4 2-4-3 2-3-3-1 1-4 3-1Z" fill-rule="evenodd"/>';
+  return `<svg class="faction-crest ${faction.toLowerCase()}" viewBox="0 0 24 24" role="img" aria-label="${name}"><title>${name}</title>${path}</svg>`;
+};
+const groupWowRealms = rows => {
+  const groups = new Map();
+  for (const c of rows) {
+    const realm = (c.realm || "").trim() || "Unknown server", region = (c.region || "").toUpperCase();
+    const key = realm.toLowerCase() + "|" + region;
+    if (!groups.has(key)) groups.set(key, { realm, region, rows: [] });
+    groups.get(key).rows.push(c);
+  }
+  const realms = [...groups.values()];
+  const regions = new Map();
+  for (const g of realms) {
+    const key = g.realm.toLowerCase();
+    if (!regions.has(key)) regions.set(key, new Set());
+    regions.get(key).add(g.region);
+  }
+  return realms.sort((a, b) => b.rows.length - a.rows.length || a.realm.localeCompare(b.realm, "en", { sensitivity: "base" }) || a.region.localeCompare(b.region)).map(g => ({ ...g, showRegion: regions.get(g.realm.toLowerCase()).size > 1 }));
+};
 const WOW = (() => {
   const S = { WARRIOR: [["Arms", "ability_warrior_savageblow"], ["Fury", "ability_warrior_innerrage"], ["Protection", "ability_warrior_defensivestance"]],
     PALADIN: [["Holy", "spell_holy_holybolt"], ["Protection", "ability_paladin_shieldofthetemplar"], ["Retribution", "spell_holy_auraoflight"]],
@@ -672,7 +699,7 @@ async function wowManager(el) {
       ${flavSeg}${s.linked ? `<div data-feat></div>` : ""}</section>
     <section class="${Sec}"><div class="bn-tabs" data-tabs role="tablist"></div></section>
     <section class="${Sec}"><${Hx}>Add characters</${Hx}>
-      <div class="bn-addblock"><div data-addbox></div><p class="bn-or"><a data-upload href="/connect/wow?version=${def === "wow_forever" ? "forever" : "retail"}">Or upload your /played file</a></p></div></section>
+      <div class="bn-addblock"><div data-addbox></div><div class="bn-upload"><div><b>Upload /played</b><p class="sub">From the Fraglink /played addon.</p></div><div class="bn-upload-actions"><a class="btn" data-upload href="/connect/wow?version=${def === "wow_forever" ? "forever" : "retail"}">Upload ${def === "wow_forever" ? "Forever" : "Retail"} /played</a><a class="sub" href="https://www.curseforge.com/wow/addons/fraglink-played" target="_blank" rel="noopener">Get the addon</a></div></div></div></section>
     <section class="${Sec}"><${Hx}>Your characters</${Hx}>
       <div class="bn-tools"><input type="search" data-q placeholder="Search" aria-label="Search name or realm" maxlength="64">
         <select data-sort aria-label="Sort"><option value="hours">Hours</option><option value="level">Level</option><option value="name">Name</option><option value="realm">Realm</option></select>
@@ -695,7 +722,7 @@ async function wowManager(el) {
     const cls = [Number(c.level) > 0 ? "Level " + c.level : "", WOW.cls(c.class)].filter(Boolean).join(" ");
     const imp = c.played_min > 0 && c.uploaded_at ? ago(c.uploaded_at) : "—";
     return `<div class="bn-row${hid ? " hid" : ""}" data-id="${c.id}"><img src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" ${imgOk}>
-      <div class="bn-nm">${esc(c.name)}${c.verified ? `<span class="bn-tick" title="On the linked Battle.net account">✓</span>` : ""}${was ? `<div class="sub">formerly ${esc(was)}</div>` : ""}</div>
+      <div class="bn-nm">${esc(c.name)}${factionCrest(c.faction)}${c.verified ? `<span class="bn-tick" title="On the linked Battle.net account">✓</span>` : ""}${was ? `<div class="sub">formerly ${esc(was)}</div>` : ""}</div>
       <div class="c-realm sub">${c.realm ? esc(c.realm) + " " : ""}${esc((c.region || "").toUpperCase())}</div>
       <div class="c-cls">${esc(cls || "—")}</div>
       <div class="c-hrs num">${hours(c.played_min, { zero: true })}</div>
@@ -710,7 +737,7 @@ async function wowManager(el) {
     const d = st.data, label = { wow: "Retail", wow_forever: "Forever" };
     $("[data-tabs]", el).innerHTML = ["wow", "wow_forever"].map(id => `<button type="button" role="tab" data-tab="${id}" aria-selected="${id === st.game}" class="${id === st.game ? "on" : ""}">${label[id]}</button>`).join("");
     $("[data-addbox]", el).innerHTML = addForm(st.game);
-    const up = $("[data-upload]", el); if (up) up.href = "/connect/wow?version=" + (st.game === "wow_forever" ? "forever" : "retail");
+    const up = $("[data-upload]", el); if (up) { up.href = "/connect/wow?version=" + (st.game === "wow_forever" ? "forever" : "retail"); up.textContent = "Upload " + (st.game === "wow_forever" ? "Forever" : "Retail") + " /played"; }
     const filtered = d && d.matched === 0 && (st.q || st.class || st.vis);
     list.innerHTML = st.items.length ? st.items.map(row).join("")
       : `<p class="empty bn-empty">${filtered ? "No characters match." : "No characters yet. Add one above, or upload a /played file."}</p>`;
@@ -1301,16 +1328,16 @@ pages.profile = async () => {
   // Gear, Mythic+, raids and collections open only for a verified Retail character, and
   // only while Admin has "Show WoW character details" on. Hidden and Forever cards stay plain.
   const poppable = c => FEATURES.wow_characters && c.verified && c.game_id === "wow" && !c.hidden;
-  const wowCard = c => {
+  const wowCard = (c, showRealm = true) => {
     const col = WOW.color(c.class), cls = WOW.cls(c.class);
     const tick = c.verified ? `<span class="wc-tick" title="On the linked Battle.net account">✓</span>` : "";
     const guild = c.show_guild && c.guild ? `<div class="wc-g">&lt;${esc(c.guild)}&gt;</div>` : "";
-    const realm = c.realm ? `<div class="wc-realm">${esc(c.realm)}</div>` : "";
+    const realm = showRealm && c.realm ? `<div class="wc-realm">${esc(c.realm)}</div>` : "";
     const ini = esc(String(c.name || "?").slice(0, 2));
     const lvl = Number(c.level) > 0 ? `Level ${c.level}` : "";
     const line = [lvl && `<span class="wc-lv">${esc(lvl)}</span>`, cls && `<span class="wc-cl">${esc(cls)}</span>`].filter(Boolean).join(" ");
     const open = poppable(c);
-    return `<div class="wc${open ? " wc-click" : ""}" style="--cls:${col}"${open ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${tick}</b>${line ? `<div class="wc-meta">${line}</div>` : ""}${guild}${realm}</div></div>`;
+    return `<div class="wc${open ? " wc-click" : ""}" style="--cls:${col}"${open ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${factionCrest(c.faction)}${tick}</b>${line ? `<div class="wc-meta">${line}</div>` : ""}${guild}${realm}</div></div>`;
   };
   const wireWowPop = () => {
     if (root._wowpop) return;
@@ -1345,9 +1372,9 @@ pages.profile = async () => {
       root.innerHTML = `<div class="wow-page"><a href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><h1>WoW characters</h1><p class="empty">No WoW characters on this profile.</p>${manage ? `<p class="wow-foot">${manage}</p>` : ""}</div>`;
       return;
     }
-    const paint = flav => { const box = $("[data-wowgal]", root); if (box) box.innerHTML = wowRows(flav).map(wowCard).join("") || `<p class="empty">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`; $$("[data-flav]", root).forEach(b => b.setAttribute("aria-pressed", b.dataset.flav === flav ? "true" : "false")); };
+    const paint = flav => { const box = $("[data-wowgal]", root); if (box) box.innerHTML = groupWowRealms(wowRows(flav)).map(g => `<section class="wow-realm"><h2>${esc(g.realm)}${g.showRegion ? ` <span class="sub">${esc(g.region)}</span>` : ""}<span class="wow-realm-count" aria-label="${g.rows.length} characters">${g.rows.length}</span></h2><div class="wow-gal">${g.rows.map(c => wowCard(c, false)).join("")}</div></section>`).join("") || `<p class="empty">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`; $$("[data-flav]", root).forEach(b => b.setAttribute("aria-pressed", b.dataset.flav === flav ? "true" : "false")); };
     const tog = wowToggle ? `<div class="seg" role="tablist" aria-label="Which roster to show"><button type="button" data-flav="wow" aria-pressed="${wowOpen === "wow"}">Retail</button><button type="button" data-flav="wow_forever" aria-pressed="${wowOpen === "wow_forever"}">Forever</button></div>` : "";
-    root.innerHTML = `<div class="wow-page"><a class="wow-back" href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><div class="bar"><h1>WoW characters</h1>${tog}</div><div class="wow-gal" data-wowgal></div>${manage ? `<p class="wow-foot">${manage}</p>` : ""}</div>`;
+    root.innerHTML = `<div class="wow-page"><a class="wow-back" href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><div class="bar"><h1>WoW characters</h1>${tog}</div><div class="wow-realms" data-wowgal></div>${manage ? `<p class="wow-foot">${manage}</p>` : ""}</div>`;
     paint(wowOpen);
     wireWowPop();
     if (wowToggle) root.addEventListener("click", e => { const b = e.target.closest("[data-flav]"); if (!b) return; paint(b.dataset.flav); });
@@ -1441,7 +1468,7 @@ pages.profile = async () => {
   const WC = (p.wow_characters || []).filter(c => !c.hidden);
   if (wowShow !== "none" && WC.length) {
     const ordered = flav => wowRows(flav).slice().sort((a, b) => (a.featured || 9) - (b.featured || 9));
-    const grid = flav => { const rows = ordered(flav); return `<div class="wcs" data-wowcards>${rows.slice(0, 6).map(wowCard).join("") || `<p class="empty" style="padding:8px 0">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`}</div><p class="wow-foot">${self ? `<a href="/settings#wow">Manage</a><span>·</span>` : ""}<a href="/u/${encodeURIComponent(p.handle)}/wow">View all</a></p>`; };
+    const grid = flav => { const rows = ordered(flav); return `<div class="wcs" data-wowcards>${rows.slice(0, 6).map(c => wowCard(c)).join("") || `<p class="empty" style="padding:8px 0">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`}</div><p class="wow-foot">${self ? `<a href="/settings#wow">Manage</a><span>·</span>` : ""}<a href="/u/${encodeURIComponent(p.handle)}/wow">View all</a></p>`; };
     const tog = wowToggle ? `<div class="seg" role="tablist" aria-label="Which roster to show"><button type="button" data-wflav="wow" aria-pressed="${wowOpen === "wow"}">Retail</button><button type="button" data-wflav="wow_forever" aria-pressed="${wowOpen === "wow_forever"}">Forever</button></div>` : "";
     wowc = sec("WoW characters", grid(wowOpen), tog);
   }
@@ -1497,7 +1524,7 @@ pages.profile = async () => {
     $$("[data-wflav]", root).forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
     const box = $("[data-wowcards]", root); if (!box) return;
     const rows = wowRows(b.dataset.wflav).slice().sort((a, c) => (a.featured || 9) - (c.featured || 9));
-    box.innerHTML = rows.slice(0, 6).map(wowCard).join("") || `<p class="empty" style="padding:8px 0">No ${b.dataset.wflav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`;
+    box.innerHTML = rows.slice(0, 6).map(c => wowCard(c)).join("") || `<p class="empty" style="padding:8px 0">No ${b.dataset.wflav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`;
   });
   root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${wowc}${ach}${miniprofile}</div><aside class="col">${mini}${rig}${fr}${discord}</aside></div></div>`;
   $$('a[href="#friends"]', root).forEach(a => a.addEventListener("click", e => { const f = $("#friends", root); if (!f) return; e.preventDefault(); f.scrollIntoView({ behavior: "smooth", block: "center" }); f.classList.add("flash"); setTimeout(() => f.classList.remove("flash"), 1200); }));
@@ -2145,7 +2172,7 @@ const WOWPOP = (() => {
   const slot = (g, k) => { const it = g[k]; const lk = it && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : it.id ? ` data-whi="${Number(it.id)}" data-whp="${esc(whp(it))}" role="button" tabindex="0" aria-expanded="false"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
   const raid = r => r.instances.map(i => `<div class="cp-raid"><b>${esc(i.name)}</b><div class="cp-modes">${[...i.modes].sort((a, b) => DO.indexOf(a.difficulty) - DO.indexOf(b.difficulty)).map(m => `<span class="${m.done >= m.total ? "full" : ""}">${esc(m.label)} <b>${m.done}/${m.total}</b></span>`).join("")}</div></div>`).join("");
   const body = (d, c) => {
-    if (d.status === "missing") return `<div class="cp-hd"><div><h2>${esc(c.name)}</h2><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}</div></div></div><p class="empty cp-pad">Not on the Armory.</p>`;
+    if (d.status === "missing") return `<div class="cp-hd"><div><h2>${esc(c.name)}${factionCrest(c.faction)}</h2><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}</div></div></div><p class="empty cp-pad">Not on the Armory.</p>`;
     const g = {}; (d.gear || []).forEach(x => g[x.slot] = x);
     const col = CC[d.class_id] || "#eef2f6", mp = d.mplus || {}, pv = d.pvp || {}, rd = d.raids || {}, co = d.collections || {}, pr = d.professions || [];
     const stat = (l, v) => `<div class="cp-st"><small>${l}</small><b>${v}</b></div>`;
@@ -2153,7 +2180,7 @@ const WOWPOP = (() => {
     return `<div class="cp-hd${d.render ? " has-rd" : ""}" style="--cc:${col}">${d.render ? `<div class="cp-rw" aria-hidden="true"><img class="cp-rd" alt="" hidden></div>` : ""}<div class="cp-who">
       ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
       <div class="sub">Level ${d.level} ${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
-      <div class="sub">${esc(d.realm)} ${esc(d.region.toUpperCase())}${d.faction ? ` · <span class="cp-f ${esc(d.faction.toLowerCase())}">${esc(d.faction)}</span>` : ""}</div>
+      <div class="sub">${esc(d.realm)} ${esc(d.region.toUpperCase())}${factionCrest(d.faction || c.faction)}</div>
       ${d.guild ? `<div class="cp-gu">&lt;${esc(d.guild.name)}&gt;${d.guild.rank != null ? ` · ${d.guild.rank === 0 ? "Guild Master" : "Rank " + d.guild.rank}` : ""}</div>` : ""}
       <div class="cp-sts">${stat("Item level", d.ilvl ? nf.format(d.ilvl) : "—")}${stat("Achievements", d.achievement_points ? nf.format(d.achievement_points) : "—")}${stat("M+ rating", mp.rating ? nf.format(Math.round(mp.rating)) : "—")}</div></div></div>
       <div class="cp-bd"><section><h3>Gear</h3>${d.gear && d.gear.length ? `<div class="cp-gear"><div>${L.map(k => slot(g, k)).join("")}</div><div>${R.map(k => slot(g, k)).join("")}</div></div><div class="cp-gear cp-w">${W.map(k => slot(g, k)).join("")}</div>` : `<p class="empty">No gear equipped.</p>`}</section>

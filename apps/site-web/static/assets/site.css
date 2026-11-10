@@ -1281,3 +1281,11 @@ tr.hc-flag td{background:#1d1010}
 .hl .k{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--label);font-weight:700}
 .hl .v{color:#fff;font-weight:700;font-size:15px;margin-top:3px}.hl .d{font-size:11px;color:#8ea2b8;margin-top:2px;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:1100px){.hc-3,.hl-row{grid-template-columns:1fr 1fr}}
+
+/* WoW upload alternative and server groups. */
+.bn-upload{border-top:1px solid var(--line);margin-top:18px;padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.bn-upload p{margin:4px 0 0}.bn-upload-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.bn-upload-actions>a.sub{font-size:12px}
+.faction-crest{display:inline-block;width:16px;height:18px;vertical-align:-3px;margin-left:6px;flex-shrink:0;fill:currentColor}
+.faction-crest.horde{color:#bc6663}.faction-crest.alliance{color:#b9a879}
+.wow-realms{display:grid;gap:28px}.wow-realm{min-width:0}.wow-realm h2{font-size:16px;margin:0 0 12px;font-weight:600}.wow-realm-count{font-size:12px;font-weight:400;color:var(--dim);margin-left:10px}
+@media(max-width:600px){.bn-upload{align-items:flex-start;flex-direction:column}.bn-upload-actions{gap:12px}.wow-realm h2{font-size:15px}}

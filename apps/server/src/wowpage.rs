@@ -281,6 +281,7 @@ async fn list(
         bnet_spec: Option<String>,
         show_guild: bool,
         verified: bool,
+        faction: Option<String>,
         former: Option<String>,
         uploaded_at: DateTime<Utc>,
     }
@@ -290,7 +291,7 @@ async fn list(
                       WHERE n.char_id = wow_characters.id
                         AND (lower(n.name) <> lower(wow_characters.name) OR n.realm <> wow_characters.realm)
                       ORDER BY n.recorded_at DESC, n.id DESC LIMIT 1) AS former,
-                    uploaded_at
+                    uploaded_at, coalesce(faction, (SELECT CASE upper(d.data->>'faction') WHEN 'HORDE' THEN 'HORDE' WHEN 'ALLIANCE' THEN 'ALLIANCE' END FROM wow_char_details d WHERE d.char_id = wow_characters.id AND d.status = 'ok')) AS faction
              FROM wow_characters WHERE {filter} ORDER BY {order} LIMIT $7 OFFSET $8",
             lvl = crate::wow::shown_level!()
         )))
@@ -347,6 +348,7 @@ async fn list(
                 show_guild: sg,
                 verified,
                 former,
+                faction,
                 uploaded_at,
             } = c;
             let (former_name, former_realm) = former
@@ -373,7 +375,7 @@ async fn list(
                     "spec": spec.clone().or(bspec.clone()), "spec_picked": spec.is_some(),
                     "active_spec": bspec, "show_guild": sg, "verified": verified,
                     "former_name": former_name, "former_realm": former_realm,
-                    "uploaded_at": uploaded_at })
+                    "uploaded_at": uploaded_at, "faction": faction })
         })
         .collect();
     let (retail, forever): (i64, i64) = sqlx::query_as(

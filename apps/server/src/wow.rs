@@ -308,6 +308,14 @@ pub async fn add_armory_character(
         .await?;
         id
     };
+    sqlx::query(
+        "UPDATE wow_characters SET faction = coalesce($2, faction) WHERE id = $1 AND user_id = $3",
+    )
+    .bind(id)
+    .bind(profile_faction(profile))
+    .bind(uid)
+    .execute(&st.db)
+    .await?;
     // Same check as a Battle.net refresh. Does not store a new hours total for this user.
     set_verified(st, uid, None).await;
     let verified: bool =
@@ -585,7 +593,7 @@ async fn fetch_forever_profile(st: &AppState, id: Uuid, e: &CharEntry) -> bool {
     let _ = sqlx::query(
         "UPDATE wow_characters SET bnet_level = coalesce($2, bnet_level),
                 bnet_spec = coalesce($3, bnet_spec), race = coalesce($4, race),
-                gender = coalesce($5, gender), bnet_checked_at = now()
+                gender = coalesce($5, gender), bnet_checked_at = now(), faction = coalesce($6, faction)
          WHERE id = $1",
     )
     .bind(id)
@@ -593,6 +601,7 @@ async fn fetch_forever_profile(st: &AppState, id: Uuid, e: &CharEntry) -> bool {
     .bind(name_of(&v["active_spec"]))
     .bind(name_of(&v["race"]))
     .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
+    .bind(profile_faction(&v))
     .execute(&st.db)
     .await
     .inspect_err(|err| tracing::warn!("forever profile: update {id}: {err}"));
@@ -2018,7 +2027,7 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
     let _ = sqlx::query(
         "UPDATE wow_characters SET bnet_level = $2, bnet_last_login = $3, bnet_checked_at = now(),
                 bnet_spec = coalesce($4, bnet_spec), race = coalesce($5, race), gender = coalesce($6, gender),
-                bnet_id = coalesce(bnet_id, $7)
+                bnet_id = coalesce(bnet_id, $7), faction = coalesce($8, faction)
          WHERE id = $1",
     )
     .bind(id)
@@ -2028,6 +2037,7 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
     .bind(name_of(&v["race"]))
     .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
     .bind(v["id"].as_i64())
+    .bind(profile_faction(&v))
     .execute(&st.db)
     .await
     .inspect_err(|e| tracing::warn!("wow armory: update character {id}: {e}"));
@@ -2055,6 +2065,13 @@ pub(crate) fn name_of(v: &Value) -> Option<String> {
 }
 
 // ------------------------------------------------------------------ profile
+
+/// Blizzard's stable API value, not a localized faction name or a race guess.
+pub fn profile_faction(profile: &Value) -> Option<&str> {
+    profile["faction"]["type"]
+        .as_str()
+        .filter(|f| matches!(*f, "HORDE" | "ALLIANCE"))
+}
 
 /// Characters for a profile page. `all`: the owner's own view (hidden ones too).
 /// Profile cards list Battle.net-verified Retail characters (`verified_only`). Forever
@@ -2085,6 +2102,7 @@ pub async fn characters(
         show_guild: bool,
         guild: Option<String>,
         featured: Option<i16>,
+        faction: Option<String>,
     }
     let rows: Vec<Row> = sqlx::query_as(
             concat!("SELECT id, game_id, region, realm, name, class, ", shown_level!(), " AS level, played_s, played_at, verified,
@@ -2092,7 +2110,7 @@ pub async fn characters(
                     race, gender, coalesce(spec, bnet_spec) AS spec, show_guild,
                     CASE WHEN show_guild THEN (SELECT d.data->'guild'->>'name' FROM wow_char_details d
                          WHERE d.char_id = wow_characters.id AND d.status = 'ok') END AS guild,
-                    featured
+                    featured, coalesce(faction, (SELECT CASE upper(d.data->>'faction') WHEN 'HORDE' THEN 'HORDE' WHEN 'ALLIANCE' THEN 'ALLIANCE' END FROM wow_char_details d WHERE d.char_id = wow_characters.id AND d.status = 'ok')) AS faction
              FROM wow_characters WHERE user_id = $1
                AND ($2 OR NOT (hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false)))
                AND (NOT $3 OR verified OR game_id = 'wow_forever')
@@ -2110,7 +2128,7 @@ pub async fn characters(
                 "name": c.name, "class": c.class, "level": c.level, "played_min": c.played_s / 60,
                 "played_at": c.played_at, "verified": c.verified, "hidden": c.hid, "race": c.race,
                 "gender": c.gender, "spec": c.spec, "show_guild": c.show_guild, "guild": c.guild,
-                "featured": c.featured })
+                "featured": c.featured, "faction": c.faction })
         })
         .collect())
 }
@@ -2278,6 +2296,27 @@ mod tests {
     }
 
     const NOW: i64 = 1_800_000_000;
+
+    #[test]
+    fn faction_uses_only_stable_blizzard_type() {
+        assert_eq!(
+            profile_faction(&json!({"faction": {"type": "HORDE", "name": "Horde"}})),
+            Some("HORDE")
+        );
+        assert_eq!(
+            profile_faction(&json!({"faction": {"type": "ALLIANCE"}})),
+            Some("ALLIANCE")
+        );
+        assert_eq!(
+            profile_faction(&json!({"faction": {"type": "NEUTRAL"}})),
+            None
+        );
+        assert_eq!(
+            profile_faction(&json!({"faction": {"name": "Alliance"}})),
+            None
+        );
+        assert_eq!(profile_faction(&json!({})), None);
+    }
 
     #[test]
     fn forever_profile_url_has_no_realm() {
