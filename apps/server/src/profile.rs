@@ -494,7 +494,18 @@ async fn profile(
     // cards are included without a tick until that account list is on. A profile
     // set to one flavour omits the other from this response; the rows stay stored.
     let wow_show = crate::wowpage::profile_show(&st, p.id).await?;
-    let wow_characters = if can_see_games
+    let wow_default = crate::wowpage::default_flavour(&st, p.id).await?;
+    let wow_characters = if wow_show == "none"
+        || !(can_see_games
+            && show("wow_characters")
+            && crate::features::on(&st, "wow_characters").await)
+    {
+        if wow_show == "none" {
+            json!([])
+        } else {
+            Value::Null
+        }
+    } else if can_see_games
         && show("wow_characters")
         && crate::features::on(&st, "wow_characters").await
     {
@@ -526,6 +537,17 @@ async fn profile(
     } else {
         Value::Null
     };
+    let (retail_n, forever_n) = match wow_characters.as_array() {
+        Some(rows) => (
+            rows.iter().filter(|x| x["game_id"] == "wow").count() as i64,
+            rows.iter()
+                .filter(|x| x["game_id"] == "wow_forever")
+                .count() as i64,
+        ),
+        None => (0, 0),
+    };
+    let (wow_open, wow_toggle) =
+        crate::wowpage::public_roster(&wow_show, &wow_default, retail_n, forever_n);
     if can_see_history {
         recent = recent_sessions(&st, p.id, is_self).await?;
         recent.retain(|r| {
@@ -635,8 +657,10 @@ async fn profile(
         "events": events,
         "achievements": achievements,
         "wow_characters": wow_characters,
-        "wow_default": crate::wowpage::default_flavour(&st, p.id).await?,
+        "wow_default": wow_default,
         "wow_show": wow_show,
+        "wow_open": wow_open,
+        "wow_toggle": wow_toggle,
         "rig": if has_rig && show("rig") { rig } else { Value::Null },
         "friends": friend_grid,
         "linked": linked,

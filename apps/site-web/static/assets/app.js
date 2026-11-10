@@ -506,38 +506,48 @@ pages.changelog = async () => {
 pages.wowupload = async () => {
   const el = $("#wu");
   if (!token()) { location.href = "/login?next=" + encodeURIComponent(location.pathname); return; }
-  const b = BRAND.bnet, logo = `<svg viewBox="0 0 24 24" width="34" height="34" fill="${b[1]}" aria-hidden="true"><path d="${b[2]}"/></svg>`;
   const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
   const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
-  el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
-    <p class="sub">Upload a character's /played from the addon. Retail and Forever each store that total on their own game. Shown hours use the imported total plus play after that snapshot, or the app's tracked time if that is higher. The two are not added together.</p></div></div>
+  const PATHS = {
+    wow: "World of Warcraft\\_retail_\\WTF\\Account\\<ACCOUNT>\\SavedVariables\\FraglinkPlayed.lua",
+    wow_forever: "World of Warcraft\\_forever_\\WTF\\Account\\<ACCOUNT>\\SavedVariables\\FraglinkPlayed.lua",
+  };
+  const asked = new URLSearchParams(location.search);
+  const raw = (asked.get("version") || asked.get("game") || "retail").toLowerCase();
+  let game = raw === "forever" || raw === "wow_forever" ? "wow_forever" : "wow";
+  el.innerHTML = `<div class="wu-page">
+    <div class="bn-tabs" role="tablist" aria-label="Which version to upload"><button type="button" data-ver="wow">Retail</button><button type="button" data-ver="wow_forever">Forever</button></div>
+    <h2 data-title>Upload Retail /played</h2>
+    <p class="sub">Log in to each character with the addon on, then /reload or log out so WoW saves the file.</p>
+    <div class="wu-paths" data-paths></div>
     <form class="wu-form" data-form>
-      <div class="wu-row" data-gamepick><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
-      <p class="sub">Retail and Forever are separate. A Forever character stays unverified until Battle.net's Forever account list confirms it. That check is off until it has been tested.</p>
-      <div class="alert info"><b>Before you upload: log in to every character.</b> The addon only saves a character's /played when you log in to it (then log out or <code>/reload</code>). Characters you skip keep the hours from their last upload, and Fraglink always keeps your higher total, so a partial upload never lowers your hours.</div>
-      <label class="check wu-row"><input type="checkbox" name="all" required> I've logged in to each of my characters with the addon on since my last upload</label>
-      <div class="wu-row"><span class="wu-l">File</span><input type="file" name="f" accept=".lua" required> <button class="btn blue" type="submit">Upload and check</button></div>
-      <details class="wu-help"><summary>Where is FraglinkPlayed.lua?</summary>
-        <p>Log out of WoW (or type <code>/reload</code>) first so the game saves it, then open:</p>
-        <p><code>World of Warcraft\\_retail_\\WTF\\Account\\&lt;ACCOUNT&gt;\\SavedVariables\\FraglinkPlayed.lua</code></p>
-        <p>Forever uses the same file name under <code>_forever_</code>, not <code>_retail_</code>.</p>
-        <p class="sub">If you have several WoW accounts there (WoW1, WoW2, or a family member's), upload each account's file. Characters from a Battle.net account other than the one you linked are refused.</p></details>
+      <input type="hidden" name="game" value="wow">
+      <div class="wu-row"><input type="file" name="f" accept=".lua" required aria-label="FraglinkPlayed.lua"> <button class="btn" type="submit">Upload Retail /played</button></div>
     </form>
+    <p class="sub">Got more than one WoW account? Upload each one's file.</p>
+  </div>
     <ol class="bv-steps" data-steps hidden>${STEPS.map(([k, t]) => `<li data-s="${k}"><span class="bv-ic"></span><b>${t}</b><small></small></li>`).join("")}</ol>
     <div data-res></div>`;
   const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
   const res = $("[data-res]", el), form = $("[data-form]", el), steps = $("[data-steps]", el);
-  const preset = new URLSearchParams(location.search).get("game");
-  if (preset === "wow" || preset === "wow_forever") {
-    form.game.value = preset;
-    const pick = $("[data-gamepick]", form);
-    if (pick) pick.hidden = true;
-  }
+  const setGame = next => {
+    game = next === "wow_forever" ? "wow_forever" : "wow";
+    form.game.value = game;
+    const label = game === "wow_forever" ? "Forever" : "Retail";
+    $("[data-title]", el).textContent = `Upload ${label} /played`;
+    $("button[type=submit]", form).textContent = `Upload ${label} /played`;
+    const order = game === "wow_forever" ? ["wow_forever", "wow"] : ["wow", "wow_forever"];
+    const names = { wow: "Retail", wow_forever: "Forever" };
+    $("[data-paths]", el).innerHTML = order.map(id => `<p class="${id === game ? "on" : ""}"><span>${names[id]}</span><code>${esc(PATHS[id])}</code></p>`).join("");
+    $$("[data-ver]", el).forEach(b => { const on = b.dataset.ver === game; b.classList.toggle("on", on); b.setAttribute("aria-selected", on ? "true" : "false"); });
+  };
+  setGame(game);
+  el.addEventListener("click", e => { const b = e.target.closest("[data-ver]"); if (b) setGame(b.dataset.ver); });
   const R = { wow_checksum: "Edited after the game saved it", wow_battletag: "From a different Battle.net account", wow_old_addon: "Addon too old, update it",
     wow_decrease: "/played went down", wow_impossible: "/played grew faster than real time", wow_clock: "Saved with a wrong clock" };
   let rows = [], sortBy = "played", dir = -1, showAll = false, totals = null;
   const CAP = 25;
-  const STATUS = { v: [0, "vbadge", "✓ Verified via Battle.net"], s: [1, "srbadge", "◆ Not verified, not counted"], r: [2, "badbadge", "✕ Rejected"] };
+  const STATUS = { v: [0, "vbadge", "Verified"], s: [1, "srbadge", "Not verified"], r: [2, "badbadge", "Rejected"] };
   const draw = () => {
     if (!totals) return;
     const key = { name: r => r.name.toLowerCase(), realm: r => r.realm.toLowerCase(), level: r => r.level || 0, played: r => r.played_min, status: r => STATUS[r.st][0] }[sortBy];
@@ -546,14 +556,13 @@ pages.wowupload = async () => {
     const th = (k, t) => `<th><button type="button" data-sort="${k}" class="wu-sort${sortBy === k ? " on" : ""}">${t}${sortBy === k ? (dir < 0 ? " ▾" : " ▴") : ""}</button></th>`;
     const cls = c => c ? c.charAt(0) + c.slice(1).toLowerCase().replace(/knight$/, " Knight").replace(/hunter$/, " Hunter") : "";
     res.innerHTML = `<h3>Results</h3>
-      <div class="wu-tot"><div><b>${hours(totals.verified, { zero: true })}</b><small>Counted: verified via Battle.net</small></div>${totals.unverified ? `<div class="wu-nc"><b>${hours(totals.unverified)}</b><small>Not counted until verified</small></div>` : ""}</div>
+      <div class="wu-tot"><div><b>${hours(totals.verified, { zero: true })}</b><small>Verified</small></div>${totals.unverified ? `<div class="wu-nc"><b>${hours(totals.unverified)}</b><small>Not verified</small></div>` : ""}</div>
       ${rows.length ? `<div class="wu-scroll"><table class="wu-t"><thead><tr>${th("name", "Character")}${th("realm", "Realm")}${th("level", "Class / level")}${th("played", "Hours played")}${th("status", "Status")}</tr></thead><tbody>
       ${shown.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.realm)} <span class="sub">${esc(r.region.toUpperCase())}${r.game_id === "wow_forever" ? " · Forever" : ""}</span></td>
         <td>${esc([cls(r.class), r.level ? "level " + r.level : ""].filter(Boolean).join(" · ")) || `<span class="sub">–</span>`}</td>
         <td class="num">${hours(r.played_min)}${r.chg ? `<br><small class="sub">${esc(r.chg)}</small>` : ""}</td><td><span class="${STATUS[r.st][1]}">${STATUS[r.st][2]}</span>${r.why ? `<br><small class="sub">${esc(r.why)}</small>` : r.st === "s" ? `<br><small class="sub"><a href="/connect/battlenet/verify">Verify WoW characters</a></small>` : ""}</td></tr>`).join("")}</tbody></table></div>
       ${list.length > CAP ? `<p><button class="btn sm" type="button" data-more>${showAll ? "Show fewer" : `Show all ${plural(list.length, "character")}`}</button></p>` : ""}` : `<p class="sub">No characters uploaded yet.</p>`}
-      <p class="sub">Only characters Battle.net confirms are on your account count toward your hours. Unverified ones are kept and start counting once they verify: Battle.net has to list the character on your linked account, and the file has to be saved under that account's BattleTag.</p>
-      <p><a class="btn" href="/connect/battlenet/verify">🔒 Verify WoW characters</a> <a class="btn" href="/connect/battlenet">Back to Battle.net</a></p>`;
+      <p><a class="btn" href="/connect/battlenet/verify">Verify characters</a> <a class="btn" href="/settings#wow">Back to World of Warcraft</a></p>`;
   };
   res.addEventListener("click", e => {
     const s = e.target.closest("[data-sort]");
@@ -585,14 +594,14 @@ pages.wowupload = async () => {
     try { m = await api("/me/wow"); } catch (x) { return fail("match", x); }
     const game = form.game.value, mine = m.characters.filter(c => c.game_id === game);
     const nv = mine.filter(c => c.verified).length;
-    step("match", m.bnet === "linked" ? "ok" : "warn", m.bnet === "none" ? "Battle.net isn't linked, so these aren't counted yet" : m.bnet === "reconnect" ? "Reconnect Battle.net to verify characters" : `${nf.format(nv)} of ${plural(mine.length, "character")} verified`);
+    step("match", m.bnet === "linked" ? "ok" : "warn", m.bnet === "none" ? "Battle.net isn't linked." : m.bnet === "reconnect" ? "Reconnect Battle.net to verify characters." : `${nf.format(nv)} of ${plural(mine.length, "character")} verified`);
     const ck = c => [c.region, c.realm, c.name].join("|").toLowerCase();
     const chg = new Map((u.changes || []).map(c => [ck(c), c.first ? "First upload" : c.delta_s > 0 ? `+${(c.delta_s / 3600).toFixed(1)} hours since last upload` : "No change since last upload"]));
     rows = mine.map(c => ({ ...c, st: c.verified ? "v" : "s", chg: chg.get(ck(c)) }))
       .concat(u.rejected.map(r => ({ ...r, game_id: game, st: "r", why: R[r.reason] || r.detail })));
     totals = { verified: mine.filter(c => c.verified).reduce((a, c) => a + c.played_min, 0), unverified: mine.filter(c => !c.verified).reduce((a, c) => a + c.played_min, 0) };
     showAll = false; draw();
-    btn.disabled = false; form.reset(); form.game.value = game;
+    btn.disabled = false; form.reset(); setGame(game);
   });
 };
 
@@ -637,29 +646,34 @@ const WOW = (() => {
 const imgOk = "data-hide-broken";
 
 /* ---------- /connect/battlenet: the Battle.net account, verified WoW characters, spec picks, hide toggles ---------- */
-pages.bnet = async () => {
-  const el = $("#bn");
-  if (!token()) { location.href = "/login?next=" + encodeURIComponent(location.pathname); return; }
+pages.bnet = () => wowManager($("#bn"));
+async function wowManager(el) {
+  if (!el) return;
+  if (!token()) { location.href = "/login?next=" + encodeURIComponent(location.pathname + location.search + location.hash); return; }
+  const embedded = el.dataset.embed === "1";
+  const Hx = embedded ? "h3" : "h2";
+  const Sec = embedded ? "bn-sec" : "panel bn-box";
   const b = BRAND.bnet, logo = s => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="${b[1]}" aria-hidden="true"><path d="${b[2]}"/></svg>`;
   let s;
   try { s = await api("/me/bnet"); } catch (x) { el.innerHTML = `<p class="empty" style="padding:30px 0">${esc(x.message)}</p>`; return; }
   const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? "just now" : m < 60 ? plural(m, "minute") + " ago" : m < 1440 ? plural(Math.round(m / 60), "hour") + " ago" : plural(Math.round(m / 1440), "day") + " ago"; };
-  const show = s.profile_show === "wow" || s.profile_show === "wow_forever" ? s.profile_show : "both";
+  const show = s.profile_show === "wow" || s.profile_show === "wow_forever" || s.profile_show === "none" ? s.profile_show : "both";
   const def = s.default_flavour === "wow_forever" ? "wow_forever" : "wow";
   const handle = (me() || {}).handle || "";
-  const flavSeg = `<div class="bn-def"><span class="bn-k">Show on profile</span><div class="seg" role="radiogroup" aria-label="Show on profile"><button type="button" data-show="wow" aria-pressed="${show === "wow"}">Retail only</button><button type="button" data-show="wow_forever" aria-pressed="${show === "wow_forever"}">Forever only</button><button type="button" data-show="both" aria-pressed="${show === "both"}">Both</button></div><div data-opener ${show === "both" ? "" : "hidden"}><span class="bn-k">Profile opens on</span><div class="seg" role="radiogroup" aria-label="Profile opens on"><button type="button" data-def="wow" aria-pressed="${def === "wow"}">Retail</button><button type="button" data-def="wow_forever" aria-pressed="${def === "wow_forever"}">Forever</button></div></div></div>`;
+  const flavSeg = `<div class="bn-def"><span class="bn-k">Show on profile</span><div class="seg" role="radiogroup" aria-label="Show on profile"><button type="button" data-show="wow" aria-pressed="${show === "wow"}">Retail only</button><button type="button" data-show="wow_forever" aria-pressed="${show === "wow_forever"}">Forever only</button><button type="button" data-show="both" aria-pressed="${show === "both"}">Both</button><button type="button" data-show="none" aria-pressed="${show === "none"}" title="Hides WoW from your profile.">None</button></div><div data-opener ${show === "both" ? "" : "hidden"}><span class="bn-k">Profile opens on</span><div class="seg" role="radiogroup" aria-label="Profile opens on"><button type="button" data-def="wow" aria-pressed="${def === "wow"}">Retail</button><button type="button" data-def="wow_forever" aria-pressed="${def === "wow_forever"}">Forever</button></div></div></div>`;
   const head = s.linked
     ? `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">${esc(s.battletag)} ${s.needs_reconnect ? `<span class="srbadge">Reconnect</span>` : `<span class="vbadge">Verified</span>`}</div>
         <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") : "", s.last_verified ? "checked " + ago(s.last_verified) : ""].filter(Boolean).join(" · ")}</div></div>
         <div class="bn-acts"><a class="btn" href="/connect/battlenet/verify">Check account</a><button class="btn bn-unlink" type="button" data-unlink>Unlink</button></div></div>`
     : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify Retail characters.</div></div>
         <div class="bn-acts"><button class="btn" type="button" data-link>Link Battle.net</button></div></div>`;
-  el.innerHTML = `<section class="panel bn-box"><h2>Battle.net</h2><div data-msg></div>${head}</section>
-    <section class="panel bn-box"><h2>Profile page display${handle ? `<a class="bn-view" href="/u/${encodeURIComponent(handle)}">View profile</a>` : ""}</h2>
-      <p class="bn-lead">Choose which WoW characters show on your public profile. This doesn't change your hours or characters here.</p>
+  el.innerHTML = `<section class="${Sec}"><${Hx}>Battle.net</${Hx}><div data-msg></div>${head}</section>
+    <section class="${Sec}"><${Hx}>Profile page display${handle ? `<a class="bn-view" href="/u/${encodeURIComponent(handle)}">View profile</a>` : ""}</${Hx}>
       ${flavSeg}${s.linked ? `<div data-feat></div>` : ""}</section>
-    <section class="panel bn-box"><div class="bn-tabs" data-tabs role="tablist"></div>
-      <div class="bn-actrow"><div data-addbox></div><a class="btn" data-upload href="/connect/wow?game=${def}">Upload /played</a></div>
+    <section class="${Sec}"><div class="bn-tabs" data-tabs role="tablist"></div></section>
+    <section class="${Sec}"><${Hx}>Add characters</${Hx}>
+      <div class="bn-addblock"><div data-addbox></div><p class="bn-or"><a data-upload href="/connect/wow?version=${def === "wow_forever" ? "forever" : "retail"}">Or upload your /played file</a></p></div></section>
+    <section class="${Sec}"><${Hx}>Your characters</${Hx}>
       <div class="bn-tools"><input type="search" data-q placeholder="Search" aria-label="Search name or realm" maxlength="64">
         <select data-sort aria-label="Sort"><option value="hours">Hours</option><option value="level">Level</option><option value="name">Name</option><option value="realm">Realm</option></select>
         <select data-class aria-label="Class"><option value="">Class</option></select>
@@ -668,20 +682,13 @@ pages.bnet = async () => {
       <div class="bn-headrow" aria-hidden="true"><span></span><span>Name</span><span class="c-realm">Realm</span><span class="c-cls">Level / class</span><span class="c-hrs">Hours</span><span class="c-imp">Imported</span><span></span></div>
       <div data-list><p class="empty bn-empty">Loading…</p></div>
       <div class="bn-more"><span class="sub" data-cnt></span><button class="btn" type="button" data-more hidden>Show more</button></div></section>
-    <section class="panel bn-box" data-review hidden><h2>Held for review</h2><div class="bn-review" data-rev></div></section>`;
+    <section class="${Sec}" data-review hidden><${Hx}>Held for review</${Hx}><div class="bn-review" data-rev></div></section>`;
   const msgBox = $("[data-msg]", el), list = $("[data-list]", el), more = $("[data-more]", el), cnt = $("[data-cnt]", el);
   const st = { q: "", sort: "hours", class: "", vis: "", items: [], data: null, seq: 0, game: def, extra: "" };
   const regions = `<select name="region" aria-label="Region"><option value="us">US</option><option value="eu">EU</option><option value="kr">KR</option><option value="tw">TW</option></select>`;
   const addForm = game => game === "wow_forever"
-    ? `<form class="bn-add" data-addchar><p class="sub">Add by first name and surname. It's verified automatically when it matches your linked Battle.net account.</p>${regions}<input name="first" placeholder="First name" aria-label="First name" required maxlength="32"><input name="surname" placeholder="Surname" aria-label="Surname" required maxlength="32"><button class="btn" type="submit">Add character</button></form>`
-    : `<form class="bn-add" data-addchar><p class="sub">Add by name and realm. It's verified automatically when it matches your linked Battle.net account.</p>${regions}<input name="realm" placeholder="Realm" aria-label="Realm" required maxlength="64"><input name="name" placeholder="Name" aria-label="Character name" required maxlength="24"><button class="btn" type="submit">Add character</button></form>`;
-  const tabIds = d => {
-    const retail = d ? d.retail || 0 : 0, forever = d ? d.forever || 0 : 0, none = !d || retail + forever === 0;
-    const ids = [];
-    if (retail > 0 || def === "wow" || st.extra === "wow" || (none && st.game === "wow")) ids.push("wow");
-    if (forever > 0 || def === "wow_forever" || st.extra === "wow_forever" || (none && st.game === "wow_forever")) ids.push("wow_forever");
-    return ids.length ? ids : [def];
-  };
+    ? `<form class="bn-add" data-addchar>${regions}<input name="first" placeholder="First name" aria-label="First name" required maxlength="32"><input name="surname" placeholder="Surname" aria-label="Surname" required maxlength="32"><button class="btn" type="submit">Add character</button></form>`
+    : `<form class="bn-add" data-addchar>${regions}<input name="realm" placeholder="Realm" aria-label="Realm" required maxlength="64"><input name="name" placeholder="Name" aria-label="Character name" required maxlength="24"><button class="btn" type="submit">Add character</button></form>`;
   const row = c => {
     const hid = c.hidden, specs = WOW.specs(c.class);
     const was = [c.former_name && c.former_name.toLowerCase() !== c.name.toLowerCase() ? c.former_name : "", c.former_realm && c.former_realm !== c.realm ? c.former_realm : ""].filter(Boolean).join(" · ");
@@ -700,14 +707,13 @@ pages.bnet = async () => {
       </div></div></div>`;
   };
   const render = () => {
-    const d = st.data, ids = tabIds(d), label = { wow: "Retail", wow_forever: "Forever" };
-    if (!ids.includes(st.game)) st.game = ids[0];
-    $("[data-tabs]", el).innerHTML = ids.map(id => `<button type="button" role="tab" data-tab="${id}" aria-selected="${id === st.game}" class="${id === st.game ? "on" : ""}">${label[id]}</button>`).join("")
-      + (ids.length < 2 ? `<button type="button" class="bn-addtab" data-addtab="${st.game === "wow" ? "wow_forever" : "wow"}">Add ${st.game === "wow" ? "Forever" : "Retail"}</button>` : "");
+    const d = st.data, label = { wow: "Retail", wow_forever: "Forever" };
+    $("[data-tabs]", el).innerHTML = ["wow", "wow_forever"].map(id => `<button type="button" role="tab" data-tab="${id}" aria-selected="${id === st.game}" class="${id === st.game ? "on" : ""}">${label[id]}</button>`).join("");
     $("[data-addbox]", el).innerHTML = addForm(st.game);
-    const up = $("[data-upload]", el); if (up) up.href = "/connect/wow?game=" + st.game;
+    const up = $("[data-upload]", el); if (up) up.href = "/connect/wow?version=" + (st.game === "wow_forever" ? "forever" : "retail");
+    const filtered = d && d.matched === 0 && (st.q || st.class || st.vis);
     list.innerHTML = st.items.length ? st.items.map(row).join("")
-      : `<p class="empty bn-empty">${d && d.matched === 0 && st.q ? "No characters match." : "No characters yet."}</p>`;
+      : `<p class="empty bn-empty">${filtered ? "No characters match." : "No characters yet. Add one above, or upload a /played file."}</p>`;
     cnt.textContent = d && d.matched ? plural(d.matched, "character") : "";
     const left = d ? d.matched - st.items.length : 0;
     more.hidden = left <= 0; more.textContent = "Show more";
@@ -786,9 +792,7 @@ pages.bnet = async () => {
       return;
     }
     const tab = e.target.closest("[data-tab]");
-    if (tab) { st.game = tab.dataset.tab; st.extra = ""; load(false); return; }
-    const addTab = e.target.closest("[data-addtab]");
-    if (addTab) { st.game = addTab.dataset.addtab; st.extra = st.game; load(false); return; }
+    if (tab) { st.game = tab.dataset.tab; load(false); return; }
     const menuBtn = e.target.closest("[data-menu]");
     if (menuBtn) {
       const pop = menuBtn.nextElementSibling;
@@ -800,7 +804,7 @@ pages.bnet = async () => {
     const t = e.target.closest("[data-unlink],[data-link]"); if (!t) return;
     try {
       if (t.matches("[data-link]")) { t.disabled = true; const r = await api("/connect/bnet/start", { method: "POST" }); location.href = r.url; return; }
-      if (!confirm("Unlink Battle.net? Your characters stop counting toward your hours until you link it again. Their data is kept.")) return;
+      if (!confirm("Unlink Battle.net? You can link it again later.")) return;
       t.disabled = true; await api("/connect/bnet", { method: "DELETE" }); location.reload();
     } catch (x) { t.disabled = false; showErr(msgBox, x); }
   });
@@ -861,7 +865,7 @@ pages.bnetverify = async () => {
   const b = BRAND.bnet, logo = `<svg viewBox="0 0 24 24" width="34" height="34" fill="${b[1]}" aria-hidden="true"><path d="${b[2]}"/></svg>`;
   const STEPS = [["connect", "Connecting to Battle.net"], ["fetch", "Fetching your characters"], ["match", "Matching /played data"], ["sig", "Checking signatures"]];
   el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Verify WoW characters</h2>
-    <p class="sub">Fraglink asks Battle.net which characters are yours, then checks each one against the signed /played data from the Fraglink addon. Only verified characters count on leaderboards.</p></div></div>
+    <p class="sub">Checks which characters are on the Battle.net account you linked.</p></div></div>
     <ol class="bv-steps">${STEPS.map(([k, t]) => `<li data-s="${k}"><span class="bv-ic"></span><b>${t}</b><small></small></li>`).join("")}</ol>
     <div data-res></div><div data-act class="bv-act"></div>`;
   const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
@@ -900,7 +904,7 @@ pages.bnetverify = async () => {
   res.innerHTML = `<h3>Results</h3><ul class="bv-res">${me_.characters.map(c => `<li><span class="${c.verified ? "vbadge" : "srbadge"}">${c.verified ? "✓ Verified" : "◆ Not verified, not counted"}</span>
       <b>${esc(c.name)}</b> <span class="sub">${esc(c.realm)} · ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · ${Math.floor(c.played_min / 60)}h</span></li>`).join("") || `<li class="sub">No characters uploaded yet.</li>`}
     ${s.refused.map(r => `<li><span class="badbadge">✕ Refused</span> <b>${esc(r.character)}</b> <span class="sub">${esc(R[r.reason] || r.reason)}</span></li>`).join("")}</ul>
-    <p class="sub">Only characters Battle.net confirms are on your account count toward your hours. A character verifies when Battle.net lists it on the same account as the BattleTag saved by the addon.</p>`;
+    <p class="sub">Verified means the character is on your linked Battle.net account.</p>`;
   act.innerHTML = `<a class="btn" href="/connect/battlenet">Done</a>`;
 };
 
@@ -1301,11 +1305,12 @@ pages.profile = async () => {
     const col = WOW.color(c.class), cls = WOW.cls(c.class);
     const tick = c.verified ? `<span class="wc-tick" title="On the linked Battle.net account">✓</span>` : "";
     const guild = c.show_guild && c.guild ? `<div class="wc-g">&lt;${esc(c.guild)}&gt;</div>` : "";
+    const realm = c.realm ? `<div class="wc-realm">${esc(c.realm)}</div>` : "";
     const ini = esc(String(c.name || "?").slice(0, 2));
     const lvl = Number(c.level) > 0 ? `Level ${c.level}` : "";
-    const line = [lvl && `<span class="wc-lv">${esc(lvl)}</span>`, cls && esc(cls)].filter(Boolean).join(" ");
+    const line = [lvl && `<span class="wc-lv">${esc(lvl)}</span>`, cls && `<span class="wc-cl">${esc(cls)}</span>`].filter(Boolean).join(" ");
     const open = poppable(c);
-    return `<div class="wc${open ? " wc-click" : ""}" style="--cls:${col}"${open ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${tick}</b>${line ? `<div class="wc-cls">${line}</div>` : ""}${guild}</div></div>`;
+    return `<div class="wc${open ? " wc-click" : ""}" style="--cls:${col}"${open ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${tick}</b>${line ? `<div class="wc-meta">${line}</div>` : ""}${guild}${realm}</div></div>`;
   };
   const wireWowPop = () => {
     if (root._wowpop) return;
@@ -1323,18 +1328,29 @@ pages.profile = async () => {
       go(n);
     });
   };
-  const wowShow = p.wow_show === "wow" || p.wow_show === "wow_forever" ? p.wow_show : "both";
+  const wowShow = p.wow_show === "wow" || p.wow_show === "wow_forever" || p.wow_show === "none" ? p.wow_show : "both";
   const wowRows = flav => (p.wow_characters || []).filter(c => !c.hidden && (c.game_id === "wow_forever" ? "wow_forever" : "wow") === flav);
-  const wowOpen = wowShow === "both" ? (p.wow_default === "wow_forever" ? "wow_forever" : "wow") : wowShow;
+  const bothSides = wowRows("wow").length > 0 && wowRows("wow_forever").length > 0;
+  const wowToggle = typeof p.wow_toggle === "boolean" ? p.wow_toggle : wowShow === "both" && bothSides;
+  const wowOpen = p.wow_open === "wow" || p.wow_open === "wow_forever" || p.wow_open === "none" ? p.wow_open
+    : wowShow === "none" ? "none"
+    : wowShow === "wow" || wowShow === "wow_forever" ? wowShow
+    : bothSides ? (p.wow_default === "wow_forever" ? "wow_forever" : "wow")
+    : wowRows("wow_forever").length && !wowRows("wow").length ? "wow_forever" : "wow";
+  const manage = p.relation === "self" ? `<a href="/settings#wow">Manage</a>` : "";
   if (wowAll) {
     document.title = "WoW characters · " + (p.display_name || p.handle);
     window.flCrumb([[p.display_name || p.handle, "/u/" + encodeURIComponent(p.handle)], ["WoW characters"]]);
+    if (wowShow === "none" || wowOpen === "none") {
+      root.innerHTML = `<div class="wow-page"><a href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><h1>WoW characters</h1><p class="empty">No WoW characters on this profile.</p>${manage ? `<p class="wow-foot">${manage}</p>` : ""}</div>`;
+      return;
+    }
     const paint = flav => { const box = $("[data-wowgal]", root); if (box) box.innerHTML = wowRows(flav).map(wowCard).join("") || `<p class="empty">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`; $$("[data-flav]", root).forEach(b => b.setAttribute("aria-pressed", b.dataset.flav === flav ? "true" : "false")); };
-    const tog = wowShow === "both" ? `<div class="seg" role="tablist" aria-label="Which roster to show"><button type="button" data-flav="wow" aria-pressed="${wowOpen === "wow"}">Retail</button><button type="button" data-flav="wow_forever" aria-pressed="${wowOpen === "wow_forever"}">Forever</button></div>` : "";
-    root.innerHTML = `<div class="wow-page"><a href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><div class="bar"><h1>WoW characters</h1>${tog}</div><div class="wow-gal" data-wowgal></div></div>`;
+    const tog = wowToggle ? `<div class="seg" role="tablist" aria-label="Which roster to show"><button type="button" data-flav="wow" aria-pressed="${wowOpen === "wow"}">Retail</button><button type="button" data-flav="wow_forever" aria-pressed="${wowOpen === "wow_forever"}">Forever</button></div>` : "";
+    root.innerHTML = `<div class="wow-page"><a class="wow-back" href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><div class="bar"><h1>WoW characters</h1>${tog}</div><div class="wow-gal" data-wowgal></div>${manage ? `<p class="wow-foot">${manage}</p>` : ""}</div>`;
     paint(wowOpen);
     wireWowPop();
-    if (wowShow === "both") root.addEventListener("click", e => { const b = e.target.closest("[data-flav]"); if (!b) return; paint(b.dataset.flav); });
+    if (wowToggle) root.addEventListener("click", e => { const b = e.target.closest("[data-flav]"); if (!b) return; paint(b.dataset.flav); });
     return;
   }
   const pres = p.presence;
@@ -1423,10 +1439,10 @@ pages.profile = async () => {
   // Public cards: name, guild, class, avatar, verified tick. No hours and no past names.
   let wowc = "";
   const WC = (p.wow_characters || []).filter(c => !c.hidden);
-  if (WC.length) {
+  if (wowShow !== "none" && WC.length) {
     const ordered = flav => wowRows(flav).slice().sort((a, b) => (a.featured || 9) - (b.featured || 9));
-    const grid = flav => { const rows = ordered(flav); return `<div class="wcs" data-wowcards>${rows.slice(0, 6).map(wowCard).join("") || `<p class="empty" style="padding:8px 0">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`}</div><p class="wow-foot"><a class="btn sm" href="/u/${encodeURIComponent(p.handle)}/wow">View all</a></p>${self ? `<p class="sub" style="padding:0 14px 10px">Hidden characters stay off this page. <a href="/connect/battlenet">Manage characters</a></p>` : ""}`; };
-    const tog = wowShow === "both" ? `<div class="seg" role="tablist" aria-label="Which roster to show"><button type="button" data-wflav="wow" aria-pressed="${wowOpen === "wow"}">Retail</button><button type="button" data-wflav="wow_forever" aria-pressed="${wowOpen === "wow_forever"}">Forever</button></div>` : "";
+    const grid = flav => { const rows = ordered(flav); return `<div class="wcs" data-wowcards>${rows.slice(0, 6).map(wowCard).join("") || `<p class="empty" style="padding:8px 0">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`}</div><p class="wow-foot">${self ? `<a href="/settings#wow">Manage</a><span>·</span>` : ""}<a href="/u/${encodeURIComponent(p.handle)}/wow">View all</a></p>`; };
+    const tog = wowToggle ? `<div class="seg" role="tablist" aria-label="Which roster to show"><button type="button" data-wflav="wow" aria-pressed="${wowOpen === "wow"}">Retail</button><button type="button" data-wflav="wow_forever" aria-pressed="${wowOpen === "wow_forever"}">Forever</button></div>` : "";
     wowc = sec("WoW characters", grid(wowOpen), tog);
   }
 
@@ -1477,7 +1493,7 @@ pages.profile = async () => {
 
   wireWowPop();
   root.addEventListener("click", e => {
-    const b = e.target.closest("[data-wflav]"); if (!b || wowShow !== "both") return;
+    const b = e.target.closest("[data-wflav]"); if (!b || !wowToggle) return;
     $$("[data-wflav]", root).forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
     const box = $("[data-wowcards]", root); if (!box) return;
     const rows = wowRows(b.dataset.wflav).slice().sort((a, c) => (a.featured || 9) - (c.featured || 9));
@@ -1622,7 +1638,7 @@ function zoneOptions(cur, term) {
   const auto = `<option value=""${cur ? "" : " selected"}>Automatic (browser): ${esc(TZ ? `${TZ} (${zoneOff(TZ) || "UTC"})` : "not detected, Australia/Sydney")}</option>`;
   return auto + Array.from(groups.keys()).sort().map(g => `<optgroup label="${esc(g)}">${groups.get(g).sort((a, b) => a[1].localeCompare(b[1])).map(([z, l]) => `<option value="${esc(z)}"${z === cur ? " selected" : ""}>${esc(l)}</option>`).join("")}</optgroup>`).join("");
 }
-const TABS = [["account", "Account & profile"], ["rig", "Gaming rig"], ["games", "Played games"], ["privacy", "Privacy"], ["notifications", "Notifications"], ["connections", "Connections"], ["security", "Security"]];
+const BASE_TABS = [["account", "Account & profile"], ["rig", "Gaming rig"], ["games", "Played games"], ["privacy", "Privacy"], ["notifications", "Notifications"], ["connections", "Connections"], ["security", "Security"]];
 pages.settings = async () => {
   if (!requireLogin()) return;
   const root = $("#settings");
@@ -1631,7 +1647,12 @@ pages.settings = async () => {
   let u = m.user;
   const keep = () => setSession(token(), Object.assign(me() || {}, { id: u.id, handle: u.handle, display_name: u.display_name, email: u.email, avatar: u.avatar, email_verified: u.email_verified, mail_live: u.mail_live, staff_role: u.staff_role || null, timezone: u.timezone || null }));
   keep(); renderHeader(); verifyBar();
-  const tab = () => { const t = location.hash.replace("#", ""); return TABS.some(x => x[0] === t) ? t : "account"; };
+  const tabs = () => {
+    const t = BASE_TABS.slice();
+    if (u.has_wow) { const i = t.findIndex(x => x[0] === "games"); t.splice(i + 1, 0, ["wow", "World of Warcraft"]); }
+    return t;
+  };
+  const tab = () => { const t = location.hash.replace("#", "").split("/")[0]; return tabs().some(x => x[0] === t) ? t : "account"; };
   const row = (label, html, hint) => `<label>${label}</label><div>${html}${hint ? `<div class="sub">${hint}</div>` : ""}</div>`;
   const msg = `<div class="alert" hidden data-msg></div>`;
   const ok = (el, t) => showOk($("[data-msg]", el), t), bad = (el, e) => showErr($("[data-msg]", el), e);
@@ -1776,7 +1797,7 @@ pages.settings = async () => {
       const v = c[p] || {}, l = v.linked;
       if (!l && !v.off && !v.available) return ""; // not built yet: hide rather than show a "Coming soon" stub
       const right = l
-        ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}${p === "bnet" ? `<a class="btn sm" href="/connect/battlenet">Manage WoW</a> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
+        ? `${p === "steam" && v.import ? `<button class="btn sm" type="button" data-import>Import hours</button> ` : ""}${p === "bnet" && u.has_wow ? `<a class="btn sm" href="/settings#wow">Manage WoW</a> ` : ""}<button class="btn sm" type="button" data-unlink="${p}">Unlink</button>`
         : v.off ? `<span class="btn sm" aria-disabled="true">Turned off for now</span>` : v.available ? `<button class="btn sm blue" type="button" data-link="${p}">${p === "steam" ? "Sign in through Steam" : "Link " + NAMES[p]}</button>` : `<span class="btn sm" aria-disabled="true">Coming soon</span>`;
       const who = l ? `${p === "steam" ? `<a href="https://steamcommunity.com/profiles/${esc(l.uid)}" rel="noopener">${esc(l.display || l.uid)}</a>` : `<b>${esc(l.display || l.uid)}</b>`} ${l.verified ? `<span class="vbadge">✓ Verified</span>` : `<span class="sub">(not verified)</span>`}${l.last_sync_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(l.last_sync_at))}${l.sync_status === "private" ? " · Steam game details were private" : ""}</div>` : ""}${p === "bnet" ? (v.wow_imported_at ? `<div class="sub">Hours imported ${fullDate.format(new Date(v.wow_imported_at))}</div>` : `<div class="sub"><a href="/connect/battlenet">No /played upload yet</a></div>`) : ""}`
         : `<span class="sub">${blurb}</span>`;
@@ -1786,7 +1807,7 @@ pages.settings = async () => {
       ${card("steam", `<img src="/assets/brand-steam.svg" alt="" width="22" height="22">`, c.steam && c.steam.import ? "Verify your Steam account and import your Steam hours." : "Verify your Steam account. It shows as a badge on your profile.")}
       ${card("discord", `<img src="/assets/brand-discord.svg" alt="" width="22" height="22">`, "Show your Discord name on your profile.")}
       ${card("bnet", `<img src="/assets/brand-battlenet.svg" alt="" width="22" height="22">`, "Show your BattleTag on your profile.")}
-      ${c.bnet && c.bnet.needs_reconnect ? `<div class="conn-sub"><span class="sub warn">Reconnect Battle.net to verify characters.</span> <a href="/connect/battlenet">Manage WoW</a></div>` : ""}
+      ${c.bnet && c.bnet.needs_reconnect ? `<div class="conn-sub"><span class="sub warn">Reconnect Battle.net to verify characters.</span> ${u.has_wow ? `<a href="/settings#wow">Manage WoW</a>` : ""}</div>` : ""}
       <p class="sub" style="padding:8px 0">Verified accounts show as badges on your profile. You're sent to the provider's own sign-in page; Fraglink never sees your password there.</p></div>`;
     if (q.get("connected")) { ok(box, `${NAMES[q.get("connected")] || "Account"} linked.`); history.replaceState(null, "", "/settings#connections"); }
     else if (q.get("connect_error")) { bad(box, new Error(q.get("connect_error") === "expired" ? "That link expired. Try again." : q.get("connect_error") === "cancelled" ? "Linking was cancelled." : q.get("connect_error"))); history.replaceState(null, "", "/settings#connections"); }
@@ -1825,11 +1846,12 @@ pages.settings = async () => {
 
   function render() {
     const t = tab();
-    root.innerHTML = `<section class="head"><div><h1>Account settings</h1><div class="sub">Your profile, gaming rig, privacy, notifications and linked accounts.</div></div></section><nav class="tabs">${TABS.map(([k, l]) => `<a href="#${k}" class="${k === t ? "on" : ""}">${l}</a>`).join("")}</nav><div class="tabpane" id="pane"></div>`;
+    root.innerHTML = `<section class="head"><div><h1>Account settings</h1><div class="sub">Your profile, gaming rig, privacy, notifications and linked accounts.</div></div></section><nav class="tabs">${tabs().map(([k, l]) => `<a href="#${k}" class="${k === t ? "on" : ""}">${l}</a>`).join("")}</nav><div class="tabpane" id="pane"></div>`;
     const el = $("#pane");
     if (t === "account") el.innerHTML = accountTab();
     else if (t === "rig") el.innerHTML = rigTab();
     else if (t === "games") gamesTab(el);
+    else if (t === "wow") { el.dataset.embed = "1"; el.classList.add("bn"); wowManager(el); }
     else if (t === "privacy") el.innerHTML = privacyTab();
     else if (t === "notifications") el.innerHTML = notificationsTab();
     else if (t === "connections") connectionsTab(el);
@@ -2054,7 +2076,7 @@ function applyFeatures() {
 const CRUMBS = { download: [["Download", "/download"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
   login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
   settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
-  verify: [["Confirm your email"]], wowupload: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Battle.net", "/connect/battlenet"], ["Upload WoW /played"]], bnetverify: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Battle.net", "/connect/battlenet"], ["Verify WoW characters"]], bnet: [["Account Settings", "/settings"], ["Connections", "/settings#connections"], ["Battle.net"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
+  verify: [["Confirm your email"]], wowupload: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"], ["Upload /played"]], bnetverify: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"], ["Verify characters"]], bnet: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };
 function setCrumb(parts) {
   const nav = document.getElementById("ycrumb"); if (!nav || !parts) return;
   const all = [["Home", "/"], ...parts];
@@ -2123,7 +2145,7 @@ const WOWPOP = (() => {
   const slot = (g, k) => { const it = g[k]; const lk = it && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : it.id ? ` data-whi="${Number(it.id)}" data-whp="${esc(whp(it))}" role="button" tabindex="0" aria-expanded="false"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
   const raid = r => r.instances.map(i => `<div class="cp-raid"><b>${esc(i.name)}</b><div class="cp-modes">${[...i.modes].sort((a, b) => DO.indexOf(a.difficulty) - DO.indexOf(b.difficulty)).map(m => `<span class="${m.done >= m.total ? "full" : ""}">${esc(m.label)} <b>${m.done}/${m.total}</b></span>`).join("")}</div></div>`).join("");
   const body = (d, c) => {
-    if (d.status === "missing") return `<div class="cp-hd"><div><h2>${esc(c.name)}</h2><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}</div></div></div><p class="empty cp-pad">Profile private or not found on Blizzard.</p>`;
+    if (d.status === "missing") return `<div class="cp-hd"><div><h2>${esc(c.name)}</h2><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}</div></div></div><p class="empty cp-pad">Not on the Armory.</p>`;
     const g = {}; (d.gear || []).forEach(x => g[x.slot] = x);
     const col = CC[d.class_id] || "#eef2f6", mp = d.mplus || {}, pv = d.pvp || {}, rd = d.raids || {}, co = d.collections || {}, pr = d.professions || [];
     const stat = (l, v) => `<div class="cp-st"><small>${l}</small><b>${v}</b></div>`;
@@ -2174,7 +2196,7 @@ const WOWPOP = (() => {
       const im = $(".cp-rd", box);
       if (im) { const t = localStorage.getItem(TK), r = await fetch(`${API}/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}/render.png`, { headers: t ? { authorization: "Bearer " + t } : {} });
         if (r.ok && box === me) { im.src = URL.createObjectURL(await r.blob()); im.onload = () => URL.revokeObjectURL(im.src); im.hidden = false; } } }
-    catch (x) { if (box === me) $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load character details right now. Try again in a minute.</p>`; }
+    catch (x) { if (box === me) $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load this character.</p>`; }
   };
   return { open, close };
 })();

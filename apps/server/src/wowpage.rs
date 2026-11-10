@@ -81,7 +81,7 @@ async fn summary(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Valu
     })))
 }
 
-/// `both`, `wow`, or `wow_forever`. A missing preference is Both.
+/// `both`, `wow`, `wow_forever`, or `none`. A missing preference is Both.
 pub(crate) async fn profile_show(st: &AppState, uid: Uuid) -> ApiResult<String> {
     let stored: Option<String> = sqlx::query_scalar(
         "SELECT coalesce(profile_show, 'both') FROM wow_prefs WHERE user_id = $1",
@@ -92,8 +92,32 @@ pub(crate) async fn profile_show(st: &AppState, uid: Uuid) -> ApiResult<String> 
     Ok(match stored.as_deref() {
         Some("wow") => "wow".into(),
         Some("wow_forever") => "wow_forever".into(),
+        Some("none") => "none".into(),
         _ => "both".into(),
     })
+}
+
+/// Which roster the public page opens on, and whether the Retail/Forever toggle shows.
+/// Counts are visible characters. A side with nobody on it is not offered.
+pub fn public_roster(show: &str, default: &str, retail: i64, forever: i64) -> (String, bool) {
+    if show == "none" {
+        return ("none".into(), false);
+    }
+    if show == "wow" || show == "wow_forever" {
+        return (show.into(), false);
+    }
+    if retail > 0 && forever > 0 {
+        let open = if default == "wow_forever" {
+            "wow_forever"
+        } else {
+            "wow"
+        };
+        return (open.into(), true);
+    }
+    if forever > 0 {
+        return ("wow_forever".into(), false);
+    }
+    ("wow".into(), false)
 }
 
 #[derive(Deserialize)]
@@ -108,10 +132,10 @@ async fn set_profile_show(
     Json(r): Json<ShowReq>,
 ) -> ApiResult<Json<Value>> {
     api::check_origin(&a, &headers, &st)?;
-    if r.show != "wow" && r.show != "wow_forever" && r.show != "both" {
+    if r.show != "wow" && r.show != "wow_forever" && r.show != "both" && r.show != "none" {
         return Err(AppError::bad_request(
             "invalid_show",
-            "Choose Retail only, Forever only, or Both.",
+            "Choose Retail, Forever, Both, or None.",
         ));
     }
     sqlx::query(
@@ -635,6 +659,27 @@ mod tests {
         assert_eq!(specs_of("druid").len(), 4);
         assert!(specs_of("DEATHKNIGHT").contains(&"Unholy"));
         assert!(specs_of("nope").is_empty());
+    }
+
+    #[test]
+    fn roster_toggle_only_when_both_versions_are_visible() {
+        assert_eq!(
+            public_roster("both", "wow_forever", 2, 3),
+            ("wow_forever".into(), true)
+        );
+        assert_eq!(
+            public_roster("both", "wow_forever", 2, 0),
+            ("wow".into(), false)
+        );
+        assert_eq!(
+            public_roster("both", "wow", 0, 4),
+            ("wow_forever".into(), false)
+        );
+        assert_eq!(
+            public_roster("wow", "wow_forever", 1, 1),
+            ("wow".into(), false)
+        );
+        assert_eq!(public_roster("none", "wow", 3, 3), ("none".into(), false));
     }
 }
 
