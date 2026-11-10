@@ -783,7 +783,7 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .wc-p .r{width:48px;height:48px;border-radius:4px;border:0;background:transparent;position:relative;z-index:1}
 .wc-ini{position:absolute;inset:0;display:grid;place-items:center;font-weight:700;color:#fff;background:color-mix(in srgb,var(--cls) 62%,#1a120c);letter-spacing:.3px}
 .wc-ic{position:absolute;right:-6px;bottom:-6px;display:flex;z-index:2}.wc-ic img{width:20px;height:20px;border-radius:50%;border:1px solid #000;margin-left:-4px}
-.wc-t{min-width:0}.wc-t b{color:#eef2f6}.wc-cls{color:var(--cls);font-weight:650;font-size:12px}
+.wc-t{min-width:0}.wc-t b{color:#eef2f6}.wc-cls{color:var(--cls);font-weight:700;font-size:12px}.wc-lv{font-weight:600;opacity:.8;margin-right:3px}
 .wc-tick{color:#8fdc79;font-weight:700;margin-left:4px}
 .wc .wc-h{font-size:12px;font-weight:400;margin:2px 0 0;color:var(--label)}
 .seg{display:inline-flex;border:1px solid #3d5168;border-radius:3px;overflow:hidden;text-transform:none;letter-spacing:0}

@@ -1234,7 +1234,9 @@ pages.profile = async () => {
     const tick = c.verified ? `<span class="wc-tick" title="On the linked Battle.net account">✓</span>` : "";
     const guild = c.show_guild && c.guild ? `<div class="wc-g">&lt;${esc(c.guild)}&gt;</div>` : "";
     const ini = esc(String(c.name || "?").slice(0, 2));
-    return `<div class="wc" style="--cls:${col}"><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${tick}</b>${cls ? `<div class="wc-cls">${esc(cls)}</div>` : ""}${guild}</div></div>`;
+    const lvl = Number(c.level) > 0 ? `Level ${c.level}` : "";
+    const line = [lvl && `<span class="wc-lv">${esc(lvl)}</span>`, cls && esc(cls)].filter(Boolean).join(" ");
+    return `<div class="wc" style="--cls:${col}"><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${tick}</b>${line ? `<div class="wc-cls">${line}</div>` : ""}${guild}</div></div>`;
   };
   const wowShow = p.wow_show === "wow" || p.wow_show === "wow_forever" ? p.wow_show : "both";
   const wowRows = flav => (p.wow_characters || []).filter(c => !c.hidden && (c.game_id === "wow_forever" ? "wow_forever" : "wow") === flav);
