@@ -50,8 +50,12 @@ fn avatar_url_ok(s: &str) -> bool {
         && !s.contains("..")
 }
 
-pub fn forever_media_avatar(media: &Value, expected_id: Option<i64>) -> Option<String> {
-    if expected_id.is_some_and(|id| media["character"]["id"].as_i64() != Some(id)) {
+pub fn media_avatar(media: &Value, expected_id: Option<i64>) -> Option<String> {
+    if expected_id.is_some_and(|id| {
+        media["character"]["id"]
+            .as_i64()
+            .is_some_and(|got| got != id)
+    }) {
         return None;
     }
     media["assets"]
@@ -61,6 +65,10 @@ pub fn forever_media_avatar(media: &Value, expected_id: Option<i64>) -> Option<S
         .as_str()
         .filter(|s| avatar_url_ok(s))
         .map(str::to_owned)
+}
+
+pub fn forever_media_avatar(media: &Value, expected_id: Option<i64>) -> Option<String> {
+    media_avatar(media, expected_id)
 }
 
 async fn avatar(
@@ -76,9 +84,6 @@ async fn avatar(
             "That character isn't shown on this profile.",
         )
     };
-    if !crate::wow::forever_lookup_enabled() {
-        return Err(nf());
-    }
     let viewer = m.0.as_ref().map(|a| a.user.id);
     let key = viewer
         .map(|v| v.to_string())
@@ -91,20 +96,39 @@ async fn avatar(
     if !owner {
         visible_char(&st, viewer, &handle, id).await?;
     }
-    let row: Option<(String, String, Option<i64>, Option<String>)> = sqlx::query_as(
-        "SELECT c.name,c.region,c.bnet_id,(SELECT d.data->>'avatar_src' FROM wow_char_details d WHERE d.char_id=c.id AND d.status='ok' AND d.fetched_at > now()-interval '12 hours') FROM wow_characters c WHERE c.id=$1 AND c.game_id='wow_forever'"
+    let row: Option<(String, String, String, String, Option<i64>, Option<String>)> = sqlx::query_as(
+        "SELECT c.game_id,c.name,c.region,c.realm_slug,c.bnet_id,(SELECT d.data->>'avatar_src' FROM wow_char_details d WHERE d.char_id=c.id AND d.status='ok' AND d.fetched_at > now()-interval '12 hours') FROM wow_characters c WHERE c.id=$1 AND c.game_id IN ('wow','wow_forever')"
     ).bind(id).fetch_optional(&st.db).await?;
-    let Some((name, region, bnet_id, warm)) = row else {
+    let Some((game, name, region, realm_slug, bnet_id, warm)) = row else {
         return Err(nf());
     };
+    if game == "wow_forever" && !crate::wow::forever_lookup_enabled() {
+        return Err(nf());
+    }
     let mut src = warm.filter(|s| avatar_url_ok(s));
-    if src.is_none() && region == "us" {
-        if let Some((first, surname)) = crate::wow::forever_parts(&name) {
-            let base = crate::wow::forever_profile_url("us", &first, &surname);
-            let (path, query) = base
-                .split_once('?')
-                .expect("Forever helper includes namespace");
-            let url = format!("{path}/character-media?{query}");
+    let media_url = if game == "wow_forever" {
+        if region == "us" {
+            crate::wow::forever_parts(&name).map(|(first, surname)| {
+                let base = crate::wow::forever_profile_url("us", &first, &surname);
+                let (path, query) = base
+                    .split_once('?')
+                    .expect("Forever helper includes namespace");
+                format!("{path}/character-media?{query}")
+            })
+        } else {
+            None
+        }
+    } else if matches!(region.as_str(), "us" | "eu" | "kr" | "tw") && !realm_slug.is_empty() {
+        Some(format!(
+            "https://{region}.api.blizzard.com/profile/wow/character/{}/{}/character-media?namespace=profile-{region}&locale=en_US",
+            realm_slug,
+            name.to_lowercase()
+        ))
+    } else {
+        None
+    };
+    if src.is_none() {
+        if let Some(url) = media_url {
             let key = format!("{url}:{bnet_id:?}");
             let lock = lock_for(id);
             let _guard = lock.lock().await;
@@ -247,6 +271,9 @@ async fn detail(
         });
     }
     let Some((status, mut data, at)) = cached else {
+        if let Some(data) = fallback_details(&st, id).await? {
+            return Ok(Json(data));
+        }
         return Err(AppError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "bnet_unavailable",
@@ -691,6 +718,71 @@ pub async fn refresh(st: &AppState, id: Uuid) -> Result<(), ()> {
     Ok(())
 }
 
+/// Local fields only, used when Blizzard has no public profile (Forever under 10 is a 404).
+async fn fallback_details(st: &AppState, id: Uuid) -> ApiResult<Option<Value>> {
+    let row: Option<(
+        String,
+        String,
+        String,
+        String,
+        i32,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(
+        "SELECT c.game_id, c.name, c.region, c.realm, c.level, c.class, c.faction,
+                    (SELECT wr.name FROM wow_forever_rulesets wr WHERE wr.id = c.ruleset_id)
+             FROM wow_characters c WHERE c.id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let Some((game, name, region, realm, level, class, faction, ruleset)) = row else {
+        return Ok(None);
+    };
+    let forever = game == "wow_forever";
+    let display = if forever {
+        ruleset
+    } else if realm.is_empty() {
+        None
+    } else {
+        Some(realm)
+    };
+    Ok(Some(json!({
+        "status": "ok",
+        "game_id": game,
+        "name": name,
+        "region": region,
+        "realm": display,
+        "level": level,
+        "class": class,
+        "faction": faction,
+        "gear": [],
+        "stats": [],
+        "armory": Value::Null,
+        "armory_unavailable": forever,
+        "updated_at": Utc::now(),
+    })))
+}
+
+async fn store_minimal_forever(st: &AppState, id: Uuid, name: &str) -> Result<(), ()> {
+    let Some(data) = fallback_details(st, id).await.map_err(|_| ())? else {
+        return Err(());
+    };
+    let mut data = data;
+    data["name"] = json!(name);
+    sqlx::query(
+        "INSERT INTO wow_char_details(char_id,status,data,fetched_at) VALUES($1,'ok',$2,now())
+         ON CONFLICT(char_id) DO UPDATE SET status='ok',data=$2,fetched_at=now()",
+    )
+    .bind(id)
+    .bind(data)
+    .execute(&st.db)
+    .await
+    .map_err(|_| ())?;
+    Ok(())
+}
+
 /// Forever uses only probed realmless resources and a separate item-media namespace.
 /// No ownership, character identity, /played, ledger or quarantine writes here.
 async fn refresh_forever(st: &AppState, id: Uuid, region: &str, name: &str) -> Result<(), ()> {
@@ -706,7 +798,24 @@ async fn refresh_forever(st: &AppState, id: Uuid, region: &str, name: &str) -> R
     };
     let url = crate::wow::forever_profile_url("us", first, surname);
     let base = url.split('?').next().ok_or(())?;
-    let root = get_json(&h, &tok, &url).await.map_err(|_| ())?;
+    let root = match get_json(&h, &tok, &url).await {
+        Ok(v) => v,
+        Err(_) => {
+            // Keep a previous full summary. Under-10 and other public misses get a local fallback.
+            if let Ok(Some((status, data, _))) = load(st, id).await {
+                if status == "ok"
+                    && data.get("armory_unavailable").and_then(|v| v.as_bool()) != Some(true)
+                {
+                    return Ok(());
+                }
+            }
+            let _ = store_minimal_forever(st, id, name).await;
+            return Ok(());
+        }
+    };
+    if let Some(rid) = root["ruleset"]["id"].as_i64() {
+        let _ = crate::wow::assign_forever_ruleset(&st.db, id, "us", rid).await;
+    }
     if root["id"].as_i64().is_none()
         || root["name"].as_str().is_none()
         || root["surname"].as_str().is_none()
@@ -826,14 +935,24 @@ pub fn summarise_forever(
         root["surname"].as_str().unwrap_or("")
     )
     .trim());
-    out["realm"] = Value::Null;
-    out["armory"] = json!(format!(
-        "https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/character/{}",
-        crate::wow::forever_slug(
-            root["name"].as_str().unwrap_or(""),
-            root["surname"].as_str().unwrap_or("")
-        )
-    ));
+    if let Some(ruleset) = name_of(&root["ruleset"]) {
+        out["realm"] = json!(ruleset);
+    } else {
+        out["realm"] = Value::Null;
+    }
+    let level = root["level"].as_i64().unwrap_or(0);
+    if level < 10 {
+        out["armory"] = Value::Null;
+        out["armory_unavailable"] = json!(true);
+    } else {
+        out["armory"] = json!(format!(
+            "https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/character/{}",
+            crate::wow::forever_slug(
+                root["name"].as_str().unwrap_or(""),
+                root["surname"].as_str().unwrap_or("")
+            )
+        ));
+    }
     out["avatar_src"] = media["assets"]
         .as_array()
         .and_then(|a| a.iter().find(|x| x["key"] == "avatar"))
@@ -1136,6 +1255,7 @@ pub fn summarise(p: &Parts) -> Value {
         "ilvl": r["equipped_item_level"].as_i64(), "achievement_points": r["achievement_points"].as_i64(),
         "last_login": r["last_login_timestamp"].as_i64(),
         "guild": guild, "render": render_src.is_some(), "render_src": render_src,
+        "avatar_src": media_avatar(p.media, r["id"].as_i64()),
         "gear": gear,
         "mplus": { "rating": mrating, "runs": runs },
         "pvp": { "honor_level": p.pvp["honor_level"].as_i64(), "honorable_kills": p.pvp["honorable_kills"].as_i64(), "rated": rated },
@@ -1156,7 +1276,7 @@ mod tests {
             "race": { "name": "Dracthyr" }, "character_class": { "name": "Warrior", "id": 1 }, "active_spec": { "name": "Protection" },
             "faction": { "name": "Alliance" }, "active_title": { "display_string": "{name} the Kingslayer" },
             "equipped_item_level": 78, "achievement_points": 15440, "guild": { "name": "Seraphim" } });
-        let media = json!({ "assets": [{ "key": "main-raw", "value": "https://render.worldofwarcraft.com/us/character/x/1-main-raw.png" }] });
+        let media = json!({ "assets": [{ "key": "main-raw", "value": "https://render.worldofwarcraft.com/us/character/x/1-main-raw.png" }, { "key": "avatar", "value": "https://render.worldofwarcraft.com/us/character/x/1-avatar.jpg" }] });
         let equip = json!({ "equipped_items": [{ "slot": { "type": "HEAD", "name": "Head" }, "name": "Helm", "quality": { "type": "EPIC" },
             "level": { "value": 83 }, "media": { "id": 5 }, "item": { "id": 19019 }, "bonus_list": [6652, 1498],
             "enchantments": [{ "enchantment_id": 7001, "enchantment_slot": { "id": 0 } }], "sockets": [{ "item": { "id": 213743 } }, {}],
@@ -1190,6 +1310,10 @@ mod tests {
         });
         assert_eq!(v["title"], "Lucrona the Kingslayer");
         assert_eq!(v["armory"], "https://worldofwarcraft.blizzard.com/en-us/worldsoul/us/armory/character/frostmourne/lucrona");
+        assert_eq!(
+            v["avatar_src"],
+            "https://render.worldofwarcraft.com/us/character/x/1-avatar.jpg"
+        );
         assert_eq!(v["gear"][0]["icon"], "132963");
         assert_eq!(v["gear"][0]["ilvl"], 83);
         assert_eq!(v["gear"][0]["id"], 19019);

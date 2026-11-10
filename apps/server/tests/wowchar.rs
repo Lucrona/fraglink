@@ -189,6 +189,11 @@ fn forever_maps_probed_shapes_without_retail_filler() {
         d["armory"],
         "https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/character/sample-character"
     );
+    assert_eq!(d["realm"], "PvP");
+    assert_eq!(
+        d["avatar_src"],
+        "https://render.worldofwarcraft.com/forever-us/character/42/42-avatar.jpg"
+    );
     assert!(d["mplus"]["rating"].is_null());
     assert!(d["raids"]["current"].is_null());
     let n = Value::Null;
@@ -206,6 +211,26 @@ fn forever_maps_probed_shapes_without_retail_filler() {
     assert!(empty["stats"].as_array().unwrap().is_empty());
     assert!(empty["professions"].as_array().unwrap().is_empty());
     assert_eq!(empty["render"], false);
+}
+
+#[test]
+fn forever_under_ten_has_no_armory_link() {
+    let mut f: Value = serde_json::from_str(include_str!("fixtures/forever-popup.json")).unwrap();
+    f["root"]["level"] = 4.into();
+    let n = Value::Null;
+    let d = fraglink_server::wowchar::summarise_forever(
+        &f["root"],
+        &n,
+        &n,
+        &n,
+        &n,
+        &n,
+        &n,
+        &Default::default(),
+    );
+    assert_eq!(d["realm"], "PvP");
+    assert!(d["armory"].is_null());
+    assert_eq!(d["armory_unavailable"], true);
 }
 
 #[test]

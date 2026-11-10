@@ -667,6 +667,28 @@ fn empty_entry() -> CharEntry {
     }
 }
 
+/// Point a Forever character at a seeded ruleset. Only fills a null `ruleset_id`;
+/// never writes realm, hours or identity columns.
+pub async fn assign_forever_ruleset(
+    db: &sqlx::PgPool,
+    char_id: Uuid,
+    region: &str,
+    blizzard_id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE wow_characters c SET ruleset_id = r.id
+         FROM wow_forever_rulesets r
+         WHERE c.id = $1 AND c.game_id = 'wow_forever' AND c.ruleset_id IS NULL
+           AND r.region = $2 AND r.blizzard_id = $3",
+    )
+    .bind(char_id)
+    .bind(region)
+    .bind(blizzard_id)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Returns true when Battle.net answered. A failure leaves the last good fields.
 async fn fetch_forever_profile(st: &AppState, id: Uuid, e: &CharEntry) -> bool {
     let Some(tok) = app_token().await else {
@@ -687,6 +709,14 @@ async fn fetch_forever_profile(st: &AppState, id: Uuid, e: &CharEntry) -> bool {
     let Ok(v) = resp.json::<Value>().await else {
         return false;
     };
+    if let Some(rid) = v["ruleset"]["id"].as_i64() {
+        let region = if e.region.trim().is_empty() {
+            "us"
+        } else {
+            e.region.trim()
+        };
+        let _ = assign_forever_ruleset(&st.db, id, region, rid).await;
+    }
     let level = v["level"].as_i64();
     let _ = sqlx::query(
         "UPDATE wow_characters SET bnet_level = coalesce($2, bnet_level),
@@ -2240,6 +2270,7 @@ pub async fn characters(
         guild: Option<String>,
         featured: Option<i16>,
         faction: Option<String>,
+        ruleset: Option<String>,
     }
     let rows: Vec<Row> = sqlx::query_as(
             concat!("SELECT id, game_id, region, realm, name, class, ", shown_level!(), " AS level, played_s, played_at, verified,
@@ -2247,7 +2278,8 @@ pub async fn characters(
                     race, gender, coalesce(spec, bnet_spec) AS spec, show_guild,
                     CASE WHEN show_guild THEN (SELECT d.data->'guild'->>'name' FROM wow_char_details d
                          WHERE d.char_id = wow_characters.id AND d.status = 'ok') END AS guild,
-                    featured, coalesce(faction, (SELECT CASE upper(d.data->>'faction') WHEN 'HORDE' THEN 'HORDE' WHEN 'ALLIANCE' THEN 'ALLIANCE' END FROM wow_char_details d WHERE d.char_id = wow_characters.id AND d.status = 'ok')) AS faction
+                    featured, coalesce(faction, (SELECT CASE upper(d.data->>'faction') WHEN 'HORDE' THEN 'HORDE' WHEN 'ALLIANCE' THEN 'ALLIANCE' END FROM wow_char_details d WHERE d.char_id = wow_characters.id AND d.status = 'ok')) AS faction,
+                    (SELECT wr.name FROM wow_forever_rulesets wr WHERE wr.id = wow_characters.ruleset_id) AS ruleset
              FROM wow_characters WHERE user_id = $1
                AND ($2 OR NOT (hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false)))
                AND (NOT $3 OR verified OR game_id = 'wow_forever')
@@ -2266,7 +2298,7 @@ pub async fn characters(
                 "played_at": c.played_at, "verified": c.verified, "hidden": c.hid, "race": c.race,
                 "details_enabled": c.game_id == "wow" && c.verified || c.game_id == "wow_forever" && forever_lookup_enabled(),
                 "gender": c.gender, "spec": c.spec, "show_guild": c.show_guild, "guild": c.guild,
-                "featured": c.featured, "faction": c.faction })
+                "featured": c.featured, "faction": c.faction, "ruleset": c.ruleset })
         })
         .collect())
 }

@@ -27,7 +27,7 @@ returned 200 too. The official Forever Armory route was subsequently verified wi
 Both pages returned HTTP 200 with the correct character title and Blizzard id in
 the HTML (Lucrona Ashborne / 1119743 and Lucroner Ashborne / 1395710). No redirect
 was needed. Forever uses that realmless route, not Retail's realm-based path.
-There is no Retail Wowhead item lookup in Forever popups.
+Forever gear uses Wowhead's Forever item pages and tooltips (`/forever/item=` and `dataEnv=16`), not Retail Wowhead.
 
 ## Popup
 
@@ -41,8 +41,8 @@ Forever uses the realmless URL, checks the returned full name and any known
 Blizzard id, and caches only its summarised details for 12 hours with the existing
 per-character lock/stale-refresh behaviour. Item-media memory caching is version-
 scoped, separate from Retail's item-id cache. No character/hour/identity writes
-are part of this refresh. Failed optional resources quietly disappear; a failed
-first lookup closes the popup. Last good cached summaries are retained.
+are part of this refresh. Failed optional resources quietly disappear. A failed first public
+lookup still opens the popup with whatever Fraglink already has, and last good cached summaries are retained.
 
 Displayed data: name/level/race/class, dominant active talent specialization,
 actual equipped slots (including ranged), item icons/quality/level, character
@@ -78,3 +78,20 @@ No new migration for these popup/share additions; migration 0062 from the first
 part of PR 35 remains the only migration. Nothing is enabled or released here.
 
 The footer keeps Share and View on Armory together on one line for both versions.
+
+## Rulesets and characters under level 10
+
+Forever has no realms. The character profile carries a `ruleset` (`id` and `name`)
+instead, and View all / the popup treat that name like a Retail realm
+(for example `PvP · Forever · US`). The seeded `wow_forever_rulesets` table
+holds the US and EU list (PvP, Normal, Roleplay, Roleplay PvP). That list
+was verified on 11 November 2026 (AEDT) against `GET /data/wow/ruleset/index`
+and `GET /data/wow/ruleset/{id}` under `dynamic-forever-us` and
+`dynamic-forever-eu` (client credentials). Realm and connected-realm indexes
+under those namespaces return 404. KR and TW indexes contain only PvP (1)
+and Normal (2) and are not seeded here. Hardcore is not in the index yet.
+
+The public Battle.net profile and official Armory only list Forever characters
+from level 10. Below that the popup still opens with whatever Fraglink already
+has, and View on Armory is replaced with a short note that the Armory does not
+list the character yet.
