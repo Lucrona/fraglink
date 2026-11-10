@@ -559,7 +559,7 @@ pages.wowupload = async () => {
     res.innerHTML = `<h3>Results</h3>
       <div class="wu-tot"><div><b>${hours(totals.verified, { zero: true })}</b><small>Verified</small></div>${totals.unverified ? `<div class="wu-nc"><b>${hours(totals.unverified)}</b><small>Not verified</small></div>` : ""}</div>
       ${rows.length ? `<div class="wu-scroll"><table class="wu-t"><thead><tr>${th("name", "Character")}${th("realm", "Realm")}${th("level", "Class / level")}${th("played", "Hours played")}${th("status", "Status")}</tr></thead><tbody>
-      ${shown.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.realm)} <span class="sub">${esc(r.region.toUpperCase())}${r.game_id === "wow_forever" ? " · Forever" : ""}</span></td>
+      ${shown.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${wowRealm(r) ? esc(wowRealm(r)) + " " : ""}<span class="sub">${esc((r.region || "").toUpperCase())}${r.game_id === "wow_forever" ? " · Forever" : ""}</span></td>
         <td>${esc([cls(r.class), r.level ? "level " + r.level : ""].filter(Boolean).join(" · ")) || `<span class="sub">–</span>`}</td>
         <td class="num">${hours(r.played_min)}${r.chg ? `<br><small class="sub">${esc(r.chg)}</small>` : ""}</td><td><span class="${STATUS[r.st][1]}">${STATUS[r.st][2]}</span>${r.why ? `<br><small class="sub">${esc(r.why)}</small>` : r.st === "s" ? `<br><small class="sub"><a href="/connect/battlenet/verify">Verify WoW characters</a></small>` : ""}</td></tr>`).join("")}</tbody></table></div>
       ${list.length > CAP ? `<p><button class="btn sm" type="button" data-more>${showAll ? "Show fewer" : `Show all ${plural(list.length, "character")}`}</button></p>` : ""}` : `<p class="sub">No characters uploaded yet.</p>`}
@@ -616,10 +616,12 @@ const factionCrest = value => {
   const asset = `/assets/wow-factions/${faction.toLowerCase()}`;
   return `<img class="faction-crest" src="${asset}-64.webp" srcset="${asset}-128.webp 2x" width="16" height="18" alt="${name}" title="${name}" decoding="async">`;
 };
+// Forever characters have no realm; the ruleset (PvP, Normal, …) is the server name.
+const wowRealm = c => (c.realm || c.ruleset || "").trim();
 const groupWowRealms = rows => {
   const groups = new Map();
   for (const c of rows) {
-    const realm = (c.realm || "").trim() || "Unknown server", region = (c.region || "").toUpperCase();
+    const realm = wowRealm(c) || (c.game_id === "wow_forever" ? "Forever" : "Unknown server"), region = (c.region || "").toUpperCase();
     const key = realm.toLowerCase() + "|" + region;
     if (!groups.has(key)) groups.set(key, { realm, region, rows: [] });
     groups.get(key).rows.push(c);
@@ -677,8 +679,8 @@ const WOWAV = (() => {
   const safe = s => typeof s === "string" && /^https:\/\/render\.worldofwarcraft\.com\/[^?#]+\.(jpg|png)$/.test(s) && !s.includes("..");
   const image = (c, attrs = "") => {
     const forever = c.game_id === "wow_forever", fallback = forever ? WOW.clsIcon(c.class) : WOW.raceIcon(c.race, c.gender, c.class);
-    const src = forever && safe(c.avatar_src) ? c.avatar_src : fallback;
-    return `<img src="${esc(src)}" alt="" ${attrs} ${imgOk}${forever ? ` data-wow-avatar="${esc(c.id || "")}"${src !== fallback ? ` data-wow-fallback="${esc(fallback)}"` : ""}` : ""}>`;
+    const src = safe(c.avatar_src) ? c.avatar_src : fallback;
+    return `<img src="${esc(src)}" alt="" ${attrs} ${imgOk} data-wow-avatar="${esc(c.id || "")}"${src !== fallback ? ` data-wow-fallback="${esc(fallback)}"` : ""}>`;
   };
   const fill = (root, handle) => {
     if (!handle) return;
@@ -749,7 +751,7 @@ async function wowManager(el) {
     const imp = c.played_min > 0 && c.uploaded_at ? ago(c.uploaded_at) : "—";
     return `<div class="bn-row${hid ? " hid" : ""}" data-id="${c.id}">${WOWAV.image(c)}
       <div class="bn-nm">${esc(c.name)}${factionCrest(c.faction)}${c.verified ? `<span class="bn-tick" title="On the linked Battle.net account">✓</span>` : ""}${was ? `<div class="sub">formerly ${esc(was)}</div>` : ""}</div>
-      <div class="c-realm sub">${c.realm ? esc(c.realm) + " " : ""}${esc((c.region || "").toUpperCase())}</div>
+      <div class="c-realm sub">${wowRealm(c) ? esc(wowRealm(c)) + " " : ""}${esc((c.region || "").toUpperCase())}</div>
       <div class="c-cls">${esc(cls || "—")}</div>
       <div class="c-hrs num">${hours(c.played_min, { zero: true })}</div>
       <div class="c-imp sub">${imp}</div>
@@ -956,7 +958,7 @@ pages.bnetverify = async () => {
   const me_ = await api("/me/wow");
   const R = { wow_checksum: "edited after the game wrote it", wow_battletag: "from a different Battle.net account", wow_old_addon: "addon too old" };
   res.innerHTML = `<h3>Results</h3><ul class="bv-res">${me_.characters.map(c => `<li><span class="${c.verified ? "vbadge" : "srbadge"}">${c.verified ? "✓ Verified" : "◆ Not verified, not counted"}</span>
-      <b>${esc(c.name)}</b> <span class="sub">${esc(c.realm)} · ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · ${Math.floor(c.played_min / 60)}h</span></li>`).join("") || `<li class="sub">No characters uploaded yet.</li>`}
+      <b>${esc(c.name)}</b> <span class="sub">${[wowRealm(c), (c.region || "").toUpperCase(), c.game_id === "wow_forever" ? "Forever" : ""].filter(Boolean).map(esc).join(" · ")} · ${Math.floor(c.played_min / 60)}h</span></li>`).join("") || `<li class="sub">No characters uploaded yet.</li>`}
     ${s.refused.map(r => `<li><span class="badbadge">✕ Refused</span> <b>${esc(r.character)}</b> <span class="sub">${esc(R[r.reason] || r.reason)}</span></li>`).join("")}</ul>
     <p class="sub">Verified means the character is on your linked Battle.net account.</p>`;
   act.innerHTML = `<a class="btn" href="/connect/battlenet">Done</a>`;
@@ -1364,7 +1366,7 @@ pages.profile = async () => {
     const col = WOW.color(c.class), cls = WOW.cls(c.class);
     const tick = c.verified ? `<span class="wc-tick" title="On the linked Battle.net account">✓</span>` : "";
     const guild = c.show_guild && c.guild ? `<div class="wc-g">&lt;${esc(c.guild)}&gt;</div>` : "";
-    const realm = showRealm && c.realm ? `<div class="wc-realm">${esc(c.realm)}</div>` : "";
+    const realm = showRealm && wowRealm(c) ? `<div class="wc-realm">${esc(wowRealm(c))}</div>` : "";
     const ini = esc(String(c.name || "?").slice(0, 2));
     const lvl = Number(c.level) > 0 ? `Level ${c.level}` : "";
     const line = [lvl && `<span class="wc-lv">${esc(lvl)}</span>`, cls && `<span class="wc-cl">${esc(cls)}</span>`].filter(Boolean).join(" ");
@@ -2218,7 +2220,10 @@ const WOWPOP = (() => {
   const key = e => { if (e.key === "Escape") close(); };
   addEventListener("popstate", () => { if (box) close(true); if (resolver) resolver(); });
   const whp = it => [it.ilvl && "ilvl=" + it.ilvl, it.bonus && it.bonus.length && "bonus=" + it.bonus.join(":"), it.ench && "ench=" + it.ench, it.gems && it.gems.length && "gems=" + it.gems.join(":"), it.pcs && it.pcs.length && "pcs=" + it.pcs.join(":")].filter(Boolean).join("&");
-  const slot = (g, k) => { const it = g[k]; const lk = it && !it.forever && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : it.id && !it.forever ? ` data-whi="${Number(it.id)}" data-whp="${esc(whp(it))}" role="button" tabindex="0" aria-expanded="false"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
+  // Forever items live at wowhead.com/forever and dataEnv=16; Retail Wowhead 404s Forever-only ids.
+  const whUrl = it => `https://www.wowhead.com/${it.forever ? "forever/" : ""}item=${Number(it.id)}`;
+  const whData = it => [it.forever && "domain=forever", whp(it)].filter(Boolean).join("&");
+  const slot = (g, k) => { const it = g[k]; const lk = it && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="${whUrl(it)}" data-wowhead="${esc(whData(it))}" target="_blank" rel="noopener"` : it.id ? ` data-whi="${Number(it.id)}" data-whp="${esc(whp(it))}" data-whenv="${it.forever ? 16 : 1}" role="button" tabindex="0" aria-expanded="false"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
   const raid = r => r.instances.map(i => `<div class="cp-raid"><b>${esc(i.name)}</b><div class="cp-modes">${[...i.modes].sort((a, b) => DO.indexOf(a.difficulty) - DO.indexOf(b.difficulty)).map(m => `<span class="${m.done >= m.total ? "full" : ""}">${esc(m.label)} <b>${m.done}/${m.total}</b></span>`).join("")}</div></div>`).join("");
   const body = (d, c) => {
     const forever = (d.game_id || c.game_id) === "wow_forever";
@@ -2237,14 +2242,14 @@ const WOWPOP = (() => {
     if (co.mounts != null || co.pets != null) sections.push(`<section><h3>Collections</h3><table class="cp-tb">${co.mounts != null ? `<tr><td>Mounts</td><td class="n">${nf.format(co.mounts)}</td></tr>` : ""}${co.pets != null ? `<tr><td>Pets</td><td class="n">${nf.format(co.pets)}</td></tr>` : ""}</table></section>`);
     if (pr.length) sections.push(`<section><h3>Professions</h3><table class="cp-tb">${pr.map(x => `<tr><td>${esc(x.name)}${x.tier && x.tier !== x.name ? `<small class="sub"> ${esc(x.tier)}</small>` : ""}</td><td class="n">${x.max ? `${x.skill}/${x.max}` : x.skill != null ? x.skill : ""}</td></tr>`).join("")}</table></section>`);
     return `<div class="cp-hd${d.render ? " has-rd" : ""}" style="--cc:${col}">${d.render ? `<div class="cp-rw" aria-hidden="true"><img class="cp-rd" alt="" hidden></div>` : ""}<div class="cp-who">
-      ${forever ? WOWAV.image({ ...c, game_id: "wow_forever", class: d.class || c.class, avatar_src: d.avatar_src }, 'class="cp-avatar" width="64" height="64"') : !d.render && d.avatar_src ? `<img class="cp-avatar" src="${esc(d.avatar_src)}" width="64" height="64" alt="">` : ""}
+      ${WOWAV.image({ ...c, game_id: d.game_id || c.game_id, class: d.class || c.class, race: d.race || c.race, gender: d.gender || c.gender, avatar_src: d.avatar_src }, 'class="cp-avatar" width="64" height="64"')}
       ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
       <div class="sub">${d.level != null ? `Level ${d.level} ` : ""}${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
       <div class="sub">${esc([d.realm, forever ? "Forever" : "Retail", (d.region || c.region || "").toUpperCase()].filter(Boolean).join(" · "))}${factionCrest(d.faction || c.faction)}</div>
       ${d.guild ? `<div class="cp-gu">&lt;${esc(d.guild.name)}&gt;${d.guild.rank != null ? ` · ${d.guild.rank === 0 ? "Guild Master" : "Rank " + d.guild.rank}` : ""}</div>` : ""}
       <div class="cp-sts">${d.ilvl != null ? stat("Item level", nf.format(d.ilvl)) : ""}${d.achievement_points > 0 ? stat("Achievements", nf.format(d.achievement_points)) : ""}${mp.rating != null ? stat("M+ rating", nf.format(Math.round(mp.rating))) : ""}</div></div></div>
       ${sections.length ? `<div class="cp-bd">${sections.join("")}</div>` : ""}
-      <div class="cp-ft"><span class="sub">${d.updated_at ? "Updated " + ago(d.updated_at) : ""}</span><div class="cp-actions"><button class="btn sm" type="button" data-copychar>Share</button>${d.armory ? ` <a href="${esc(d.armory)}" target="_blank" rel="noopener">View on Armory ↗</a>` : ""}</div></div>`;
+      <div class="cp-ft"><span class="sub">${d.updated_at ? "Updated " + ago(d.updated_at) : ""}</span><div class="cp-actions"><button class="btn sm" type="button" data-copychar>Share</button>${d.armory ? ` <a href="${esc(d.armory)}" target="_blank" rel="noopener">View on Armory ↗</a>` : d.armory_unavailable ? ` <span class="sub">The Armory doesn't list this character yet.</span>` : ""}</div></div>`;
   };
   // Touch devices: tap a gear row to show Wowhead's tooltip for it inline (sanitised), tap again/elsewhere to hide.
   const TT = new Map(), OKT = new Set(["TABLE", "TBODY", "TR", "TD", "TH", "B", "BR", "SPAN", "DIV", "SMALL", "I", "UL", "LI"]);
@@ -2260,7 +2265,7 @@ const WOWPOP = (() => {
     row.setAttribute("aria-expanded", "true");
     const t = document.createElement("div"); t.className = "cp-tip"; t.textContent = "Loading…"; row.after(t);
     const k = row.dataset.whi + "?" + row.dataset.whp;
-    try { if (!TT.has(k)) TT.set(k, fetch(`https://nether.wowhead.com/tooltip/item/${row.dataset.whi}?dataEnv=1&locale=0${row.dataset.whp ? "&" + row.dataset.whp : ""}`).then(r => { if (!r.ok) throw 0; return r.json(); }));
+    try { if (!TT.has(k)) TT.set(k, fetch(`https://nether.wowhead.com/tooltip/item/${row.dataset.whi}?dataEnv=${Number(row.dataset.whenv) || 1}&locale=0${row.dataset.whp ? "&" + row.dataset.whp : ""}`).then(r => { if (!r.ok) throw 0; return r.json(); }));
       const j = await TT.get(k); if (!t.isConnected) return; t.textContent = ""; t.appendChild(clean(j.tooltip || "")); }
     catch (e) { TT.delete(k); if (t.isConnected) t.textContent = "Couldn't load this item's tooltip."; }
   };
@@ -2282,12 +2287,16 @@ const WOWPOP = (() => {
     $(".cp-x", box).focus();
     const me = box;
     try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box !== me) return;
-      if (d.status === "missing" && c.game_id === "wow_forever") { close(); return; }
+      if (d.status === "missing" && c.game_id === "wow_forever") {
+        $(".cp-in", box).innerHTML = body({ name: c.name, level: c.level, class: c.class, race: c.race, region: c.region, realm: wowRealm(c), game_id: "wow_forever", armory_unavailable: true, gear: [], stats: [], avatar_src: c.avatar_src }, { ...c, handle });
+        WOWAV.fill(box, handle); WH.scan(); return;
+      }
       $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WOWAV.fill(box, handle); WH.scan();
       const im = $(".cp-rd", box);
       if (im) { const t = localStorage.getItem(TK), r = await fetch(`${API}/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}/render.png`, { headers: t ? { authorization: "Bearer " + t } : {} });
         if (r.ok && box === me) { im.src = URL.createObjectURL(await r.blob()); im.onload = () => URL.revokeObjectURL(im.src); im.hidden = false; } } }
-    catch (x) { if (box === me) { if (c.game_id === "wow_forever" || options.deep || x.status === 404) close(); else $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load this character.</p>`; } }
+    catch (x) { if (box === me) { if (c.game_id === "wow_forever") { $(".cp-in", box).innerHTML = body({ name: c.name, level: c.level, class: c.class, race: c.race, region: c.region, realm: wowRealm(c), game_id: "wow_forever", armory_unavailable: true, gear: [], stats: [], avatar_src: c.avatar_src }, { ...c, handle }); WOWAV.fill(box, handle); }
+      else if (options.deep || x.status === 404) close(); else $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load this character.</p>`; } }
   };
   return { open, close, body, setResolver: fn => { resolver = fn; } };
 })();

@@ -44,7 +44,7 @@ test('crests are accessible self-hosted artwork; unknown factions render nothing
 test('gallery omits realm on cards; profile retains it; upload follows active tab', () => {
   assert.ok(source.includes('g.rows.map(c => wowCard(c, false))'));
   assert.ok(source.includes('const wowCard = (c, showRealm = true)'));
-  assert.ok(source.includes('const realm = showRealm && c.realm'));
+  assert.ok(source.includes('const realm = showRealm && wowRealm(c)'));
   assert.ok(source.includes('up.textContent = "Upload " + (st.game === "wow_forever" ? "Forever" : "Retail") + " /played"'));
   assert.ok(source.includes('up.href = "/connect/wow?version=" + (st.game === "wow_forever" ? "forever" : "retail")'));
 });
@@ -56,4 +56,21 @@ test('manager and uploader share the filled, bordered version switch', () => {
   assert.ok(css.includes('.seg.wow-version-switch button:hover'));
   assert.ok(css.includes('.wow-version-control{padding:10px 12px}'));
   assert.ok(!css.includes('.bn-tabs button.on'));
+});
+
+test('Forever characters group under the ruleset name, never Unknown server', () => {
+  const groups = groupWowRealms([
+    {game_id:'wow_forever',realm:'',ruleset:'PvP',region:'us',name:'Lucrona Ashborne'},
+    {game_id:'wow_forever',realm:null,ruleset:'PvP',region:'us',name:'Lucroner Ashborne'},
+    {game_id:'wow_forever',realm:'',ruleset:'Normal',region:'us',name:'Other'},
+  ]);
+  assert.equal(JSON.stringify(groups.map(g => [g.realm, g.region, g.rows.length, g.showRegion])), JSON.stringify([
+    ['PvP','US',2,false],['Normal','US',1,false],
+  ]));
+  assert.ok(!JSON.stringify(groups).includes('Unknown'));
+  const unsourced = groupWowRealms([{game_id:'wow_forever',realm:'',region:'us'}]);
+  assert.equal(unsourced[0].realm,'Forever');
+  const retail = groupWowRealms([{game_id:'wow',realm:'Area 52',region:'us'},{game_id:'wow_forever',ruleset:'PvP',region:'us'}]);
+  assert.equal(retail[0].realm,'Area 52');
+  assert.equal(retail[1].realm,'PvP');
 });

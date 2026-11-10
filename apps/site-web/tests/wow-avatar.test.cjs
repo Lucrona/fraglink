@@ -15,12 +15,14 @@ function image(id='42') {
  const attrs={src:'/class.jpg'},dataset={wowAvatar:id};
  return {attrs,dataset,isConnected:true,style:{},tagName:'IMG',getAttribute:k=>attrs[k],setAttribute(k,v){attrs[k]=v},hasAttribute:k=>Object.hasOwn(attrs,k),removeAttribute(k){delete attrs[k]},get src(){return attrs.src},set src(v){attrs.src=v}};
 }
-test('Forever image prefers the avatar and class fallback; Retail stays unchanged',()=>{
+test('Forever and Retail both prefer the character avatar, with a class or race fallback',()=>{
  const av=harness(),c={id:'42',game_id:'wow_forever',class:'WARRIOR',avatar_src:src};
  assert.ok(av.image(c).includes(`src="${src}"`));assert.ok(av.image(c).includes('data-wow-fallback="/class.jpg"'));
  assert.ok(av.image({...c,avatar_src:null}).includes('src="/class.jpg"'));
  assert.ok(av.image({...c,avatar_src:'https://example.com/fake.jpg'}).includes('src="/class.jpg"'));
- const retail=av.image({...c,game_id:'wow'});assert.ok(retail.includes('/retail.jpg'));assert.ok(!retail.includes('data-wow-avatar'));
+ const retail=av.image({id:'7',game_id:'wow',class:'WARRIOR',avatar_src:src});
+ assert.ok(retail.includes(`src="${src}"`));assert.ok(retail.includes('data-wow-avatar'));assert.ok(retail.includes('data-wow-fallback="/retail.jpg"'));
+ assert.ok(av.image({id:'7',game_id:'wow',avatar_src:null}).includes('/retail.jpg'));
 });
 test('media hydration deduplicates requests and retains class icons on missing/error',async()=>{
  let calls=0;const av=harness(async path=>{calls++;assert.ok(path.startsWith('/users/test/wow/'));return {avatar_src:src}}),a=image(),b=image();
@@ -44,7 +46,7 @@ test('broken avatars fall back once to class icons, then use normal broken handl
 });
 test('profile, gallery, manager and popup all use the shared portrait helper',()=>{
  for(const anchor of ['${WOWAV.image(c)}','${WOWAV.image(c, \'class="r" loading="lazy"\')}','WOWAV.fill(list, (me() || {}).handle)','WOWAV.fill(root, p.handle)','WOWAV.fill(box, p.handle)','WOWAV.fill(box, handle)'])assert.ok(source.includes(anchor),anchor);
- assert.ok(source.includes('forever ? WOWAV.image({ ...c'));
+ assert.ok(source.includes('WOWAV.image({ ...c, game_id: d.game_id || c.game_id'));
 });
 
 test('initial profile hydrates only after the profile cards are mounted',()=>{
@@ -52,4 +54,14 @@ test('initial profile hydrates only after the profile cards are mounted',()=>{
  const hydrate=source.indexOf('WOWAV.fill(root, p.handle)',mount);
  assert.ok(mount>0 && hydrate>mount);
  assert.ok(hydrate<source.indexOf('const sm =',mount));
+});
+
+test('cards, manager rows and the popup use the same avatar crop',()=>{
+ const css=readFileSync(__dirname+'/../static/assets/site.css','utf8');
+ for (const sel of ['.wc-p .r{','.bn-row img{','.cp-avatar{']) {
+  const i=css.indexOf(sel); assert.ok(i>=0,sel);
+  const block=css.slice(i,i+280);
+  assert.ok(block.includes('object-fit:cover'),sel+' fit');
+  assert.ok(block.includes('object-position:center 20%'),sel+' pos');
+ }
 });
