@@ -42,6 +42,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - name: UI regression tests
+        run: node --test apps/site-web/tests/*.test.cjs
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy (whole workspace incl. desktop app)

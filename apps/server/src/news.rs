@@ -156,9 +156,10 @@ type Row = (
     DateTime<Utc>,
     Option<String>,
     Option<String>,
+    Option<String>,
 );
 const COLS: &str =
-    "id, slug, title, body, link, pinned, published_at, updated_at, image, link_label";
+    "id, slug, title, body, link, pinned, published_at, updated_at, image, link_label, content_format";
 
 fn excerpt(body: &str, max: usize) -> String {
     let flat = body.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -174,12 +175,18 @@ fn excerpt(body: &str, max: usize) -> String {
 }
 
 fn to_json(r: Row, full: bool) -> Value {
-    let (id, slug, title, body, link, pinned, at, upd, image, link_label) = r;
+    let (id, slug, title, body, link, pinned, at, upd, image, link_label, format) = r;
+    let summary = if format.as_deref() == Some("markdown") {
+        excerpt(&crate::content::plain_markdown(&body), 220)
+    } else {
+        excerpt(&body, 220)
+    };
     let mut v = json!({
-        "id": id, "slug": slug, "title": title, "summary": excerpt(&body, 220),
-        "link": link, "link_label": link_label, "image": image, "pinned": pinned, "at": at, "updated_at": upd, "url": format!("/news/{slug}"),
+        "id": id, "slug": slug, "title": title, "summary": summary,
+        "link": link, "link_label": link_label, "image": image, "format": format, "pinned": pinned, "at": at, "updated_at": upd, "url": format!("/news/{slug}"),
     });
     if full {
+        v["body_html"] = json!(crate::content::news(&body, format.as_deref()));
         v["body"] = json!(body);
     }
     v
@@ -322,6 +329,7 @@ async fn admin_list(
 
 #[derive(Deserialize)]
 struct PostReq {
+    format: Option<String>,
     title: Option<String>,
     body: Option<String>,
     /// "" clears it.
@@ -416,6 +424,7 @@ async fn create(
     Json(r): Json<PostReq>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
+    crate::content::format_ok(r.format.as_deref())?;
     let title = clean_title(r.title.as_deref().unwrap_or(""))?;
     let body = clean_body(r.body.as_deref().unwrap_or(""))?;
     let link = clean_link(r.link.as_deref().unwrap_or(""))?;
@@ -433,8 +442,8 @@ async fn create(
         n += 1;
     }
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO news_posts(slug, title, body, link, pinned, published_at, created_by, image, link_label)
-         VALUES($1, $2, $3, $4, $5, coalesce($6, now()), $7, $8, $9) RETURNING id",
+        "INSERT INTO news_posts(slug, title, body, link, pinned, published_at, created_by, image, link_label, content_format)
+         VALUES($1, $2, $3, $4, $5, coalesce($6, now()), $7, $8, $9, $10) RETURNING id",
     )
     .bind(&slug)
     .bind(&title)
@@ -445,6 +454,7 @@ async fn create(
     .bind(s.user.id)
     .bind(&image)
     .bind(&label)
+    .bind(&r.format)
     .fetch_one(&st.db)
     .await?;
     let after = get_row(&st, id)
@@ -471,6 +481,12 @@ async fn update(
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
     let before = get_row(&st, id).await?.ok_or_else(AppError::not_found)?;
+    crate::content::format_ok(r.format.as_deref())?;
+    let format = if r.body.is_some() {
+        r.format.clone()
+    } else {
+        r.format.clone().or_else(|| before.10.clone())
+    };
     let title = match &r.title {
         Some(t) => clean_title(t)?,
         None => before.2.clone(),
@@ -495,7 +511,7 @@ async fn update(
     let at = r.published_at.unwrap_or(before.6);
     // The slug stays put so shared links keep working.
     sqlx::query(
-        "UPDATE news_posts SET title = $2, body = $3, link = $4, pinned = $5, published_at = $6, image = $7, link_label = $8,
+        "UPDATE news_posts SET title = $2, body = $3, link = $4, pinned = $5, published_at = $6, image = $7, link_label = $8, content_format = $9,
          updated_at = now() WHERE id = $1",
     )
     .bind(id)
@@ -506,6 +522,7 @@ async fn update(
     .bind(at)
     .bind(&image)
     .bind(&label)
+    .bind(&format)
     .execute(&st.db)
     .await?;
     let after = get_row(&st, id)
@@ -514,6 +531,7 @@ async fn update(
         .unwrap_or(Value::Null);
     let action = if r.title.is_none()
         && r.body.is_none()
+        && r.format.is_none()
         && r.link.is_none()
         && r.image.is_none()
         && r.link_label.is_none()

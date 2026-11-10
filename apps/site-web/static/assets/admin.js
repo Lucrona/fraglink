@@ -833,6 +833,51 @@ async function announcements() {
   });
 }
 
+// Only server-rendered, sanitized HTML enters previews. No Markdown parser or
+// raw textarea-to-innerHTML path exists in the browser.
+const MD = (() => {
+  const tools = [['bold','Bold'],['italic','Italic'],['link','Link'],['bullet','Bullet list'],['code','Code'],['break','Line break'],['paragraph','Paragraph']];
+  const toolbar = name => `<div class="md-toolbar" role="toolbar" aria-label="Format ${esc(name)}" data-md-for="${esc(name)}">${tools.map(([action,label])=>`<button class="btn sm" type="button" data-md="${action}">${label}</button>`).join('')}</div>`;
+  const edit = (value, start, end, action, url) => {
+    let text = value.slice(start,end), insert, inner = 0;
+    if (action === 'bullet') {
+      start = value.lastIndexOf('\n',start-1)+1;
+      const edge = end>start && value[end-1]==='\n' ? end-1 : end;
+      const nl = value.indexOf('\n',edge); end = nl<0 ? value.length : nl;
+      text = value.slice(start,end);
+      insert = text.trim() ? text.split('\n').map(line=>line.trim() && !/^\s*[-*+]\s/.test(line) ? '- '+line : line).join('\n') : '- ';
+    } else if (action === 'break') insert='\n';
+    else if (action === 'paragraph') insert='\n\n';
+    else if (action === 'link') {
+      if (!url || !/^(https?:\/\/|\/(?!\/)|#)/i.test(url) || /[\s<>"']/.test(url)) return null;
+      text = text || 'link text'; insert='['+text.replace(/\]/g,'\\]')+']('+url.replace(/[()]/g,'\\$&')+')'; inner=1;
+    } else {
+      const mark = {bold:'**',italic:'*',code:'`'}[action]; if (!mark) return null;
+      text = text || {bold:'bold text',italic:'italic text',code:'code'}[action]; insert=mark+text+mark;inner=mark.length;
+    }
+    return {value:value.slice(0,start)+insert+value.slice(end),start:start+inner,end:inner ? start+inner+text.length : start+insert.length};
+  };
+  const bind = form => form.addEventListener('click',e=>{
+    const b=e.target.closest('[data-md]'); if (!b || !form.contains(b)) return;
+    const box=b.closest('[data-md-for]'),ta=form.elements.namedItem(box.dataset.mdFor); if (!ta) return;
+    const url=b.dataset.md==='link' ? prompt('Link URL','https://') : undefined;
+    if (url===null) return;
+    const r=edit(ta.value,ta.selectionStart,ta.selectionEnd,b.dataset.md,url && url.trim());
+    if (!r) { if (b.dataset.md==='link') alert('Use an https://, http://, / or # link.'); return; }
+    ta.value=r.value;ta.focus();ta.setSelectionRange(r.start,r.end);ta.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  const preview = (payload,draw,fail) => {
+    let seq=0,timer;
+    return () => { const ticket=++seq;clearTimeout(timer);timer=setTimeout(async()=>{
+      try { const result=await api('/admin/markdown/preview',{method:'POST',body:payload()});if(ticket===seq) draw(result); }
+      catch (_) { if(ticket===seq) fail(); }
+    },180); };
+  };
+  const blocks = value => value.trim() ? [value.trim()] : [];
+  const legacy = items => items.map(s=>'- '+String(s).replace(/[\\`*_\[\]<>#!~.+\-()={}]/g,'\\$&').replace(/\n/g,'\n  ')).join('\n');
+  return {toolbar,edit,bind,preview,blocks,legacy};
+})();
+
 /* ---------- 6b. news ---------- */
 /* Posts for the home page News box, /news and /news/<slug>. Separate from the one-line
    announcement banner; "Also show as banner" publishes a banner that links to the post. */
@@ -842,7 +887,8 @@ async function news(arg) {
     <p class="note">News posts show in the <b>News</b> box on the home page (latest 4, pinned first), on <a href="/news" target="_blank">/news</a>, and each has its own page. For a short alert on every page and in the app, use <a href="#announcements">Announcements</a>, or tick “Also show as banner” below.</p>
     <form method="post" action="/api/v1/form-fallback" class="f" id="nf"><input type="hidden" name="id">
       <label>Title<input type="text" name="title" maxlength="140" required placeholder="Fraglink 0.3.0 beta 1 is out"></label>
-      <label>Post<textarea class="in" name="body" rows="10" maxlength="20000" placeholder="Blank line = new paragraph. https:// links become clickable."></textarea></label>
+      <label for="nf-body">Post</label>${MD.toolbar("body")}<textarea class="in" id="nf-body" name="body" rows="10" maxlength="20000" placeholder="Markdown: **bold**, *italic*, links, lists and code. Blank line = new paragraph."></textarea>
+      <section class="md-preview"><h3>Preview</h3><div class="md-content txt" id="nf-mdprev" aria-live="polite"></div></section>
       <label>Cover image (optional)<input type="text" name="image" placeholder="https://… or upload below"></label>
       <div class="row" style="align-items:center"><input type="file" id="nf-file" accept="image/jpeg,image/png,image/webp,image/gif"><button type="button" class="btn sm" id="nf-up">Upload</button><button type="button" class="btn sm danger" id="nf-rm" hidden>Remove image</button></div>
       <p class="dimt">JPG, PNG, WebP or GIF up to 5 MB. Shows beside the post in lists and full width at the top of the post.</p>
@@ -858,10 +904,13 @@ async function news(arg) {
       <div class="alert" id="nfmsg" hidden></div></form></div></section>
     <section class="panel"><h2>Posts <span class="dimt" id="n-count"></span></h2><div class="body" style="padding-bottom:4px"><input class="in" type="search" id="n-q" placeholder="Search posts" style="width:100%"></div><div id="n-list"></div></section></div>`;
   const f = $("#nf"), local = iso => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
-  let items = [];
-  const reset = () => { f.reset(); f.id.value = ""; $("#nf-h").textContent = "New post"; $("#nf-go").textContent = "Publish"; $("#nf-cancel").hidden = true; $("#nf-ban").hidden = false; prev(); };
+  let items = [], newsFormat = "markdown";
+  const previewBody = MD.preview(()=>({kind:"news",format:newsFormat,body:f.body.value}),d=>{if(f.isConnected) $("#nf-mdprev").innerHTML=d.html;},()=>{if(f.isConnected) $("#nf-mdprev").textContent="Couldn't load the preview.";});
+  MD.bind(f); f.body.addEventListener("input",()=>{newsFormat="markdown";previewBody();}); previewBody();
+  const reset = () => { f.reset(); newsFormat="markdown";previewBody(); f.id.value = ""; $("#nf-h").textContent = "New post"; $("#nf-go").textContent = "Publish"; $("#nf-cancel").hidden = true; $("#nf-ban").hidden = false; prev(); };
   const fill = p => {
-    f.id.value = p.id; f.title.value = p.title; f.body.value = p.body || ""; f.link.value = p.link || ""; f.link_label.value = p.link_label || ""; f.image.value = p.image || ""; prev(); f.at.value = local(p.at); f.pinned.checked = p.pinned;
+    newsFormat=p.format || null;
+    f.id.value = p.id; f.title.value = p.title; f.body.value = p.body || ""; f.link.value = p.link || ""; f.link_label.value = p.link_label || ""; f.image.value = p.image || ""; prev(); previewBody(); f.at.value = local(p.at); f.pinned.checked = p.pinned;
     $("#nf-h").textContent = "Edit post"; $("#nf-go").textContent = "Save changes"; $("#nf-cancel").hidden = false; $("#nf-ban").hidden = true; f.title.focus(); window.scrollTo(0, 0);
   };
   function prev() { const u = f.image.value.trim(), im = $("#nf-prev"); im.hidden = !u; $("#nf-rm").hidden = !u; if (u) im.src = u; else im.removeAttribute("src"); }
@@ -897,7 +946,7 @@ async function news(arg) {
   });
   f.addEventListener("submit", async e => {
     e.preventDefault();
-    const body = { title: f.title.value.trim(), body: f.body.value, link: f.link.value.trim(), link_label: f.link_label.value.trim(), image: f.image.value.trim(), pinned: f.pinned.checked };
+    const body = { title: f.title.value.trim(), body: f.body.value, format: newsFormat, link: f.link.value.trim(), link_label: f.link_label.value.trim(), image: f.image.value.trim(), pinned: f.pinned.checked };
     if (f.at.value) body.published_at = new Date(f.at.value).toISOString();
     try {
       const r = f.id.value ? await api(`/admin/news/${f.id.value}`, { method: "POST", body }) : await api("/admin/news", { method: "POST", body });
@@ -1122,11 +1171,11 @@ const CL = { offset: 0, q: "" };
 const clLines = v => v.split("\n").map(l => l.replace(/^\s*[-*•]\s*/, "").trim()).filter(Boolean);
 const clLabel = d => { const t = new Date(d + "T00:00:00"); return isNaN(t) ? d : t.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); };
 function clPreview(e) {
-  const list = (h, items) => items.length ? `<h4>${h}</h4><ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
-  return `<section class="panel"><h2><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(clLabel(e.date))}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new)}${list("Changes", e.changes)}${list("Fixes", e.fixes)}${e.new.length + e.changes.length + e.fixes.length ? "" : `<p class="dimt">Add at least one line.</p>`}</div></section>`;
+  const list = (h, items, html) => items.length ? `<h4>${h}</h4><div class="md-content">${typeof html === "string" ? html : `<ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>`}</div>` : "";
+  return `<section class="panel"><h2><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(clLabel(e.date))}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new, e.new_html)}${list("Changes", e.changes, e.changes_html)}${list("Fixes", e.fixes, e.fixes_html)}${e.new.length + e.changes.length + e.fixes.length ? "" : `<p class="dimt">Add at least one line.</p>`}</div></section>`;
 }
 function clText(e) {
-  const part = (h, items) => items.length ? `**${h}**\n${items.map(i => "- " + i).join("\n")}\n` : "";
+  const part = (h, items) => items.length ? `**${h}**\n${e.format === "markdown" ? items.join("\n\n") : items.map(i => "- " + i).join("\n")}\n` : "";
   return `**Fraglink ${e.area === "App" ? "app" : "website"} · ${clLabel(e.date)}${e.version ? " · " + e.version : ""}**\n${part("New", e.new)}${part("Changes", e.changes)}${part("Fixes", e.fixes)}`.trim();
 }
 async function changelog(arg) {
@@ -1134,22 +1183,25 @@ async function changelog(arg) {
   view.innerHTML = `<div class="split cl-ed"><section class="panel"><h2 id="clh">New entry</h2><form method="post" action="/api/v1/form-fallback" class="f body" id="clf">
       <input type="hidden" name="eid" value="">
       <div class="row"><label style="margin:0">Area<select class="in" name="area" style="min-width:110px"><option>Website</option><option>App</option></select></label><label style="margin:0">Date<input class="in" type="date" name="date" value="${today}" required></label><label style="margin:0;flex:1">Version (app only)<input class="in" type="text" name="version" maxlength="40" placeholder="0.3.0-beta.11"></label></div>
-      <label>New<textarea name="new" rows="4" placeholder="One short line each"></textarea></label>
-      <label>Changes<textarea name="changes" rows="4"></textarea></label>
-      <label>Fixes<textarea name="fixes" rows="4"></textarea></label>
-      <div class="dimt">One bullet per line, terse. Saved as a draft until you publish it. Shows on /changelog with the shipped entries, newest first.</div>
+      <label for="cl-new">New</label>${MD.toolbar("new")}<textarea id="cl-new" name="new" rows="4" maxlength="20000" placeholder="- One change\n- Another change"></textarea>
+      <label for="cl-changes">Changes</label>${MD.toolbar("changes")}<textarea id="cl-changes" name="changes" rows="4" maxlength="20000"></textarea>
+      <label for="cl-fixes">Fixes</label>${MD.toolbar("fixes")}<textarea id="cl-fixes" name="fixes" rows="4" maxlength="20000"></textarea>
+      <div class="dimt">Markdown: **bold**, *italic*, links, lists and code. A blank line starts a paragraph. Saved as a draft until you publish it.</div>
       <div class="row"><button class="btn">Save draft</button><button type="button" class="btn dl" id="clpub">Save and publish</button><button type="button" class="btn" id="clcopy">Copy for Discord</button><button type="button" class="btn" id="clnew" hidden>New entry</button></div>
       <div class="alert" id="clmsg" hidden></div></form></section>
     <section class="panel"><h2>Preview <span class="more">as it shows on /changelog</span></h2><div class="body changelog" id="clprev"></div></section></div>
     <section class="panel" style="margin-top:12px"><h2>Entries <span class="dimt" id="clcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
       <div class="ag-tb"><input class="in" type="search" id="clq" placeholder="Search the entries" value="${esc(CL.q)}"><span class="dimt" style="margin-left:auto">Only entries written here. The shipped ones stay in the site files.</span></div><div id="cllist"><div class="body empty">Loading…</div></div></section>`;
   const f = $("#clf");
-  const cur = () => ({ area: f.area.value, date: f.date.value, version: f.version.value.trim(), new: clLines(f.new.value), changes: clLines(f.changes.value), fixes: clLines(f.fixes.value) });
-  const prev = () => { $("#clprev").innerHTML = clPreview(cur()); };
-  f.addEventListener("input", prev); prev();
+  let clFormat = "markdown", legacyEntry = null;
+  const cur = () => ({ area: f.area.value, date: f.date.value, version: f.version.value.trim(), format:clFormat, new: clFormat ? MD.blocks(f.new.value) : legacyEntry.new, changes: clFormat ? MD.blocks(f.changes.value) : legacyEntry.changes, fixes: clFormat ? MD.blocks(f.fixes.value) : legacyEntry.fixes });
+  const prev = MD.preview(()=>({kind:"changelog",...cur()}),d=>{if(f.isConnected) $("#clprev").innerHTML=clPreview({...cur(),...d});},()=>{if(f.isConnected) $("#clprev").textContent="Couldn't load the preview.";});
+  MD.bind(f); f.addEventListener("input",e=>{if(["new","changes","fixes"].includes(e.target.name)) clFormat="markdown";prev();}); prev();
   const fill = e => {
+    clFormat = e ? e.format || null : "markdown"; legacyEntry = e;
     f.eid.value = e ? e.id : ""; f.area.value = e ? e.area : "Website"; f.date.value = e ? e.date : today; f.version.value = e ? e.version || "" : "";
-    f.new.value = e ? e.new.join("\n") : ""; f.changes.value = e ? e.changes.join("\n") : ""; f.fixes.value = e ? e.fixes.join("\n") : "";
+    const text = items => e.format === "markdown" ? items.join("\n\n") : MD.legacy(items);
+    f.new.value = e ? text(e.new) : ""; f.changes.value = e ? text(e.changes) : ""; f.fixes.value = e ? text(e.fixes) : "";
     $("#clh").textContent = e ? `Edit entry · ${e.published_at ? "published" : "draft"}` : "New entry"; $("#clnew").hidden = !e; prev();
   };
   const save = async publish => {
@@ -1170,7 +1222,7 @@ async function changelog(arg) {
   async function listCl() {
     const d = await api("/admin/changelog?" + new URLSearchParams({ offset: CL.offset, q: CL.q }));
     rows = d.rows; $("#clcount").textContent = `· ${num(d.total)}${d.drafts ? ` · ${num(d.drafts)} draft${d.drafts === 1 ? "" : "s"}` : ""}`;
-    const n = r => r.new.length + r.changes.length + r.fixes.length;
+    const n = r => r.format === "markdown" ? [...r.new,...r.changes,...r.fixes].join("\n").split("\n").filter(s=>s.trim()).length : r.new.length + r.changes.length + r.fixes.length;
     $("#cllist").innerHTML = rows.length ? `<table class="gl"><thead><tr><th>Date</th><th>Area</th><th>Version</th><th>First line</th><th class="nr">Lines</th><th>Status</th><th>Last edit</th><th></th></tr></thead><tbody>${rows.map(r => `<tr data-id="${r.id}"><td>${esc(r.label)}</td><td><span class="cl-tag ${esc(r.area)}">${esc(r.area)}</span></td><td class="mono">${esc(r.version || "-")}</td><td><div class="exes">${esc((r.new[0] || r.changes[0] || r.fixes[0] || ""))}</div></td><td class="nr">${n(r)}</td>
       <td>${r.published_at ? `<span class="st ok">Published</span><div class="sm">${when(r.published_at)}</div>` : `<span class="st hid">Draft</span>`}</td><td><div class="sm">${when(r.updated_at)}</div>${r.updated_by ? `<div class="who">${esc(r.updated_by)}</div>` : ""}</td>
       <td class="rt" style="white-space:nowrap"><button class="btn sm" data-cl="edit">Edit</button> <button class="btn sm${r.published_at ? "" : " dl"}" data-cl="${r.published_at ? "unpublish" : "publish"}">${r.published_at ? "Unpublish" : "Publish"}</button> <button class="btn sm danger" data-cl="delete">Delete</button></td></tr>`).join("")}</tbody></table>

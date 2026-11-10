@@ -467,10 +467,10 @@ const pages = {};
 /* Entries staff publish in Admin > Changelog come from the API and slot in by date. */
 const clDate = s => { const t = Date.parse(s); return isNaN(t) ? 0 : t; };
 function clSection(e) {
-  const list = (h, items) => items && items.length ? `<h4>${h}</h4><ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+  const list = (h, items, html) => items && items.length ? `<h4>${h}</h4><div class="md-content">${typeof html === "string" ? html : `<ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>`}</div>` : "";
   const sec = document.createElement("section");
   sec.className = "panel"; sec.dataset.k = e.area; sec.dataset.date = e.date;
-  sec.innerHTML = `<h2><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(e.label)}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new)}${list("Changes", e.changes)}${list("Fixes", e.fixes)}</div>`;
+  sec.innerHTML = `<h2><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(e.label)}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new, e.new_html)}${list("Changes", e.changes, e.changes_html)}${list("Fixes", e.fixes, e.fixes_html)}</div>`;
   return sec;
 }
 pages.changelog = async () => {
@@ -2096,7 +2096,7 @@ pages.news = async () => {
       if (p.slug !== slug) history.replaceState(null, "", p.url);
       root.innerHTML = `<p class="crumb"><a href="/news">‹ All news</a></p><article class="panel post">${p.image ? `<img class="post-img" src="${esc(p.image)}" alt="">` : ""}<div class="body">
         <h1>${esc(p.title)}</h1><div class="sub">${fullDate.format(new Date(p.at))}${p.pinned ? ' · <span class="pin">Pinned</span>' : ""}</div>
-        <div class="txt">${newsBody(p.body) || `<p class="muted">${esc(p.summary)}</p>`}</div>
+        <div class="txt md-content">${(typeof p.body_html === "string" ? p.body_html : newsBody(p.body)) || `<p class="muted">${esc(p.summary)}</p>`}</div>
         ${p.link ? `<p><a class="btn blue" href="${esc(p.link)}"${p.link.startsWith("http") ? ' rel="noopener"' : ""}>${esc(p.link_label || "Read more")}</a></p>` : ""}</div></article>
         <div class="post-nav">${d.newer ? `<a href="${esc(d.newer.url)}">‹ Newer: ${esc(d.newer.title)}</a>` : "<span></span>"}${d.older ? `<a href="${esc(d.older.url)}">Older: ${esc(d.older.title)} ›</a>` : ""}</div>`;
     } catch (x) {
