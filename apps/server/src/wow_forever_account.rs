@@ -97,9 +97,7 @@ pub(crate) async fn sync(st: &AppState, uid: Uuid, token: &str) -> Option<usize>
     if !enabled && !probe {
         return None;
     }
-    let Some(rows) = fetch(token).await else {
-        return None;
-    };
+    let rows = fetch(token).await?;
     match apply(&st.db, uid, &rows, enabled).await {
         Ok(true) => Some(rows.len()),
         Ok(false) => None,
