@@ -646,7 +646,8 @@ pages.bnet = async () => {
   const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? "just now" : m < 60 ? plural(m, "minute") + " ago" : m < 1440 ? plural(Math.round(m / 60), "hour") + " ago" : plural(Math.round(m / 1440), "day") + " ago"; };
   const show = s.profile_show === "wow" || s.profile_show === "wow_forever" ? s.profile_show : "both";
   const def = s.default_flavour === "wow_forever" ? "wow_forever" : "wow";
-  const flavSeg = `<div class="bn-def"><span class="bn-k">Profile</span><div class="seg" role="radiogroup" aria-label="What the profile shows"><button type="button" data-show="wow" aria-pressed="${show === "wow"}">Retail only</button><button type="button" data-show="wow_forever" aria-pressed="${show === "wow_forever"}">Forever only</button><button type="button" data-show="both" aria-pressed="${show === "both"}">Both</button></div><div data-opener ${show === "both" ? "" : "hidden"}><span class="bn-k">Opens on</span><div class="seg" role="radiogroup" aria-label="Which roster opens first"><button type="button" data-def="wow" aria-pressed="${def === "wow"}">Retail</button><button type="button" data-def="wow_forever" aria-pressed="${def === "wow_forever"}">Forever</button></div></div></div>`;
+  const handle = (me() || {}).handle || "";
+  const flavSeg = `<div class="bn-def"><span class="bn-k">Show on profile</span><div class="seg" role="radiogroup" aria-label="Show on profile"><button type="button" data-show="wow" aria-pressed="${show === "wow"}">Retail only</button><button type="button" data-show="wow_forever" aria-pressed="${show === "wow_forever"}">Forever only</button><button type="button" data-show="both" aria-pressed="${show === "both"}">Both</button></div><div data-opener ${show === "both" ? "" : "hidden"}><span class="bn-k">Profile opens on</span><div class="seg" role="radiogroup" aria-label="Profile opens on"><button type="button" data-def="wow" aria-pressed="${def === "wow"}">Retail</button><button type="button" data-def="wow_forever" aria-pressed="${def === "wow_forever"}">Forever</button></div></div></div>`;
   const head = s.linked
     ? `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">${esc(s.battletag)} ${s.needs_reconnect ? `<span class="srbadge">Reconnect</span>` : `<span class="vbadge">Verified</span>`}</div>
         <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") : "", s.last_verified ? "checked " + ago(s.last_verified) : ""].filter(Boolean).join(" · ")}</div></div>
@@ -654,10 +655,11 @@ pages.bnet = async () => {
     : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify Retail characters.</div></div>
         <div class="bn-acts"><button class="btn" type="button" data-link>Link Battle.net</button></div></div>`;
   el.innerHTML = `<section class="panel bn-box"><h2>Battle.net</h2><div data-msg></div>${head}</section>
-    <section class="panel bn-box"><h2>On your profile</h2>${flavSeg}</section>
+    <section class="panel bn-box"><h2>Profile page display${handle ? `<a class="bn-view" href="/u/${encodeURIComponent(handle)}">View profile</a>` : ""}</h2>
+      <p class="bn-lead">Choose which WoW characters show on your public profile. This doesn't change your hours or characters here.</p>
+      ${flavSeg}${s.linked ? `<div data-feat></div>` : ""}</section>
     <section class="panel bn-box"><div class="bn-tabs" data-tabs role="tablist"></div>
       <div class="bn-actrow"><div data-addbox></div><a class="btn" data-upload href="/connect/wow?game=${def}">Upload /played</a></div>
-      ${s.linked ? `<div data-feat></div>` : ""}
       <div class="bn-tools"><input type="search" data-q placeholder="Search" aria-label="Search name or realm" maxlength="64">
         <select data-sort aria-label="Sort"><option value="hours">Hours</option><option value="level">Level</option><option value="name">Name</option><option value="realm">Realm</option></select>
         <select data-class aria-label="Class"><option value="">Class</option></select>
@@ -727,11 +729,11 @@ pages.bnet = async () => {
   };
   list.addEventListener("change", async e => {
     const gb = e.target.closest("[data-guild]");
-    if (gb) { const c = st.items.find(x => x.id === gb.closest(".bn-ch").dataset.id), on = gb.checked; gb.disabled = true;
+    if (gb) { const c = st.items.find(x => x.id === gb.closest(".bn-row").dataset.id), on = gb.checked; gb.disabled = true;
       try { await api(`/me/wow/${c.id}/guild`, { method: "POST", body: { show_guild: on } }); c.show_guild = on; }
       catch (x) { gb.checked = !on; showErr(msgBox, x); } finally { gb.disabled = false; } return; }
     const cb = e.target.closest("[data-hide]"); if (!cb) return;
-    const r = cb.closest(".bn-ch"), c = st.items.find(x => x.id === r.dataset.id), hidden = !cb.checked; cb.disabled = true;
+    const r = cb.closest(".bn-row"), c = st.items.find(x => x.id === r.dataset.id), hidden = !cb.checked; cb.disabled = true;
     try { await api("/me/wow/" + c.id, { method: "POST", body: { hidden } }); c.hidden = c.own_hidden = hidden;
       if (hidden) el.dispatchEvent(new CustomEvent("wowhid", { detail: c.id }));
       if (st.vis) await load(false); else { r.outerHTML = row(c); } }
@@ -739,7 +741,7 @@ pages.bnet = async () => {
   });
   list.addEventListener("click", async e => {
     const bt = e.target.closest("[data-spec]"); if (!bt) return;
-    const r = bt.closest(".bn-ch"), c = st.items.find(x => x.id === r.dataset.id); bt.disabled = true;
+    const r = bt.closest(".bn-row"), c = st.items.find(x => x.id === r.dataset.id); bt.disabled = true;
     try { const x = await api(`/me/wow/${c.id}/spec`, { method: "POST", body: { spec: bt.dataset.spec } }); c.spec = x.spec; c.spec_picked = true; r.outerHTML = row(c); }
     catch (x) { bt.disabled = false; showErr(msgBox, x); }
   });
@@ -767,6 +769,7 @@ pages.bnet = async () => {
         await api("/me/wow/profile_show", { method: "POST", body: { show: showTo } });
         $$("[data-show]", el).forEach(b => b.setAttribute("aria-pressed", b === sh ? "true" : "false"));
         const opener = $("[data-opener]", el); if (opener) opener.hidden = showTo !== "both";
+        if (el._feat) el._feat();
       } catch (x) { showErr(msgBox, x); }
       finally { $$("[data-show]", el).forEach(b => { b.disabled = false; }); }
       return;
@@ -783,9 +786,9 @@ pages.bnet = async () => {
       return;
     }
     const tab = e.target.closest("[data-tab]");
-    if (tab) { st.game = tab.dataset.tab; st.extra = ""; load(false); if (el._feat) el._feat(); return; }
+    if (tab) { st.game = tab.dataset.tab; st.extra = ""; load(false); return; }
     const addTab = e.target.closest("[data-addtab]");
-    if (addTab) { st.game = addTab.dataset.addtab; st.extra = st.game; load(false); if (el._feat) el._feat(); return; }
+    if (addTab) { st.game = addTab.dataset.addtab; st.extra = st.game; load(false); return; }
     const menuBtn = e.target.closest("[data-menu]");
     if (menuBtn) {
       const pop = menuBtn.nextElementSibling;
@@ -812,9 +815,14 @@ pages.bnet = async () => {
   if (fbox) {
     let F; try { F = await api("/me/wow/featured"); } catch (x) { fbox.innerHTML = `<p class="empty">${esc(x.message)}</p>`; return; }
     const lbl = c => esc(c.name);
-    const draw = () => { const g = st.game; fbox.innerHTML = `<div class="bn-feat" data-g="${g}"><span class="bn-k">First on profile</span>
-      <span class="bn-featlist">${(F[g] || []).map((c, i) => `<span data-i="${i}">${lbl(c)} <button type="button" data-up ${i ? "" : "disabled"}>Up</button><button type="button" data-dn ${i < F[g].length - 1 ? "" : "disabled"}>Down</button><button type="button" data-rm>Remove</button></span>`).join("") || `<span class="sub">Most played</span>`}</span>
-      ${(F[g] || []).length < 3 ? `<input type="search" data-fq placeholder="Add" aria-label="Search a character to feature" maxlength="64"><div data-fr></div>` : ""}</div>`; };
+    const shownGames = () => {
+      const on = $("[data-show][aria-pressed=true]", el);
+      const which = on ? on.dataset.show : show;
+      if (which === "wow") return [["wow", "Retail"]];
+      if (which === "wow_forever") return [["wow_forever", "Forever"]];
+      return [["wow", "Retail"], ["wow_forever", "Forever"]];
+    };
+    const draw = () => { fbox.innerHTML = `<div class="bn-feat"><span class="bn-k">First on profile</span>${shownGames().map(([g, nm]) => `<div class="bn-featrow" data-g="${g}"><span class="bn-k">${nm}</span><span class="bn-featlist">${(F[g] || []).map((c, i) => `<span data-i="${i}">${lbl(c)} <button type="button" data-up ${i ? "" : "disabled"}>Up</button><button type="button" data-dn ${i < F[g].length - 1 ? "" : "disabled"}>Down</button><button type="button" data-rm>Remove</button></span>`).join("") || `<span class="sub">Most played</span>`}</span>${(F[g] || []).length < 3 ? `<input type="search" data-fq placeholder="Search" aria-label="Search a ${nm} character to show first" maxlength="64"><div data-fr></div>` : ""}</div>`).join("")}</div>`; };
     const save = async (g, next) => {
       try { await api("/me/wow/featured", { method: "POST", body: { game_id: g, ids: next.map(c => c.id) } }); F[g] = next; draw(); }
       catch (x) { showErr(msgBox, x); }
@@ -1286,6 +1294,9 @@ pages.profile = async () => {
     wire();
     return;
   }
+  // Gear, Mythic+, raids and collections open only for a verified Retail character, and
+  // only while Admin has "Show WoW character details" on. Hidden and Forever cards stay plain.
+  const poppable = c => FEATURES.wow_characters && c.verified && c.game_id === "wow" && !c.hidden;
   const wowCard = c => {
     const col = WOW.color(c.class), cls = WOW.cls(c.class);
     const tick = c.verified ? `<span class="wc-tick" title="On the linked Battle.net account">✓</span>` : "";
@@ -1293,7 +1304,24 @@ pages.profile = async () => {
     const ini = esc(String(c.name || "?").slice(0, 2));
     const lvl = Number(c.level) > 0 ? `Level ${c.level}` : "";
     const line = [lvl && `<span class="wc-lv">${esc(lvl)}</span>`, cls && esc(cls)].filter(Boolean).join(" ");
-    return `<div class="wc" style="--cls:${col}"><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${tick}</b>${line ? `<div class="wc-cls">${line}</div>` : ""}${guild}</div></div>`;
+    const open = poppable(c);
+    return `<div class="wc${open ? " wc-click" : ""}" style="--cls:${col}"${open ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${tick}</b>${line ? `<div class="wc-cls">${line}</div>` : ""}${guild}</div></div>`;
+  };
+  const wireWowPop = () => {
+    if (root._wowpop) return;
+    root._wowpop = true;
+    const go = n => {
+      const c = (p.wow_characters || []).find(x => String(x.id) === n.dataset.wcid);
+      if (c && poppable(c)) WOWPOP.open(p.handle, c);
+    };
+    root.addEventListener("click", e => { const n = e.target.closest("[data-wcid]"); if (n && root.contains(n)) go(n); });
+    root.addEventListener("keydown", e => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const n = e.target.closest("[data-wcid]");
+      if (!n || e.target !== n) return;
+      e.preventDefault();
+      go(n);
+    });
   };
   const wowShow = p.wow_show === "wow" || p.wow_show === "wow_forever" ? p.wow_show : "both";
   const wowRows = flav => (p.wow_characters || []).filter(c => !c.hidden && (c.game_id === "wow_forever" ? "wow_forever" : "wow") === flav);
@@ -1305,6 +1333,7 @@ pages.profile = async () => {
     const tog = wowShow === "both" ? `<div class="seg" role="tablist" aria-label="Which roster to show"><button type="button" data-flav="wow" aria-pressed="${wowOpen === "wow"}">Retail</button><button type="button" data-flav="wow_forever" aria-pressed="${wowOpen === "wow_forever"}">Forever</button></div>` : "";
     root.innerHTML = `<div class="wow-page"><a href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><div class="bar"><h1>WoW characters</h1>${tog}</div><div class="wow-gal" data-wowgal></div></div>`;
     paint(wowOpen);
+    wireWowPop();
     if (wowShow === "both") root.addEventListener("click", e => { const b = e.target.closest("[data-flav]"); if (!b) return; paint(b.dataset.flav); });
     return;
   }
@@ -1446,6 +1475,7 @@ pages.profile = async () => {
     : self ? sec("Gaming rig", `<div class="body empty">Show off your setup. <a href="/settings#rig">Add your gaming rig</a>.</div>`) : "";
   const discord = sec("Discord server", `<div class="body discord-box"><div class="dl"><img src="/assets/discord-symbol-white.svg" alt=""></div><div><a href="${DISCORD}" rel="noopener">Fraglink on Discord</a><small>Chat, feedback and release news</small></div></div>`);
 
+  wireWowPop();
   root.addEventListener("click", e => {
     const b = e.target.closest("[data-wflav]"); if (!b || wowShow !== "both") return;
     $$("[data-wflav]", root).forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));

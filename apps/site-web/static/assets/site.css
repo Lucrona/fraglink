@@ -784,9 +784,15 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .bn-pop .bn-specs{flex-wrap:wrap}
 .bn-pop .bn-specs button{background:transparent;border:0;color:var(--text);font:inherit;padding:2px 0;cursor:pointer;text-align:left}
 .bn-pop .bn-specs button.on{color:#fff;font-weight:700}
-.bn-feat{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.bn-lead{margin:0;padding:2px 14px 0;color:var(--muted);font-size:13px;line-height:1.4}
+.bn-box>h2 .bn-view{margin-left:auto;text-transform:none;letter-spacing:0;font-size:12px;font-weight:600}
+.bn-feat{display:flex;flex-direction:column;gap:6px;padding:0 14px 12px}
+.bn-featrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .bn-featlist{display:flex;flex-wrap:wrap;gap:8px}
 .bn-feat button{background:transparent;border:0;color:var(--link);font:inherit;cursor:pointer;padding:0 2px}
+.bn-feat input[type="search"]{background:#0f1216;border:1px solid var(--line2);color:var(--text);border-radius:3px;padding:5px 8px;font:inherit;min-width:10em;color-scheme:dark;-webkit-appearance:none;appearance:none}
+.bn-feat input[type="search"]::placeholder{color:var(--dim)}
+.bn-feat [data-fr]{flex:1 0 100%}
 .bn-empty{padding:12px}
 .bn-ch{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto 86px;gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line)}
 .bn-ch:nth-child(even){background:var(--row-alt)}
@@ -829,7 +835,7 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .wow-page .bar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 14px}
 .wow-page h1{margin:8px 0 0;font-size:20px}
 .bn-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
-.bn-def{display:flex;align-items:center;gap:8px;padding:8px 14px;flex-wrap:wrap}
+.bn-def{display:flex;align-items:center;gap:10px;padding:10px 14px;flex-wrap:wrap}
 .bn-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 14px}
 .bn-add{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .bn-add input,.bn-add select{background:#0f1216;border:1px solid var(--line2);color:var(--text);border-radius:3px;padding:5px 8px;font:inherit}
