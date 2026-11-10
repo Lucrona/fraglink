@@ -612,10 +612,8 @@ const factionCrest = value => {
   const faction = String(value || "").toUpperCase();
   if (faction !== "HORDE" && faction !== "ALLIANCE") return "";
   const name = faction === "HORDE" ? "Horde" : "Alliance";
-  const path = faction === "HORDE"
-    ? '<path d="M12 2 8 7l2 3-3 4-2-7-3 6 4 7 4-2 2 4 2-4 4 2 4-7-3-6-2 7-3-4 2-3Zm0 6 2 7-2 3-2-3Z" fill-rule="evenodd"/>'
-    : '<path d="M12 1 3 4v8c0 5 4 8 9 11 5-3 9-6 9-11V4Zm-1 4 6 2-2 3 3 2-3 2 1 4-4 2-4-3 2-3-3-1 1-4 3-1Z" fill-rule="evenodd"/>';
-  return `<svg class="faction-crest ${faction.toLowerCase()}" viewBox="0 0 24 24" role="img" aria-label="${name}"><title>${name}</title>${path}</svg>`;
+  const asset = `/assets/wow-factions/${faction.toLowerCase()}`;
+  return `<img class="faction-crest" src="${asset}-64.webp" srcset="${asset}-128.webp 2x" width="16" height="18" alt="${name}" title="${name}" decoding="async">`;
 };
 const groupWowRealms = rows => {
   const groups = new Map();

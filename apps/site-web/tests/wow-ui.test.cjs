@@ -25,11 +25,19 @@ test('case variants group into the same server', () => {
   const groups = groupWowRealms([{realm:'Area 52',region:'us'},{realm:'area 52',region:'US'}]);
   assert.equal(groups.length,1); assert.equal(groups[0].rows.length,2);
 });
-test('crests are accessible inline SVG; unknown factions render nothing', () => {
+test('crests are accessible self-hosted artwork; unknown factions render nothing', () => {
   for (const name of ['Horde','Alliance']) {
-    assert.match(factionCrest(name), /<svg/);
-    assert.ok(factionCrest(name).includes(`aria-label="${name}"`));
-    assert.match(factionCrest(name), /<path/);
+    assert.match(factionCrest(name), /<img/);
+    assert.ok(factionCrest(name).includes(`alt="${name}"`));
+    assert.ok(factionCrest(name).includes(`/assets/wow-factions/${name.toLowerCase()}-64.webp`));
+    assert.ok(factionCrest(name).includes(`/assets/wow-factions/${name.toLowerCase()}-128.webp 2x`));
+    assert.ok(!factionCrest(name).includes("https://"));
+    for (const size of [64,128]) {
+      const asset = readFileSync(`${__dirname}/../static/assets/wow-factions/${name.toLowerCase()}-${size}.webp`);
+      assert.equal(asset.toString('ascii',0,4),'RIFF');
+      assert.equal(asset.toString('ascii',8,12),'WEBP');
+      assert.ok(asset.length < 32768);
+    }
   }
   for (const value of [null,undefined,'','NEUTRAL','<script>']) assert.equal(factionCrest(value),'');
 });
