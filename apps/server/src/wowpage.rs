@@ -81,7 +81,7 @@ async fn summary(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Valu
     })))
 }
 
-/// `both`, `wow`, or `wow_forever`. A missing preference is Both.
+/// `both`, `wow`, `wow_forever`, or `none`. A missing preference is Both.
 pub(crate) async fn profile_show(st: &AppState, uid: Uuid) -> ApiResult<String> {
     let stored: Option<String> = sqlx::query_scalar(
         "SELECT coalesce(profile_show, 'both') FROM wow_prefs WHERE user_id = $1",
@@ -92,8 +92,32 @@ pub(crate) async fn profile_show(st: &AppState, uid: Uuid) -> ApiResult<String> 
     Ok(match stored.as_deref() {
         Some("wow") => "wow".into(),
         Some("wow_forever") => "wow_forever".into(),
+        Some("none") => "none".into(),
         _ => "both".into(),
     })
+}
+
+/// Which roster the public page opens on, and whether the Retail/Forever toggle shows.
+/// Counts are visible characters. A side with nobody on it is not offered.
+pub fn public_roster(show: &str, default: &str, retail: i64, forever: i64) -> (String, bool) {
+    if show == "none" {
+        return ("none".into(), false);
+    }
+    if show == "wow" || show == "wow_forever" {
+        return (show.into(), false);
+    }
+    if retail > 0 && forever > 0 {
+        let open = if default == "wow_forever" {
+            "wow_forever"
+        } else {
+            "wow"
+        };
+        return (open.into(), true);
+    }
+    if forever > 0 {
+        return ("wow_forever".into(), false);
+    }
+    ("wow".into(), false)
 }
 
 #[derive(Deserialize)]
@@ -108,10 +132,10 @@ async fn set_profile_show(
     Json(r): Json<ShowReq>,
 ) -> ApiResult<Json<Value>> {
     api::check_origin(&a, &headers, &st)?;
-    if r.show != "wow" && r.show != "wow_forever" && r.show != "both" {
+    if r.show != "wow" && r.show != "wow_forever" && r.show != "both" && r.show != "none" {
         return Err(AppError::bad_request(
             "invalid_show",
-            "Choose Retail only, Forever only, or Both.",
+            "Choose Retail, Forever, Both, or None.",
         ));
     }
     sqlx::query(
@@ -257,6 +281,7 @@ async fn list(
         bnet_spec: Option<String>,
         show_guild: bool,
         verified: bool,
+        faction: Option<String>,
         former: Option<String>,
         uploaded_at: DateTime<Utc>,
     }
@@ -266,7 +291,7 @@ async fn list(
                       WHERE n.char_id = wow_characters.id
                         AND (lower(n.name) <> lower(wow_characters.name) OR n.realm <> wow_characters.realm)
                       ORDER BY n.recorded_at DESC, n.id DESC LIMIT 1) AS former,
-                    uploaded_at
+                    uploaded_at, coalesce(faction, (SELECT CASE upper(d.data->>'faction') WHEN 'HORDE' THEN 'HORDE' WHEN 'ALLIANCE' THEN 'ALLIANCE' END FROM wow_char_details d WHERE d.char_id = wow_characters.id AND d.status = 'ok')) AS faction
              FROM wow_characters WHERE {filter} ORDER BY {order} LIMIT $7 OFFSET $8",
             lvl = crate::wow::shown_level!()
         )))
@@ -323,6 +348,7 @@ async fn list(
                 show_guild: sg,
                 verified,
                 former,
+                faction,
                 uploaded_at,
             } = c;
             let (former_name, former_realm) = former
@@ -349,7 +375,7 @@ async fn list(
                     "spec": spec.clone().or(bspec.clone()), "spec_picked": spec.is_some(),
                     "active_spec": bspec, "show_guild": sg, "verified": verified,
                     "former_name": former_name, "former_realm": former_realm,
-                    "uploaded_at": uploaded_at })
+                    "uploaded_at": uploaded_at, "faction": faction })
         })
         .collect();
     let (retail, forever): (i64, i64) = sqlx::query_as(
@@ -635,6 +661,27 @@ mod tests {
         assert_eq!(specs_of("druid").len(), 4);
         assert!(specs_of("DEATHKNIGHT").contains(&"Unholy"));
         assert!(specs_of("nope").is_empty());
+    }
+
+    #[test]
+    fn roster_toggle_only_when_both_versions_are_visible() {
+        assert_eq!(
+            public_roster("both", "wow_forever", 2, 3),
+            ("wow_forever".into(), true)
+        );
+        assert_eq!(
+            public_roster("both", "wow_forever", 2, 0),
+            ("wow".into(), false)
+        );
+        assert_eq!(
+            public_roster("both", "wow", 0, 4),
+            ("wow_forever".into(), false)
+        );
+        assert_eq!(
+            public_roster("wow", "wow_forever", 1, 1),
+            ("wow".into(), false)
+        );
+        assert_eq!(public_roster("none", "wow", 3, 3), ("none".into(), false));
     }
 }
 

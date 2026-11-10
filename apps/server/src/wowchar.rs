@@ -409,6 +409,12 @@ pub async fn refresh(st: &AppState, id: Uuid) -> Result<(), ()> {
         .await
         .inspect_err(|e| tracing::warn!("wowchar: level for {id}: {e}"));
     }
+    let _ = sqlx::query("UPDATE wow_characters SET faction = coalesce($2, faction) WHERE id = $1")
+        .bind(id)
+        .bind(crate::wow::profile_faction(&root))
+        .execute(&st.db)
+        .await
+        .inspect_err(|e| tracing::warn!("wowchar: faction for {id}: {e}"));
     let sub = |p: &str| format!("{base}/{p}?{ns}");
     let u: Vec<String> = [
         "character-media",
@@ -783,7 +789,7 @@ pub fn summarise(p: &Parts) -> Value {
         "name": name, "region": p.region, "realm": name_of(&r["realm"]), "realm_slug": realm_slug,
         "level": r["level"].as_i64(), "race": name_of(&r["race"]), "class": name_of(&r["character_class"]),
         "class_id": r["character_class"]["id"].as_i64(),
-        "spec": name_of(&r["active_spec"]), "faction": name_of(&r["faction"]),
+        "spec": name_of(&r["active_spec"]), "faction": crate::wow::profile_faction(r).map(str::to_string).or_else(|| name_of(&r["faction"])),
         "title": r["active_title"]["display_string"].as_str().map(|t| t.replace("{name}", name)),
         "ilvl": r["equipped_item_level"].as_i64(), "achievement_points": r["achievement_points"].as_i64(),
         "last_login": r["last_login_timestamp"].as_i64(),

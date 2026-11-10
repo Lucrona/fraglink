@@ -118,7 +118,23 @@ pub async fn me_extra(st: &AppState, uid: Uuid) -> ApiResult<Value> {
         "timezone": crate::week::saved_zone(st, uid).await,
         "avatar_upload_allowed": avatars::upload_block_reason(st, uid).await?.is_none(),
         "avatar_upload_block": avatars::upload_block_reason(st, uid).await?,
+        "has_wow": has_wow(st, uid).await?,
     }))
+}
+
+/// True when this account has any WoW time: a character, an import, or a tracked session.
+async fn has_wow(st: &AppState, uid: Uuid) -> ApiResult<bool> {
+    let on: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM wow_characters WHERE user_id = $1)
+         OR EXISTS(SELECT 1 FROM user_game_stats WHERE user_id = $1
+                    AND game_id IN ('wow', 'wow_forever') AND display_min > 0)
+         OR EXISTS(SELECT 1 FROM sessions WHERE user_id = $1
+                    AND game_id IN ('wow', 'wow_forever'))",
+    )
+    .bind(uid)
+    .fetch_one(&st.db)
+    .await?;
+    Ok(on)
 }
 
 fn notify_defaults(p: &Value) -> Value {

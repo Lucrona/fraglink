@@ -1,1 +1,1 @@
-Saves Retail and WoW Forever /played on your PC for Fraglink. Uploads only add time and never lower your hours.
+Tracks your /played time in Retail and WoW Forever so you can add it to your Fraglink profile.

@@ -16,7 +16,8 @@ async fn names(v: &Value) -> Vec<String> {
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
 async fn profile_show_filters_the_page_and_keeps_every_row(pool: PgPool) {
-    let sql = include_str!("../migrations/0058_wow_default_flavour.sql").to_ascii_lowercase();
+    let sql = include_str!("../migrations/0058_wow_default_flavour.sql").to_ascii_lowercase()
+        + include_str!("../migrations/0059_wow_profile_none.sql");
     for line in sql.lines() {
         let t = line.trim();
         if t.starts_with("--") {
@@ -123,6 +124,42 @@ async fn profile_show_filters_the_page_and_keeps_every_row(pool: PgPool) {
         vec!["Vale Mocken".to_string()]
     );
     set("both").await;
+    let both = profile().await;
+    assert_eq!(both["wow_toggle"], true);
+    assert_eq!(both["wow_open"], "wow");
+    sqlx::query(
+        "UPDATE wow_characters SET hidden = true WHERE user_id = $1 AND game_id = 'wow_forever'",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let one = profile().await;
+    assert_eq!(one["wow_show"], "both");
+    assert_eq!(one["wow_toggle"], false);
+    assert_eq!(one["wow_open"], "wow");
+    assert!(one["wow_characters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|c| c["game_id"] == "wow"));
+    sqlx::query(
+        "UPDATE wow_characters SET hidden = false WHERE user_id = $1 AND game_id = 'wow_forever'",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    set("none").await;
+    let hidden_page = profile().await;
+    assert_eq!(hidden_page["wow_show"], "none");
+    assert_eq!(hidden_page["wow_toggle"], false);
+    assert_eq!(hidden_page["wow_characters"].as_array().unwrap().len(), 0);
+    let me_none = api(&app, "GET", "/api/v1/me/bnet", Some(&t), None).await;
+    assert_eq!(me_none.json()["profile_show"], "none");
+    let me_user = api(&app, "GET", "/api/v1/me", Some(&t), None).await;
+    assert_eq!(me_user.json()["user"]["has_wow"], true);
+    set("both").await;
     let r = api(
         &app,
         "POST",
@@ -135,7 +172,12 @@ async fn profile_show_filters_the_page_and_keeps_every_row(pool: PgPool) {
     let p = profile().await;
     assert_eq!(p["wow_show"], "both");
     assert_eq!(p["wow_default"], "wow_forever");
+    assert_eq!(p["wow_open"], "wow_forever");
+    assert_eq!(p["wow_toggle"], true);
     assert_eq!(names(&p).await.len(), 2);
+    let t2 = signup(&app, "nowow@example.com", "nowow").await;
+    let bare = api(&app, "GET", "/api/v1/me", Some(&t2), None).await;
+    assert_eq!(bare.json()["user"]["has_wow"], false);
 
     let stored: Vec<(String, i64, bool)> = sqlx::query_as(
         "SELECT name, played_s, hidden FROM wow_characters WHERE user_id = $1 ORDER BY name",
