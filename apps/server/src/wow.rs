@@ -2264,6 +2264,7 @@ pub async fn characters(
             json!({ "id": c.id, "game_id": c.game_id, "region": c.region, "realm": c.realm,
                 "name": c.name, "class": c.class, "level": c.level, "played_min": c.played_s / 60,
                 "played_at": c.played_at, "verified": c.verified, "hidden": c.hid, "race": c.race,
+                "details_enabled": c.game_id == "wow" && c.verified || c.game_id == "wow_forever" && forever_lookup_enabled(),
                 "gender": c.gender, "spec": c.spec, "show_guild": c.show_guild, "guild": c.guild,
                 "featured": c.featured, "faction": c.faction })
         })

@@ -1,0 +1,450 @@
+{
+  "root": {
+    "id": 42,
+    "name": "Sample",
+    "surname": "Character",
+    "character_class": {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/playable-class/1?namespace=static-1.60.1_70399-forever-us"
+      },
+      "name": "Warrior",
+      "id": 1
+    },
+    "race": {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/playable-race/96?namespace=static-1.60.1_70399-forever-us"
+      },
+      "name": "Windshaper Skyborne",
+      "id": 96
+    },
+    "level": 18,
+    "faction": {
+      "type": "HORDE",
+      "name": "Horde"
+    },
+    "equipped_item_level": 7,
+    "achievement_points": 0
+  },
+  "equip": {
+    "equipped_items": [
+      {
+        "item": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/item/1769?namespace=static-1.60.1_70399-forever-us"
+          },
+          "id": 1769
+        },
+        "slot": {
+          "type": "SHOULDER",
+          "name": "Shoulders"
+        },
+        "quantity": 1,
+        "quality": {
+          "type": "POOR",
+          "name": "Poor"
+        },
+        "name": "Canvas Shoulderpads",
+        "media": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/media/item/1769?namespace=static-1.60.1_70399-forever-us"
+          },
+          "id": 1769
+        },
+        "item_class": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/item-class/4?namespace=static-1.60.1_70399-forever-us"
+          },
+          "name": "Armor",
+          "id": 4
+        },
+        "item_subclass": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/item-class/4/item-subclass/1?namespace=static-1.60.1_70399-forever-us"
+          },
+          "name": "Cloth",
+          "id": 1
+        },
+        "inventory_type": {
+          "type": "SHOULDER",
+          "name": "Shoulder"
+        },
+        "armor": {
+          "value": 23,
+          "display": {
+            "display_string": "23 Armor",
+            "color": {
+              "r": 255,
+              "g": 255,
+              "b": 255,
+              "a": 1.0
+            }
+          }
+        },
+        "sell_price": {
+          "value": 163,
+          "display_strings": {
+            "header": "Sell Price:",
+            "gold": "0",
+            "silver": "1",
+            "copper": "63"
+          }
+        },
+        "requirements": {
+          "level": {
+            "value": 15,
+            "display_string": "Requires Level 15"
+          }
+        },
+        "level": {
+          "value": 20,
+          "display_string": "Item Level 20"
+        },
+        "durability": {
+          "value": 23,
+          "display_string": "Durability 23 / 35"
+        }
+      },
+      {
+        "item": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/item/271669?namespace=static-1.60.1_70399-forever-us"
+          },
+          "id": 271669
+        },
+        "slot": {
+          "type": "SHIRT",
+          "name": "Shirt"
+        },
+        "quantity": 1,
+        "context": 75,
+        "quality": {
+          "type": "COMMON",
+          "name": "Common"
+        },
+        "name": "Thendal Warrior's Shirt",
+        "media": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/media/item/271669?namespace=static-1.60.1_70399-forever-us"
+          },
+          "id": 271669
+        },
+        "item_class": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/item-class/4?namespace=static-1.60.1_70399-forever-us"
+          },
+          "name": "Armor",
+          "id": 4
+        },
+        "item_subclass": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/item-class/4/item-subclass/0?namespace=static-1.60.1_70399-forever-us"
+          },
+          "name": "Miscellaneous",
+          "id": 0
+        },
+        "inventory_type": {
+          "type": "BODY",
+          "name": "Shirt"
+        },
+        "sell_price": {
+          "value": 1,
+          "display_strings": {
+            "header": "Sell Price:",
+            "gold": "0",
+            "silver": "0",
+            "copper": "1"
+          }
+        },
+        "level": {
+          "value": 1,
+          "display_string": "Item Level 1"
+        },
+        "is_subclass_hidden": true
+      }
+    ]
+  },
+  "stats": {
+    "health": 508,
+    "power": 100,
+    "power_type": {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/power-type/1?namespace=static-1.60.1_70399-forever-us"
+      },
+      "name": "Rage",
+      "id": 1
+    },
+    "speed": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    },
+    "strength": {
+      "base": 40,
+      "effective": 47
+    },
+    "agility": {
+      "base": 36,
+      "effective": 36
+    },
+    "intellect": {
+      "base": 21,
+      "effective": 21
+    },
+    "stamina": {
+      "base": 41,
+      "effective": 52
+    },
+    "melee_crit": {
+      "rating_bonus": 0.0,
+      "value": 4.8004,
+      "rating_normalized": 0
+    },
+    "melee_haste": {
+      "rating_bonus": 0.0,
+      "value": 1.9999981,
+      "rating_normalized": 0
+    },
+    "mastery": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    },
+    "bonus_armor": 0,
+    "lifesteal": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    },
+    "versatility": 0.0,
+    "versatility_damage_done_bonus": 0.0,
+    "versatility_healing_done_bonus": 0.0,
+    "versatility_damage_taken_bonus": 0.0,
+    "avoidance": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    },
+    "attack_power": 128,
+    "main_hand_damage_min": 40.028572,
+    "main_hand_damage_max": 58.028572,
+    "main_hand_speed": 2.255,
+    "main_hand_dps": 21.742159,
+    "off_hand_damage_min": 0.0,
+    "off_hand_damage_max": 0.0,
+    "off_hand_speed": 1.961,
+    "off_hand_dps": 0.0,
+    "spell_power": 0,
+    "spell_penetration": 0,
+    "spell_crit": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    },
+    "mana_regen": 0.0,
+    "mana_regen_combat": 0.0,
+    "armor": {
+      "base": 0,
+      "effective": 941
+    },
+    "dodge": {
+      "rating_bonus": 0.0,
+      "value": 4.9204,
+      "rating_normalized": 0
+    },
+    "parry": {
+      "rating_bonus": 0.0,
+      "value": 4.92,
+      "rating_normalized": 0
+    },
+    "block": {
+      "rating_bonus": 0.0,
+      "value": 9.919999,
+      "rating_normalized": 0
+    },
+    "ranged_crit": {
+      "rating_bonus": 0.0,
+      "value": 3.8404,
+      "rating_normalized": 0
+    },
+    "ranged_haste": {
+      "rating_bonus": 0.0,
+      "value": 1.9999981,
+      "rating_normalized": 0
+    },
+    "spell_haste": {
+      "rating_bonus": 0.0,
+      "value": 1.9999981,
+      "rating_normalized": 0
+    },
+    "spirit": {
+      "base": 28,
+      "effective": 28
+    },
+    "defense": {
+      "base": 84,
+      "effective": 88
+    },
+    "fire_resistance": {
+      "base": 0,
+      "effective": 0
+    },
+    "shadow_resistance": {
+      "base": 0,
+      "effective": 0
+    },
+    "nature_resistance": {
+      "base": 0,
+      "effective": 0
+    },
+    "arcane_resistance": {
+      "base": 0,
+      "effective": 0
+    },
+    "frost_resistance": {
+      "base": 0,
+      "effective": 0
+    },
+    "movement_speed": 100.0,
+    "ranged_attack_power": 70,
+    "ranged_damage_min": 11.000001,
+    "ranged_damage_max": 13.000001,
+    "expertise": 0.0,
+    "off_hand_expertise": 0.0,
+    "armor_penetration": 0.0,
+    "spell_healing": 0,
+    "melee_hit": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    },
+    "off_hand_hit": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    },
+    "ranged_hit": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    },
+    "spell_hit": {
+      "rating_bonus": 0.0,
+      "value": 0.0,
+      "rating_normalized": 0
+    }
+  },
+  "media": {
+    "assets": [
+      {
+        "key": "main-raw",
+        "value": "https://render.worldofwarcraft.com/forever-us/character/42/42-main-raw.png"
+      }
+    ]
+  },
+  "specs": {
+    "specialization_groups": [
+      {
+        "is_active": true,
+        "specializations": [
+          {
+            "specialization": {
+              "key": {
+                "href": "https://us.api.blizzard.com/data/wow/playable-specialization/257?namespace=static-1.60.1_70399-forever-us"
+              },
+              "name": "Protection",
+              "id": 257
+            },
+            "specialization_name": "Protection",
+            "spent_points": 9
+          }
+        ]
+      }
+    ]
+  },
+  "profs": {
+    "primaries": [
+      {
+        "profession": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/profession/186?namespace=static-1.60.1_70399-forever-us"
+          },
+          "name": "Mining",
+          "id": 186
+        },
+        "tiers": [
+          {
+            "skill_points": 53,
+            "max_skill_points": 75,
+            "tier": {
+              "name": "Mining",
+              "id": 2946
+            }
+          }
+        ]
+      },
+      {
+        "profession": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/profession/164?namespace=static-1.60.1_70399-forever-us"
+          },
+          "name": "Blacksmithing",
+          "id": 164
+        },
+        "tiers": [
+          {
+            "skill_points": 40,
+            "max_skill_points": 75,
+            "tier": {
+              "name": "Blacksmithing",
+              "id": 2938
+            }
+          }
+        ]
+      }
+    ],
+    "secondaries": [
+      {
+        "profession": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/profession/185?namespace=static-1.60.1_70399-forever-us"
+          },
+          "name": "Cooking",
+          "id": 185
+        },
+        "tiers": [
+          {
+            "skill_points": 3,
+            "max_skill_points": 75,
+            "tier": {
+              "name": "Cooking",
+              "id": 2939
+            }
+          }
+        ]
+      },
+      {
+        "profession": {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/profession/129?namespace=static-1.60.1_70399-forever-us"
+          },
+          "name": "First Aid",
+          "id": 129
+        },
+        "tiers": [
+          {
+            "skill_points": 58,
+            "max_skill_points": 75,
+            "tier": {
+              "name": "First Aid",
+              "id": 2942
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "pvp": {
+    "honorable_kills": 0,
+    "pvp_rank": 0
+  }
+}

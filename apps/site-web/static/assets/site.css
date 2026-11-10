@@ -1292,3 +1292,5 @@ tr.hc-flag td{background:#1d1010}
 .seg.wow-version-switch button[aria-selected="true"]{background:#2c4d6b;color:#fff}
 .seg.wow-version-switch button[aria-selected="true"]:hover{background:#355a7c}
 .seg.wow-version-switch button:focus-visible{outline:2px solid #86afcf;outline-offset:-3px}
+
+.cp-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.cp-actions input{max-width:240px}.cp-avatar{float:right;margin:0 0 8px 12px;border-radius:4px}

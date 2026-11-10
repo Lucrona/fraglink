@@ -3,8 +3,9 @@
 //! with the app's client-credentials token, summarised and stored per character in
 //! `wow_char_details` for 12 hours; stale data is served while a background refresh runs
 //! (one at a time per character). The 1 MB achievements endpoint is never fetched. Only
-//! verified, non-hidden retail characters, only while Admin > "Show WoW character details"
-//! is on, and only where the profile itself shows them. The guild shows only with the
+//! non-hidden characters where the profile shows them, only while Admin >
+//! "Show WoW character details" is on. Retail needs verification; Forever needs
+//! the default-off BNET_FOREVER_LOOKUP switch. The guild shows only with the
 //! character's "Show guild" switch. No hours here.
 
 use crate::auth::{AuthUser, MaybeUser};
@@ -30,19 +31,21 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/users/{handle}/wow/{id}", get(detail))
         .route("/api/v1/users/{handle}/wow/{id}/render.png", get(render))
+        .route("/api/v1/users/{handle}/wow/{id}/share", get(share))
         .route("/api/v1/me/wow/{id}/guild", post(set_guild))
 }
 
 // ------------------------------------------------------------------ access
 
 /// The character if `viewer` may see it on `handle`'s profile: same rules as the profile's
-/// WoW cards, plus verified, not hidden, retail.
-async fn visible_char(
+/// WoW cards, including Show on profile. Retail needs verification; Forever needs
+/// its separate public-lookup gate (which is not ownership proof).
+pub(crate) async fn visible_char(
     st: &AppState,
     viewer: Option<Uuid>,
     handle: &str,
     id: Uuid,
-) -> ApiResult<(Uuid, bool)> {
+) -> ApiResult<(Uuid, bool, String)> {
     let nf = || {
         AppError::new(
             StatusCode::NOT_FOUND,
@@ -89,24 +92,25 @@ async fn visible_char(
     if !show("games") || !show("wow_characters") {
         return Err(nf());
     }
+    let row: Option<(bool, String)> = sqlx::query_as(
+        "SELECT show_guild, game_id FROM wow_characters WHERE id = $1 AND user_id = $2
+           AND ((game_id = 'wow' AND verified) OR (game_id = 'wow_forever' AND $3)) AND NOT hidden
+           AND NOT coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $2), false)
+           AND coalesce((SELECT profile_show FROM wow_prefs WHERE user_id = $2), 'both') IN ('both', game_id)",
+    )
+    .bind(id).bind(p.id).bind(crate::wow::forever_lookup_enabled())
+    .fetch_optional(&st.db).await?;
+    let Some((guild, game)) = row else {
+        return Err(nf());
+    };
     if !is_self
         && crate::account::hidden_games(st, p.id)
             .await?
-            .iter()
-            .any(|g| g == "wow")
+            .contains(&game)
     {
         return Err(nf());
     }
-    let row: Option<(bool,)> = sqlx::query_as(
-        "SELECT show_guild FROM wow_characters WHERE id = $1 AND user_id = $2 AND verified
-           AND game_id = 'wow' AND NOT hidden
-           AND NOT coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $2), false)",
-    )
-    .bind(id)
-    .bind(p.id)
-    .fetch_optional(&st.db)
-    .await?;
-    row.map(|r| (p.id, r.0)).ok_or_else(nf)
+    Ok((p.id, guild, game))
 }
 
 async fn detail(
@@ -120,7 +124,7 @@ async fn detail(
         .map(|v| v.to_string())
         .unwrap_or_else(|| crate::client_ip(&headers));
     st.rate_limit(format!("wowchar:{key}"), 120, Duration::from_secs(600))?;
-    let (_, show_guild) = visible_char(&st, viewer, &handle, id).await?;
+    let (_, show_guild, _) = visible_char(&st, viewer, &handle, id).await?;
     let mut cached = load(&st, id).await?;
     let fresh = |c: &Option<(String, Value, DateTime<Utc>)>| {
         c.as_ref()
@@ -209,7 +213,7 @@ async fn render(
     match bytes {
         Some(b) => Response::builder()
             .header(header::CONTENT_TYPE, "image/png")
-            .header(header::CACHE_CONTROL, "public, max-age=3600")
+            .header(header::CACHE_CONTROL, "private, no-store")
             .body(Body::from(b))
             .unwrap(),
         None => nf(),
@@ -234,7 +238,7 @@ async fn set_guild(
 ) -> ApiResult<Json<Value>> {
     crate::api::check_origin(&a, &headers, &st)?;
     let n = sqlx::query(
-        "UPDATE wow_characters SET show_guild = $3 WHERE id = $1 AND user_id = $2 AND verified",
+        "UPDATE wow_characters SET show_guild = $3 WHERE id = $1 AND user_id = $2 AND (verified OR game_id='wow_forever')",
     )
     .bind(id)
     .bind(a.user.id)
@@ -357,6 +361,9 @@ pub async fn refresh(st: &AppState, id: Uuid) -> Result<(), ()> {
     let Some((game, region, slug, name, show_guild)) = row else {
         return Err(());
     };
+    if game == "wow_forever" {
+        return refresh_forever(st, id, &region, &name).await;
+    }
     if game != "wow" || !matches!(region.as_str(), "us" | "eu" | "kr" | "tw") {
         return Err(());
     }
@@ -576,6 +583,229 @@ pub async fn refresh(st: &AppState, id: Uuid) -> Result<(), ()> {
     .await
     .map_err(|_| ())?;
     Ok(())
+}
+
+/// Forever uses only probed realmless resources and a separate item-media namespace.
+/// No ownership, character identity, /played, ledger or quarantine writes here.
+async fn refresh_forever(st: &AppState, id: Uuid, region: &str, name: &str) -> Result<(), ()> {
+    if !crate::wow::forever_lookup_enabled() || region != "us" {
+        return Err(());
+    }
+    let (first, surname) = name.trim().split_once(' ').ok_or(())?;
+    if surname.trim().is_empty() {
+        return Err(());
+    }
+    let (Some(tok), Some(h)) = (app_token().await, http()) else {
+        return Err(());
+    };
+    let url = crate::wow::forever_profile_url("us", first, surname);
+    let base = url.split('?').next().ok_or(())?;
+    let root = get_json(&h, &tok, &url).await.map_err(|_| ())?;
+    if root["id"].as_i64().is_none()
+        || root["name"].as_str().is_none()
+        || root["surname"].as_str().is_none()
+        || !format!(
+            "{} {}",
+            root["name"].as_str().unwrap_or(""),
+            root["surname"].as_str().unwrap_or("")
+        )
+        .eq_ignore_ascii_case(name)
+    {
+        return Err(());
+    }
+    let bid: Option<i64> = sqlx::query_scalar("SELECT bnet_id FROM wow_characters WHERE id=$1")
+        .bind(id)
+        .fetch_one(&st.db)
+        .await
+        .map_err(|_| ())?;
+    if bid.is_some() && bid != root["id"].as_i64() {
+        return Err(());
+    }
+    let sub = |part: &str| format!("{base}/{part}?namespace=profile-forever-us&locale=en_US");
+    let urls = [
+        "equipment",
+        "statistics",
+        "character-media",
+        "specializations",
+        "professions",
+        "pvp-summary",
+    ]
+    .map(sub);
+    let (equip, stats, media, specs, profs, pvp) = tokio::join!(
+        get_json(&h, &tok, &urls[0]),
+        get_json(&h, &tok, &urls[1]),
+        get_json(&h, &tok, &urls[2]),
+        get_json(&h, &tok, &urls[3]),
+        get_json(&h, &tok, &urls[4]),
+        get_json(&h, &tok, &urls[5])
+    );
+    let equip = equip.unwrap_or(Value::Null);
+    let mut icons = HashMap::new();
+    for item in equip["equipped_items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(32)
+    {
+        if let Some(mid) = item["media"]["id"].as_i64() {
+            let media = cached_static(&h,&tok,&format!("forever-item-{mid}"),format!("https://us.api.blizzard.com/data/wow/media/item/{mid}?namespace=static-forever-us&locale=en_US")).await;
+            if let Some(icon) = media.as_ref().and_then(icon_of) {
+                icons.insert(mid, icon);
+            }
+        }
+    }
+    let data = summarise_forever(
+        &root,
+        &equip,
+        &stats.unwrap_or(Value::Null),
+        &media.unwrap_or(Value::Null),
+        &specs.unwrap_or(Value::Null),
+        &profs.unwrap_or(Value::Null),
+        &pvp.unwrap_or(Value::Null),
+        &icons,
+    );
+    sqlx::query(
+        "INSERT INTO wow_char_details(char_id,status,data,fetched_at) VALUES($1,'ok',$2,now())
+        ON CONFLICT(char_id) DO UPDATE SET status='ok',data=$2,fetched_at=now()",
+    )
+    .bind(id)
+    .bind(data)
+    .execute(&st.db)
+    .await
+    .map_err(|_| ())?;
+    // Only a disposable image cache, not a character/hour row.
+    let _ = tokio::fs::remove_file(
+        st.cfg
+            .data_dir
+            .join("wow-renders")
+            .join(format!("{id}.png")),
+    )
+    .await;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn summarise_forever(
+    root: &Value,
+    equip: &Value,
+    stats: &Value,
+    media: &Value,
+    specs: &Value,
+    profs: &Value,
+    pvp: &Value,
+    icons: &HashMap<i64, String>,
+) -> Value {
+    let n = Value::Null;
+    let mut out = summarise(&Parts {
+        region: "us",
+        root,
+        media,
+        equip,
+        mplus: &n,
+        season: &n,
+        pvp,
+        brackets: &[],
+        raids: &n,
+        current_exp: None,
+        mounts: &n,
+        pets: &n,
+        profs,
+        icons,
+        rank: None,
+    });
+    out["game_id"] = json!("wow_forever");
+    out["name"] = json!(format!(
+        "{} {}",
+        root["name"].as_str().unwrap_or(""),
+        root["surname"].as_str().unwrap_or("")
+    )
+    .trim());
+    out["realm"] = Value::Null;
+    out["armory"] = Value::Null; // no tested public Forever Armory URL
+    out["avatar_src"] = media["assets"]
+        .as_array()
+        .and_then(|a| a.iter().find(|x| x["key"] == "avatar"))
+        .and_then(|x| x["value"].as_str())
+        .filter(|u| {
+            u.starts_with("https://render.worldofwarcraft.com/")
+                && u.ends_with(".jpg")
+                && !u.contains("..")
+        })
+        .map_or(Value::Null, |u| json!(u));
+    let active = specs["specialization_groups"]
+        .as_array()
+        .and_then(|a| a.iter().find(|g| g["is_active"] == true));
+    out["spec"] = active
+        .and_then(|g| g["specializations"].as_array())
+        .and_then(|a| {
+            a.iter()
+                .max_by_key(|x| x["spent_points"].as_i64().unwrap_or(0))
+        })
+        .and_then(|x| name_of(&x["specialization"]))
+        .map_or(Value::Null, |x| json!(x));
+    let mut mapped = Vec::new();
+    for (key, label, percent) in [
+        ("health", "Health", false),
+        ("power", "Power", false),
+        ("strength", "Strength", false),
+        ("agility", "Agility", false),
+        ("stamina", "Stamina", false),
+        ("intellect", "Intellect", false),
+        ("spirit", "Spirit", false),
+        ("armor", "Armor", false),
+        ("defense", "Defense", false),
+        ("attack_power", "Attack power", false),
+        ("melee_crit", "Melee crit", true),
+        ("spell_crit", "Spell crit", true),
+        ("dodge", "Dodge", true),
+        ("parry", "Parry", true),
+        ("block", "Block", true),
+    ] {
+        let raw = &stats[key];
+        let value = raw
+            .as_f64()
+            .or_else(|| raw["effective"].as_f64())
+            .or_else(|| raw["value"].as_f64());
+        if let Some(v) = value.filter(|v| v.is_finite()) {
+            let label = if key == "power" {
+                name_of(&stats["power_type"]).unwrap_or_else(|| label.into())
+            } else {
+                label.into()
+            };
+            mapped.push(json!({"name":label,"value":v,"percent":percent}));
+        }
+    }
+    out["stats"] = json!(mapped);
+    out
+}
+
+/// Public-only share metadata. No refresh/network call; hidden/private failures are
+/// indistinguishable from an unknown id, even for an authenticated owner.
+pub(crate) async fn share_metadata(st: &AppState, handle: &str, id: Uuid) -> ApiResult<Value> {
+    let (_, guild, game) = visible_char(st, None, handle, id).await?;
+    let row: (String, i32, String) = sqlx::query_as(concat!(
+        "SELECT name, ",
+        crate::wow::shown_level!(),
+        " AS level, class FROM wow_characters WHERE id=$1"
+    ))
+    .bind(id)
+    .fetch_one(&st.db)
+    .await?;
+    let data = load(st, id)
+        .await?
+        .map(|(_, d, _)| d)
+        .unwrap_or(Value::Null);
+    Ok(
+        json!({"id":id,"name":row.0,"level":row.1,"class":row.2,"game_id":game,
+        "guild":if guild {data["guild"]["name"].clone()} else {Value::Null},
+        "render":data["render"]==true,"details_enabled":true}),
+    )
+}
+async fn share(
+    State(st): State<AppState>,
+    Path((handle, id)): Path<(String, Uuid)>,
+) -> ApiResult<Json<Value>> {
+    share_metadata(&st, &handle, id).await.map(Json)
 }
 
 /// Highest expansion id in the journal index, skipping the "Current Season" pseudo-tier.

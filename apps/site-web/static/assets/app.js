@@ -727,7 +727,7 @@ async function wowManager(el) {
       <div class="c-imp sub">${imp}</div>
       <div class="bn-menu"><button type="button" class="bn-morebtn" data-menu aria-label="Actions for ${esc(c.name)}">···</button><div class="bn-pop" hidden>
         <label class="bn-sw"><span>${hid ? "Hidden" : "Shown"}</span><input type="checkbox" data-hide ${hid ? "" : "checked"} ${st.data && st.data.hide_all ? "disabled" : ""}><i class="bn-tg"></i></label>
-        ${c.game_id === "wow" ? `<label class="bn-sw"><span>Guild</span><input type="checkbox" data-guild ${c.show_guild ? "checked" : ""}><i class="bn-tg"></i></label>` : ""}
+        ${["wow", "wow_forever"].includes(c.game_id) ? `<label class="bn-sw"><span>Guild</span><input type="checkbox" data-guild ${c.show_guild ? "checked" : ""}><i class="bn-tg"></i></label>` : ""}
         ${specs.length ? `<div class="bn-specs" role="group" aria-label="Spec">${specs.map(p => `<button type="button" class="${p[0] === c.spec ? "on" : ""}" data-spec="${esc(p[0])}">${esc(p[0])}</button>`).join("")}</div>` : ""}
       </div></div></div>`;
   };
@@ -1251,6 +1251,11 @@ pages.verify = async () => {
 
 /* ----- profile ----- */
 const GPAGE = 10;
+const WOWLINK = {
+  path: (handle, c) => `/u/${encodeURIComponent(handle)}/wow/${c.game_id === "wow_forever" ? "forever" : "retail"}/${encodeURIComponent(c.id)}`,
+  parse: path => { const m = /^\/u\/([^/]+)\/wow\/(retail|forever)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i.exec(path);
+    if (!m) return null; try { return { handle: decodeURIComponent(m[1]), game_id: m[2] === "forever" ? "wow_forever" : "wow", id: m[3] }; } catch (_) { return null; } }
+};
 /* Pager: "‹ Prev  11–20 of 248  Next ›" (buttons carry data-off). */
 function pagerHtml(off, lim, total, term) {
   if (!total) return "";
@@ -1283,8 +1288,9 @@ pages.profile = async () => {
   const bits = location.pathname.replace(/^\/u\/?/, "").replace(/\/$/, "").split("/").filter(Boolean);
   const handle = decodeURIComponent(bits[0] || "");
   const wowAll = bits.length === 2 && bits[1] === "wow";
+  const wowDeep = bits.length === 4 && bits[1] === "wow" && ["retail", "forever"].includes(bits[2]);
   if (!handle) { location.replace(me() ? "/u/" + encodeURIComponent(me().handle) : "/login"); return; }
-  if (bits.length > 1 && !wowAll) { root.innerHTML = `<div class="narrow panel"><h2>Not found</h2><div class="body"><p>That page isn't on Fraglink.</p></div></div>`; return; }
+  if (bits.length > 1 && !wowAll && !wowDeep) { root.innerHTML = `<div class="narrow panel"><h2>Not found</h2><div class="body"><p>That page isn't on Fraglink.</p></div></div>`; return; }
   document.title = handle + " · Fraglink";
   let p;
   try { p = await api("/users/" + encodeURIComponent(handle) + "/profile?limit=" + GPAGE + "&tz=" + encodeURIComponent(TZ), { keepSession: true }); }
@@ -1299,7 +1305,7 @@ pages.profile = async () => {
     return;
   }
   // old username (renamed by staff): show the new address
-  if (p.handle && p.handle.toLowerCase() !== String(handle).toLowerCase()) history.replaceState(null, "", "/u/" + encodeURIComponent(p.handle) + (wowAll ? "/wow" : "") + location.search + location.hash);
+  if (p.handle && p.handle.toLowerCase() !== String(handle).toLowerCase()) history.replaceState(null, "", "/u/" + encodeURIComponent(p.handle) + (wowDeep ? "/wow/" + bits[2] + "/" + encodeURIComponent(bits[3]) : wowAll ? "/wow" : "") + location.search + location.hash);
   if (p.private) {
     const nm = esc(p.display_name || p.handle), next = encodeURIComponent(location.pathname + location.search);
     // Friend actions: hidden for yourself, friends and test accounts (server says can_add).
@@ -1323,9 +1329,8 @@ pages.profile = async () => {
     wire();
     return;
   }
-  // Gear, Mythic+, raids and collections open only for a verified Retail character, and
-  // only while Admin has "Show WoW character details" on. Hidden and Forever cards stay plain.
-  const poppable = c => FEATURES.wow_characters && c.verified && c.game_id === "wow" && !c.hidden;
+  // The server gates Forever public lookups separately from ownership verification.
+  const poppable = c => FEATURES.wow_characters && !c.hidden && (c.details_enabled === true || c.game_id === "wow" && c.verified);
   const wowCard = (c, showRealm = true) => {
     const col = WOW.color(c.class), cls = WOW.cls(c.class);
     const tick = c.verified ? `<span class="wc-tick" title="On the linked Battle.net account">✓</span>` : "";
@@ -1340,6 +1345,20 @@ pages.profile = async () => {
   const wireWowPop = () => {
     if (root._wowpop) return;
     root._wowpop = true;
+    const resolve = async () => {
+      const link = WOWLINK.parse(location.pathname), normal = "/u/" + encodeURIComponent(p.handle);
+      if (!link || link.handle.toLowerCase() !== p.handle.toLowerCase()) {
+        if (wowDeep && !link) history.replaceState(null, "", normal); return;
+      }
+      const requested = location.pathname;
+      try {
+        const c = await api(`/users/${encodeURIComponent(p.handle)}/wow/${encodeURIComponent(link.id)}/share`);
+        if (location.pathname !== requested) return;
+        if (c.game_id !== link.game_id) throw 0;
+        await WOWPOP.open(p.handle, c, { deep: true, returnUrl: history.state && history.state.wowReturn || normal });
+      } catch (_) { if (location.pathname === requested) history.replaceState(null, "", normal); }
+    };
+    WOWPOP.setResolver(resolve); queueMicrotask(resolve);
     const go = n => {
       const c = (p.wow_characters || []).find(x => String(x.id) === n.dataset.wcid);
       if (c && poppable(c)) WOWPOP.open(p.handle, c);
@@ -2156,38 +2175,45 @@ document.addEventListener("DOMContentLoaded", async () => {
 const WOWPOP = (() => {
   const CC = { 1: "#C69B6D", 2: "#F48CBA", 3: "#AAD372", 4: "#FFF468", 5: "#FFFFFF", 6: "#C41E3A", 7: "#0070DD", 8: "#3FC7EB", 9: "#8788EE", 10: "#00FF98", 11: "#FF7C0A", 12: "#A330C9", 13: "#33937F" };
   const L = ["HEAD", "NECK", "SHOULDER", "BACK", "CHEST", "SHIRT", "TABARD", "WRIST"], R = ["HANDS", "WAIST", "LEGS", "FEET", "FINGER_1", "FINGER_2", "TRINKET_1", "TRINKET_2"], W = ["MAIN_HAND", "OFF_HAND"];
-  const SN = { HEAD: "Head", NECK: "Neck", SHOULDER: "Shoulder", BACK: "Back", CHEST: "Chest", SHIRT: "Shirt", TABARD: "Tabard", WRIST: "Wrist", HANDS: "Hands", WAIST: "Waist", LEGS: "Legs", FEET: "Feet", FINGER_1: "Ring", FINGER_2: "Ring", TRINKET_1: "Trinket", TRINKET_2: "Trinket", MAIN_HAND: "Main hand", OFF_HAND: "Off hand" };
+  const SN = { HEAD: "Head", NECK: "Neck", SHOULDER: "Shoulder", BACK: "Back", CHEST: "Chest", SHIRT: "Shirt", TABARD: "Tabard", WRIST: "Wrist", HANDS: "Hands", WAIST: "Waist", LEGS: "Legs", FEET: "Feet", FINGER_1: "Ring", FINGER_2: "Ring", TRINKET_1: "Trinket", TRINKET_2: "Trinket", MAIN_HAND: "Main hand", OFF_HAND: "Off hand", RANGED: "Ranged" };
   const DO = ["LFR", "NORMAL", "HEROIC", "MYTHIC"];
   const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? "just now" : m < 60 ? plural(m, "minute") + " ago" : m < 1440 ? plural(Math.round(m / 60), "hour") + " ago" : plural(Math.round(m / 1440), "day") + " ago"; };
-  let box = null, pushed = false;
+  let box = null, pushed = false, returnUrl = null, resolver = null;
   const close = fromPop => {
     if (!box) return; box.remove(); box = null; document.body.classList.remove("cp-lock"); document.removeEventListener("keydown", key);
-    if (pushed && !fromPop) { pushed = false; history.back(); } pushed = false;
+    if (!fromPop) { if (pushed) history.back(); else if (returnUrl) history.replaceState(null, "", returnUrl); }
+    pushed = false; returnUrl = null;
   };
   const key = e => { if (e.key === "Escape") close(); };
-  addEventListener("popstate", () => { if (box) close(true); });
+  addEventListener("popstate", () => { if (box) close(true); if (resolver) resolver(); });
   const whp = it => [it.ilvl && "ilvl=" + it.ilvl, it.bonus && it.bonus.length && "bonus=" + it.bonus.join(":"), it.ench && "ench=" + it.ench, it.gems && it.gems.length && "gems=" + it.gems.join(":"), it.pcs && it.pcs.length && "pcs=" + it.pcs.join(":")].filter(Boolean).join("&");
-  const slot = (g, k) => { const it = g[k]; const lk = it && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : it.id ? ` data-whi="${Number(it.id)}" data-whp="${esc(whp(it))}" role="button" tabindex="0" aria-expanded="false"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
+  const slot = (g, k) => { const it = g[k]; const lk = it && !it.forever && it.id && WH.ok, tag = lk ? "a" : "div"; return it ? `<${tag} class="cp-slot q-${esc((it.quality || "common").toLowerCase())}"${lk ? ` href="https://www.wowhead.com/item=${Number(it.id)}" data-wowhead="${esc(whp(it))}" target="_blank" rel="noopener"` : it.id && !it.forever ? ` data-whi="${Number(it.id)}" data-whp="${esc(whp(it))}" role="button" tabindex="0" aria-expanded="false"` : ` title="${esc(it.name)}"`}>${it.icon ? `<img src="/api/v1/wow/icons/${encodeURIComponent(it.icon)}.jpg" alt="" loading="lazy" ${imgOk}>` : `<span class="cp-noi"></span>`}<div><b>${esc(it.name)}</b><small>${esc(SN[k])}${it.ilvl ? " · " + it.ilvl : ""}</small></div></${tag}>` : `<div class="cp-slot cp-empty"><span class="cp-noi"></span><div><b>Empty</b><small>${esc(SN[k])}</small></div></div>`; };
   const raid = r => r.instances.map(i => `<div class="cp-raid"><b>${esc(i.name)}</b><div class="cp-modes">${[...i.modes].sort((a, b) => DO.indexOf(a.difficulty) - DO.indexOf(b.difficulty)).map(m => `<span class="${m.done >= m.total ? "full" : ""}">${esc(m.label)} <b>${m.done}/${m.total}</b></span>`).join("")}</div></div>`).join("");
   const body = (d, c) => {
-    if (d.status === "missing") return `<div class="cp-hd"><div><h2>${esc(c.name)}${factionCrest(c.faction)}</h2><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}</div></div></div><p class="empty cp-pad">Not on the Armory.</p>`;
-    const g = {}; (d.gear || []).forEach(x => g[x.slot] = x);
+    const forever = (d.game_id || c.game_id) === "wow_forever";
+    if (d.status === "missing") return forever ? "" : `<div class="cp-hd"><div class="cp-who"><h2>${esc(c.name)}</h2></div></div>`;
+    const g = {}; (d.gear || []).forEach(x => g[x.slot] = { ...x, forever });
     const col = CC[d.class_id] || "#eef2f6", mp = d.mplus || {}, pv = d.pvp || {}, rd = d.raids || {}, co = d.collections || {}, pr = d.professions || [];
     const stat = (l, v) => `<div class="cp-st"><small>${l}</small><b>${v}</b></div>`;
     const rr = rd.current && rd.current.instances.length ? { t: rd.current.expansion, r: rd.current } : rd.recent && rd.recent.instances.length ? { t: "Most recent progress · " + rd.recent.expansion, r: rd.recent } : null;
+    const slots = keys => keys.filter(k => g[k]).map(k => slot(g, k)).join("");
+    const sections = [];
+    if ((d.gear || []).length) sections.push(`<section><h3>Gear</h3><div class="cp-gear"><div>${slots(L)}</div><div>${slots(R)}</div></div>${W.some(k => g[k]) || g.RANGED ? `<div class="cp-gear cp-w">${slots([...W, "RANGED"])}</div>` : ""}</section>`);
+    if ((d.stats || []).length) sections.push(`<section><h3>Stats</h3><div class="cp-two"><table class="cp-tb">${d.stats.filter((_,i) => i % 2 === 0).map(x => `<tr><td>${esc(x.name)}</td><td class="n">${x.percent ? Number(x.value).toFixed(2) + "%" : nf.format(x.value)}</td></tr>`).join("")}</table><table class="cp-tb">${d.stats.filter((_,i) => i % 2 === 1).map(x => `<tr><td>${esc(x.name)}</td><td class="n">${x.percent ? Number(x.value).toFixed(2) + "%" : nf.format(x.value)}</td></tr>`).join("")}</table></div></section>`);
+    if (rr) sections.push(`<section><h3>Raid progress</h3><div class="sub cp-rt">${esc(rr.t)}</div>${raid(rr.r)}</section>`);
+    if ((mp.runs || []).length) sections.push(`<section><h3>Mythic+</h3><table class="cp-tb">${mp.runs.map(r => `<tr><td>${esc(r.dungeon)}</td><td class="n">+${r.level}</td><td class="n ${r.timed ? "ok" : "dim"}">${r.timed ? "Timed" : "Overtime"}</td></tr>`).join("")}</table></section>`);
+    if (pv.honor_level > 0 || pv.honorable_kills > 0 || (pv.rated || []).length) sections.push(`<section><h3>PvP</h3><table class="cp-tb">${pv.honor_level != null ? `<tr><td>Honor level</td><td class="n">${nf.format(pv.honor_level)}</td></tr>` : ""}${pv.honorable_kills != null ? `<tr><td>Honorable kills</td><td class="n">${nf.format(pv.honorable_kills)}</td></tr>` : ""}${(pv.rated || []).map(b => `<tr><td>${esc(b.bracket)}</td><td class="n">${nf.format(b.rating)}</td></tr>`).join("")}</table></section>`);
+    if (co.mounts != null || co.pets != null) sections.push(`<section><h3>Collections</h3><table class="cp-tb">${co.mounts != null ? `<tr><td>Mounts</td><td class="n">${nf.format(co.mounts)}</td></tr>` : ""}${co.pets != null ? `<tr><td>Pets</td><td class="n">${nf.format(co.pets)}</td></tr>` : ""}</table></section>`);
+    if (pr.length) sections.push(`<section><h3>Professions</h3><table class="cp-tb">${pr.map(x => `<tr><td>${esc(x.name)}${x.tier && x.tier !== x.name ? `<small class="sub"> ${esc(x.tier)}</small>` : ""}</td><td class="n">${x.max ? `${x.skill}/${x.max}` : x.skill != null ? x.skill : ""}</td></tr>`).join("")}</table></section>`);
     return `<div class="cp-hd${d.render ? " has-rd" : ""}" style="--cc:${col}">${d.render ? `<div class="cp-rw" aria-hidden="true"><img class="cp-rd" alt="" hidden></div>` : ""}<div class="cp-who">
+      ${!d.render && d.avatar_src ? `<img class="cp-avatar" src="${esc(d.avatar_src)}" width="64" height="64" alt="">` : ""}
       ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
-      <div class="sub">Level ${d.level} ${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
-      <div class="sub">${esc(d.realm)} ${esc(d.region.toUpperCase())}${factionCrest(d.faction || c.faction)}</div>
+      <div class="sub">${d.level != null ? `Level ${d.level} ` : ""}${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
+      <div class="sub">${esc([d.realm, forever ? "Forever" : "Retail", (d.region || c.region || "").toUpperCase()].filter(Boolean).join(" · "))}${factionCrest(d.faction || c.faction)}</div>
       ${d.guild ? `<div class="cp-gu">&lt;${esc(d.guild.name)}&gt;${d.guild.rank != null ? ` · ${d.guild.rank === 0 ? "Guild Master" : "Rank " + d.guild.rank}` : ""}</div>` : ""}
-      <div class="cp-sts">${stat("Item level", d.ilvl ? nf.format(d.ilvl) : "—")}${stat("Achievements", d.achievement_points ? nf.format(d.achievement_points) : "—")}${stat("M+ rating", mp.rating ? nf.format(Math.round(mp.rating)) : "—")}</div></div></div>
-      <div class="cp-bd"><section><h3>Gear</h3>${d.gear && d.gear.length ? `<div class="cp-gear"><div>${L.map(k => slot(g, k)).join("")}</div><div>${R.map(k => slot(g, k)).join("")}</div></div><div class="cp-gear cp-w">${W.map(k => slot(g, k)).join("")}</div>` : `<p class="empty">No gear equipped.</p>`}</section>
-      <section><h3>Raid progress</h3>${rr ? `<div class="sub cp-rt">${esc(rr.t)}</div>${raid(rr.r)}` : `<p class="empty">No raid progress yet.</p>`}</section>
-      <div class="cp-two"><section><h3>Mythic+</h3>${mp.runs && mp.runs.length ? `<table class="cp-tb">${mp.runs.map(r => `<tr><td>${esc(r.dungeon)}</td><td class="n">+${r.level}</td><td class="n ${r.timed ? "ok" : "dim"}">${r.timed ? "Timed" : "Overtime"}</td></tr>`).join("")}</table>` : `<p class="empty">No Mythic+ runs this season.</p>`}</section>
-      <section><h3>PvP</h3>${pv.honor_level || pv.honorable_kills || (pv.rated && pv.rated.length) ? `<table class="cp-tb"><tr><td>Honor level</td><td class="n">${nf.format(pv.honor_level || 0)}</td></tr><tr><td>Honorable kills</td><td class="n">${nf.format(pv.honorable_kills || 0)}</td></tr>${(pv.rated || []).map(b => `<tr><td>${esc(b.bracket)}</td><td class="n">${nf.format(b.rating)}</td></tr>`).join("")}</table>` : `<p class="empty">No PvP activity.</p>`}</section></div>
-      <div class="cp-two"><section><h3>Collections</h3><table class="cp-tb"><tr><td>Mounts</td><td class="n">${co.mounts != null ? nf.format(co.mounts) : "—"}</td></tr><tr><td>Pets</td><td class="n">${co.pets != null ? nf.format(co.pets) : "—"}</td></tr></table></section>
-      <section><h3>Professions</h3>${pr.length ? `<table class="cp-tb">${pr.map(x => `<tr><td>${esc(x.name)}${x.tier ? `<small class="sub"> ${esc(x.tier)}</small>` : ""}</td><td class="n">${x.max ? `${x.skill}/${x.max}` : x.skill != null ? x.skill : ""}</td></tr>`).join("")}</table>` : `<p class="empty">No professions.</p>`}</section></div></div>
-      <div class="cp-ft"><span class="sub">${d.updated_at ? "Updated " + ago(d.updated_at) : ""}</span><a href="${esc(d.armory)}" target="_blank" rel="noopener">View on Armory ↗</a></div>`;
+      <div class="cp-sts">${d.ilvl != null ? stat("Item level", nf.format(d.ilvl)) : ""}${d.achievement_points > 0 ? stat("Achievements", nf.format(d.achievement_points)) : ""}${mp.rating != null ? stat("M+ rating", nf.format(Math.round(mp.rating))) : ""}</div></div></div>
+      ${sections.length ? `<div class="cp-bd">${sections.join("")}</div>` : ""}
+      <div class="cp-ft"><span class="sub">${d.updated_at ? "Updated " + ago(d.updated_at) : ""}</span><div class="cp-actions"><button class="btn sm" type="button" data-copychar>Copy link</button>${d.armory && !forever ? ` <a href="${esc(d.armory)}" target="_blank" rel="noopener">View on Armory ↗</a>` : ""}</div></div>`;
   };
   // Touch devices: tap a gear row to show Wowhead's tooltip for it inline (sanitised), tap again/elsewhere to hide.
   const TT = new Map(), OKT = new Set(["TABLE", "TBODY", "TR", "TD", "TH", "B", "BR", "SPAN", "DIV", "SMALL", "I", "UL", "LI"]);
@@ -2207,23 +2233,32 @@ const WOWPOP = (() => {
       const j = await TT.get(k); if (!t.isConnected) return; t.textContent = ""; t.appendChild(clean(j.tooltip || "")); }
     catch (e) { TT.delete(k); if (t.isConnected) t.textContent = "Couldn't load this item's tooltip."; }
   };
-  const open = async (handle, c) => {
+  const open = async (handle, c, options = {}) => {
     if (!c) return; close(true);
+    returnUrl = options.returnUrl || location.pathname + location.search + location.hash;
     box = document.createElement("div"); box.className = "cp-bg";
     box.innerHTML = `<div class="cp" role="dialog" aria-modal="true" aria-label="${esc(c.name)}"><button class="cp-x" type="button" aria-label="Close">×</button><div class="cp-in"><p class="empty cp-pad">Loading ${esc(c.name)}…</p></div></div>`;
     document.body.appendChild(box); document.body.classList.add("cp-lock");
-    box.onclick = e => { if (e.target === box || e.target.closest(".cp-x")) return close(); const r = e.target.closest(".cp-slot[data-whi]"); if (r) return tip(r); if (!e.target.closest(".cp-tip")) tipOff(); };
+    box.onclick = async e => { const copy = e.target.closest("[data-copychar]");
+      if (copy) { const link = siteBase() + WOWLINK.path(handle, c); try { await navigator.clipboard.writeText(link); copy.textContent = "Copied"; setTimeout(() => { if (copy.isConnected) copy.textContent = "Copy link"; }, 1500); }
+        catch (_) { const input = document.createElement("input"); input.value = link; input.readOnly = true; input.setAttribute("aria-label", "Character link"); copy.after(input); input.focus(); input.select(); } return; }
+      if (e.target === box || e.target.closest(".cp-x")) return close(); const r = e.target.closest(".cp-slot[data-whi]"); if (r) return tip(r); if (!e.target.closest(".cp-tip")) tipOff(); };
     box.onkeydown = e => { const r = (e.key === "Enter" || e.key === " ") && e.target.closest && e.target.closest(".cp-slot[data-whi]"); if (r) { e.preventDefault(); tip(r); } };
-    document.addEventListener("keydown", key); history.pushState({ wowpop: 1 }, ""); pushed = true;
+    document.addEventListener("keydown", key);
+    const state = { wowpop: 1, wowReturn: returnUrl };
+    if (options.deep) history.replaceState(state, "", WOWLINK.path(handle, c));
+    else { history.pushState(state, "", WOWLINK.path(handle, c)); pushed = true; }
     $(".cp-x", box).focus();
     const me = box;
-    try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box !== me) return; $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WH.scan();
+    try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box !== me) return;
+      if (d.status === "missing" && c.game_id === "wow_forever") { close(); return; }
+      $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WH.scan();
       const im = $(".cp-rd", box);
       if (im) { const t = localStorage.getItem(TK), r = await fetch(`${API}/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}/render.png`, { headers: t ? { authorization: "Bearer " + t } : {} });
         if (r.ok && box === me) { im.src = URL.createObjectURL(await r.blob()); im.onload = () => URL.revokeObjectURL(im.src); im.hidden = false; } } }
-    catch (x) { if (box === me) $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load this character.</p>`; }
+    catch (x) { if (box === me) { if (c.game_id === "wow_forever" || options.deep || x.status === 404) close(); else $(".cp-in", box).innerHTML = `<p class="empty cp-pad">Couldn't load this character.</p>`; } }
   };
-  return { open, close };
+  return { open, close, body, setResolver: fn => { resolver = fn; } };
 })();
 
 })();
