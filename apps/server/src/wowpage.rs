@@ -123,14 +123,14 @@ async fn list(
     let limit = p.limit.unwrap_or(25).clamp(1, 100);
     let offset = p.offset.unwrap_or(0).clamp(0, 1_000_000);
     // `$4` hide_all: every character counts as hidden
-    let filter = "user_id = $1 AND verified
+    let filter = "user_id = $1 AND (verified OR game_id = 'wow_forever')
         AND ($2 = '' OR lower(name) LIKE $3 OR lower(realm) LIKE $3)
         AND ($5 = '' OR upper(class) = upper($5))
         AND ($6 = 0 OR ($6 = 1 AND NOT (hidden OR $4)) OR ($6 = 2 AND (hidden OR $4)))";
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, bool, Option<String>, Option<String>, Option<String>, Option<String>, bool)> =
+    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, bool, Option<String>, Option<String>, Option<String>, Option<String>, bool, bool)> =
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "SELECT id, game_id, region, realm, name, class, {lvl} AS level, played_s, hidden, race, gender, spec, bnet_spec, show_guild
+            "SELECT id, game_id, region, realm, name, class, {lvl} AS level, played_s, hidden, race, gender, spec, bnet_spec, show_guild, verified
              FROM wow_characters WHERE {filter} ORDER BY {order} LIMIT $7 OFFSET $8",
             lvl = crate::wow::shown_level!()
         )))
@@ -158,7 +158,7 @@ async fn list(
     let (total, total_s, classes): (i64, i64, Vec<String>) = sqlx::query_as(
         "SELECT count(*), coalesce(sum(played_s), 0)::bigint,
                 coalesce(array_agg(DISTINCT upper(class)) FILTER (WHERE class <> ''), '{}')
-         FROM wow_characters WHERE user_id = $1 AND verified",
+         FROM wow_characters WHERE user_id = $1 AND (verified OR game_id = 'wow_forever')",
     )
     .bind(uid)
     .fetch_one(&st.db)
@@ -166,12 +166,28 @@ async fn list(
     let items: Vec<Value> = rows
         .into_iter()
         .map(
-            |(id, g, r, realm, name, class, level, s, h, race, gender, spec, bspec, sg)| {
+            |(
+                id,
+                g,
+                r,
+                realm,
+                name,
+                class,
+                level,
+                s,
+                h,
+                race,
+                gender,
+                spec,
+                bspec,
+                sg,
+                verified,
+            )| {
                 json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
                     "class": class, "level": level, "played_min": s / 60,
                     "hidden": h || ha, "own_hidden": h, "race": race, "gender": gender,
                     "spec": spec.clone().or(bspec.clone()), "spec_picked": spec.is_some(),
-                    "active_spec": bspec, "show_guild": sg })
+                    "active_spec": bspec, "show_guild": sg, "verified": verified })
             },
         )
         .collect();

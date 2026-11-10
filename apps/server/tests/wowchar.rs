@@ -16,6 +16,13 @@ fn entry(name: &str, played: i64, at: i64) -> CharEntry {
         at,
         sv: SIG_KEYS[0].0,
         battletag: "Thrall#1234".into(),
+        flavour: String::new(),
+        project: 0,
+        build: String::new(),
+        first: String::new(),
+        surname: String::new(),
+        beta: 0,
+        confirmed: 0,
         sig: String::new(),
     };
     e.sig = sign_with(SIG_KEYS[0].1, &e);

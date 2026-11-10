@@ -16,6 +16,13 @@ fn entry(name: &str, played: i64, at: i64, tag: &str) -> CharEntry {
         at,
         sv: SIG_KEYS[0].0,
         battletag: tag.into(),
+        flavour: String::new(),
+        project: 0,
+        build: String::new(),
+        first: String::new(),
+        surname: String::new(),
+        beta: 0,
+        confirmed: 0,
         sig: String::new(),
     };
     e.sig = sign_with(SIG_KEYS[0].1, &e);
@@ -884,9 +891,9 @@ async fn a_sold_character_moves_to_its_new_owner(pool: PgPool) {
     assert_eq!(r["total_min"], 610, "{r}");
 }
 
-/// WoW Forever isn't out: its /played uploads are refused (hours are app-tracked).
+/// A Retail-shaped file sent as Forever is quarantined. It does not open a character.
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn forever_uploads_are_closed(pool: PgPool) {
+async fn retail_shaped_forever_upload_is_quarantined(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     let t = link(&app, &pool, "forever", "70", "For#1").await;
     let now = chrono::Utc::now().timestamp() - 60;
@@ -898,8 +905,20 @@ async fn forever_uploads_are_closed(pool: PgPool) {
         Some(json!({ "game_id": "wow_forever", "characters": [entry("Zqx", 3600, now, "For#1")] })),
     )
     .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
-    assert!(r.text.contains("forever_not_open"), "{}", r.text);
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let v = r.json();
+    assert_eq!(v["accepted"], 0, "{v}");
+    assert_eq!(v["rejected"][0]["reason"], "flavour_mismatch", "{v}");
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM wow_characters")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+    let q: i64 = sqlx::query_scalar("SELECT count(*) FROM wow_played_quarantine")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(q, 1);
 }
 
 /// Recount is staff-only (audit-logged); the old user endpoint is gone.

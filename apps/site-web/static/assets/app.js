@@ -510,16 +510,17 @@ pages.wowupload = async () => {
   const plural = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : (many || one + "s")}`;
   const STEPS = [["read", "Reading the file"], ["send", "Sending it securely to Fraglink"], ["check", "Checking signatures, BattleTag and /played history"], ["match", "Matching your Battle.net characters"]];
   el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
-    <p class="sub">Upload once to bring in your past WoW hours, and anything Fraglink tracks after that adds on top. You don't need to upload again, but it'll catch up time you played with Fraglink closed. The higher total always wins, and menu and loading screen time (which /played leaves out) is kept. Each character counts once, even after a rename or realm transfer.</p></div></div>
+    <p class="sub">Upload a character's /played from the addon. Retail and Forever each store that total on their own game. Shown hours use the imported total plus play after that snapshot, or the app's tracked time if that is higher. The two are not added together.</p></div></div>
     <form class="wu-form" data-form>
-      <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label class="sub" title="Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app."><input type="radio" name="game" value="wow_forever" disabled> World of Warcraft: Forever</label></div>
-      <p class="sub">Forever /played uploads open after WoW Forever launches; until then your hours are tracked by the app.</p>
+      <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
+      <p class="sub">Retail and Forever are separate. A Forever character stays unverified until Battle.net's Forever account list confirms it. That check is off until it has been tested.</p>
       <div class="alert info"><b>Before you upload: log in to every character.</b> The addon only saves a character's /played when you log in to it (then log out or <code>/reload</code>). Characters you skip keep the hours from their last upload, and Fraglink always keeps your higher total, so a partial upload never lowers your hours.</div>
       <label class="check wu-row"><input type="checkbox" name="all" required> I've logged in to each of my characters with the addon on since my last upload</label>
       <div class="wu-row"><span class="wu-l">File</span><input type="file" name="f" accept=".lua" required> <button class="btn blue" type="submit">Upload and check</button></div>
       <details class="wu-help"><summary>Where is FraglinkPlayed.lua?</summary>
         <p>Log out of WoW (or type <code>/reload</code>) first so the game saves it, then open:</p>
         <p><code>World of Warcraft\\_retail_\\WTF\\Account\\&lt;ACCOUNT&gt;\\SavedVariables\\FraglinkPlayed.lua</code></p>
+        <p>Forever uses the same file name under <code>_forever_</code>, not <code>_retail_</code>.</p>
         <p class="sub">If you have several WoW accounts there (WoW1, WoW2, or a family member's), upload each account's file. Characters from a Battle.net account other than the one you linked are refused.</p></details>
     </form>
     <ol class="bv-steps" data-steps hidden>${STEPS.map(([k, t]) => `<li data-s="${k}"><span class="bv-ic"></span><b>${t}</b><small></small></li>`).join("")}</ol>
@@ -645,20 +646,20 @@ pages.bnet = async () => {
         <div class="bn-acts"><button class="btn blue" type="button" data-link>Link Battle.net</button><a class="btn" href="/connect/wow">Upload /played</a></div></div>`;
   el.innerHTML = `<section class="panel bn-box"><h2>Battle.net</h2><div data-msg></div>${head}</section>
     ${s.linked ? `<section class="panel bn-box" data-feat><h2>Featured on profile</h2><p class="sub" style="padding:0 14px">Pick up to 3 characters to show first on your profile, in this order. Leave empty to show your most played. Hidden characters can't be featured.</p><div data-fbox><p class="empty" style="padding:12px">Loading…</p></div></section>` : ""}
-    <section class="panel bn-box"><h2><span data-ttl>Verified characters</span><label class="bn-sw bn-hd"><span>Hide all from profile</span><input type="checkbox" data-hideall ${s.hide_all ? "checked" : ""}><i class="bn-tg"></i></label></h2>
+    <section class="panel bn-box"><h2><span data-ttl>WoW characters</span><label class="bn-sw bn-hd"><span>Hide all from profile</span><input type="checkbox" data-hideall ${s.hide_all ? "checked" : ""}><i class="bn-tg"></i></label></h2>
       <div class="bn-tools"><input type="search" data-q placeholder="Search name or realm" aria-label="Search name or realm" maxlength="64">
         <select data-sort aria-label="Sort"><option value="hours">Sort: Hours played</option><option value="level">Sort: Level</option><option value="name">Sort: Name</option><option value="realm">Sort: Realm</option></select>
         <select data-class aria-label="Class"><option value="">All classes</option></select>
         <select data-vis aria-label="Shown or hidden"><option value="">Shown + hidden</option><option value="shown">Shown only</option><option value="hidden">Hidden only</option></select></div>
       <div data-list><p class="empty" style="padding:20px 12px">Loading…</p></div>
       <div class="bn-more"><span class="sub" data-cnt></span><button class="btn" type="button" data-more hidden>Show 25 more</button></div></section>
-    <p class="sub">Only characters Battle.net confirms are listed and counted.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} ${s.unverified === 1 ? "isn't" : "aren't"} verified yet, so ${s.unverified === 1 ? "it doesn't" : "they don't"} count.` : ""} Hidden characters still count toward your WoW hours total; they're just not shown on your profile.${FEATURES.wow_characters ? "" : " Character details aren't shown on profiles right now; your profile shows only your WoW hours."}</p>`;
+    <p class="sub">Retail characters Battle.net confirms are listed with a tick. Forever characters are listed from the addon without that tick until the Forever account list has been tested. Shown hours follow the same rule for both: the imported total is not added on top of tracked time.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} ${s.unverified === 1 ? "isn't" : "aren't"} verified yet.` : ""} Hidden characters are not shown on your profile.${FEATURES.wow_characters ? "" : " Character details aren't shown on profiles right now; your profile shows only your WoW hours."}</p>`;
   const msgBox = $("[data-msg]", el), list = $("[data-list]", el), more = $("[data-more]", el), cnt = $("[data-cnt]", el);
   const st = { q: "", sort: "hours", class: "", vis: "", items: [], data: null, seq: 0 };
   const row = c => {
     const hid = c.hidden, specs = WOW.specs(c.class);
     return `<div class="bn-ch${hid ? " hid" : ""}" data-id="${c.id}"><div class="bn-port"><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" title="${esc(c.race || "")}" loading="lazy" ${imgOk}>${c.class ? `<img class="c" src="${WOW.clsIcon(c.class)}" alt="" title="${esc(WOW.cls(c.class))}" loading="lazy" ${imgOk}>` : ""}</div>
-      <div class="bn-who"><div class="bn-nm">${esc(c.name)} <span class="vbadge" title="Battle.net confirmed this character">✓</span></div><div class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · Level ${c.level}${c.spec || c.class ? " " + esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" ")) : ""}</div></div>
+      <div class="bn-who"><div class="bn-nm">${esc(c.name)} ${c.verified === false ? "" : `<span class="vbadge" title="On the linked Battle.net account">✓</span>`}</div><div class="sub">${c.realm ? esc(c.realm) + " " : ""}${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · Level ${c.level}${c.spec || c.class ? " " + esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" ")) : ""}</div></div>
       <div class="bn-specs" role="group" aria-label="Spec">${specs.map(p => `<button type="button" class="${p[0] === c.spec ? "sel" : ""}" data-spec="${esc(p[0])}" title="${esc(p[0])}${p[0] === c.active_spec ? " (active on Battle.net)" : ""}" aria-pressed="${p[0] === c.spec}"><img src="${WOW.url(p[1])}" alt="${esc(p[0])}" loading="lazy" ${imgOk}></button>`).join("")}</div>
       <div class="bn-hrs">${hours(c.played_min, { zero: true })}<small>/played</small></div>
       ${c.game_id === "wow" ? `<label class="bn-sw bn-gsw" title="Show this character's guild on your profile"><span>Guild</span><input type="checkbox" data-guild ${c.show_guild ? "checked" : ""}><i class="bn-tg"></i></label>` : ""}
@@ -666,7 +667,7 @@ pages.bnet = async () => {
   };
   const render = () => {
     const d = st.data;
-    $("[data-ttl]", el).textContent = `Verified characters (${nf.format(d.total)})`;
+    $("[data-ttl]", el).textContent = `WoW characters (${nf.format(d.total)})`;
     list.innerHTML = st.items.length ? st.items.map(row).join("")
       : `<p class="empty" style="padding:20px 12px">${d.total ? "No characters match." : s.linked ? "No verified characters yet. Verify your WoW characters, or upload /played if you haven't." : "Link Battle.net to verify your characters."}</p>`;
     cnt.textContent = d.total && !d.matched ? `No characters match (${nf.format(d.total)} in all) · ${hours(d.total_min, { zero: true })} total` : d.total ? `Showing ${nf.format(st.items.length)} of ${plural(d.matched, "character")}${d.matched === d.total ? "" : ` (${nf.format(d.total)} in all)`} · ${hours(d.total_min, { zero: true })} total` : "";

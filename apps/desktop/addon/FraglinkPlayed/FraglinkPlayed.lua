@@ -6,8 +6,8 @@
 -- Each entry carries a checksum so hand-edited totals are spotted. It is a deterrent,
 -- not security: leaderboards also need the character verified through Battle.net.
 
-local SIG_VERSION = 1 -- bump with KEY on every release that changes it
-local KEY = "OlApFDIsED1aJE04makEnBj7W6DZwvYG"
+local SIG_VERSION = 2 -- bump with KEY on every release that changes it
+local KEY = "K7mQ2pL9xR4vN8cW1dF6hJ3sT5yB0aUe"
 local REFRESH = 600
 
 FraglinkPlayedDB = FraglinkPlayedDB or {}
@@ -63,10 +63,46 @@ local function ask()
   end)
 end
 
+-- Live Forever is WOW_PROJECT_CAMELOT (18) and not a beta/test client.
+-- Interface 16001 is shared with the old beta, so it is not used here.
+-- If the beta/test APIs are missing, the client is not called live Forever.
+local function client_facts()
+  local project = tonumber(WOW_PROJECT_ID) or 0
+  local camelot = tonumber(WOW_PROJECT_CAMELOT) or 18
+  local build = ""
+  if GetBuildInfo then
+    local _, b = GetBuildInfo()
+    build = tostring(b or "")
+  end
+  local saw = (IsBetaBuild ~= nil) or (IsPublicTestClient ~= nil) or (IsTestBuild ~= nil)
+  local beta = (IsBetaBuild and IsBetaBuild()) or (IsPublicTestClient and IsPublicTestClient()) or (IsTestBuild and IsTestBuild())
+  local flavour, confirmed = "unknown", 0
+  if project == camelot or project == 18 then
+    if beta then
+      flavour, confirmed = "forever_beta", 1
+    elseif saw then
+      flavour, confirmed = "forever", 1
+    else
+      flavour, confirmed = "forever_unconfirmed", 0
+    end
+  elseif project == 1 or project == (tonumber(WOW_PROJECT_MAINLINE) or 1) then
+    flavour, confirmed = "retail", 1
+  end
+  return flavour, project, build, beta and 1 or 0, confirmed
+end
+
 local function save(total)
   local region = REGIONS[GetCurrentRegion and GetCurrentRegion() or 0] or "unknown"
-  local realm = GetRealmName() or ""
+  local flavour, project, build, beta, confirmed = client_facts()
+  local forever = flavour == "forever" or flavour == "forever_beta" or flavour == "forever_unconfirmed"
+  local realm = forever and "" or (GetRealmName() or "")
   local name = UnitName("player") or ""
+  local first, surname = "", ""
+  if forever then
+    first, surname = name:match("^(%S+)%s+(.+)$")
+    first = first or name
+    surname = surname or ""
+  end
   local _, class = UnitClass("player")
   class = class or ""
   local level = UnitLevel("player") or 0
@@ -77,20 +113,26 @@ local function save(total)
     local _, bt = BNGetInfo()
     battletag = bt or ""
   end
-  if realm == "" or name == "" or played <= 0 then return false end
+  if name == "" or played <= 0 then return false end
+  if not forever and realm == "" then return false end
   local e = {
     region = region, realm = realm, name = name, class = class,
     level = level, played = played, at = at, sv = SIG_VERSION, battletag = battletag,
+    flavour = flavour, project = project, build = build,
+    first = first, surname = surname, beta = beta, confirmed = confirmed,
   }
   e.sig = sign({
     region, realm, name, class,
     string.format("%d", level), string.format("%d", played), string.format("%d", at),
     string.format("%d", SIG_VERSION), battletag,
+    flavour, string.format("%d", project), build, first, surname,
+    string.format("%d", beta), string.format("%d", confirmed),
   })
   FraglinkPlayedDB.chars = FraglinkPlayedDB.chars or {}
-  FraglinkPlayedDB.chars[region .. "/" .. realm .. "/" .. name] = e
-  FraglinkPlayedDB.version = 1
-  return true, name .. "-" .. realm
+  local key = forever and (region .. "/forever/" .. name) or (region .. "/" .. realm .. "/" .. name)
+  FraglinkPlayedDB.chars[key] = e
+  FraglinkPlayedDB.version = 2
+  return true, forever and name or (name .. "-" .. realm)
 end
 
 -- No in-game UI: one system-style chat line per login, unless /fragq turned it off.
