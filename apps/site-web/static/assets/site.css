@@ -874,9 +874,16 @@ body.cp-lock{overflow:hidden}
 .cp-rd{position:absolute;left:50%;bottom:-34%;height:195%;width:auto;max-width:none;transform:translateX(-50%)}
 .cp-hd.has-rd .cp-who{max-width:calc(100% - 250px)}
 .cp-who{position:relative;padding:18px 20px;max-width:70%}
-.cp-who h2{margin:2px 0;font-size:24px;overflow-wrap:anywhere}
+.cp-who h2,.cp-nm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0;font-size:24px;overflow-wrap:anywhere}
 .cp-ti{color:var(--label);font-size:12px}
-.cp-gu{color:#a7d08c;margin-top:4px}
+.cp-id{color:#c8ced6;font-size:13px;line-height:1.35;margin-top:4px}
+.cp-lv{font-weight:600}
+.cp-cl{color:var(--cc,#eef2f6);font-weight:700}
+.cp-srv{margin-top:4px;font-size:13px;line-height:1.35}
+.cp-realm{color:#eef2f6;font-weight:600}
+.cp-ver{color:#b9bec5;font-weight:400}
+.cp-gu{color:#a7d08c;margin-top:6px;font-size:13px}
+.cp-who .faction-crest{width:20px;height:22px;margin-left:0;vertical-align:-4px;flex-shrink:0;filter:drop-shadow(0 0 0.6px #f4f7fb) drop-shadow(0 0 0.6px #f4f7fb) drop-shadow(0 1px 1px rgba(0,0,0,.55))}
 .cp-f.horde{color:#e0574f}.cp-f.alliance{color:#5a9be0}
 .cp-sts{display:flex;gap:18px;margin-top:12px;flex-wrap:wrap}
 .cp-st small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}.cp-st b{font-size:18px;color:#eef2f6}

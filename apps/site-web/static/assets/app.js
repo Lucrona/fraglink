@@ -2241,11 +2241,13 @@ const WOWPOP = (() => {
     if (pv.honor_level > 0 || pv.honorable_kills > 0 || (pv.rated || []).length) sections.push(`<section><h3>PvP</h3><table class="cp-tb">${pv.honor_level != null ? `<tr><td>Honor level</td><td class="n">${nf.format(pv.honor_level)}</td></tr>` : ""}${pv.honorable_kills != null ? `<tr><td>Honorable kills</td><td class="n">${nf.format(pv.honorable_kills)}</td></tr>` : ""}${(pv.rated || []).map(b => `<tr><td>${esc(b.bracket)}</td><td class="n">${nf.format(b.rating)}</td></tr>`).join("")}</table></section>`);
     if (co.mounts != null || co.pets != null) sections.push(`<section><h3>Collections</h3><table class="cp-tb">${co.mounts != null ? `<tr><td>Mounts</td><td class="n">${nf.format(co.mounts)}</td></tr>` : ""}${co.pets != null ? `<tr><td>Pets</td><td class="n">${nf.format(co.pets)}</td></tr>` : ""}</table></section>`);
     if (pr.length) sections.push(`<section><h3>Professions</h3><table class="cp-tb">${pr.map(x => `<tr><td>${esc(x.name)}${x.tier && x.tier !== x.name ? `<small class="sub"> ${esc(x.tier)}</small>` : ""}</td><td class="n">${x.max ? `${x.skill}/${x.max}` : x.skill != null ? x.skill : ""}</td></tr>`).join("")}</table></section>`);
+    const raceSpec = [d.race, d.spec].filter(Boolean).map(esc).join(" ");
+    const verLine = [forever ? "Forever" : "Retail", (d.region || c.region || "").toUpperCase()].filter(Boolean).join(" · ");
     return `<div class="cp-hd${d.render ? " has-rd" : ""}" style="--cc:${col}">${d.render ? `<div class="cp-rw" aria-hidden="true"><img class="cp-rd" alt="" hidden></div>` : ""}<div class="cp-who">
       ${WOWAV.image({ ...c, game_id: d.game_id || c.game_id, class: d.class || c.class, race: d.race || c.race, gender: d.gender || c.gender, avatar_src: d.avatar_src }, 'class="cp-avatar" width="64" height="64"')}
-      ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
-      <div class="sub">${d.level != null ? `Level ${d.level} ` : ""}${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
-      <div class="sub">${esc([d.realm, forever ? "Forever" : "Retail", (d.region || c.region || "").toUpperCase()].filter(Boolean).join(" · "))}${factionCrest(d.faction || c.faction)}</div>
+      ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 class="cp-nm" style="color:${col}">${esc(d.name)}${factionCrest(d.faction || c.faction)}</h2>
+      <div class="cp-id">${d.level != null ? `<span class="cp-lv">Level ${esc(d.level)}</span>` : ""}${raceSpec ? ` ${raceSpec}` : ""}${d.class ? ` <span class="cp-cl">${esc(d.class)}</span>` : ""}</div>
+      <div class="cp-srv">${d.realm ? `<b class="cp-realm">${esc(d.realm)}</b>` : ""}<span class="cp-ver">${d.realm ? " · " : ""}${esc(verLine)}</span></div>
       ${d.guild ? `<div class="cp-gu">&lt;${esc(d.guild.name)}&gt;${d.guild.rank != null ? ` · ${d.guild.rank === 0 ? "Guild Master" : "Rank " + d.guild.rank}` : ""}</div>` : ""}
       <div class="cp-sts">${d.ilvl != null ? stat("Item level", nf.format(d.ilvl)) : ""}${d.achievement_points > 0 ? stat("Achievements", nf.format(d.achievement_points)) : ""}${mp.rating != null ? stat("M+ rating", nf.format(Math.round(mp.rating))) : ""}</div></div></div>
       ${sections.length ? `<div class="cp-bd">${sections.join("")}</div>` : ""}
