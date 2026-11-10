@@ -9,13 +9,13 @@ const avatarSource=source.slice(avStart,source.indexOf('\n})();',avStart)+6);
 const start=source.indexOf('const WOWPOP =');
 const popupSource=source.slice(start,source.indexOf('\n})();',start)+6);
 const esc=x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-function harness(data={name:'Sample',region:'us',level:18,gear:[]}) {
+function harness(data={name:'Sample',region:'us',level:18,gear:[]}, opts={}) {
  const events={}, calls=[], copied=[], nodes=[], timers=[];
  const location={pathname:'/u/sample',search:'',hash:''};
  const history={state:null,pushState(s,_,path){this.state=s;calls.push(['push',path]);location.pathname=path},replaceState(s,_,path){this.state=s;calls.push(['replace',path]);location.pathname=path},back(){calls.push(['back']);location.pathname='/u/sample'}};
  const inside={innerHTML:''};
  const ctx={console,URL,encodeURIComponent,Number,Date,Map,Set,location,history,navigator:{clipboard:{async writeText(s){copied.push(s)}}},
-  WOW:{clsIcon:c=>'/class/'+c,raceIcon:()=>'/race/test'},siteBase:()=> 'https://playfraglink.com',esc,nf:new Intl.NumberFormat('en'),plural:(n,s)=>`${n} ${s}`,factionCrest:()=>'',WH:{ok:false,scan(){}},imgOk:'',
+  WOW:{clsIcon:c=>'/class/'+c,raceIcon:()=>'/race/test'},siteBase:()=> 'https://playfraglink.com',esc,nf:new Intl.NumberFormat('en'),plural:(n,s)=>`${n} ${s}`,factionCrest:()=>'',WH:{ok:!!opts.whOk,scan(){}},imgOk:'',
   addEventListener:(name,fn)=>events[name]=fn,document:{createElement(){const node={remove(){},innerHTML:'',className:''};nodes.push(node);return node},body:{appendChild(){},classList:{add(){},remove(){}}},addEventListener(){},removeEventListener(){}},
   $:(selector)=>selector==='.cp-x'?{focus(){}}:selector==='.cp-in'?inside:null,$$:()=>[],api:async()=>data,setTimeout:fn=>{timers.push(fn);return 0}};
  const {WOWPOP,WOWLINK}=vm.runInNewContext(linkSource+avatarSource+popupSource+';({WOWPOP,WOWLINK})',ctx);
@@ -29,19 +29,36 @@ test('stable share links use version and UUID, not names',()=>{
  }
  for(const path of ['/u/s/wow/forever/42','/u/s/wow/classic/'+id,'/u/s/wow/forever/../../private'])assert.equal(WOWLINK.parse(path),null);
 });
-test('empty popup sections and unsupported Forever item lookups are absent',()=>{
+test('empty popup sections stay absent; Forever gear uses Wowhead Forever, not Retail',()=>{
  const {WOWPOP}=harness();const c={id:'test',name:'Sample',game_id:'wow_forever'};
  let html=WOWPOP.body({name:'Sample',level:18,region:'us',game_id:'wow_forever'},c);
  for(const word of ['<h3>Gear','<h3>Stats','Raid progress','Mythic+','Collections','Professions','cp-empty','not available','No gear'])assert.ok(!html.includes(word),word);
  assert.ok(html.includes('>Share</button>'));assert.ok(!html.includes('View on Armory'));
  html=WOWPOP.body({name:'Sample',region:'us',game_id:'wow_forever',gear:[{slot:'RANGED',id:3111,name:'Bow',quality:'POOR',icon:'inv_weapon_bow_01',ilvl:5}],stats:[{name:'Health',value:508},{name:'Melee crit',value:4.8004,percent:true}]},c);
  assert.ok(html.includes('q-poor'));assert.ok(html.includes('Ranged'));assert.ok(html.includes('508'));assert.ok(html.includes('4.80%'));
- assert.ok(!html.includes('data-whi'));assert.ok(!html.includes('wowhead.com'));assert.ok(!html.includes('cp-empty'));
+ assert.ok(html.includes('data-whi="3111"'));assert.ok(html.includes('data-whenv="16"'));assert.ok(!html.includes('data-whenv="1"'));
+ assert.ok(!html.includes('www.wowhead.com/item=3111'));assert.ok(!html.includes('cp-empty'));
+});
+test('hover links use the Forever Wowhead path and domain',()=>{
+ const {WOWPOP}=harness({name:'Sample',region:'us',gear:[]},{whOk:true});
+ const c={id:'test',name:'Sample',game_id:'wow_forever'};
+ const html=WOWPOP.body({name:'Sample',region:'us',game_id:'wow_forever',gear:[{slot:'RANGED',id:3111,name:'Bow',quality:'POOR',ilvl:5}]},c);
+ assert.ok(html.includes('href="https://www.wowhead.com/forever/item=3111"'));
+ assert.ok(html.includes('data-wowhead="domain=forever&amp;ilvl=5"') || html.includes('data-wowhead="domain=forever&ilvl=5"'));
+ assert.ok(!html.includes('https://www.wowhead.com/item=3111"'));
+ assert.ok(!html.includes('data-whi'));
 });
 test('Retail keeps Armory, item details and populated sections',()=>{
  const {WOWPOP}=harness();const html=WOWPOP.body({name:'Retail',region:'us',level:80,armory:'https://worldofwarcraft.blizzard.com/character/test',gear:[{slot:'HEAD',id:5,name:'Helm',quality:'EPIC',ilvl:100}],mplus:{rating:1234,runs:[{dungeon:'Test dungeon',level:5,timed:true}]},professions:[{name:'Mining',skill:50,max:75}]},{game_id:'wow'});
- for(const word of ['View on Armory','data-whi="5"','q-epic','Mythic+','Professions','>Share</button>'])assert.ok(html.includes(word),word);
- assert.ok(!html.includes('cp-empty'));
+ for(const word of ['View on Armory','data-whi="5"','data-whenv="1"','q-epic','Mythic+','Professions','>Share</button>'])assert.ok(html.includes(word),word);
+ assert.ok(!html.includes('forever/item='));assert.ok(!html.includes('cp-empty'));
+});
+test('Retail hover links stay on the live Wowhead item path',()=>{
+ const {WOWPOP}=harness({name:'Retail',region:'us',gear:[]},{whOk:true});
+ const html=WOWPOP.body({name:'Retail',region:'us',game_id:'wow',gear:[{slot:'HEAD',id:5,name:'Helm',quality:'EPIC',ilvl:100}]},{game_id:'wow'});
+ assert.ok(html.includes('href="https://www.wowhead.com/item=5"'));
+ assert.ok(html.includes('data-wowhead="ilvl=100"'));
+ assert.ok(!html.includes('domain=forever'));assert.ok(!html.includes('forever/item='));
 });
 test('opening pushes the share URL; closing goes back; direct entry closes in place',async()=>{
  const h=harness(), c={id:'01234567-89ab-cdef-0123-456789abcdef',name:'Sample',game_id:'wow'};
@@ -78,4 +95,13 @@ test('Share copies the stable URL for both versions, confirms, then resets',asyn
   assert.equal(h.copied[0],'https://playfraglink.com'+h.WOWLINK.path('sample',c));
   assert.equal(button.textContent,'Link copied');h.timers.at(-1)();assert.equal(button.textContent,'Share');
  }
+});
+
+test('Forever characters without an Armory page stay open with a short note',()=>{
+ const {WOWPOP}=harness();
+ const html=WOWPOP.body({name:'Lucroena Ashborne',level:4,region:'us',realm:'PvP',game_id:'wow_forever',armory_unavailable:true,gear:[],stats:[]},{game_id:'wow_forever',name:'Lucroena Ashborne'});
+ assert.ok(html.includes('PvP · Forever · US') || html.includes('PvP · Forever · us') || /PvP/.test(html) && /Forever/.test(html) && /US/.test(html));
+ assert.ok(html.includes("The Armory doesn't list this character yet."));
+ assert.ok(!html.includes('View on Armory'));
+ assert.ok(html.includes('>Share</button>'));
 });

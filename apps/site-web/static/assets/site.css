@@ -780,7 +780,7 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .bn-headrow{color:var(--dim);font-size:11px;letter-spacing:.4px;text-transform:uppercase;border-bottom:1px solid var(--line)}
 .bn-row{border-bottom:1px solid var(--line)}
 .bn-row:nth-child(even){background:var(--row-alt)}
-.bn-row img{width:28px;height:28px;border-radius:3px;border:1px solid #000;background:#111}
+.bn-row img{width:28px;height:28px;border-radius:3px;border:1px solid #000;background:#111;object-fit:cover;object-position:center 20%}
 .bn-row.hid .bn-nm,.bn-row.hid img{opacity:.45}
 .bn-nm{font-weight:650;color:#eef2f6;min-width:0}
 .bn-tick{color:var(--online);margin-left:4px;font-weight:700}
@@ -827,7 +827,7 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 }
 /* profile WoW cards with portraits */
 .wc-p{position:relative;width:48px;height:48px;flex:none;border-radius:5px;overflow:hidden;box-shadow:0 0 0 1px #000,0 0 10px color-mix(in srgb,var(--cls) 55%,transparent)}
-.wc-p .r{width:48px;height:48px;border-radius:4px;border:0;background:transparent;position:relative;z-index:1}
+.wc-p .r{width:48px;height:48px;border-radius:4px;border:0;background:transparent;position:relative;z-index:1;object-fit:cover;object-position:center 20%;display:block}
 .wc-ini{position:absolute;inset:0;display:grid;place-items:center;font-weight:700;color:#fff;background:color-mix(in srgb,var(--cls) 62%,#1a120c);letter-spacing:.3px}
 .wc-ic{position:absolute;right:-6px;bottom:-6px;display:flex;z-index:2}.wc-ic img{width:20px;height:20px;border-radius:50%;border:1px solid #000;margin-left:-4px}
 .wc-t{min-width:0}.wc-t b{color:#eef2f6}.wc-meta{font-size:12px;line-height:1.3}.wc-lv{color:var(--muted);font-weight:600;margin-right:4px}.wc-cl{color:var(--cls);font-weight:700}.wc-realm{color:var(--dim);font-size:11px;font-weight:400}
@@ -1293,4 +1293,4 @@ tr.hc-flag td{background:#1d1010}
 .seg.wow-version-switch button[aria-selected="true"]:hover{background:#355a7c}
 .seg.wow-version-switch button:focus-visible{outline:2px solid #86afcf;outline-offset:-3px}
 
-.cp-ft{flex-wrap:nowrap}.cp-ft>.sub{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cp-actions{display:flex;align-items:center;gap:12px;flex:0 0 auto;flex-wrap:nowrap;white-space:nowrap}.cp-actions button{flex:0 0 auto;min-width:86px}.cp-actions a{display:inline-flex;flex:0 0 auto;white-space:nowrap}.cp-actions input{position:absolute;bottom:42px;right:18px;width:240px;max-width:calc(100% - 36px)}.cp-avatar{float:right;margin:0 0 8px 12px;border-radius:4px}
+.cp-ft{flex-wrap:nowrap}.cp-ft>.sub{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cp-actions{display:flex;align-items:center;gap:12px;flex:0 0 auto;flex-wrap:nowrap;white-space:nowrap}.cp-actions button{flex:0 0 auto;min-width:86px}.cp-actions a{display:inline-flex;flex:0 0 auto;white-space:nowrap}.cp-actions input{position:absolute;bottom:42px;right:18px;width:240px;max-width:calc(100% - 36px)}.cp-avatar{float:right;margin:0 0 8px 12px;width:64px;height:64px;border-radius:4px;object-fit:cover;object-position:center 20%;display:block}

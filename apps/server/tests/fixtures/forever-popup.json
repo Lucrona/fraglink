@@ -23,7 +23,11 @@
       "name": "Horde"
     },
     "equipped_item_level": 7,
-    "achievement_points": 0
+    "achievement_points": 0,
+    "ruleset": {
+      "id": 1,
+      "name": "PvP"
+    }
   },
   "equip": {
     "equipped_items": [
@@ -338,6 +342,10 @@
       {
         "key": "main-raw",
         "value": "https://render.worldofwarcraft.com/forever-us/character/42/42-main-raw.png"
+      },
+      {
+        "key": "avatar",
+        "value": "https://render.worldofwarcraft.com/forever-us/character/42/42-avatar.jpg"
       }
     ]
   },

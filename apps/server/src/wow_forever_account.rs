@@ -16,6 +16,7 @@ struct AccountCharacter {
     level: Option<i32>,
     class_name: Option<String>,
     faction: Option<String>,
+    ruleset_blizzard_id: Option<i64>,
 }
 
 /// Fail closed on unknown/partial schemas. A 404 is not a confirmed empty account.
@@ -50,6 +51,7 @@ fn parse(v: &Value) -> Option<Vec<AccountCharacter>> {
                     })
                     .filter(|n| !n.is_empty()),
                 faction: wow::profile_faction(c).map(str::to_string),
+                ruleset_blizzard_id: c["ruleset"]["id"].as_i64().filter(|id| *id > 0),
             };
             if out
                 .iter()
@@ -142,10 +144,10 @@ async fn replace_cache(
     .execute(&mut *tx)
     .await?;
     for c in rows {
-        sqlx::query("INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, realm_name, name, bnet_id, addon_guid, level, class_name, faction)
-            VALUES($1, 'wow_forever', 'us', '', '', $2, $3, $4, $5, $6, $7)")
+        sqlx::query("INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, realm_name, name, bnet_id, addon_guid, level, class_name, faction, ruleset_blizzard_id)
+            VALUES($1, 'wow_forever', 'us', '', '', $2, $3, $4, $5, $6, $7, $8)")
             .bind(uid).bind(&c.name).bind(c.bnet_id).bind(&c.addon_guid).bind(c.level)
-            .bind(&c.class_name).bind(&c.faction).execute(&mut *tx).await?;
+            .bind(&c.class_name).bind(&c.faction).bind(c.ruleset_blizzard_id).execute(&mut *tx).await?;
     }
     tx.commit().await?;
     verify_cached(db, uid).await
@@ -183,7 +185,7 @@ pub(crate) async fn verify_cached(db: &PgPool, uid: Uuid) -> Result<(), sqlx::Er
     .fetch_optional(&mut *tx)
     .await?
     .flatten();
-    let mut accounts: Vec<AccountCharacter> = sqlx::query_as("SELECT name, bnet_id, addon_guid, level, class_name, faction FROM bnet_characters
+    let mut accounts: Vec<AccountCharacter> = sqlx::query_as("SELECT name, bnet_id, addon_guid, level, class_name, faction, ruleset_blizzard_id FROM bnet_characters
         WHERE user_id=$1 AND game_id='wow_forever' AND region='us' AND realm_slug='' AND bnet_id IS NOT NULL")
         .bind(uid).fetch_all(&mut *tx).await?;
     accounts.retain(|a| a.bnet_id > 0 && a.name.split_whitespace().count() >= 2);
@@ -220,6 +222,18 @@ pub(crate) async fn verify_cached(db: &PgPool, uid: Uuid) -> Result<(), sqlx::Er
                 .bind(&a.faction)
                 .execute(&mut *tx)
                 .await?;
+                if let Some(rid) = a.ruleset_blizzard_id {
+                    sqlx::query(
+                        "UPDATE wow_characters c SET ruleset_id = r.id
+                         FROM wow_forever_rulesets r
+                         WHERE c.id = $1 AND c.game_id = 'wow_forever' AND c.ruleset_id IS NULL
+                           AND r.region = 'us' AND r.blizzard_id = $2",
+                    )
+                    .bind(c.id)
+                    .bind(rid)
+                    .execute(&mut *tx)
+                    .await?;
+                }
             }
         }
         if !verified {
@@ -327,7 +341,7 @@ mod tests {
     // plus every hours/history table. IDs, names, timestamps, GUIDs included.
     async fn protected(db: &PgPool) -> Value {
         let mut out = serde_json::Map::new();
-        let chars: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(to_jsonb(c) - ARRAY['verified','ever_verified','bnet_id','bnet_level','class','faction'] ORDER BY id),'[]') FROM wow_characters c")
+        let chars: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(to_jsonb(c) - ARRAY['verified','ever_verified','bnet_id','bnet_level','class','faction','ruleset_id'] ORDER BY id),'[]') FROM wow_characters c")
             .fetch_one(db).await.unwrap();
         out.insert("characters".into(), chars);
         for (table, query) in [
