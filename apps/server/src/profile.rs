@@ -490,12 +490,16 @@ async fn profile(
     } else {
         Value::Null
     };
-    // WoW characters from the addon: only Battle.net-verified ones are shown and counted
+    // WoW characters from the addon. Retail cards are Battle.net-verified. Forever
+    // cards are included without a tick until that account list is on. A profile
+    // set to one flavour omits the other from this response; the rows stay stored.
+    let wow_show = crate::wowpage::profile_show(&st, p.id).await?;
     let wow_characters = if can_see_games
         && show("wow_characters")
         && crate::features::on(&st, "wow_characters").await
     {
-        let mut c = crate::wow::characters(&st, p.id, is_self, true).await?;
+        // Hidden rows stay stored. The profile never lists them, including for the owner.
+        let mut c = crate::wow::characters(&st, p.id, false, true).await?;
         crate::wowchar::warm_guilds(
             &st,
             c.iter()
@@ -508,6 +512,16 @@ async fn profile(
                 .as_str()
                 .is_some_and(|g| hidden.iter().any(|h| h == g))
         });
+        if wow_show != "both" {
+            c.retain(|x| x["game_id"].as_str() == Some(wow_show.as_str()));
+        }
+        // Hours stay on the manager. The public cards do not receive them.
+        for row in &mut c {
+            if let Some(o) = row.as_object_mut() {
+                o.remove("played_min");
+                o.remove("played_at");
+            }
+        }
         json!(c)
     } else {
         Value::Null
@@ -621,6 +635,8 @@ async fn profile(
         "events": events,
         "achievements": achievements,
         "wow_characters": wow_characters,
+        "wow_default": crate::wowpage::default_flavour(&st, p.id).await?,
+        "wow_show": wow_show,
         "rig": if has_rig && show("rig") { rig } else { Value::Null },
         "friends": friend_grid,
         "linked": linked,

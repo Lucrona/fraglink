@@ -441,6 +441,8 @@ mod tests {
         assert!(lua.contains(&format!("local KEY = \"{k}\"")), "addon KEY");
         assert!(ADDON_TOC.contains(&format!("## Version: {ADDON_VERSION}")));
         assert!(ADDON_TOC.contains("## X-Curse-Project-ID: 1766775"));
+        // warcraft.wiki.gg TOC format: Standard 120105, Standard test 120107, Forever 16001.
+        assert!(ADDON_TOC.contains("## Interface: 120105, 120107, 16001"));
     }
 
     /// The fixture is what the real addon wrote under Lua 5.1 (see

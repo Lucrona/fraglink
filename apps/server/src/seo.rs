@@ -206,10 +206,14 @@ pub fn profile_head(base: &str, seo: &ProfileSeo) -> String {
 /// robots header and head tags. The page itself is still drawn by the site's script.
 async fn profile_page(State(st): State<AppState>, Path(rest): Path<String>) -> Response {
     let name = rest.split('/').next().unwrap_or("");
-    let seo = match profile_seo(&st, name).await {
+    let mut seo = match profile_seo(&st, name).await {
         Ok(s) => s,
         Err(e) => return e.into_response(),
     };
+    // /u/<name>/wow is the character gallery, not the profile search engines index.
+    if rest.contains('/') && !matches!(seo, ProfileSeo::Missing) {
+        seo = ProfileSeo::NoIndex;
+    }
     let page = match std::fs::read_to_string(st.cfg.site_dir.join("u.html")) {
         Ok(p) => p,
         Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
