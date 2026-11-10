@@ -17,6 +17,7 @@ const token = () => localStorage.getItem(TK);
 document.addEventListener("error", e => {
   const t = e.target;
   if (!t || t.tagName !== "IMG") return;
+  if (t.hasAttribute("data-wow-fallback")) { const src = t.getAttribute("data-wow-fallback"); t.removeAttribute("data-wow-fallback"); t.src = src; return; }
   if (t.hasAttribute("data-hide-broken")) t.style.visibility = "hidden";
   else if (t.hasAttribute("data-broken-remove")) t.remove();
   else if (t.hasAttribute("data-broken-parent")) { if (t.parentNode) t.parentNode.classList.add("is-broken"); }
@@ -670,6 +671,33 @@ const WOW = (() => {
 })();
 const imgOk = "data-hide-broken";
 
+// Forever portraits use public character media, never account ownership or /played.
+const WOWAV = (() => {
+  const requests = new Map();
+  const safe = s => typeof s === "string" && /^https:\/\/render\.worldofwarcraft\.com\/[^?#]+\.(jpg|png)$/.test(s) && !s.includes("..");
+  const image = (c, attrs = "") => {
+    const forever = c.game_id === "wow_forever", fallback = forever ? WOW.clsIcon(c.class) : WOW.raceIcon(c.race, c.gender, c.class);
+    const src = forever && safe(c.avatar_src) ? c.avatar_src : fallback;
+    return `<img src="${esc(src)}" alt="" ${attrs} ${imgOk}${forever ? ` data-wow-avatar="${esc(c.id || "")}"${src !== fallback ? ` data-wow-fallback="${esc(fallback)}"` : ""}` : ""}>`;
+  };
+  const fill = (root, handle) => {
+    if (!handle) return;
+    const images = $$("img[data-wow-avatar]", root).filter(im => !im.dataset.wowLoaded);
+    // Bound parallel requests on large galleries and deduplicate across surfaces.
+    let next = 0;
+    const worker = async () => { while (next < images.length) {
+      const im = images[next++], id = im.dataset.wowAvatar; im.dataset.wowLoaded = "1";
+      if (!id || im.hasAttribute("data-wow-fallback")) continue;
+      const path = `/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(id)}/avatar`;
+      if (!requests.has(path)) { if (requests.size >= 256) requests.clear(); requests.set(path, api(path).catch(() => null)); }
+      const data = await requests.get(path);
+      if (im.isConnected && data && safe(data.avatar_src)) { im.setAttribute("data-wow-fallback", im.getAttribute("src")); im.style.visibility = ""; im.src = data.avatar_src; }
+    } };
+    return Promise.all(Array.from({length: Math.min(6, images.length)}, worker));
+  };
+  return {image, fill};
+})();
+
 /* ---------- /connect/battlenet: the Battle.net account, verified WoW characters, spec picks, hide toggles ---------- */
 pages.bnet = () => wowManager($("#bn"));
 async function wowManager(el) {
@@ -719,7 +747,7 @@ async function wowManager(el) {
     const was = [c.former_name && c.former_name.toLowerCase() !== c.name.toLowerCase() ? c.former_name : "", c.former_realm && c.former_realm !== c.realm ? c.former_realm : ""].filter(Boolean).join(" · ");
     const cls = [Number(c.level) > 0 ? "Level " + c.level : "", WOW.cls(c.class)].filter(Boolean).join(" ");
     const imp = c.played_min > 0 && c.uploaded_at ? ago(c.uploaded_at) : "—";
-    return `<div class="bn-row${hid ? " hid" : ""}" data-id="${c.id}"><img src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" ${imgOk}>
+    return `<div class="bn-row${hid ? " hid" : ""}" data-id="${c.id}">${WOWAV.image(c)}
       <div class="bn-nm">${esc(c.name)}${factionCrest(c.faction)}${c.verified ? `<span class="bn-tick" title="On the linked Battle.net account">✓</span>` : ""}${was ? `<div class="sub">formerly ${esc(was)}</div>` : ""}</div>
       <div class="c-realm sub">${c.realm ? esc(c.realm) + " " : ""}${esc((c.region || "").toUpperCase())}</div>
       <div class="c-cls">${esc(cls || "—")}</div>
@@ -739,6 +767,7 @@ async function wowManager(el) {
     const filtered = d && d.matched === 0 && (st.q || st.class || st.vis);
     list.innerHTML = st.items.length ? st.items.map(row).join("")
       : `<p class="empty bn-empty">${filtered ? "No characters match." : "No characters yet. Add one above, or upload a /played file."}</p>`;
+    WOWAV.fill(list, (me() || {}).handle);
     cnt.textContent = d && d.matched ? plural(d.matched, "character") : "";
     const left = d ? d.matched - st.items.length : 0;
     more.hidden = left <= 0; more.textContent = "Show more";
@@ -1340,7 +1369,7 @@ pages.profile = async () => {
     const lvl = Number(c.level) > 0 ? `Level ${c.level}` : "";
     const line = [lvl && `<span class="wc-lv">${esc(lvl)}</span>`, cls && `<span class="wc-cl">${esc(cls)}</span>`].filter(Boolean).join(" ");
     const open = poppable(c);
-    return `<div class="wc${open ? " wc-click" : ""}" style="--cls:${col}"${open ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><span class="wc-ini">${ini}</span><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" loading="lazy" ${imgOk}></div><div class="wc-t"><b>${esc(c.name)}${factionCrest(c.faction)}${tick}</b>${line ? `<div class="wc-meta">${line}</div>` : ""}${guild}${realm}</div></div>`;
+    return `<div class="wc${open ? " wc-click" : ""}" style="--cls:${col}"${open ? ` data-wcid="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)} character details"` : ""}><div class="wc-p"><span class="wc-ini">${ini}</span>${WOWAV.image(c, 'class="r" loading="lazy"')}</div><div class="wc-t"><b>${esc(c.name)}${factionCrest(c.faction)}${tick}</b>${line ? `<div class="wc-meta">${line}</div>` : ""}${guild}${realm}</div></div>`;
   };
   const wireWowPop = () => {
     if (root._wowpop) return;
@@ -1389,7 +1418,7 @@ pages.profile = async () => {
       root.innerHTML = `<div class="wow-page"><a href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><h1>WoW characters</h1><p class="empty">No WoW characters on this profile.</p>${manage ? `<p class="wow-foot">${manage}</p>` : ""}</div>`;
       return;
     }
-    const paint = flav => { const box = $("[data-wowgal]", root); if (box) box.innerHTML = groupWowRealms(wowRows(flav)).map(g => `<section class="wow-realm"><h2>${esc(g.realm)}${g.showRegion ? ` <span class="sub">${esc(g.region)}</span>` : ""}<span class="wow-realm-count" aria-label="${g.rows.length} characters">${g.rows.length}</span></h2><div class="wow-gal">${g.rows.map(c => wowCard(c, false)).join("")}</div></section>`).join("") || `<p class="empty">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`; $$("[data-flav]", root).forEach(b => b.setAttribute("aria-pressed", b.dataset.flav === flav ? "true" : "false")); };
+    const paint = flav => { const box = $("[data-wowgal]", root); if (box) box.innerHTML = groupWowRealms(wowRows(flav)).map(g => `<section class="wow-realm"><h2>${esc(g.realm)}${g.showRegion ? ` <span class="sub">${esc(g.region)}</span>` : ""}<span class="wow-realm-count" aria-label="${g.rows.length} characters">${g.rows.length}</span></h2><div class="wow-gal">${g.rows.map(c => wowCard(c, false)).join("")}</div></section>`).join("") || `<p class="empty">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`; $$("[data-flav]", root).forEach(b => b.setAttribute("aria-pressed", b.dataset.flav === flav ? "true" : "false")); WOWAV.fill(root, p.handle); };
     const tog = wowToggle ? `<div class="seg" role="tablist" aria-label="Which roster to show"><button type="button" data-flav="wow" aria-pressed="${wowOpen === "wow"}">Retail</button><button type="button" data-flav="wow_forever" aria-pressed="${wowOpen === "wow_forever"}">Forever</button></div>` : "";
     root.innerHTML = `<div class="wow-page"><a class="wow-back" href="/u/${encodeURIComponent(p.handle)}">← ${esc(p.display_name || p.handle)}</a><div class="bar"><h1>WoW characters</h1>${tog}</div><div class="wow-realms" data-wowgal></div>${manage ? `<p class="wow-foot">${manage}</p>` : ""}</div>`;
     paint(wowOpen);
@@ -1542,8 +1571,10 @@ pages.profile = async () => {
     const box = $("[data-wowcards]", root); if (!box) return;
     const rows = wowRows(b.dataset.wflav).slice().sort((a, c) => (a.featured || 9) - (c.featured || 9));
     box.innerHTML = rows.slice(0, 6).map(c => wowCard(c)).join("") || `<p class="empty" style="padding:8px 0">No ${b.dataset.wflav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`;
+    WOWAV.fill(box, p.handle);
   });
   root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${wowc}${ach}${miniprofile}</div><aside class="col">${mini}${rig}${fr}${discord}</aside></div></div>`;
+  WOWAV.fill(root, p.handle);
   $$('a[href="#friends"]', root).forEach(a => a.addEventListener("click", e => { const f = $("#friends", root); if (!f) return; e.preventDefault(); f.scrollIntoView({ behavior: "smooth", block: "center" }); f.classList.add("flash"); setTimeout(() => f.classList.remove("flash"), 1200); }));
   const sm = $("[data-seemore]", root);
   if (sm) sm.addEventListener("click", e => { e.preventDefault(); $$(".olda", root).forEach(x => x.hidden = false); sm.parentNode.remove(); });
@@ -2206,7 +2237,7 @@ const WOWPOP = (() => {
     if (co.mounts != null || co.pets != null) sections.push(`<section><h3>Collections</h3><table class="cp-tb">${co.mounts != null ? `<tr><td>Mounts</td><td class="n">${nf.format(co.mounts)}</td></tr>` : ""}${co.pets != null ? `<tr><td>Pets</td><td class="n">${nf.format(co.pets)}</td></tr>` : ""}</table></section>`);
     if (pr.length) sections.push(`<section><h3>Professions</h3><table class="cp-tb">${pr.map(x => `<tr><td>${esc(x.name)}${x.tier && x.tier !== x.name ? `<small class="sub"> ${esc(x.tier)}</small>` : ""}</td><td class="n">${x.max ? `${x.skill}/${x.max}` : x.skill != null ? x.skill : ""}</td></tr>`).join("")}</table></section>`);
     return `<div class="cp-hd${d.render ? " has-rd" : ""}" style="--cc:${col}">${d.render ? `<div class="cp-rw" aria-hidden="true"><img class="cp-rd" alt="" hidden></div>` : ""}<div class="cp-who">
-      ${!d.render && d.avatar_src ? `<img class="cp-avatar" src="${esc(d.avatar_src)}" width="64" height="64" alt="">` : ""}
+      ${forever ? WOWAV.image({ ...c, game_id: "wow_forever", class: d.class || c.class, avatar_src: d.avatar_src }, 'class="cp-avatar" width="64" height="64"') : !d.render && d.avatar_src ? `<img class="cp-avatar" src="${esc(d.avatar_src)}" width="64" height="64" alt="">` : ""}
       ${d.title ? `<div class="cp-ti">${esc(d.title.replace("{name}", d.name))}</div>` : ""}<h2 style="color:${col}">${esc(d.name)}</h2>
       <div class="sub">${d.level != null ? `Level ${d.level} ` : ""}${esc([d.race, d.spec, d.class].filter(Boolean).join(" "))}</div>
       <div class="sub">${esc([d.realm, forever ? "Forever" : "Retail", (d.region || c.region || "").toUpperCase()].filter(Boolean).join(" · "))}${factionCrest(d.faction || c.faction)}</div>
@@ -2252,7 +2283,7 @@ const WOWPOP = (() => {
     const me = box;
     try { const d = await api(`/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}`); if (box !== me) return;
       if (d.status === "missing" && c.game_id === "wow_forever") { close(); return; }
-      $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WH.scan();
+      $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WOWAV.fill(box, handle); WH.scan();
       const im = $(".cp-rd", box);
       if (im) { const t = localStorage.getItem(TK), r = await fetch(`${API}/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}/render.png`, { headers: t ? { authorization: "Bearer " + t } : {} });
         if (r.ok && box === me) { im.src = URL.createObjectURL(await r.blob()); im.onload = () => URL.revokeObjectURL(im.src); im.hidden = false; } } }

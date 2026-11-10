@@ -269,8 +269,18 @@ async fn forever_and_share_links_obey_public_visibility(pool: PgPool) {
     sqlx::query("INSERT INTO wow_characters(id,user_id,game_id,region,realm,realm_slug,name,class,level,played_s,played_at,verified) VALUES($1,$2,'wow_forever','us','','','Sample Character','WARRIOR',18,9876,now(),false)")
         .bind(id).bind(uid).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO wow_char_details(char_id,status,data,fetched_at) VALUES($1,'ok',$2,now())")
-        .bind(id).bind(json!({"name":"Sample Character","game_id":"wow_forever","level":18,"guild":{"name":"Secret Guild"},"gear":[],"render":false})).execute(&pool).await.unwrap();
+        .bind(id).bind(json!({"name":"Sample Character","game_id":"wow_forever","level":18,"guild":{"name":"Secret Guild"},"gear":[],"render":false,"avatar_src":"https://render.worldofwarcraft.com/forever-us/character/1/42-avatar.jpg"})).execute(&pool).await.unwrap();
     let detail = format!("/api/v1/users/sharetest/wow/{id}");
+    let avatar = format!("{detail}/avatar");
+    let before: Value = sqlx::query_scalar("SELECT to_jsonb(c) FROM wow_characters c WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        api(&app, "GET", &avatar, None, None).await.status,
+        StatusCode::NOT_FOUND
+    );
     let share = format!("{detail}/share");
     let route = format!("/u/sharetest/wow/forever/{id}");
     assert_eq!(
@@ -278,6 +288,13 @@ async fn forever_and_share_links_obey_public_visibility(pool: PgPool) {
         StatusCode::NOT_FOUND
     );
     std::env::set_var("BNET_FOREVER_LOOKUP", "on");
+    let r = api(&app, "GET", &avatar, None, None).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(
+        r.json()["avatar_src"],
+        "https://render.worldofwarcraft.com/forever-us/character/1/42-avatar.jpg"
+    );
+    assert_eq!(r.headers["cache-control"], "private, no-store");
     let r = api(&app, "GET", &detail, None, None).await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.text);
     assert!(!r.text.contains("Secret Guild"));
@@ -305,6 +322,15 @@ async fn forever_and_share_links_obey_public_visibility(pool: PgPool) {
     ] {
         sqlx::query(sql).bind(id).execute(&pool).await.unwrap();
         if sql.contains("hidden=true") {
+            assert_eq!(
+                api(&app, "GET", &avatar, None, None).await.status,
+                StatusCode::NOT_FOUND
+            );
+            assert_eq!(
+                api(&app, "GET", &avatar, Some(&token), None).await.status,
+                StatusCode::OK,
+                "owner's manager can show hidden portraits"
+            );
             let r = api(&app, "GET", &route, None, None).await;
             assert_eq!(r.status, StatusCode::OK);
             assert!(!r.text.contains("Sample Character"));
@@ -323,6 +349,10 @@ async fn forever_and_share_links_obey_public_visibility(pool: PgPool) {
         api(&app, "GET", &share, None, None).await.status,
         StatusCode::NOT_FOUND
     );
+    assert_eq!(
+        api(&app, "GET", &avatar, None, None).await.status,
+        StatusCode::NOT_FOUND
+    );
     sqlx::query("UPDATE wow_prefs SET profile_show='both' WHERE user_id=$1")
         .bind(uid)
         .execute(&pool)
@@ -337,6 +367,10 @@ async fn forever_and_share_links_obey_public_visibility(pool: PgPool) {
         api(&app, "GET", &share, None, None).await.status,
         StatusCode::NOT_FOUND
     );
+    assert_eq!(
+        api(&app, "GET", &avatar, None, None).await.status,
+        StatusCode::NOT_FOUND
+    );
     sqlx::query("UPDATE wow_prefs SET hide_all=false,profile_show='none' WHERE user_id=$1")
         .bind(uid)
         .execute(&pool)
@@ -344,6 +378,10 @@ async fn forever_and_share_links_obey_public_visibility(pool: PgPool) {
         .unwrap();
     assert_eq!(
         api(&app, "GET", &share, None, None).await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        api(&app, "GET", &avatar, None, None).await.status,
         StatusCode::NOT_FOUND
     );
     sqlx::query("UPDATE wow_prefs SET profile_show='both' WHERE user_id=$1")
@@ -358,6 +396,10 @@ async fn forever_and_share_links_obey_public_visibility(pool: PgPool) {
         .unwrap();
     assert_eq!(
         api(&app, "GET", &share, None, None).await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        api(&app, "GET", &avatar, None, None).await.status,
         StatusCode::NOT_FOUND
     );
     sqlx::query("UPDATE users SET privacy='{}' WHERE id=$1")
@@ -383,4 +425,42 @@ async fn forever_and_share_links_obey_public_visibility(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(seconds, 9876);
+    assert_eq!(
+        api(&app, "GET", &avatar, None, None).await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        api(&app, "GET", &avatar, Some(&token), None).await.status,
+        StatusCode::OK
+    );
+    let after: Value = sqlx::query_scalar("SELECT to_jsonb(c) FROM wow_characters c WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        before, after,
+        "avatar requests never modify any character fields or seconds"
+    );
+}
+
+#[test]
+fn forever_avatar_maps_media_and_rejects_wrong_ids_and_urls() {
+    use fraglink_server::wowchar::forever_media_avatar;
+    let src = "https://render.worldofwarcraft.com/forever-us/character/1/42-avatar.jpg";
+    let media = json!({"character":{"id":42},"assets":[{"key":"main-raw","value":"https://render.worldofwarcraft.com/forever-us/character/1/42-main-raw.png"},{"key":"avatar","value":src}]});
+    assert_eq!(forever_media_avatar(&media, Some(42)).as_deref(), Some(src));
+    assert_eq!(forever_media_avatar(&media, None).as_deref(), Some(src));
+    assert!(forever_media_avatar(&media, Some(43)).is_none());
+    assert!(forever_media_avatar(&json!({"assets":[]}), None).is_none());
+    for url in [
+        "https://example.com/avatar.jpg",
+        "https://render.worldofwarcraft.com.evil.test/avatar.jpg",
+        "javascript:alert(1)",
+        "https://render.worldofwarcraft.com/../avatar.jpg",
+    ] {
+        assert!(
+            forever_media_avatar(&json!({"assets":[{"key":"avatar","value":url}]}), None).is_none()
+        );
+    }
 }

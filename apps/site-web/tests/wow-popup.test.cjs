@@ -4,6 +4,8 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const source=readFileSync(__dirname+'/../static/assets/app.js','utf8');
 const linkSource=source.slice(source.indexOf('const WOWLINK ='),source.indexOf('/* Pager:'));
+const avStart=source.indexOf('const WOWAV =');
+const avatarSource=source.slice(avStart,source.indexOf('\n})();',avStart)+6);
 const start=source.indexOf('const WOWPOP =');
 const popupSource=source.slice(start,source.indexOf('\n})();',start)+6);
 const esc=x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -13,10 +15,10 @@ function harness(data={name:'Sample',region:'us',level:18,gear:[]}) {
  const history={state:null,pushState(s,_,path){this.state=s;calls.push(['push',path]);location.pathname=path},replaceState(s,_,path){this.state=s;calls.push(['replace',path]);location.pathname=path},back(){calls.push(['back']);location.pathname='/u/sample'}};
  const inside={innerHTML:''};
  const ctx={console,URL,encodeURIComponent,Number,Date,Map,Set,location,history,navigator:{clipboard:{async writeText(s){copied.push(s)}}},
-  siteBase:()=> 'https://playfraglink.com',esc,nf:new Intl.NumberFormat('en'),plural:(n,s)=>`${n} ${s}`,factionCrest:()=>'',WH:{ok:false,scan(){}},imgOk:'',
+  WOW:{clsIcon:c=>'/class/'+c,raceIcon:()=>'/race/test'},siteBase:()=> 'https://playfraglink.com',esc,nf:new Intl.NumberFormat('en'),plural:(n,s)=>`${n} ${s}`,factionCrest:()=>'',WH:{ok:false,scan(){}},imgOk:'',
   addEventListener:(name,fn)=>events[name]=fn,document:{createElement(){const node={remove(){},innerHTML:'',className:''};nodes.push(node);return node},body:{appendChild(){},classList:{add(){},remove(){}}},addEventListener(){},removeEventListener(){}},
   $:(selector)=>selector==='.cp-x'?{focus(){}}:selector==='.cp-in'?inside:null,$$:()=>[],api:async()=>data,setTimeout:fn=>{timers.push(fn);return 0}};
- const {WOWPOP,WOWLINK}=vm.runInNewContext(linkSource+popupSource+';({WOWPOP,WOWLINK})',ctx);
+ const {WOWPOP,WOWLINK}=vm.runInNewContext(linkSource+avatarSource+popupSource+';({WOWPOP,WOWLINK})',ctx);
  return {WOWPOP,WOWLINK,calls,copied,events,location,history,inside,nodes,timers};
 }
 test('stable share links use version and UUID, not names',()=>{

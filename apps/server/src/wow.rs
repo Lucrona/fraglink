@@ -1581,7 +1581,7 @@ fn display_realm(gid: &str, acct: &AcctName, rows: &[&OwnedChar]) -> String {
         .unwrap_or_default()
 }
 
-fn forever_parts(name: &str) -> Option<(String, String)> {
+pub(crate) fn forever_parts(name: &str) -> Option<(String, String)> {
     let mut parts = name.split_whitespace();
     let first = parts.next()?.trim();
     let surname = parts.collect::<Vec<_>>().join(" ");
