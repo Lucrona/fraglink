@@ -25,6 +25,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/me/bnet", get(summary))
         .route("/api/v1/me/wow/list", get(list))
         .route("/api/v1/me/wow/hide_all", post(hide_all))
+        .route("/api/v1/me/wow/default_flavour", post(set_default_flavour))
+        .route("/api/v1/me/wow/profile_show", post(set_profile_show))
+        .route("/api/v1/me/wow/review", get(review))
         .route("/api/v1/me/wow/featured", get(featured).post(set_featured))
         .route("/api/v1/me/wow/{id}/spec", post(set_spec))
         .route("/api/v1/wow/icons/{file}", get(icon))
@@ -73,7 +76,110 @@ async fn summary(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Valu
         "verified": verified,
         "unverified": unverified,
         "hide_all": hide_all_on(&st, uid).await?,
+        "default_flavour": default_flavour(&st, uid).await?,
+        "profile_show": profile_show(&st, uid).await?,
     })))
+}
+
+/// `both`, `wow`, or `wow_forever`. A missing preference is Both.
+pub(crate) async fn profile_show(st: &AppState, uid: Uuid) -> ApiResult<String> {
+    let stored: Option<String> = sqlx::query_scalar(
+        "SELECT coalesce(profile_show, 'both') FROM wow_prefs WHERE user_id = $1",
+    )
+    .bind(uid)
+    .fetch_optional(&st.db)
+    .await?;
+    Ok(match stored.as_deref() {
+        Some("wow") => "wow".into(),
+        Some("wow_forever") => "wow_forever".into(),
+        _ => "both".into(),
+    })
+}
+
+#[derive(Deserialize)]
+struct ShowReq {
+    show: String,
+}
+
+async fn set_profile_show(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<ShowReq>,
+) -> ApiResult<Json<Value>> {
+    api::check_origin(&a, &headers, &st)?;
+    if r.show != "wow" && r.show != "wow_forever" && r.show != "both" {
+        return Err(AppError::bad_request(
+            "invalid_show",
+            "Choose Retail only, Forever only, or Both.",
+        ));
+    }
+    sqlx::query(
+        "INSERT INTO wow_prefs(user_id, profile_show) VALUES($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET profile_show = excluded.profile_show",
+    )
+    .bind(a.user.id)
+    .bind(&r.show)
+    .execute(&st.db)
+    .await?;
+    Ok(Json(json!({ "ok": true, "profile_show": r.show })))
+}
+
+pub(crate) async fn default_flavour(st: &AppState, uid: Uuid) -> ApiResult<String> {
+    let stored: Option<String> = sqlx::query_scalar(
+        "SELECT coalesce(default_flavour, 'wow') FROM wow_prefs WHERE user_id = $1",
+    )
+    .bind(uid)
+    .fetch_optional(&st.db)
+    .await?;
+    Ok(match stored.as_deref() {
+        Some("wow_forever") => "wow_forever".into(),
+        _ => "wow".into(),
+    })
+}
+
+#[derive(Deserialize)]
+struct FlavourReq {
+    flavour: String,
+}
+
+async fn set_default_flavour(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    a: AuthUser,
+    Json(r): Json<FlavourReq>,
+) -> ApiResult<Json<Value>> {
+    api::check_origin(&a, &headers, &st)?;
+    if r.flavour != "wow" && r.flavour != "wow_forever" {
+        return Err(AppError::bad_request(
+            "invalid_flavour",
+            "Choose Retail or Forever.",
+        ));
+    }
+    sqlx::query(
+        "INSERT INTO wow_prefs(user_id, default_flavour) VALUES($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET default_flavour = excluded.default_flavour",
+    )
+    .bind(a.user.id)
+    .bind(&r.flavour)
+    .execute(&st.db)
+    .await?;
+    Ok(Json(json!({ "ok": true, "default_flavour": r.flavour })))
+}
+
+async fn review(State(st): State<AppState>, a: AuthUser) -> ApiResult<Json<Value>> {
+    let rows: Vec<(String, String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT reason, detail, created_at FROM wow_played_quarantine
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20",
+    )
+    .bind(a.user.id)
+    .fetch_all(&st.db)
+    .await?;
+    let items: Vec<Value> = rows
+        .into_iter()
+        .map(|(reason, detail, at)| json!({ "reason": reason, "detail": detail, "at": at }))
+        .collect();
+    Ok(Json(json!({ "items": items })))
 }
 
 #[derive(Deserialize)]

@@ -1800,8 +1800,9 @@ pub(crate) fn name_of(v: &Value) -> Option<String> {
 // ------------------------------------------------------------------ profile
 
 /// Characters for a profile page. `all`: the owner's own view (hidden ones too).
-/// Profile cards list only Battle.net-verified characters (`verified_only`); the owner's
-/// /connect/wow page lists all of them so unverified ones can be verified.
+/// Profile cards list Battle.net-verified Retail characters (`verified_only`). Forever
+/// characters are included too, without a tick, until `BNET_FOREVER_ACCOUNT` verifies
+/// them. The owner's /connect/wow page lists every row so unverified ones can be verified.
 pub async fn characters(
     st: &AppState,
     uid: Uuid,
@@ -1837,7 +1838,7 @@ pub async fn characters(
                     featured
              FROM wow_characters WHERE user_id = $1
                AND ($2 OR NOT (hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false)))
-               AND (NOT $3 OR verified)
+               AND (NOT $3 OR verified OR game_id = 'wow_forever')
              ORDER BY game_id, featured NULLS LAST, played_s DESC LIMIT 200"),
         )
         .bind(uid)

@@ -718,8 +718,10 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .bv-act{margin-top:14px}
 .srbadge{color:#c9a227;font-size:12px;font-weight:600}.badbadge{color:#e55;font-size:12px;font-weight:600}
 .conn-sub{padding:2px 0 10px 40px}.sub.warn{color:#e0a040}
-.wcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;padding:12px 14px}
-.wc{border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:10px;background:rgba(0,0,0,.15)}
+.wcs,.wow-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;padding:12px 14px}
+.wow-gal{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));padding:0}
+.wc{--cls:#8a939e;display:flex;gap:10px;align-items:center;border:1px solid color-mix(in srgb,var(--cls) 38%,var(--line));border-radius:6px;padding:10px;background:linear-gradient(180deg,color-mix(in srgb,var(--cls) 16%,#141920),#10141a);box-shadow:inset 3px 0 0 var(--cls);transition:border-color .15s,box-shadow .15s,transform .15s}
+.wc:hover{border-color:var(--cls);box-shadow:inset 3px 0 0 var(--cls),0 0 16px color-mix(in srgb,var(--cls) 42%,transparent);transform:translateY(-1px)}
 .wc-top{display:flex;justify-content:space-between;gap:6px;align-items:center}
 .wc-h{font-size:20px;font-weight:700;margin:6px 0}.wc-h small{font-size:11px;font-weight:400;opacity:.7}
 .wc-hid{opacity:.5}
@@ -744,7 +746,7 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 /* Battle.net page (/connect/battlenet) */
 .bn .bn-box{margin:14px 0 16px}
 .bn-box>h2{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.bn-acct{display:flex;align-items:center;gap:12px;padding:12px 14px;flex-wrap:wrap}
+.bn-acct{display:flex;align-items:center;gap:10px;padding:8px 14px;flex-wrap:wrap}
 .bn-av{width:40px;height:40px;border-radius:4px;background:#22374d;display:grid;place-items:center;flex:none}
 .bn-nm{font-weight:600;color:#eef2f6;overflow-wrap:anywhere}
 .bn-acts{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
@@ -760,7 +762,7 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .bn-sw input:checked+.bn-tg{background:#2f5a2a}.bn-sw input:checked+.bn-tg::after{left:16px;background:#8fdc79}
 .bn-sw input:focus-visible+.bn-tg{outline:2px solid var(--link);outline-offset:2px}
 .bn-sw input:disabled+.bn-tg{opacity:.5;cursor:not-allowed}
-.bn-ch{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto 86px;gap:14px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.bn-ch{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto 86px;gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line)}
 .bn-ch:nth-child(even){background:var(--row-alt)}
 .bn-port{position:relative;width:44px;height:44px;flex:none}
 .bn-port img.r{width:44px;height:44px;border-radius:4px;border:1px solid #000;background:#111}
@@ -777,11 +779,33 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .bn-more{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 @media(max-width:640px){.bn-ch{grid-template-columns:auto minmax(0,1fr) auto;row-gap:8px}.bn-ch .bn-specs{grid-column:1/3}.bn-ch .bn-sw{grid-column:3}.bn-acts{margin-left:0;width:100%}.bn-tools select{flex:1 1 40%}}
 /* profile WoW cards with portraits */
-.wc{display:flex;gap:10px;align-items:center}
-.wc-p{position:relative;width:48px;height:48px;flex:none}.wc-p .r{width:48px;height:48px;border-radius:4px;border:1px solid #000;background:#111}
-.wc-ic{position:absolute;right:-6px;bottom:-6px;display:flex}.wc-ic img{width:20px;height:20px;border-radius:50%;border:1px solid #000;margin-left:-4px}
-.wc-t{min-width:0}.wc-t .sub{overflow-wrap:anywhere}
+.wc-p{position:relative;width:48px;height:48px;flex:none;border-radius:5px;overflow:hidden;box-shadow:0 0 0 1px #000,0 0 10px color-mix(in srgb,var(--cls) 55%,transparent)}
+.wc-p .r{width:48px;height:48px;border-radius:4px;border:0;background:transparent;position:relative;z-index:1}
+.wc-ini{position:absolute;inset:0;display:grid;place-items:center;font-weight:700;color:#fff;background:color-mix(in srgb,var(--cls) 62%,#1a120c);letter-spacing:.3px}
+.wc-ic{position:absolute;right:-6px;bottom:-6px;display:flex;z-index:2}.wc-ic img{width:20px;height:20px;border-radius:50%;border:1px solid #000;margin-left:-4px}
+.wc-t{min-width:0}.wc-t b{color:#eef2f6}.wc-cls{color:var(--cls);font-weight:650;font-size:12px}
+.wc-tick{color:#8fdc79;font-weight:700;margin-left:4px}
 .wc .wc-h{font-size:12px;font-weight:400;margin:2px 0 0;color:var(--label)}
+.seg{display:inline-flex;border:1px solid #3d5168;border-radius:3px;overflow:hidden;text-transform:none;letter-spacing:0}
+.seg button{background:transparent;color:#c5d0db;border:0;border-right:1px solid #3d5168;padding:4px 10px;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:#2c4d6b;color:#fff}
+.wow-foot{display:flex;justify-content:flex-end;padding:0 14px 10px}
+.wow-page{max-width:980px;margin:16px auto;padding:0 16px 28px}
+.wow-page .bar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 14px}
+.wow-page h1{margin:8px 0 0;font-size:20px}
+.bn-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.bn-def{display:flex;align-items:center;gap:8px;padding:8px 14px;flex-wrap:wrap}
+.bn-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 14px}
+.bn-split .sub{margin:4px 0 8px}
+.bn-review{padding:8px 14px 12px}
+@media(max-width:640px){
+  .wcs,.wow-gal{grid-template-columns:1fr}
+  .bn-split{grid-template-columns:1fr}
+  .bn-head{align-items:flex-start}
+  .wow-page .bar{align-items:flex-start;flex-direction:column}
+  .seg button{padding:8px 14px}
+}
 .bn-sw.bn-hd{text-transform:none;letter-spacing:0;font-weight:600}.btn.bn-unlink{color:var(--bad)}
 
 /* WoW character popup */
