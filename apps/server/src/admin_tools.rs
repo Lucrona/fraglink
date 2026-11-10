@@ -71,18 +71,22 @@ type EntryRow = (
     Option<DateTime<Utc>>,
     DateTime<Utc>,
     Option<String>,
+    Option<String>,
 );
 
 const ENTRY_SQL: &str =
     "SELECT c.id, c.area, c.entry_date, c.version, c.new_items, c.changes, c.fixes,
-        c.published_at, c.updated_at, u.handle
+        c.published_at, c.updated_at, u.handle, c.content_format
  FROM changelog_entries c LEFT JOIN users u ON u.id = c.updated_by";
 
 fn entry_json(r: &EntryRow) -> Value {
     json!({
         "id": r.0, "area": r.1, "date": r.2.to_string(), "label": r.2.format("%-d %B %Y").to_string(),
         "version": r.3, "new": r.4, "changes": r.5, "fixes": r.6,
-        "published_at": r.7, "updated_at": r.8, "updated_by": r.9,
+        "published_at": r.7, "updated_at": r.8, "updated_by": r.9, "format": r.10,
+        "new_html": crate::content::section(&r.4, r.10.as_deref()),
+        "changes_html": crate::content::section(&r.5, r.10.as_deref()),
+        "fixes_html": crate::content::section(&r.6, r.10.as_deref()),
     })
 }
 
@@ -97,7 +101,10 @@ async fn changelog_public(State(st): State<AppState>) -> ApiResult<impl IntoResp
         .iter()
         .map(|r| {
             json!({ "area": r.1, "date": r.2.to_string(), "label": r.2.format("%-d %B %Y").to_string(),
-                    "version": r.3, "new": r.4, "changes": r.5, "fixes": r.6 })
+                    "version": r.3, "new": r.4, "changes": r.5, "fixes": r.6, "format": r.10,
+                    "new_html": crate::content::section(&r.4, r.10.as_deref()),
+                    "changes_html": crate::content::section(&r.5, r.10.as_deref()),
+                    "fixes_html": crate::content::section(&r.6, r.10.as_deref()) })
         })
         .collect();
     Ok((
@@ -152,6 +159,7 @@ async fn changelog_list(
 
 #[derive(Deserialize)]
 struct EntryReq {
+    format: Option<String>,
     id: Option<i64>,
     area: String,
     date: String,
@@ -171,12 +179,21 @@ fn banned_words(s: &str) -> bool {
     ["xfire", "xf1re"].iter().any(|w| l.contains(w))
 }
 
-fn items(v: &[String], what: &str) -> ApiResult<Vec<String>> {
-    let out: Vec<String> = v
-        .iter()
-        .map(|i| clean(i.trim_start_matches(['-', '*', '•', ' ']), MAX_ITEM_LEN))
-        .filter(|i| !i.is_empty())
-        .collect();
+fn items(v: &[String], what: &str, markdown: bool) -> ApiResult<Vec<String>> {
+    let out: Vec<String> = if markdown {
+        crate::content::source(&v.join("\n\n"))?;
+        v.iter()
+            .map(|s| crate::content::source(s))
+            .collect::<ApiResult<Vec<_>>>()?
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else {
+        v.iter()
+            .map(|i| clean(i.trim_start_matches(['-', '*', '•', ' ']), MAX_ITEM_LEN))
+            .filter(|i| !i.is_empty())
+            .collect()
+    };
     if out.len() > MAX_ITEMS {
         return Err(bad(
             "too_many",
@@ -215,20 +232,22 @@ async fn changelog_save(
             "That wording can't go on the public changelog.",
         ));
     }
+    crate::content::format_ok(r.format.as_deref())?;
+    let md = r.format.as_deref() == Some("markdown");
     let (n, c, f) = (
-        items(&r.new, "New")?,
-        items(&r.changes, "Changes")?,
-        items(&r.fixes, "Fixes")?,
+        items(&r.new, "New", md)?,
+        items(&r.changes, "Changes", md)?,
+        items(&r.fixes, "Fixes", md)?,
     );
     if n.is_empty() && c.is_empty() && f.is_empty() {
         return Err(bad("empty", "Add at least one bullet."));
     }
-    let after = json!({ "area": r.area, "date": date.to_string(), "version": version, "new": n, "changes": c, "fixes": f });
+    let after = json!({ "area": r.area, "date": date.to_string(), "version": version, "new": n, "changes": c, "fixes": f, "format": r.format });
     let id = if let Some(id) = r.id {
         let before = one(&st, id).await?;
         sqlx::query(
             "UPDATE changelog_entries SET area = $2, entry_date = $3, version = $4, new_items = $5,
-               changes = $6, fixes = $7, updated_at = now(), updated_by = $8 WHERE id = $1",
+               changes = $6, fixes = $7, updated_at = now(), updated_by = $8, content_format = $9 WHERE id = $1",
         )
         .bind(id)
         .bind(&r.area)
@@ -238,6 +257,7 @@ async fn changelog_save(
         .bind(&c)
         .bind(&f)
         .bind(s.user.id)
+        .bind(&r.format)
         .execute(&st.db)
         .await?;
         audit(
@@ -252,8 +272,8 @@ async fn changelog_save(
         id
     } else {
         let id: i64 = sqlx::query_scalar(
-            "INSERT INTO changelog_entries(area, entry_date, version, new_items, changes, fixes, created_by, updated_by)
-             VALUES($1, $2, $3, $4, $5, $6, $7, $7) RETURNING id",
+            "INSERT INTO changelog_entries(area, entry_date, version, new_items, changes, fixes, created_by, updated_by, content_format)
+             VALUES($1, $2, $3, $4, $5, $6, $7, $7, $8) RETURNING id",
         )
         .bind(&r.area)
         .bind(date)
@@ -262,6 +282,7 @@ async fn changelog_save(
         .bind(&c)
         .bind(&f)
         .bind(s.user.id)
+        .bind(&r.format)
         .fetch_one(&st.db)
         .await?;
         audit(

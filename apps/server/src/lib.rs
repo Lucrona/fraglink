@@ -19,6 +19,7 @@ pub mod avatars;
 pub mod config;
 pub mod connect;
 pub mod contact;
+pub mod content;
 pub mod detection_aliases;
 pub mod emails;
 pub mod error;
@@ -172,6 +173,7 @@ pub fn router(state: AppState) -> Router {
         .merge(detection_aliases::routes())
         .merge(merge_suggest::routes())
         .merge(news::routes())
+        .merge(content::routes())
         .merge(polls::routes())
         .merge(status::routes())
         .merge(contact::routes())
