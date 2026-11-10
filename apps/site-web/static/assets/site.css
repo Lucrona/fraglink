@@ -762,6 +762,32 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .bn-sw input:checked+.bn-tg{background:#2f5a2a}.bn-sw input:checked+.bn-tg::after{left:16px;background:#8fdc79}
 .bn-sw input:focus-visible+.bn-tg{outline:2px solid var(--link);outline-offset:2px}
 .bn-sw input:disabled+.bn-tg{opacity:.5;cursor:not-allowed}
+.bn-tabs{display:flex;align-items:stretch;border-bottom:1px solid var(--line);background:#12161b}
+.bn-tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--silver);font:inherit;font-weight:650;padding:8px 14px;cursor:pointer}
+.bn-tabs button.on{color:#fff;border-bottom-color:var(--orange)}
+.bn-tabs .bn-addtab{margin-left:auto;color:var(--link);font-weight:600;border-bottom-color:transparent}
+.bn-actrow{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;padding:10px 12px;border-bottom:1px solid var(--line)}
+.bn-actrow .sub,.bn-add .sub{flex:1 0 100%;margin:0 0 6px}
+.bn-k{color:var(--dim);font-size:11px;font-weight:650;letter-spacing:.4px;text-transform:uppercase}
+.bn-headrow,.bn-row{display:grid;grid-template-columns:28px minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.1fr) 5.5em 6.5em 36px;gap:8px;align-items:center;padding:6px 12px}
+.bn-headrow{color:var(--dim);font-size:11px;letter-spacing:.4px;text-transform:uppercase;border-bottom:1px solid var(--line)}
+.bn-row{border-bottom:1px solid var(--line)}
+.bn-row:nth-child(even){background:var(--row-alt)}
+.bn-row img{width:28px;height:28px;border-radius:3px;border:1px solid #000;background:#111}
+.bn-row.hid .bn-nm,.bn-row.hid img{opacity:.45}
+.bn-nm{font-weight:650;color:#eef2f6;min-width:0}
+.bn-tick{color:var(--online);margin-left:4px;font-weight:700}
+.bn-row .num{text-align:right;font-variant-numeric:tabular-nums}
+.bn-menu{position:relative;justify-self:end}
+.bn-morebtn{background:transparent;border:1px solid var(--line);color:var(--silver);width:28px;height:24px;border-radius:3px;cursor:pointer;font:inherit}
+.bn-pop{position:absolute;right:0;top:26px;z-index:4;background:#15181d;border:1px solid var(--line2);min-width:160px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.bn-pop .bn-specs{flex-wrap:wrap}
+.bn-pop .bn-specs button{background:transparent;border:0;color:var(--text);font:inherit;padding:2px 0;cursor:pointer;text-align:left}
+.bn-pop .bn-specs button.on{color:#fff;font-weight:700}
+.bn-feat{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.bn-featlist{display:flex;flex-wrap:wrap;gap:8px}
+.bn-feat button{background:transparent;border:0;color:var(--link);font:inherit;cursor:pointer;padding:0 2px}
+.bn-empty{padding:12px}
 .bn-ch{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto 86px;gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line)}
 .bn-ch:nth-child(even){background:var(--row-alt)}
 .bn-port{position:relative;width:44px;height:44px;flex:none}
@@ -777,7 +803,15 @@ table.newsadm td.t b{display:block}table.newsadm td.t small{color:var(--dim)}tab
 .bn-ch.hid .bn-nm,.bn-ch.hid .bn-port{opacity:.45}
 .bn-ch .bn-sw{justify-content:flex-end}
 .bn-more{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
-@media(max-width:640px){.bn-ch{grid-template-columns:auto minmax(0,1fr) auto;row-gap:8px}.bn-ch .bn-specs{grid-column:1/3}.bn-ch .bn-sw{grid-column:3}.bn-acts{margin-left:0;width:100%}.bn-tools select{flex:1 1 40%}}
+@media(max-width:640px){
+  .bn-ch{grid-template-columns:auto minmax(0,1fr) auto;row-gap:8px}
+  .bn-ch .bn-specs{grid-column:1/3}.bn-ch .bn-sw{grid-column:3}
+  .bn-acts{margin-left:0}
+  .bn-tools select{flex:1 1 40%}
+  .bn-actrow{flex-direction:column;align-items:stretch}
+  .bn-headrow .c-realm,.bn-headrow .c-cls,.bn-headrow .c-imp,.bn-row .c-realm,.bn-row .c-cls,.bn-row .c-imp{display:none}
+  .bn-headrow,.bn-row{grid-template-columns:28px minmax(0,1fr) auto 36px}
+}
 /* profile WoW cards with portraits */
 .wc-p{position:relative;width:48px;height:48px;flex:none;border-radius:5px;overflow:hidden;box-shadow:0 0 0 1px #000,0 0 10px color-mix(in srgb,var(--cls) 55%,transparent)}
 .wc-p .r{width:48px;height:48px;border-radius:4px;border:0;background:transparent;position:relative;z-index:1}

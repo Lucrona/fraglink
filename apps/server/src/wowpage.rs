@@ -190,6 +190,8 @@ struct ListQ {
     vis: Option<String>,
     offset: Option<i64>,
     limit: Option<i64>,
+    /// `wow` or `wow_forever`. Empty lists both.
+    game: Option<String>,
 }
 
 /// One page of the user's verified characters, plus the filtered count and totals.
@@ -228,19 +230,43 @@ async fn list(
     };
     let limit = p.limit.unwrap_or(25).clamp(1, 100);
     let offset = p.offset.unwrap_or(0).clamp(0, 1_000_000);
-    // `$4` hide_all: every character counts as hidden
+    let game = match p.game.as_deref() {
+        Some("wow" | "wow_forever") => p.game.clone().unwrap_or_default(),
+        _ => String::new(),
+    };
+    // `$4` hide_all: every character counts as hidden. `$9` limits one version.
     let filter = "user_id = $1 AND (verified OR game_id = 'wow_forever')
         AND ($2 = '' OR lower(name) LIKE $3 OR lower(realm) LIKE $3)
         AND ($5 = '' OR upper(class) = upper($5))
-        AND ($6 = 0 OR ($6 = 1 AND NOT (hidden OR $4)) OR ($6 = 2 AND (hidden OR $4)))";
-    #[allow(clippy::type_complexity)]
-    let rows: Vec<(Uuid, String, String, String, String, String, i32, i64, bool, Option<String>, Option<String>, Option<String>, Option<String>, bool, bool, Option<String>)> =
-        sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        AND ($6 = 0 OR ($6 = 1 AND NOT (hidden OR $4)) OR ($6 = 2 AND (hidden OR $4)))
+        AND ($9 = '' OR game_id = $9)";
+    #[derive(sqlx::FromRow)]
+    struct Listed {
+        id: Uuid,
+        game_id: String,
+        region: String,
+        realm: String,
+        name: String,
+        class: String,
+        level: i32,
+        played_s: i64,
+        hidden: bool,
+        race: Option<String>,
+        gender: Option<String>,
+        spec: Option<String>,
+        bnet_spec: Option<String>,
+        show_guild: bool,
+        verified: bool,
+        former: Option<String>,
+        uploaded_at: DateTime<Utc>,
+    }
+    let rows: Vec<Listed> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT id, game_id, region, realm, name, class, {lvl} AS level, played_s, hidden, race, gender, spec, bnet_spec, show_guild, verified,
                     (SELECT n.name || E'\\x1f' || n.realm FROM wow_character_names n
                       WHERE n.char_id = wow_characters.id
                         AND (lower(n.name) <> lower(wow_characters.name) OR n.realm <> wow_characters.realm)
-                      ORDER BY n.recorded_at DESC, n.id DESC LIMIT 1)
+                      ORDER BY n.recorded_at DESC, n.id DESC LIMIT 1) AS former,
+                    uploaded_at
              FROM wow_characters WHERE {filter} ORDER BY {order} LIMIT $7 OFFSET $8",
             lvl = crate::wow::shown_level!()
         )))
@@ -249,11 +275,12 @@ async fn list(
         .bind(&like)
         .bind(ha)
         .bind(&class)
-        .bind(vis)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&st.db)
-        .await?;
+    .bind(vis)
+    .bind(limit)
+    .bind(offset)
+    .bind(&game)
+    .fetch_all(&st.db)
+    .await?;
     let (matched,): (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT count(*) FROM wow_characters WHERE {filter}"
     )))
@@ -263,6 +290,9 @@ async fn list(
     .bind(ha)
     .bind(&class)
     .bind(vis)
+    .bind(0i64)
+    .bind(0i64)
+    .bind(&game)
     .fetch_one(&st.db)
     .await?;
     let (total, total_s, classes): (i64, i64, Vec<String>) = sqlx::query_as(
@@ -275,54 +305,64 @@ async fn list(
     .await?;
     let items: Vec<Value> = rows
         .into_iter()
-        .map(
-            |(
+        .map(|c| {
+            let Listed {
                 id,
-                g,
-                r,
+                game_id: g,
+                region: r,
                 realm,
                 name,
                 class,
                 level,
-                s,
-                h,
+                played_s: s,
+                hidden: h,
                 race,
                 gender,
                 spec,
-                bspec,
-                sg,
+                bnet_spec: bspec,
+                show_guild: sg,
                 verified,
                 former,
-            )| {
-                let (former_name, former_realm) = former
-                    .as_deref()
-                    .map(|s| {
-                        let (n, r) = s.split_once('\u{1f}').unwrap_or((s, ""));
-                        (
-                            if n.eq_ignore_ascii_case(&name) {
-                                None
-                            } else {
-                                Some(n.to_string())
-                            },
-                            if r == realm {
-                                None
-                            } else {
-                                Some(r.to_string())
-                            },
-                        )
-                    })
-                    .unwrap_or((None, None));
-                json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
+                uploaded_at,
+            } = c;
+            let (former_name, former_realm) = former
+                .as_deref()
+                .map(|s| {
+                    let (n, r) = s.split_once('\u{1f}').unwrap_or((s, ""));
+                    (
+                        if n.eq_ignore_ascii_case(&name) {
+                            None
+                        } else {
+                            Some(n.to_string())
+                        },
+                        if r == realm {
+                            None
+                        } else {
+                            Some(r.to_string())
+                        },
+                    )
+                })
+                .unwrap_or((None, None));
+            json!({ "id": id, "game_id": g, "region": r, "realm": realm, "name": name,
                     "class": class, "level": level, "played_min": s / 60,
                     "hidden": h || ha, "own_hidden": h, "race": race, "gender": gender,
                     "spec": spec.clone().or(bspec.clone()), "spec_picked": spec.is_some(),
                     "active_spec": bspec, "show_guild": sg, "verified": verified,
-                    "former_name": former_name, "former_realm": former_realm })
-            },
-        )
+                    "former_name": former_name, "former_realm": former_realm,
+                    "uploaded_at": uploaded_at })
+        })
         .collect();
+    let (retail, forever): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE game_id = 'wow'),
+                count(*) FILTER (WHERE game_id = 'wow_forever')
+         FROM wow_characters WHERE user_id = $1 AND (verified OR game_id = 'wow_forever')",
+    )
+    .bind(uid)
+    .fetch_one(&st.db)
+    .await?;
     Ok(Json(json!({
         "items": items, "matched": matched, "total": total,
+        "retail": retail, "forever": forever,
         "total_min": total_s / 60, "classes": classes, "hide_all": ha,
         "offset": offset, "limit": limit,
     })))

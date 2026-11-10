@@ -157,8 +157,12 @@ async fn verify_signatures(State(st): State<AppState>, a: AuthUser) -> ApiResult
 #[derive(Deserialize)]
 struct ArmoryAdd {
     region: String,
+    #[serde(default)]
     realm: String,
     name: String,
+    /// `wow` (Armory) or `wow_forever` (first name and surname, no lookup).
+    #[serde(default)]
+    game: String,
 }
 
 fn clean_label(s: &str, max: usize) -> String {
@@ -191,6 +195,7 @@ pub async fn add_armory_character(
     realm_input: &str,
     name_input: &str,
     profile: &Value,
+    game: &str,
 ) -> ApiResult<Value> {
     let region = region.trim().to_lowercase();
     if !matches!(region.as_str(), "us" | "eu" | "kr" | "tw") {
@@ -199,22 +204,29 @@ pub async fn add_armory_character(
             "Choose US, EU, KR, or TW.",
         ));
     }
-    let name = clean_label(profile["name"].as_str().unwrap_or(name_input), 24);
-    let realm = clean_label(
-        name_of(&profile["realm"]).as_deref().unwrap_or(realm_input),
-        64,
-    );
-    if name.chars().count() < 2 || realm.chars().count() < 2 {
+    let forever = game == "wow_forever";
+    let game_id = if forever { "wow_forever" } else { "wow" };
+    let name = clean_label(profile["name"].as_str().unwrap_or(name_input), 64);
+    let (realm, slug) = if forever {
+        (String::new(), String::new())
+    } else {
+        let realm = clean_label(
+            name_of(&profile["realm"]).as_deref().unwrap_or(realm_input),
+            64,
+        );
+        let slug = realm_slug(&realm);
+        if realm.chars().count() < 2 || slug.is_empty() {
+            return Err(AppError::bad_request(
+                "invalid_character",
+                "Enter the character's realm and name.",
+            ));
+        }
+        (realm, slug)
+    };
+    if name.chars().count() < 2 {
         return Err(AppError::bad_request(
             "invalid_character",
-            "Enter the character's realm and name.",
-        ));
-    }
-    let slug = realm_slug(&realm);
-    if slug.is_empty() {
-        return Err(AppError::bad_request(
-            "invalid_realm",
-            "Enter the character's realm and name.",
+            "Enter the character's name.",
         ));
     }
     let class = class_token(profile);
@@ -233,13 +245,14 @@ pub async fn add_armory_character(
     .unwrap_or_default();
     let existing: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM wow_characters
-         WHERE user_id = $1 AND game_id = 'wow' AND region = $2
+         WHERE user_id = $1 AND game_id = $5 AND region = $2
            AND lower(realm) = lower($3) AND lower(name) = lower($4)",
     )
     .bind(uid)
     .bind(&region)
     .bind(&realm)
     .bind(&name)
+    .bind(game_id)
     .fetch_optional(&st.db)
     .await?;
     let id = if let Some(id) = existing {
@@ -274,7 +287,7 @@ pub async fn add_armory_character(
             "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class,
                                         level, played_s, played_at, battletag, race, gender, bnet_spec,
                                         bnet_id, verified)
-             VALUES($1, $2, 'wow', $3, $4, $5, $6, $7, $8, 0, $9, $10, $11, $12, $13, $14, false)",
+             VALUES($1, $2, $15, $3, $4, $5, $6, $7, $8, 0, $9, $10, $11, $12, $13, $14, false)",
         )
         .bind(id)
         .bind(uid)
@@ -290,6 +303,7 @@ pub async fn add_armory_character(
         .bind(&gender)
         .bind(&spec)
         .bind(bnet_id)
+        .bind(game_id)
         .execute(&st.db)
         .await?;
         id
@@ -372,9 +386,27 @@ async fn add_armory(
     Json(r): Json<ArmoryAdd>,
 ) -> ApiResult<Json<Value>> {
     api::check_origin(&a, &headers, &st)?;
+    if r.game == "wow_forever" {
+        let profile = json!({ "name": r.name });
+        return Ok(Json(
+            add_armory_character(
+                &st,
+                a.user.id,
+                &r.region,
+                "",
+                &r.name,
+                &profile,
+                "wow_forever",
+            )
+            .await?,
+        ));
+    }
     let profile = fetch_armory_profile(&r.region, &r.realm, &r.name).await?;
     Ok(Json(
-        add_armory_character(&st, a.user.id, &r.region, &r.realm, &r.name, &profile).await?,
+        add_armory_character(
+            &st, a.user.id, &r.region, &r.realm, &r.name, &profile, "wow",
+        )
+        .await?,
     ))
 }
 

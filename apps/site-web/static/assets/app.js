@@ -512,7 +512,7 @@ pages.wowupload = async () => {
   el.innerHTML = `<div class="bv-head"><span class="bv-shield">${logo}<i class="bv-lock">🔒</i></span><div><h2>Upload WoW /played</h2>
     <p class="sub">Upload a character's /played from the addon. Retail and Forever each store that total on their own game. Shown hours use the imported total plus play after that snapshot, or the app's tracked time if that is higher. The two are not added together.</p></div></div>
     <form class="wu-form" data-form>
-      <div class="wu-row"><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
+      <div class="wu-row" data-gamepick><span class="wu-l">Game</span><label><input type="radio" name="game" value="wow" checked> World of Warcraft (Retail)</label><label><input type="radio" name="game" value="wow_forever"> World of Warcraft: Forever</label></div>
       <p class="sub">Retail and Forever are separate. A Forever character stays unverified until Battle.net's Forever account list confirms it. That check is off until it has been tested.</p>
       <div class="alert info"><b>Before you upload: log in to every character.</b> The addon only saves a character's /played when you log in to it (then log out or <code>/reload</code>). Characters you skip keep the hours from their last upload, and Fraglink always keeps your higher total, so a partial upload never lowers your hours.</div>
       <label class="check wu-row"><input type="checkbox" name="all" required> I've logged in to each of my characters with the addon on since my last upload</label>
@@ -527,6 +527,12 @@ pages.wowupload = async () => {
     <div data-res></div>`;
   const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
   const res = $("[data-res]", el), form = $("[data-form]", el), steps = $("[data-steps]", el);
+  const preset = new URLSearchParams(location.search).get("game");
+  if (preset === "wow" || preset === "wow_forever") {
+    form.game.value = preset;
+    const pick = $("[data-gamepick]", form);
+    if (pick) pick.hidden = true;
+  }
   const R = { wow_checksum: "Edited after the game saved it", wow_battletag: "From a different Battle.net account", wow_old_addon: "Addon too old, update it",
     wow_decrease: "/played went down", wow_impossible: "/played grew faster than real time", wow_clock: "Saved with a wrong clock" };
   let rows = [], sortBy = "played", dir = -1, showAll = false, totals = null;
@@ -640,48 +646,72 @@ pages.bnet = async () => {
   const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? "just now" : m < 60 ? plural(m, "minute") + " ago" : m < 1440 ? plural(Math.round(m / 60), "hour") + " ago" : plural(Math.round(m / 1440), "day") + " ago"; };
   const show = s.profile_show === "wow" || s.profile_show === "wow_forever" ? s.profile_show : "both";
   const def = s.default_flavour === "wow_forever" ? "wow_forever" : "wow";
-  const flavSeg = `<div class="bn-def"><div class="seg" role="radiogroup" aria-label="What the profile shows"><button type="button" data-show="wow" aria-pressed="${show === "wow"}">Retail only</button><button type="button" data-show="wow_forever" aria-pressed="${show === "wow_forever"}">Forever only</button><button type="button" data-show="both" aria-pressed="${show === "both"}">Both</button></div><div data-opener ${show === "both" ? "" : "hidden"}><span>Opens on</span><div class="seg" role="radiogroup" aria-label="Which roster opens first"><button type="button" data-def="wow" aria-pressed="${def === "wow"}">Retail</button><button type="button" data-def="wow_forever" aria-pressed="${def === "wow_forever"}">Forever</button></div><span class="sub">Visitors can still switch.</span></div></div>`;
+  const flavSeg = `<div class="bn-def"><span class="bn-k">Profile</span><div class="seg" role="radiogroup" aria-label="What the profile shows"><button type="button" data-show="wow" aria-pressed="${show === "wow"}">Retail only</button><button type="button" data-show="wow_forever" aria-pressed="${show === "wow_forever"}">Forever only</button><button type="button" data-show="both" aria-pressed="${show === "both"}">Both</button></div><div data-opener ${show === "both" ? "" : "hidden"}><span class="bn-k">Opens on</span><div class="seg" role="radiogroup" aria-label="Which roster opens first"><button type="button" data-def="wow" aria-pressed="${def === "wow"}">Retail</button><button type="button" data-def="wow_forever" aria-pressed="${def === "wow_forever"}">Forever</button></div></div></div>`;
   const head = s.linked
-    ? `<div class="bn-head"><div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">${esc(s.battletag)} ${s.needs_reconnect ? `<span class="srbadge">Reconnect to verify</span>` : `<span class="vbadge">✓ Verified</span>`}</div>
-        <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") + (s.regions.length === 1 ? " region" : " regions") : "", s.last_verified ? "last checked " + ago(s.last_verified) : "not checked yet"].filter(Boolean).join(" · ")}</div></div>
-        <div class="bn-acts"><a class="btn blue" href="/connect/battlenet/verify">Verify</a><button class="btn bn-unlink" type="button" data-unlink>Unlink</button></div></div>${flavSeg}</div>`
-    : `<div class="bn-head"><div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify Retail characters.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} waiting.` : ""}</div></div>
-        <div class="bn-acts"><button class="btn blue" type="button" data-link>Link Battle.net</button></div></div>${flavSeg}</div>`;
+    ? `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">${esc(s.battletag)} ${s.needs_reconnect ? `<span class="srbadge">Reconnect</span>` : `<span class="vbadge">Verified</span>`}</div>
+        <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") : "", s.last_verified ? "checked " + ago(s.last_verified) : ""].filter(Boolean).join(" · ")}</div></div>
+        <div class="bn-acts"><a class="btn" href="/connect/battlenet/verify">Check account</a><button class="btn bn-unlink" type="button" data-unlink>Unlink</button></div></div>`
+    : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify Retail characters.</div></div>
+        <div class="bn-acts"><button class="btn" type="button" data-link>Link Battle.net</button></div></div>`;
   el.innerHTML = `<section class="panel bn-box"><h2>Battle.net</h2><div data-msg></div>${head}</section>
-    <section class="panel bn-box"><h2>Add or import</h2><div class="bn-split"><div><b>Add character</b><p class="sub">Add by name and realm. It's verified automatically when it matches your linked Battle.net account.</p><form class="bn-add" data-addchar><select name="region" aria-label="Region"><option value="us">US</option><option value="eu">EU</option><option value="kr">KR</option><option value="tw">TW</option></select><input name="realm" placeholder="Realm" aria-label="Realm" required maxlength="64"><input name="name" placeholder="Name" aria-label="Character name" required maxlength="24"><button class="btn" type="submit">Add character</button></form><p class="sub"><a href="/connect/wow">Or add from the addon file</a></p></div><div><b>Upload /played</b><p class="sub">Retail or Forever file from the addon. Each game keeps its own total.</p><a class="btn" href="/connect/wow">Upload</a></div></div></section>
-    ${s.linked ? `<section class="panel bn-box" data-feat><h2>Featured on profile</h2><p class="sub" style="padding:0 12px">Up to 3 characters show first, in this order.</p><div data-fbox><p class="empty" style="padding:8px 12px">Loading…</p></div></section>` : ""}
-    <section class="panel bn-box"><h2><span data-ttl>WoW characters</span><label class="bn-sw bn-hd"><span>Hide all from profile</span><input type="checkbox" data-hideall ${s.hide_all ? "checked" : ""}><i class="bn-tg"></i></label></h2>
-      <div class="bn-tools"><input type="search" data-q placeholder="Search name or realm" aria-label="Search name or realm" maxlength="64">
-        <select data-sort aria-label="Sort"><option value="hours">Sort: Hours played</option><option value="level">Sort: Level</option><option value="name">Sort: Name</option><option value="realm">Sort: Realm</option></select>
-        <select data-class aria-label="Class"><option value="">All classes</option></select>
-        <select data-vis aria-label="Shown or hidden"><option value="">Shown + hidden</option><option value="shown">Shown only</option><option value="hidden">Hidden only</option></select></div>
-      <div data-list><p class="empty" style="padding:20px 12px">Loading…</p></div>
-      <div class="bn-more"><span class="sub" data-cnt></span><button class="btn" type="button" data-more hidden>Show 25 more</button></div></section>
-    <section class="panel bn-box" data-review hidden><h2>Held for review</h2><div class="bn-review" data-rev></div></section>
-    <p class="sub">A tick means Battle.net lists that character on your linked account. Forever gets the tick when its account list is on. Shown hours use the imported total or tracked time, whichever is higher.${s.unverified ? ` ${plural(s.unverified, "uploaded character")} still to verify.` : ""}</p>`;
+    <section class="panel bn-box"><h2>On your profile</h2>${flavSeg}</section>
+    <section class="panel bn-box"><div class="bn-tabs" data-tabs role="tablist"></div>
+      <div class="bn-actrow"><div data-addbox></div><a class="btn" data-upload href="/connect/wow?game=${def}">Upload /played</a></div>
+      ${s.linked ? `<div data-feat></div>` : ""}
+      <div class="bn-tools"><input type="search" data-q placeholder="Search" aria-label="Search name or realm" maxlength="64">
+        <select data-sort aria-label="Sort"><option value="hours">Hours</option><option value="level">Level</option><option value="name">Name</option><option value="realm">Realm</option></select>
+        <select data-class aria-label="Class"><option value="">Class</option></select>
+        <select data-vis aria-label="Shown or hidden"><option value="">Shown and hidden</option><option value="shown">Shown</option><option value="hidden">Hidden</option></select>
+        <label class="bn-sw"><span>Hide all</span><input type="checkbox" data-hideall ${s.hide_all ? "checked" : ""}><i class="bn-tg"></i></label></div>
+      <div class="bn-headrow" aria-hidden="true"><span></span><span>Name</span><span class="c-realm">Realm</span><span class="c-cls">Level / class</span><span class="c-hrs">Hours</span><span class="c-imp">Imported</span><span></span></div>
+      <div data-list><p class="empty bn-empty">Loading…</p></div>
+      <div class="bn-more"><span class="sub" data-cnt></span><button class="btn" type="button" data-more hidden>Show more</button></div></section>
+    <section class="panel bn-box" data-review hidden><h2>Held for review</h2><div class="bn-review" data-rev></div></section>`;
   const msgBox = $("[data-msg]", el), list = $("[data-list]", el), more = $("[data-more]", el), cnt = $("[data-cnt]", el);
-  const st = { q: "", sort: "hours", class: "", vis: "", items: [], data: null, seq: 0 };
+  const st = { q: "", sort: "hours", class: "", vis: "", items: [], data: null, seq: 0, game: def, extra: "" };
+  const regions = `<select name="region" aria-label="Region"><option value="us">US</option><option value="eu">EU</option><option value="kr">KR</option><option value="tw">TW</option></select>`;
+  const addForm = game => game === "wow_forever"
+    ? `<form class="bn-add" data-addchar><p class="sub">Add by first name and surname. It's verified automatically when it matches your linked Battle.net account.</p>${regions}<input name="first" placeholder="First name" aria-label="First name" required maxlength="32"><input name="surname" placeholder="Surname" aria-label="Surname" required maxlength="32"><button class="btn" type="submit">Add character</button></form>`
+    : `<form class="bn-add" data-addchar><p class="sub">Add by name and realm. It's verified automatically when it matches your linked Battle.net account.</p>${regions}<input name="realm" placeholder="Realm" aria-label="Realm" required maxlength="64"><input name="name" placeholder="Name" aria-label="Character name" required maxlength="24"><button class="btn" type="submit">Add character</button></form>`;
+  const tabIds = d => {
+    const retail = d ? d.retail || 0 : 0, forever = d ? d.forever || 0 : 0, none = !d || retail + forever === 0;
+    const ids = [];
+    if (retail > 0 || def === "wow" || st.extra === "wow" || (none && st.game === "wow")) ids.push("wow");
+    if (forever > 0 || def === "wow_forever" || st.extra === "wow_forever" || (none && st.game === "wow_forever")) ids.push("wow_forever");
+    return ids.length ? ids : [def];
+  };
   const row = c => {
     const hid = c.hidden, specs = WOW.specs(c.class);
     const was = [c.former_name && c.former_name.toLowerCase() !== c.name.toLowerCase() ? c.former_name : "", c.former_realm && c.former_realm !== c.realm ? c.former_realm : ""].filter(Boolean).join(" · ");
-    return `<div class="bn-ch${hid ? " hid" : ""}" data-id="${c.id}"><div class="bn-port"><img class="r" src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" title="${esc(c.race || "")}" loading="lazy" ${imgOk}>${c.class ? `<img class="c" src="${WOW.clsIcon(c.class)}" alt="" title="${esc(WOW.cls(c.class))}" loading="lazy" ${imgOk}>` : ""}</div>
-      <div class="bn-who"><div class="bn-nm">${esc(c.name)} ${c.verified === false ? "" : `<span class="vbadge" title="On the linked Battle.net account">✓</span>`}</div><div class="sub">${c.realm ? esc(c.realm) + " " : ""}${esc(c.region.toUpperCase())}${c.game_id === "wow_forever" ? " · Forever" : ""} · Level ${c.level}${c.spec || c.class ? " " + esc([c.spec, WOW.cls(c.class)].filter(Boolean).join(" ")) : ""}</div>${was ? `<div class="sub">formerly ${esc(was)}</div>` : ""}</div>
-      <div class="bn-specs" role="group" aria-label="Spec">${specs.map(p => `<button type="button" class="${p[0] === c.spec ? "sel" : ""}" data-spec="${esc(p[0])}" title="${esc(p[0])}${p[0] === c.active_spec ? " (active on Battle.net)" : ""}" aria-pressed="${p[0] === c.spec}"><img src="${WOW.url(p[1])}" alt="${esc(p[0])}" loading="lazy" ${imgOk}></button>`).join("")}</div>
-      <div class="bn-hrs">${hours(c.played_min, { zero: true })}<small>/played</small></div>
-      ${c.game_id === "wow" ? `<label class="bn-sw bn-gsw" title="Show this character's guild on your profile"><span>Guild</span><input type="checkbox" data-guild ${c.show_guild ? "checked" : ""}><i class="bn-tg"></i></label>` : ""}
-      <label class="bn-sw"><span>${hid ? "Hidden" : "Shown"}</span><input type="checkbox" data-hide ${hid ? "" : "checked"} ${st.data && st.data.hide_all ? "disabled title=\"Hide all is on\"" : ""}><i class="bn-tg"></i></label></div>`;
+    const cls = [Number(c.level) > 0 ? "Level " + c.level : "", WOW.cls(c.class)].filter(Boolean).join(" ");
+    const imp = c.played_min > 0 && c.uploaded_at ? ago(c.uploaded_at) : "—";
+    return `<div class="bn-row${hid ? " hid" : ""}" data-id="${c.id}"><img src="${WOW.raceIcon(c.race, c.gender, c.class)}" alt="" ${imgOk}>
+      <div class="bn-nm">${esc(c.name)}${c.verified ? `<span class="bn-tick" title="On the linked Battle.net account">✓</span>` : ""}${was ? `<div class="sub">formerly ${esc(was)}</div>` : ""}</div>
+      <div class="c-realm sub">${c.realm ? esc(c.realm) + " " : ""}${esc((c.region || "").toUpperCase())}</div>
+      <div class="c-cls">${esc(cls || "—")}</div>
+      <div class="c-hrs num">${hours(c.played_min, { zero: true })}</div>
+      <div class="c-imp sub">${imp}</div>
+      <div class="bn-menu"><button type="button" class="bn-morebtn" data-menu aria-label="Actions for ${esc(c.name)}">···</button><div class="bn-pop" hidden>
+        <label class="bn-sw"><span>${hid ? "Hidden" : "Shown"}</span><input type="checkbox" data-hide ${hid ? "" : "checked"} ${st.data && st.data.hide_all ? "disabled" : ""}><i class="bn-tg"></i></label>
+        ${c.game_id === "wow" ? `<label class="bn-sw"><span>Guild</span><input type="checkbox" data-guild ${c.show_guild ? "checked" : ""}><i class="bn-tg"></i></label>` : ""}
+        ${specs.length ? `<div class="bn-specs" role="group" aria-label="Spec">${specs.map(p => `<button type="button" class="${p[0] === c.spec ? "on" : ""}" data-spec="${esc(p[0])}">${esc(p[0])}</button>`).join("")}</div>` : ""}
+      </div></div></div>`;
   };
   const render = () => {
-    const d = st.data;
-    $("[data-ttl]", el).textContent = `WoW characters (${nf.format(d.total)})`;
+    const d = st.data, ids = tabIds(d), label = { wow: "Retail", wow_forever: "Forever" };
+    if (!ids.includes(st.game)) st.game = ids[0];
+    $("[data-tabs]", el).innerHTML = ids.map(id => `<button type="button" role="tab" data-tab="${id}" aria-selected="${id === st.game}" class="${id === st.game ? "on" : ""}">${label[id]}</button>`).join("")
+      + (ids.length < 2 ? `<button type="button" class="bn-addtab" data-addtab="${st.game === "wow" ? "wow_forever" : "wow"}">Add ${st.game === "wow" ? "Forever" : "Retail"}</button>` : "");
+    $("[data-addbox]", el).innerHTML = addForm(st.game);
+    const up = $("[data-upload]", el); if (up) up.href = "/connect/wow?game=" + st.game;
     list.innerHTML = st.items.length ? st.items.map(row).join("")
-      : `<p class="empty" style="padding:20px 12px">${d.total ? "No characters match." : "No characters yet. Add one by name and realm, or upload /played."}</p>`;
-    cnt.textContent = d.total && !d.matched ? `No characters match (${nf.format(d.total)} in all) · ${hours(d.total_min, { zero: true })} total` : d.total ? `Showing ${nf.format(st.items.length)} of ${plural(d.matched, "character")}${d.matched === d.total ? "" : ` (${nf.format(d.total)} in all)`} · ${hours(d.total_min, { zero: true })} total` : "";
-    const left = d.matched - st.items.length;
-    more.hidden = left <= 0; more.textContent = `Show ${nf.format(Math.min(25, left))} more`;
+      : `<p class="empty bn-empty">${d && d.matched === 0 && st.q ? "No characters match." : "No characters yet."}</p>`;
+    cnt.textContent = d && d.matched ? plural(d.matched, "character") : "";
+    const left = d ? d.matched - st.items.length : 0;
+    more.hidden = left <= 0; more.textContent = "Show more";
   };
   const load = async append => {
-    const seq = ++st.seq, p = new URLSearchParams({ q: st.q, sort: st.sort, class: st.class, vis: st.vis, offset: append ? st.items.length : 0, limit: 25 });
+    const seq = ++st.seq, p = new URLSearchParams({ q: st.q, sort: st.sort, class: st.class, vis: st.vis, game: st.game, offset: append ? st.items.length : 0, limit: 25 });
     let d; try { d = await api("/me/wow/list?" + p); } catch (x) { if (seq === st.seq) showErr(msgBox, x); return; }
     if (seq !== st.seq) return;
     if (!st.data) { const cs = $("[data-class]", el); d.classes.slice().sort((a, b) => WOW.cls(a).localeCompare(WOW.cls(b))).forEach(c => cs.insertAdjacentHTML("beforeend", `<option value="${esc(c)}">${esc(WOW.cls(c))}</option>`)); }
@@ -718,9 +748,12 @@ pages.bnet = async () => {
     e.preventDefault();
     const btn = $("button[type=submit]", f); btn.disabled = true;
     try {
-      const r = await api("/me/wow/armory", { method: "POST", body: { region: f.region.value, realm: f.realm.value.trim(), name: f.name.value.trim() } });
-      showOk(msgBox, r.verified ? `${r.name} added and verified.` : `${r.name} added. It verifies when it matches your linked Battle.net account.`);
-      f.name.value = "";
+      const body = f.surname ? { region: f.region.value, game: "wow_forever", name: (f.first.value.trim() + " " + f.surname.value.trim()).replace(/\s+/g, " ") } : { region: f.region.value, realm: f.realm.value.trim(), name: f.name.value.trim(), game: "wow" };
+      const r = await api("/me/wow/armory", { method: "POST", body });
+      showOk(msgBox, r.verified ? `${r.name} added.` : `${r.name} added.`);
+      if (f.name) f.name.value = "";
+      if (f.first) f.first.value = "";
+      if (f.surname) f.surname.value = "";
       await load(false);
     } catch (x) { showErr(msgBox, x); }
     finally { btn.disabled = false; }
@@ -749,6 +782,18 @@ pages.bnet = async () => {
       finally { $$("[data-def]", el).forEach(b => { b.disabled = false; }); }
       return;
     }
+    const tab = e.target.closest("[data-tab]");
+    if (tab) { st.game = tab.dataset.tab; st.extra = ""; load(false); if (el._feat) el._feat(); return; }
+    const addTab = e.target.closest("[data-addtab]");
+    if (addTab) { st.game = addTab.dataset.addtab; st.extra = st.game; load(false); if (el._feat) el._feat(); return; }
+    const menuBtn = e.target.closest("[data-menu]");
+    if (menuBtn) {
+      const pop = menuBtn.nextElementSibling;
+      $$(".bn-pop", el).forEach(p => { if (p !== pop) p.hidden = true; });
+      pop.hidden = !pop.hidden;
+      return;
+    }
+    if (!e.target.closest(".bn-pop")) $$(".bn-pop", el).forEach(p => p.hidden = true);
     const t = e.target.closest("[data-unlink],[data-link]"); if (!t) return;
     try {
       if (t.matches("[data-link]")) { t.disabled = true; const r = await api("/connect/bnet/start", { method: "POST" }); location.href = r.url; return; }
@@ -763,20 +808,20 @@ pages.bnet = async () => {
     box.hidden = false;
   }).catch(() => {});
   // Featured top 3 per WoW version: search picker (fine with 1000+ characters), up/down, remove
-  const fbox = $("[data-fbox]", el);
+  const fbox = $("[data-feat]", el);
   if (fbox) {
-    const FL = [["wow", "World of Warcraft"]]; // Forever: once its /played uploads open
     let F; try { F = await api("/me/wow/featured"); } catch (x) { fbox.innerHTML = `<p class="empty">${esc(x.message)}</p>`; return; }
-    const lbl = c => `${esc(c.name)} <span class="sub">${esc(c.realm)} ${esc(c.region.toUpperCase())} · ${hours(c.played_min, { zero: true })}</span>`;
-    const draw = () => { fbox.innerHTML = FL.map(([g, nm]) => `<div class="bn-feat" data-g="${g}" style="padding:6px 14px 12px"><b>${nm}</b>
-      <ol style="margin:6px 0 6px 20px">${F[g].map((c, i) => `<li data-i="${i}">${lbl(c)} <button class="btn sm" type="button" data-up ${i ? "" : "disabled"} aria-label="Move up">↑</button><button class="btn sm" type="button" data-dn ${i < F[g].length - 1 ? "" : "disabled"} aria-label="Move down">↓</button><button class="btn sm" type="button" data-rm aria-label="Remove">✕</button></li>`).join("") || `<li class="empty" style="list-style:none;margin-left:-20px">None picked: your most played show first.</li>`}</ol>
-      ${F[g].length < 3 ? `<input type="search" data-fq placeholder="Search a character to add #${F[g].length + 1}" aria-label="Search a character to feature" maxlength="64"><div data-fr></div>` : ""}</div>`).join(""); };
+    const lbl = c => esc(c.name);
+    const draw = () => { const g = st.game; fbox.innerHTML = `<div class="bn-feat" data-g="${g}"><span class="bn-k">First on profile</span>
+      <span class="bn-featlist">${(F[g] || []).map((c, i) => `<span data-i="${i}">${lbl(c)} <button type="button" data-up ${i ? "" : "disabled"}>Up</button><button type="button" data-dn ${i < F[g].length - 1 ? "" : "disabled"}>Down</button><button type="button" data-rm>Remove</button></span>`).join("") || `<span class="sub">Most played</span>`}</span>
+      ${(F[g] || []).length < 3 ? `<input type="search" data-fq placeholder="Add" aria-label="Search a character to feature" maxlength="64"><div data-fr></div>` : ""}</div>`; };
     const save = async (g, next) => {
       try { await api("/me/wow/featured", { method: "POST", body: { game_id: g, ids: next.map(c => c.id) } }); F[g] = next; draw(); }
       catch (x) { showErr(msgBox, x); }
     };
     draw();
-    el.addEventListener("wowhid", e => { FL.forEach(([g]) => { F[g] = F[g].filter(c => c.id !== e.detail); }); draw(); });
+    el._feat = draw;
+    el.addEventListener("wowhid", e => { ["wow", "wow_forever"].forEach(g => { if (F[g]) F[g] = F[g].filter(c => c.id !== e.detail); }); draw(); });
     let tf;
     fbox.addEventListener("input", e => {
       const q = e.target.closest("[data-fq]"); if (!q) return;
@@ -794,7 +839,7 @@ pages.bnet = async () => {
       const b = e.target.closest("button"); if (!b) return;
       const box = b.closest("[data-g]"), g = box.dataset.g, cur = F[g].slice();
       if (b.matches("[data-add]")) { const c = $("[data-fr]", box)._hits[+b.dataset.add]; return save(g, cur.concat([c]).slice(0, 3)); }
-      const i = +b.closest("li").dataset.i;
+      const i = +b.closest("[data-i]").dataset.i;
       if (b.matches("[data-rm]")) cur.splice(i, 1);
       else { const j = b.matches("[data-up]") ? i - 1 : i + 1; [cur[i], cur[j]] = [cur[j], cur[i]]; }
       save(g, cur);

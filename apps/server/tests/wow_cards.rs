@@ -196,10 +196,11 @@ async fn armory_add_verifies_only_from_the_account_list(pool: PgPool) {
         "gender": {"type": "MALE"},
         "active_spec": {"name": "Frost"}
     });
-    let added =
-        fraglink_server::wow::add_armory_character(&st, uid, "us", "Area 52", "Mockrend", &profile)
-            .await
-            .unwrap();
+    let added = fraglink_server::wow::add_armory_character(
+        &st, uid, "us", "Area 52", "Mockrend", &profile, "wow",
+    )
+    .await
+    .unwrap();
     assert_eq!(added["verified"], true);
     assert_eq!(added["created"], true);
     let row: (i64, i32, String, bool) = sqlx::query_as(
@@ -216,10 +217,11 @@ async fn armory_add_verifies_only_from_the_account_list(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let again =
-        fraglink_server::wow::add_armory_character(&st, uid, "us", "area 52", "mockrend", &profile)
-            .await
-            .unwrap();
+    let again = fraglink_server::wow::add_armory_character(
+        &st, uid, "us", "area 52", "mockrend", &profile, "wow",
+    )
+    .await
+    .unwrap();
     assert_eq!(again["created"], false);
     let played: i64 = sqlx::query_scalar("SELECT played_s FROM wow_characters WHERE user_id = $1")
         .bind(uid)
@@ -247,6 +249,7 @@ async fn armory_add_verifies_only_from_the_account_list(pool: PgPool) {
         "Area 52",
         "Samplekin",
         &serde_json::json!({"id": 99, "name": "Samplekin", "level": 0, "realm": {"name": "Area 52"}, "playable_class": {"name": "Hunter"}}),
+        "wow",
     )
     .await
     .unwrap();
@@ -261,6 +264,7 @@ async fn armory_add_verifies_only_from_the_account_list(pool: PgPool) {
         "x",
         "a",
         &serde_json::json!({"name": "a"}),
+        "wow",
     )
     .await;
     assert!(bad.is_err());
