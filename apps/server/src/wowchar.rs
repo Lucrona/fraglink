@@ -17,7 +17,7 @@ use axum::extract::{Path, State};
 use axum::http::{header, HeaderMap, Response, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -530,31 +530,11 @@ pub async fn refresh(st: &AppState, id: Uuid) -> Result<(), ()> {
         }
         Err(_) => return Err(()),
     };
-    // the armory's level onto the card (`wow::shown_level!`). `bnet_checked_at` stays with
-    // the upload's cheat check so a refresh never pushes that check back.
-    if let Some(lvl) = root["level"].as_i64().filter(|l| *l > 0) {
-        let last = root["last_login_timestamp"]
-            .as_i64()
-            .and_then(|ms| Utc.timestamp_millis_opt(ms).single());
-        let _ = sqlx::query(
-            "UPDATE wow_characters SET bnet_level = $2,
-                    bnet_last_login = CASE WHEN $3::timestamptz IS NULL THEN bnet_last_login
-                                           ELSE greatest(bnet_last_login, $3) END
-             WHERE id = $1",
-        )
-        .bind(id)
-        .bind(lvl as i32)
-        .bind(last)
-        .execute(&st.db)
+    // Write the armory's level, class, guild-facing fields onto the card
+    // (`wow::shown_level!`). Never touches played_s or the addon's level claim.
+    let _ = crate::wow::apply_blizzard_profile(&st.db, id, &root)
         .await
-        .inspect_err(|e| tracing::warn!("wowchar: level for {id}: {e}"));
-    }
-    let _ = sqlx::query("UPDATE wow_characters SET faction = coalesce($2, faction) WHERE id = $1")
-        .bind(id)
-        .bind(crate::wow::profile_faction(&root))
-        .execute(&st.db)
-        .await
-        .inspect_err(|e| tracing::warn!("wowchar: faction for {id}: {e}"));
+        .inspect_err(|e| tracing::warn!("wowchar: profile for {id}: {e}"));
     let sub = |p: &str| format!("{base}/{p}?{ns}");
     let u: Vec<String> = [
         "character-media",
@@ -836,6 +816,10 @@ async fn refresh_forever(st: &AppState, id: Uuid, region: &str, name: &str) -> R
     if bid.is_some() && bid != root["id"].as_i64() {
         return Err(());
     }
+    // Same card write-back as Retail: the popup already has the fresh profile.
+    let _ = crate::wow::apply_blizzard_profile(&st.db, id, &root)
+        .await
+        .inspect_err(|e| tracing::warn!("wowchar: forever profile for {id}: {e}"));
     let sub = |part: &str| format!("{base}/{part}?namespace=profile-forever-us&locale=en_US");
     let urls = [
         "equipment",

@@ -1071,3 +1071,148 @@ async fn cards_show_the_newer_of_armory_and_played_level(pool: PgPool) {
         .unwrap();
     assert_eq!(raw, [80, 80]);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn stale_blizzard_levels_update_cards_not_played(pool: PgPool) {
+    use std::collections::BTreeMap;
+    let app = fraglink_server::router(state(pool.clone()));
+    let t = signup(&app, "stalelevel@example.com", "stalelevel").await;
+    sqlx::query("INSERT INTO site_settings(key, enabled) VALUES('wow_characters', true)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    fraglink_server::features::forget();
+    let uid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE handle = 'stalelevel'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO games(id, name) VALUES ('wow', 'World of Warcraft'),
+            ('wow_forever', 'World of Warcraft: Forever') ON CONFLICT DO NOTHING",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let retail: uuid::Uuid = uuid::Uuid::new_v4();
+    let forever: uuid::Uuid = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class, level, played_s, played_at, verified)
+         VALUES ($1, $2, 'wow', 'us', 'Frostmourne', 'frostmourne', 'Lucroner', 'PALADIN', 80, 72000, now() - interval '2 days', true)",
+    )
+    .bind(retail)
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class, level, played_s, played_at, verified)
+         VALUES ($1, $2, 'wow_forever', 'us', '', '', 'Vale Ashborne', 'PALADIN', 22, 9876, now() - interval '1 day', true)",
+    )
+    .bind(forever)
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let levels = |v: &Value| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                (
+                    c["name"].as_str().unwrap().to_string(),
+                    c["level"].as_i64().unwrap(),
+                )
+            })
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    let profile = |app: axum::Router, t: String| async move {
+        let r = api(
+            &app,
+            "GET",
+            "/api/v1/users/stalelevel/profile",
+            Some(&t),
+            None,
+        )
+        .await;
+        assert_eq!(r.status, 200, "{}", r.text);
+        levels(&serde_json::from_str::<Value>(&r.text).unwrap()["wow_characters"])
+    };
+
+    assert_eq!(
+        profile(app.clone(), t.clone()).await,
+        BTreeMap::from([("Lucroner".into(), 80), ("Vale Ashborne".into(), 22)])
+    );
+
+    // The popup / profile fetch writes Blizzard's current level onto the card,
+    // without touching the addon's claim or /played seconds.
+    let later = chrono::Utc::now().timestamp_millis();
+    fraglink_server::wow::apply_blizzard_profile(
+        &pool,
+        retail,
+        &json!({
+            "id": 176815246i64,
+            "level": 81,
+            "character_class": {"name": "Paladin"},
+            "race": {"name": "Human"},
+            "gender": {"type": "MALE"},
+            "faction": {"type": "ALLIANCE"},
+            "active_spec": {"name": "Protection"},
+            "last_login_timestamp": later
+        }),
+    )
+    .await
+    .unwrap();
+    fraglink_server::wow::apply_blizzard_profile(
+        &pool,
+        forever,
+        &json!({
+            "id": 1395710,
+            "level": 27,
+            "character_class": {"name": "Paladin"},
+            "race": {"name": "Undead"},
+            "gender": {"type": "FEMALE"},
+            "faction": {"type": "HORDE"},
+            "last_login_timestamp": later
+        }),
+    )
+    .await
+    .unwrap();
+
+    let shown = profile(app.clone(), t.clone()).await;
+    assert_eq!(shown[&"Lucroner".to_string()], 81, "{shown:?}");
+    assert_eq!(shown[&"Vale Ashborne".to_string()], 27, "{shown:?}");
+
+    let raw: Vec<(String, i32, i64, Option<i32>, String)> = sqlx::query_as(
+        "SELECT name, level, played_s, bnet_level, class FROM wow_characters ORDER BY name",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        raw,
+        vec![
+            ("Lucroner".into(), 80, 72000, Some(81), "PALADIN".into()),
+            ("Vale Ashborne".into(), 22, 9876, Some(27), "PALADIN".into()),
+        ]
+    );
+
+    // Account listing copy also covers Forever, still without rewriting played_s.
+    sqlx::query(
+        "INSERT INTO bnet_characters(user_id, game_id, region, realm_slug, name, bnet_id, level, class_name)
+         VALUES ($1, 'wow_forever', 'us', '', 'Vale Ashborne', 1395710, 28, 'PALADIN')",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    fraglink_server::wow::copy_bnet_levels(&pool, uid).await;
+    assert_eq!(profile(app, t).await[&"Vale Ashborne".to_string()], 28);
+    let played: i64 = sqlx::query_scalar("SELECT played_s FROM wow_characters WHERE id = $1")
+        .bind(forever)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(played, 9876);
+}

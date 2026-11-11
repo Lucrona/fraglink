@@ -7,7 +7,7 @@
 use crate::api;
 use crate::auth::AuthUser;
 use crate::error::{ApiResult, AppError};
-use crate::wow::{app_token, bnet_link, http, name_of, namespace};
+use crate::wow::{app_token, bnet_link, http, namespace};
 use crate::AppState;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -227,6 +227,7 @@ async fn list(
     let uid = a.user.id;
     if p.offset.unwrap_or(0) == 0 {
         backfill(&st, uid);
+        crate::wow::schedule_stale_refresh(&st, uid);
     }
     let ha = hide_all_on(&st, uid).await?;
     let q = p.q.unwrap_or_default().trim().to_lowercase();
@@ -555,17 +556,9 @@ async fn fill_specs(st: &AppState, uid: Uuid) {
             continue;
         };
         ok += 1;
-        let _ = sqlx::query(
-            "UPDATE wow_characters SET bnet_spec = coalesce($2, bnet_spec), race = coalesce($3, race),
-                    gender = coalesce($4, gender) WHERE id = $1",
-        )
-        .bind(id)
-        .bind(name_of(&v["active_spec"]))
-        .bind(name_of(&v["race"]))
-        .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
-        .execute(&st.db)
-        .await
-        .inspect_err(|e| tracing::warn!("wowpage: spec for {id}: {e}"));
+        let _ = crate::wow::apply_blizzard_profile(&st.db, id, &v)
+            .await
+            .inspect_err(|e| tracing::warn!("wowpage: spec for {id}: {e}"));
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
     tracing::info!("wow backfill: {ok}/{total} characters for {uid}");

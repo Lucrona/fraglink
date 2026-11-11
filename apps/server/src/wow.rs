@@ -699,11 +699,14 @@ async fn fetch_forever_profile(st: &AppState, id: Uuid, e: &CharEntry) -> bool {
     let Ok(resp) = http.get(&url).bearer_auth(tok).send().await else {
         return false;
     };
-    if !resp.status().is_success() {
+    if resp.status().as_u16() == 404 {
         let _ = sqlx::query("UPDATE wow_characters SET bnet_checked_at = now() WHERE id = $1")
             .bind(id)
             .execute(&st.db)
             .await;
+        return false;
+    }
+    if !resp.status().is_success() {
         return false;
     }
     let Ok(v) = resp.json::<Value>().await else {
@@ -717,22 +720,9 @@ async fn fetch_forever_profile(st: &AppState, id: Uuid, e: &CharEntry) -> bool {
         };
         let _ = assign_forever_ruleset(&st.db, id, region, rid).await;
     }
-    let level = v["level"].as_i64();
-    let _ = sqlx::query(
-        "UPDATE wow_characters SET bnet_level = coalesce($2, bnet_level),
-                bnet_spec = coalesce($3, bnet_spec), race = coalesce($4, race),
-                gender = coalesce($5, gender), bnet_checked_at = now(), faction = coalesce($6, faction)
-         WHERE id = $1",
-    )
-    .bind(id)
-    .bind(level.map(|l| l as i32))
-    .bind(name_of(&v["active_spec"]))
-    .bind(name_of(&v["race"]))
-    .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
-    .bind(profile_faction(&v))
-    .execute(&st.db)
-    .await
-    .inspect_err(|err| tracing::warn!("forever profile: update {id}: {err}"));
+    let _ = apply_blizzard_profile(&st.db, id, &v)
+        .await
+        .inspect_err(|err| tracing::warn!("forever profile: update {id}: {err}"));
     true
 }
 
@@ -1538,10 +1528,16 @@ pub async fn sync_characters(
 /// The listing is fetched live, so it is the newest level Blizzard has.
 pub async fn copy_bnet_levels(db: &sqlx::PgPool, uid: Uuid) {
     let _ = sqlx::query(
-        "UPDATE wow_characters c SET bnet_level = b.level FROM bnet_characters b
-         WHERE c.game_id = 'wow' AND c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
-           AND (b.bnet_id = c.bnet_id OR (b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name)))
-           AND b.level > 0 AND c.bnet_level IS DISTINCT FROM b.level",
+        "UPDATE wow_characters c SET bnet_level = b.level,
+                class = coalesce(b.class_name, c.class)
+         FROM bnet_characters b
+         WHERE c.user_id = $1 AND b.user_id = c.user_id AND b.game_id = c.game_id AND b.region = c.region
+           AND (
+                (c.game_id = 'wow' AND (b.bnet_id = c.bnet_id OR (b.realm_slug = c.realm_slug AND lower(b.name) = lower(c.name))))
+             OR (c.game_id = 'wow_forever' AND (b.bnet_id = c.bnet_id OR lower(b.name) = lower(c.name)))
+           )
+           AND b.level > 0 AND (c.bnet_level IS DISTINCT FROM b.level
+                OR (b.class_name IS NOT NULL AND b.class_name <> '' AND c.class IS DISTINCT FROM b.class_name))",
     )
     .bind(uid)
     .execute(db)
@@ -2191,23 +2187,9 @@ async fn check_bnet_level(st: &AppState, uid: Uuid, gid: &str, id: Uuid, e: &Cha
     let last = v["last_login_timestamp"]
         .as_i64()
         .and_then(|ms| Utc.timestamp_millis_opt(ms).single());
-    let _ = sqlx::query(
-        "UPDATE wow_characters SET bnet_level = $2, bnet_last_login = $3, bnet_checked_at = now(),
-                bnet_spec = coalesce($4, bnet_spec), race = coalesce($5, race), gender = coalesce($6, gender),
-                bnet_id = coalesce(bnet_id, $7), faction = coalesce($8, faction)
-         WHERE id = $1",
-    )
-    .bind(id)
-    .bind(level.map(|l| l as i32))
-    .bind(last)
-    .bind(name_of(&v["active_spec"]))
-    .bind(name_of(&v["race"]))
-    .bind(v["gender"]["type"].as_str().map(|g| g.to_lowercase()))
-    .bind(v["id"].as_i64())
-    .bind(profile_faction(&v))
-    .execute(&st.db)
-    .await
-    .inspect_err(|e| tracing::warn!("wow armory: update character {id}: {e}"));
+    let _ = apply_blizzard_profile(&st.db, id, &v)
+        .await
+        .inspect_err(|e| tracing::warn!("wow armory: update character {id}: {e}"));
     if let (Some(l), Some(t)) = (level, last) {
         if t.timestamp() > e.at && e.level > l {
             let r = rej(
@@ -2244,6 +2226,157 @@ pub fn profile_faction(profile: &Value) -> Option<&str> {
 /// Profile cards list Battle.net-verified Retail characters (`verified_only`). Forever
 /// characters are included too, without a tick, until `BNET_FOREVER_ACCOUNT` verifies
 /// them. The owner's /connect/wow page lists every row so unverified ones can be verified.
+/// Copy a successful Blizzard character profile onto the card fields
+/// (`shown_level!`, class, race, spec, faction). Never writes the addon's
+/// `level` claim or `played_s`.
+pub async fn apply_blizzard_profile(
+    db: &sqlx::PgPool,
+    id: Uuid,
+    root: &Value,
+) -> Result<(), sqlx::Error> {
+    let level = root["level"].as_i64().filter(|l| *l > 0).map(|l| l as i32);
+    let last = root["last_login_timestamp"]
+        .as_i64()
+        .and_then(|ms| Utc.timestamp_millis_opt(ms).single());
+    let class = class_token(root);
+    sqlx::query(
+        "UPDATE wow_characters SET
+            bnet_level = coalesce($2, bnet_level),
+            bnet_last_login = CASE WHEN $3::timestamptz IS NULL THEN bnet_last_login
+                                   ELSE greatest(bnet_last_login, $3) END,
+            class = CASE WHEN $4 <> '' THEN $4 ELSE class END,
+            race = coalesce($5, race),
+            gender = coalesce($6, gender),
+            bnet_spec = coalesce($7, bnet_spec),
+            faction = coalesce($8, faction),
+            bnet_id = coalesce(bnet_id, $9),
+            bnet_checked_at = now()
+         WHERE id = $1",
+    )
+    .bind(id)
+    .bind(level)
+    .bind(last)
+    .bind(&class)
+    .bind(name_of(&root["race"]))
+    .bind(root["gender"]["type"].as_str().map(|g| g.to_lowercase()))
+    .bind(name_of(&root["active_spec"]))
+    .bind(profile_faction(root))
+    .bind(root["id"].as_i64())
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Kick off a background refresh of stale Blizzard metadata for this user's
+/// cards (level, class, race, spec, faction). Public profile views are
+/// rate-limited so visitors cannot stampede the API.
+pub fn schedule_stale_refresh(st: &AppState, uid: Uuid) {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Instant;
+    static SEEN: OnceLock<Mutex<HashMap<Uuid, Instant>>> = OnceLock::new();
+    {
+        let mut m = SEEN
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        m.retain(|_, t| t.elapsed() < Duration::from_secs(45));
+        if m.contains_key(&uid) {
+            return;
+        }
+        m.insert(uid, Instant::now());
+    }
+    let st = st.clone();
+    tokio::spawn(async move {
+        refresh_stale_for_user(&st, uid).await;
+    });
+}
+
+async fn refresh_stale_for_user(st: &AppState, uid: Uuid) {
+    let rows: Vec<(Uuid, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, game_id, region, realm_slug, name FROM wow_characters
+         WHERE user_id = $1
+           AND (game_id = 'wow_forever' OR verified)
+           AND (bnet_checked_at IS NULL
+                OR bnet_checked_at < now() - interval '30 minutes'
+                OR bnet_spec IS NULL
+                OR race IS NULL)
+         ORDER BY featured NULLS LAST, played_s DESC
+         LIMIT 40",
+    )
+    .bind(uid)
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    if rows.is_empty() {
+        return;
+    }
+    let mut ok = 0usize;
+    let total = rows.len();
+    for (id, game, region, slug, name) in rows {
+        if refresh_character_profile(st, id, &game, &region, &slug, &name).await {
+            ok += 1;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    tracing::info!("wow profile refresh: {ok}/{total} characters for {uid}");
+}
+
+/// One public Blizzard character profile. A miss or error does not change
+/// hours or the addon's stored level. 404s are remembered so we don't retry
+/// every page view (Forever under 10 has no public profile).
+pub async fn refresh_character_profile(
+    st: &AppState,
+    id: Uuid,
+    game: &str,
+    region: &str,
+    slug: &str,
+    name: &str,
+) -> bool {
+    let url = if game == "wow_forever" {
+        if !forever_lookup_enabled() {
+            return false;
+        }
+        let Some((first, surname)) = forever_parts(name) else {
+            return false;
+        };
+        forever_profile_url(region, &first, &surname)
+    } else if game == "wow" {
+        let Some(ns) = namespace(game, region) else {
+            return false;
+        };
+        format!(
+            "https://{region}.api.blizzard.com/profile/wow/character/{slug}/{}?namespace={ns}&locale=en_US",
+            name.to_lowercase()
+        )
+    } else {
+        return false;
+    };
+    let (Some(tok), Some(http)) = (app_token().await, http()) else {
+        return false;
+    };
+    let Ok(resp) = http.get(&url).bearer_auth(&tok).send().await else {
+        return false;
+    };
+    if resp.status().as_u16() == 404 {
+        let _ = sqlx::query("UPDATE wow_characters SET bnet_checked_at = now() WHERE id = $1")
+            .bind(id)
+            .execute(&st.db)
+            .await;
+        return false;
+    }
+    if !resp.status().is_success() {
+        return false;
+    }
+    let Ok(v) = resp.json::<Value>().await else {
+        return false;
+    };
+    apply_blizzard_profile(&st.db, id, &v)
+        .await
+        .inspect_err(|e| tracing::warn!("wow profile: apply {id}: {e}"))
+        .is_ok()
+}
+
 pub async fn characters(
     st: &AppState,
     uid: Uuid,
@@ -2272,6 +2405,7 @@ pub async fn characters(
         faction: Option<String>,
         ruleset: Option<String>,
     }
+    schedule_stale_refresh(st, uid);
     let rows: Vec<Row> = sqlx::query_as(
             concat!("SELECT id, game_id, region, realm, name, class, ", shown_level!(), " AS level, played_s, played_at, verified,
                     hidden OR coalesce((SELECT hide_all FROM wow_prefs WHERE user_id = $1), false) AS hid,

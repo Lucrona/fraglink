@@ -74,3 +74,13 @@ test('Forever characters group under the ruleset name, never Unknown server', ()
   assert.equal(retail[0].realm,'Area 52');
   assert.equal(retail[1].realm,'PvP');
 });
+
+test('popup details update the matching profile and gallery card level', () => {
+  const {readFileSync}=require('node:fs');
+  const source=readFileSync(__dirname+'/../static/assets/app.js','utf8');
+  assert.ok(source.includes('const syncWowCardFromDetails'));
+  assert.ok(source.includes('syncWowCardFromDetails(c, d)'));
+  assert.ok(source.includes('pullFreshWowCards'));
+  assert.ok(source.includes('c.level = d.level'));
+  assert.ok(source.includes('.wc-lv') && source.includes('Level " + c.level'));
+});
