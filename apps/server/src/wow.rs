@@ -2210,6 +2210,8 @@ pub(crate) fn name_of(v: &Value) -> Option<String> {
     v["name"]
         .as_str()
         .or_else(|| v["name"]["en_US"].as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
         .map(|s| s.chars().take(40).collect())
 }
 
@@ -2228,23 +2230,33 @@ pub fn profile_faction(profile: &Value) -> Option<&str> {
 /// them. The owner's /connect/wow page lists every row so unverified ones can be verified.
 /// Copy a successful Blizzard character profile onto the card fields
 /// (`shown_level!`, class, race, spec, faction). Never writes the addon's
-/// `level` claim or `played_s`.
+/// `level` claim or `played_s`. Missing or blank metadata preserves the saved
+/// value; guild/media, ownership and visibility are outside this write set.
 pub async fn apply_blizzard_profile(
     db: &sqlx::PgPool,
     id: Uuid,
     root: &Value,
 ) -> Result<(), sqlx::Error> {
-    let level = root["level"].as_i64().filter(|l| *l > 0).map(|l| l as i32);
+    let level = root["level"]
+        .as_i64()
+        .and_then(|l| i32::try_from(l).ok())
+        .filter(|l| *l > 0);
     let last = root["last_login_timestamp"]
         .as_i64()
         .and_then(|ms| Utc.timestamp_millis_opt(ms).single());
     let class = class_token(root);
+    let class = (!class.is_empty()).then_some(class);
+    let gender = root["gender"]["type"]
+        .as_str()
+        .map(str::trim)
+        .filter(|g| !g.is_empty())
+        .map(str::to_lowercase);
     sqlx::query(
         "UPDATE wow_characters SET
             bnet_level = coalesce($2, bnet_level),
             bnet_last_login = CASE WHEN $3::timestamptz IS NULL THEN bnet_last_login
                                    ELSE greatest(bnet_last_login, $3) END,
-            class = CASE WHEN $4 <> '' THEN $4 ELSE class END,
+            class = coalesce($4, class),
             race = coalesce($5, race),
             gender = coalesce($6, gender),
             bnet_spec = coalesce($7, bnet_spec),
@@ -2258,10 +2270,10 @@ pub async fn apply_blizzard_profile(
     .bind(last)
     .bind(&class)
     .bind(name_of(&root["race"]))
-    .bind(root["gender"]["type"].as_str().map(|g| g.to_lowercase()))
+    .bind(gender)
     .bind(name_of(&root["active_spec"]))
     .bind(profile_faction(root))
-    .bind(root["id"].as_i64())
+    .bind(root["id"].as_i64().filter(|id| *id > 0))
     .execute(db)
     .await?;
     Ok(())
