@@ -1216,3 +1216,183 @@ async fn stale_blizzard_levels_update_cards_not_played(pool: PgPool) {
         .unwrap();
     assert_eq!(played, 9876);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn retail_profile_preserves_missing_and_blank_metadata(pool: PgPool) {
+    profile_preserves_missing_and_blank_metadata(pool, "wow").await;
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn forever_profile_preserves_missing_and_blank_metadata(pool: PgPool) {
+    profile_preserves_missing_and_blank_metadata(pool, "wow_forever").await;
+}
+
+async fn profile_preserves_missing_and_blank_metadata(pool: PgPool, game: &str) {
+    let uid = uuid::Uuid::new_v4();
+    let id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO users(id, email, handle, display_name, password_hash)
+         VALUES ($1, 'profile-guard@example.invalid', 'profileguard', 'Profile guard', 'unused')",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO games(id, name) VALUES ($1, 'Profile guard test') ON CONFLICT DO NOTHING",
+    )
+    .bind(game)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name,
+            class, race, gender, bnet_spec, faction, level, bnet_level, bnet_last_login,
+            played_s, played_at, verified, ever_verified, hidden, featured, show_guild, bnet_id)
+         VALUES ($1, $2, $3, 'us', 'Test', 'test', 'Guard Example',
+            'PALADIN', 'Human', 'male', 'Protection', 'ALLIANCE', 22, 27,
+            '2026-01-02T00:00:00Z', 9876, '2026-01-01T00:00:00Z', $4, true, true, 1, true, 123)",
+    )
+    .bind(id)
+    .bind(uid)
+    .bind(game)
+    .bind(game == "wow") // Both verified and unverified ownership must stay unchanged.
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO wow_played_snaps(char_id, played_s, at) VALUES ($1, 9876, now())")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO hours_entries(id, user_id, game_id, tier, source, minutes)
+         VALUES ($1, $2, $3, 'imported', 'wow_addon', 164)",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(uid)
+    .bind(game)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sessions(id, user_id, game_id, started_at, ended_at, duration_s)
+         VALUES ($1, $2, $3, now() - interval '1 hour', now(), 3600)",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(uid)
+    .bind(game)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO wow_char_details(char_id, status, data)
+         VALUES ($1, 'ok', '{\"guild\":\"Saved guild\",\"avatar\":\"saved-avatar\",\"media\":\"saved-media\"}')",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Compare complete rows, including upload timestamps and every ownership /
+    // visibility field; only the refresh-at timestamp may change for blank data.
+    let character = || async {
+        sqlx::query_scalar::<_, Value>(
+            "SELECT to_jsonb(c) - 'bnet_checked_at' FROM wow_characters c WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    let related = || async {
+        sqlx::query_scalar::<_, Value>(
+            "SELECT jsonb_build_object(
+                'snaps', (SELECT jsonb_agg(to_jsonb(s)) FROM wow_played_snaps s),
+                'hours', (SELECT jsonb_agg(to_jsonb(h)) FROM hours_entries h),
+                'sessions', (SELECT jsonb_agg(to_jsonb(s)) FROM sessions s),
+                'details', (SELECT jsonb_agg(to_jsonb(d)) FROM wow_char_details d))",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    let before = character().await;
+    let related_before = related().await;
+    let mut blanks = vec![json!({}), json!({"level": null, "id": null})];
+    for blank in ["", " \t\n\r ", "\u{2003}\u{a0}"] {
+        for name in [json!(blank), json!({"en_US": blank})] {
+            blanks.push(json!({
+                "level": 0, "id": 999,
+                "playable_class": {"name": name}, "character_class": {"name": name},
+                "race": {"name": name}, "active_spec": {"name": name},
+                "gender": {"type": blank}, "faction": {"type": blank},
+                "guild": {"name": blank}, "avatar": blank, "media": blank,
+                "last_login_timestamp": null
+            }));
+        }
+    }
+    blanks.extend([
+        json!({"level": -1, "id": 0}),
+        json!({"level": 4_294_967_297i64, "id": -1}), // Must not wrap to level 1.
+        json!({"race": null, "gender": null, "active_spec": null, "faction": null}),
+        json!({"last_login_timestamp": 1_735_689_600_000i64}), // Older login.
+    ]);
+    for profile in blanks {
+        fraglink_server::wow::apply_blizzard_profile(&pool, id, &profile)
+            .await
+            .unwrap();
+        assert_eq!(character().await, before, "{game}: {profile}");
+        assert_eq!(related().await, related_before);
+    }
+
+    // Valid data still updates the intended card metadata, with trimmed names.
+    fraglink_server::wow::apply_blizzard_profile(
+        &pool,
+        id,
+        &json!({"level": 28, "id": 999, "playable_class": {"name": " \t "},
+            "character_class": {"name": " Mage "}, "race": {"name": {"en_US": " Elf "}},
+            "gender": {"type": " FEMALE "}, "active_spec": {"name": " Frost "},
+            "faction": {"type": "HORDE"}, "last_login_timestamp": 1_767_398_400_000i64}),
+    )
+    .await
+    .unwrap();
+    let mut expected = before;
+    expected["bnet_level"] = json!(28);
+    expected["class"] = json!("MAGE");
+    expected["race"] = json!("Elf");
+    expected["gender"] = json!("female");
+    expected["bnet_spec"] = json!("Frost");
+    expected["faction"] = json!("HORDE");
+    expected["bnet_last_login"] =
+        sqlx::query_scalar::<_, Value>("SELECT to_jsonb('2026-01-03T00:00:00Z'::timestamptz)")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(character().await, expected); // Existing bnet_id remains 123, not 999.
+    assert_eq!(related().await, related_before);
+
+    // An absent stable ID can be filled, but never with an invalid ID.
+    sqlx::query("UPDATE wow_characters SET bnet_id = NULL WHERE id = $1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for profile in [
+        json!({}),
+        json!({"id": 0}),
+        json!({"id": -1}),
+        json!({"id": 456}),
+    ] {
+        fraglink_server::wow::apply_blizzard_profile(&pool, id, &profile)
+            .await
+            .unwrap();
+        expected["bnet_id"] = if profile["id"] == 456 {
+            json!(456)
+        } else {
+            Value::Null
+        };
+        assert_eq!(character().await, expected);
+        assert_eq!(related().await, related_before);
+    }
+}
