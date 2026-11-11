@@ -618,6 +618,30 @@ const factionCrest = value => {
 };
 // Forever characters have no realm; the ruleset (PvP, Normal, …) is the server name.
 const wowRealm = c => (c.realm || c.ruleset || "").trim();
+// The popup's fresh Blizzard profile should show on the same character's cards.
+const syncWowCardFromDetails = (c, d) => {
+  if (!c || !d || d.status === "missing") return;
+  if (d.level != null) c.level = d.level;
+  if (d.class) c.class = d.class;
+  if (d.race) c.race = d.race;
+  if (d.spec) c.spec = d.spec;
+  if (d.faction) c.faction = String(d.faction).toUpperCase();
+  if (d.guild && d.guild.name && c.show_guild) c.guild = d.guild.name;
+  const id = String(c.id || "");
+  if (!id || typeof document === "undefined" || !document.querySelectorAll) return;
+  document.querySelectorAll(`[data-wcid="${id}"]`).forEach(n => {
+    const lv = n.querySelector(".wc-lv");
+    if (lv && c.level != null) lv.textContent = "Level " + c.level;
+    const cl = n.querySelector(".wc-cl");
+    if (cl && c.class) {
+      cl.textContent = WOW.cls(c.class);
+      n.style.setProperty("--cls", WOW.color(c.class));
+    }
+    const g = n.querySelector(".wc-g");
+    if (g && c.guild) g.textContent = "<" + c.guild + ">";
+  });
+};
+
 const groupWowRealms = rows => {
   const groups = new Map();
   for (const c of rows) {
@@ -1405,6 +1429,34 @@ pages.profile = async () => {
   };
   const wowShow = p.wow_show === "wow" || p.wow_show === "wow_forever" || p.wow_show === "none" ? p.wow_show : "both";
   const wowRows = flav => (p.wow_characters || []).filter(c => !c.hidden && (c.game_id === "wow_forever" ? "wow_forever" : "wow") === flav);
+  const currentWowFlav = () => {
+    const b = $("[data-wflav][aria-pressed='true'], [data-flav][aria-pressed='true']", root);
+    return (b && (b.dataset.wflav || b.dataset.flav)) || wowOpen || "wow";
+  };
+  const refreshVisibleWow = () => {
+    const flav = currentWowFlav();
+    const gal = $("[data-wowgal]", root);
+    if (gal) {
+      gal.innerHTML = groupWowRealms(wowRows(flav)).map(g => `<section class="wow-realm"><h2>${esc(g.realm)}${g.showRegion ? ` <span class="sub">${esc(g.region)}</span>` : ""}<span class="wow-realm-count" aria-label="${g.rows.length} characters">${g.rows.length}</span></h2><div class="wow-gal">${g.rows.map(c => wowCard(c, false)).join("")}</div></section>`).join("") || `<p class="empty">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`;
+      WOWAV.fill(root, p.handle);
+      return;
+    }
+    const box = $("[data-wowcards]", root);
+    if (!box) return;
+    const rows = wowRows(flav).slice().sort((a, b) => (a.featured || 9) - (b.featured || 9));
+    box.innerHTML = rows.slice(0, 6).map(c => wowCard(c)).join("") || `<p class="empty" style="padding:8px 0">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`;
+    WOWAV.fill(box, p.handle);
+  };
+  const pullFreshWowCards = () => {
+    setTimeout(async () => {
+      try {
+        const fresh = await api("/users/" + encodeURIComponent(p.handle) + "/profile?limit=" + GPAGE + "&tz=" + encodeURIComponent(TZ), { keepSession: true });
+        if (!fresh || !Array.isArray(fresh.wow_characters)) return;
+        p.wow_characters = fresh.wow_characters;
+        refreshVisibleWow();
+      } catch (e) {}
+    }, 2500);
+  };
   const bothSides = wowRows("wow").length > 0 && wowRows("wow_forever").length > 0;
   const wowToggle = typeof p.wow_toggle === "boolean" ? p.wow_toggle : wowShow === "both" && bothSides;
   const wowOpen = p.wow_open === "wow" || p.wow_open === "wow_forever" || p.wow_open === "none" ? p.wow_open
@@ -1426,6 +1478,7 @@ pages.profile = async () => {
     paint(wowOpen);
     wireWowPop();
     if (wowToggle) root.addEventListener("click", e => { const b = e.target.closest("[data-flav]"); if (!b) return; paint(b.dataset.flav); });
+    pullFreshWowCards();
     return;
   }
   const pres = p.presence;
@@ -1577,6 +1630,7 @@ pages.profile = async () => {
   });
   root.innerHTML = `<div class="pv3">` + head + pendingDelete + welcome + `<div class="g2v"><div class="col">${details}${games}${wowc}${ach}${miniprofile}</div><aside class="col">${mini}${rig}${fr}${discord}</aside></div></div>`;
   WOWAV.fill(root, p.handle);
+  if (wowc) pullFreshWowCards();
   $$('a[href="#friends"]', root).forEach(a => a.addEventListener("click", e => { const f = $("#friends", root); if (!f) return; e.preventDefault(); f.scrollIntoView({ behavior: "smooth", block: "center" }); f.classList.add("flash"); setTimeout(() => f.classList.remove("flash"), 1200); }));
   const sm = $("[data-seemore]", root);
   if (sm) sm.addEventListener("click", e => { e.preventDefault(); $$(".olda", root).forEach(x => x.hidden = false); sm.parentNode.remove(); });
@@ -2293,7 +2347,7 @@ const WOWPOP = (() => {
         $(".cp-in", box).innerHTML = body({ name: c.name, level: c.level, class: c.class, race: c.race, region: c.region, realm: wowRealm(c), game_id: "wow_forever", armory_unavailable: true, gear: [], stats: [], avatar_src: c.avatar_src }, { ...c, handle });
         WOWAV.fill(box, handle); WH.scan(); return;
       }
-      $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WOWAV.fill(box, handle); WH.scan();
+      $(".cp-in", box).innerHTML = body(d, { ...c, handle }); WOWAV.fill(box, handle); WH.scan(); if (typeof syncWowCardFromDetails === "function") syncWowCardFromDetails(c, d);
       const im = $(".cp-rd", box);
       if (im) { const t = localStorage.getItem(TK), r = await fetch(`${API}/users/${encodeURIComponent(handle)}/wow/${encodeURIComponent(c.id)}/render.png`, { headers: t ? { authorization: "Bearer " + t } : {} });
         if (r.ok && box === me) { im.src = URL.createObjectURL(await r.blob()); im.onload = () => URL.revokeObjectURL(im.src); im.hidden = false; } } }
