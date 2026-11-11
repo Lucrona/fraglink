@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manager option A — stacked</title>
+<style>
+:root{--font:system-ui,Segoe UI,Roboto,sans-serif;--text:#c8ced6;--muted:#8a939e;--dim:#626b76;--guild:#a7d08c}
+*{box-sizing:border-box}body{margin:0;background:#0c0e11;color:var(--text);font:13px/1.4 var(--font)}
+.sample{background:#2a1c0e;color:#f0c58e;text-align:center;padding:7px 12px;font-size:12px}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+.panel{background:#15181d;border:1px solid #24384f;border-radius:4px;margin-bottom:12px;overflow:hidden}
+h2{margin:0;padding:8px 12px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:#e89a48;background:linear-gradient(90deg,#22374d,#12171e)}
+.body{padding:12px}.row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #1a2532}
+.row:last-child{border:0}
+button,.btn{background:#1c2836;color:#d6dee8;border:1px solid #3d5168;border-radius:3px;padding:6px 10px;font:inherit}
+.seg{display:inline-flex;border:1px solid #3d5168;border-radius:3px;overflow:hidden}
+.seg b{background:#2c4d6b;color:#fff;padding:4px 10px}.seg span{padding:4px 10px;color:#c5d0db}
+.dim{color:var(--muted);font-size:12px}.tick{color:#8fdc79}.hrs{text-align:right;font-variant-numeric:tabular-nums}
+.sw{width:28px;height:16px;border-radius:8px;background:#2f5a2a;position:relative;display:inline-block}
+.sw i{position:absolute;top:2px;left:14px;width:12px;height:12px;border-radius:50%;background:#8fdc79}
+</style>
+</head>
+<body>
+<div class="sample"><b>MANAGER A</b> · one page, stacked · SAMPLE · hours stay here</div>
+<main class="wrap">
+<section class="panel"><h2>Battle.net</h2><div class="body row"><div><b>Samplemock#1234</b><div class="dim">Linked · last checked today</div></div><button>Reconnect</button></div></section>
+<section class="panel"><h2>Profile default</h2><div class="body"><div class="dim" style="margin-bottom:8px">Which roster opens first on your profile. Visitors can still switch.</div><div class="seg"><b>Retail</b><span>Forever</span></div></div></section>
+<section class="panel"><h2>Add or import</h2><div class="body">
+  <div class="row"><div>Look up a character on the Armory<div class="dim">Retail: realm and name. Forever: first name and surname.</div></div><button>Add character</button></div>
+  <div class="row"><div>Upload /played<div class="dim">Retail or Forever file. Each game keeps its own total.</div></div><button>Upload</button></div>
+</div></section>
+<section class="panel"><h2>Characters</h2><div class="body">
+  <div class="row"><div><b>Mockrend</b> <span class="tick" title="On the linked Battle.net account">✓</span><div class="dim">Mage · Retail · formerly Mossrend</div><div class="dim">Last import 8 Nov</div></div><div class="hrs">1,284 h<div class="dim">/played</div></div><span class="sw" title="Shown on profile"><i></i></span></div>
+  <div class="row"><div><b>Vale Mocken</b><div class="dim">Warrior · Forever</div><div class="dim">Last import 7 Nov</div></div><div class="hrs">86 h<div class="dim">/played</div></div><span class="sw"><i></i></span></div>
+</div></section>
+<section class="panel"><h2>Held for review</h2><div class="body dim">Samplekin's file was a lower /played. Nothing was overwritten. <button>Review</button></div></section>
+</main>
+</body></html>
