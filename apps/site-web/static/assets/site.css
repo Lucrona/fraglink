@@ -72,10 +72,16 @@ form.f{display:grid;gap:11px}
 
 /* panels */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-/* one panel bar for every panel: dark blue fade, orange caps (#e89a48 passes AA on --hd1) */
-.panel>h2{margin:0;display:flex;align-items:center;gap:8px;min-height:32px;padding:7px 12px;font-size:11.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--hd-orange);
-  background:linear-gradient(90deg,var(--hd1) 0,var(--hd2) 150px,#141b24 190px,#12171e);border-bottom:1px solid #0b1118;box-shadow:inset 0 1px 0 #ffffff12}
-.panel>h2 .more{margin-left:auto;font-size:11px;letter-spacing:0;text-transform:none;font-weight:600;color:#a9c3dd;white-space:nowrap}
+/* Panel bars: Profile v3 slant tab (50c06cb). Dark 28px bar, clipped label tab. */
+.panel>h2,.tabpane h3,.bn h3,.bn-sec>h3{display:flex;align-items:stretch;justify-content:space-between;gap:0;margin:0;padding:0;height:28px;min-height:28px;background:linear-gradient(#3b4048,#23272d 55%,#1a1d22);border:0;border-bottom:1px solid #0b0d10;box-shadow:none;text-transform:uppercase;letter-spacing:.6px;font-size:12px;font-weight:700;color:#fff;overflow:hidden}
+.tabpane h3,.bn h3,.bn-sec>h3{margin:0 0 10px}
+.tabpane h3:not(:first-child),.bn h3:not(:first-of-type),.bn-sec>h3:not(:first-child){margin-top:14px}
+.panel>h2>.tab,.tabpane h3>.tab,.bn h3>.tab,.bn-sec>h3>.tab{display:flex;align-items:center;padding:0 30px 0 12px;height:100%;background:linear-gradient(#20252c,#121519);clip-path:polygon(0 0,100% 0,calc(100% - 16px) 100%,0 100%);color:#fff;font-weight:700;white-space:nowrap}
+.panel>h2>.more,.panel>h2>.tabs,.panel>h2>.seg,.tabpane h3>.more,.tabpane h3>.bn-view,.bn h3>.bn-view,.bn-sec>h3>.bn-view{display:flex;align-items:center;margin-left:auto;padding:0 12px 0 8px;height:100%;font-size:12px;letter-spacing:0;text-transform:none;font-weight:600;color:#c8d4e0;background:none;clip-path:none;box-shadow:none;white-space:nowrap}
+.panel>h2 .more a,.panel>h2 a.more,.tabpane h3 .bn-view,.bn h3 .bn-view,.bn-sec>h3 .bn-view{color:var(--gold,#f0b429);font-weight:700}
+/* Keep Retail/Forever and leaderboard tabs usable on the 28px bar */
+.panel>h2 .seg{height:20px;margin:4px 8px 4px auto;padding:0}
+.panel>h2 .seg button{padding:0 8px;font-size:11px;line-height:18px}
 .body{padding:12px}
 .empty{color:var(--dim);font-style:italic}
 .stack{display:flex;flex-direction:column;gap:14px}
@@ -355,8 +361,6 @@ dl.rig{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;margin:0}dl.rig
 .tabpane .bn-sec{margin:0}
 .tabpane .bn-sec + .bn-sec{margin-top:16px}
 .tabpane .bn-view{margin-left:auto;text-transform:none;letter-spacing:0;font-size:12px;font-weight:600}
-.tabpane h3,.bn h3{margin:0 0 10px;display:flex;align-items:center;min-height:32px;padding:7px 12px;font-size:11.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--hd-orange);background:linear-gradient(90deg,var(--hd1) 0,var(--hd2) 150px,#141b24 190px,#12171e);border-bottom:1px solid #0b1118;box-shadow:inset 0 1px 0 #ffffff12}
-.tabpane h3:not(:first-child),.bn h3:not(:first-of-type){border-top:1px solid #24384f;margin-top:14px}
 .bn-addblock{padding:10px 12px 12px}
 .bn-or{margin:10px 0 0}
 .frm .alert{margin:0}.frm .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -1000,7 +1004,7 @@ a.cp-slot{color:inherit;text-decoration:none}a.cp-slot:hover{background:var(--ro
 .home42 .rg .h2 small{display:block;font-family:var(--font);font-weight:normal;color:var(--dim);font-size:11px}
 .home42 .rg .h{min-width:74px}
 .home42 .lb42>h2{flex-wrap:nowrap}
-.home42 .panel>h2 .tabs{flex-wrap:nowrap;margin-left:auto;display:flex;gap:3px;padding:0;letter-spacing:0;text-transform:none}
+.home42 .panel>h2 .tabs{flex-wrap:nowrap;margin:3px 8px 3px auto;display:flex;gap:2px;padding:0;height:auto;letter-spacing:0;text-transform:none}
 .home42 .tabs a{font-size:10.5px;padding:1px 7px;font-weight:600;border:1px solid var(--line2);border-radius:3px;color:#a9c3dd}
 .home42 .tabs a.on{background:#1d3753;border-color:#31608f;color:#fff;font-weight:bold}
 .home42 .feed .day{margin:0;padding:8px 12px 3px;border-top:1px solid var(--line);font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#f0b060}

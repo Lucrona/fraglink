@@ -79,15 +79,15 @@ async function approvals() {
   const rows = d.suggestions;
   const unk = decided ? [] : (await api("/admin/unknown_games").catch(() => ({ unknown: [] }))).unknown;
   if (!decided) badge("approvals", rows.length + unk.length);
-  const mrgHtml = `<section class="panel"><h2>Suggested Merge</h2><div class="body"><p class="note">Programs the games list now detects, and catalogue rows that share a launcher id, are in <a href="#suggested">Suggested Merge</a>. Nothing is merged from this page.</p></div></section>`;
-  const unkHtml = unk.length ? `<section class="panel"><h2>Unknown game IDs from the app (${unk.length})</h2>
+  const mrgHtml = `<section class="panel"><h2><span class="tab">Suggested Merge</span></h2><div class="body"><p class="note">Programs the games list now detects, and catalogue rows that share a launcher id, are in <a href="#suggested">Suggested Merge</a>. Nothing is merged from this page.</p></div></section>`;
+  const unkHtml = unk.length ? `<section class="panel"><h2><span class="tab">Unknown game IDs from the app (${unk.length})</span></h2>
     <div class="note">The app reported a game id the server doesn't know. Until you decide, it shows as "Playing a game". Map it to an existing game (moves its sessions, and future reports go there), approve it as a new game, or reject it.</div>
     <table><thead><tr><th>Game id</th><th>Exe</th><th class="num">Players</th><th class="num">Hours</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
     ${unk.map(u => `<tr data-unk="${esc(u.game_id)}"><td class="mono">${esc(u.game_id)}</td><td class="mono dimt">${esc(u.exe || "unknown")}</td><td class="num">${u.players}</td><td class="num">${hrs(u.seconds / 60)}</td><td>${day(u.first_seen)}</td>
       <td class="num"><div class="acts"><input class="in" list="unk-games" data-map placeholder="Map to game…" size="20" aria-label="Map to existing game"><button class="btn sm" data-domap>Map</button>
         <input class="in" data-uname placeholder="Official name" size="16" aria-label="Name for a new game"><button class="btn sm dl" data-uapprove>Approve new</button><button class="btn sm danger" data-ureject>Reject</button></div></td></tr>`).join("")}</tbody></table>
     <datalist id="unk-games"></datalist></section>` : "";
-  view.innerHTML = mrgHtml + unkHtml + `<section class="panel"><h2>${decided ? "Decided" : "Pending"} game suggestions <span class="more"><a href="#" data-flip>${decided ? "Show pending" : "Show decided"}</a></span></h2>
+  view.innerHTML = mrgHtml + unkHtml + `<section class="panel"><h2><span class="tab">${decided ? "Decided" : "Pending"} game suggestions</span><span class="more"><a href="#" data-flip>${decided ? "Show pending" : "Show decided"}</a></span></h2>
     <div class="note">When someone picks "Track it as a game?" in the app, the program lands here. Approve it with an official name and every app detects it and shows that name. "Not a game" keeps it as "Playing a game".</div>
     ${rows.length ? `<table><thead><tr><th>Program</th><th>Names submitted</th><th class="num">Reports</th><th class="num">Users</th><th>First seen</th><th class="num"></th></tr></thead><tbody>
     ${rows.map(r => {
@@ -144,7 +144,7 @@ async function avatarReports() {
   const d = await api("/admin/avatar_reports");
   badge("avatars", d.reports.length);
   const pic = a => a && a.url_64 ? `<img src="${esc(a.url_64)}" width="64" height="64" style="border-radius:4px;border:1px solid var(--line)" alt="">` : `<span class="muted">(already reset)</span>`;
-  view.innerHTML = `<section class="panel"><h2>Reported pictures</h2><div class="note">Players report pictures from profiles. Remove resets it to the default and blocks that exact image from being uploaded again.</div>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Reported pictures</span></h2><div class="note">Players report pictures from profiles. Remove resets it to the default and blocks that exact image from being uploaded again.</div>
     ${d.reports.length ? `<table><thead><tr><th>Picture</th><th>Player</th><th class="num">Reports</th><th>Latest reason</th><th>Last report</th><th class="num"></th></tr></thead><tbody>
     ${d.reports.map(r => `<tr data-id="${esc(r.user_id)}"><td>${pic(r.avatar)}</td><td><a href="#user/${esc(r.user_id)}">${esc(r.handle)}</a></td><td class="num">${r.reports}</td><td>${esc(r.reason || "")}</td><td>${when(r.last_at)}</td>
       <td class="num"><div class="acts"><button class="btn sm danger" data-rm>Remove</button><button class="btn sm" data-ok>Keep</button></div></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No open reports.</div>`}</section>`;
@@ -155,7 +155,7 @@ async function avatarReports() {
     else if (b.matches("[data-pok]")) await act(b, async () => { await api(`/admin/profile_reports/${id}/dismiss`, { method: "POST" }); tr.remove(); });
   };
   const pr = await api("/admin/profile_reports");
-  view.insertAdjacentHTML("beforeend", `<section class="panel"><h2>Reported profiles</h2><div class="note">From "Report this profile". Open the player to change their nickname, ban them or reset details; Dismiss closes the reports.</div>
+  view.insertAdjacentHTML("beforeend", `<section class="panel"><h2><span class="tab">Reported profiles</span></h2><div class="note">From "Report this profile". Open the player to change their nickname, ban them or reset details; Dismiss closes the reports.</div>
     ${pr.reports.length ? `<table><thead><tr><th>Player</th><th class="num">Reports</th><th>Latest reason</th><th>Last report</th><th class="num"></th></tr></thead><tbody>
     ${pr.reports.map(r => `<tr data-id="${esc(r.user_id)}"><td><a href="#user/${esc(r.user_id)}">${esc(r.handle)}</a> · <a href="/u/${encodeURIComponent(r.handle)}" target="_blank">profile</a></td><td class="num">${r.reports}</td><td>${esc(r.reason || "")}</td><td>${when(r.last_at)}</td>
       <td class="num"><button class="btn sm" data-pok>Dismiss</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No open reports.</div>`}</section>`);
@@ -174,7 +174,7 @@ async function lastUpdated() {
     · Game edit: ${m.last_game_edit ? when(m.last_game_edit) : "never"} · Fix-up: ${m.last_fixup_change ? when(m.last_fixup_change) : "never"}</div>`;
 }
 async function detection() {
-  view.innerHTML = `<section class="panel"><h2>Detection fix-ups</h2><div id="dmeta"></div>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Detection fix-ups</span></h2><div id="dmeta"></div>
     <div class="note">Sent to every app with the game rules, no app update needed. <b>Steam app id</b>: that Steam game counts as the game you pick (in the app and in Steam imports). <b>Game id</b>: one detected id counts as another. <b>Folder + exe</b>: the end of the program's path, e.g. <span class="mono">world of warcraft/_retail_/wow.exe</span>; checked before the usual exe names.</div>
     <div class="tools"><select class="in" id="dk">${Object.entries(DKIND).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
       <input class="in mono" id="dp" placeholder="793460 / old_id / folder/game.exe" size="30" aria-label="Pattern">
@@ -250,8 +250,8 @@ async function games(arg) {
   return allGames();
 }
 async function allGames() {
-  view.innerHTML = `<section class="panel" style="margin-bottom:12px"><h2>Where the list comes from</h2><div id="agfresh"><div class="body empty">Loading…</div></div></section>
-    <section class="panel"><h2>Games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+  view.innerHTML = `<section class="panel" style="margin-bottom:12px"><h2><span class="tab">Where the list comes from</span></h2><div id="agfresh"><div class="body empty">Loading…</div></div></section>
+    <section class="panel"><h2><span class="tab">Games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></span></h2>
     <div class="ag-tb"><input class="in" type="search" id="agq" placeholder="Search name, id, exe, alias or Steam app id" value="${esc(AG.q)}" autocomplete="off" aria-label="Search games">
       <select class="in" id="agflag" aria-label="Show only"><option value="">Everything</option>${AG_FLAG.map(([k, v]) => `<option value="${k}"${AG.flag === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
       <select class="in" id="agsort" aria-label="Sort"><option value="updated">Last change first</option><option value="added">Newest added</option><option value="name">Name A–Z</option><option value="players">Most players</option><option value="hours">Most hours</option></select>
@@ -374,7 +374,7 @@ async function toggleAll(tr, keep) {
     <div class="xb wide"><h4>History <span>${ev.length} event${ev.length === 1 ? "" : "s"} · staff, Steam sync and Games list</span></h4>${ev.length ? `<div class="lg">${ev.map(histLine).join("")}</div>` : `<div class="xkv"><span class="dimt">Nothing recorded yet.</span></div>`}</div></div>
     <div class="xact"><span class="note">Edits save here and land in History. Hours recorded under another id for this same game stay on that id.</span><a class="btn sm" href="#detection">Detection rules</a></div>
     <section class="panel inline-edit" id="gedit"><div class="body empty">Loading editor…</div></section></td>`;
-  editGame(id).catch(e => { const box = $("#gedit"); if (box) box.innerHTML = `<h2>Edit game</h2><div class="alert err">${esc(e.message)}</div>`; });
+  editGame(id).catch(e => { const box = $("#gedit"); if (box) box.innerHTML = `<h2><span class="tab">Edit game</span></h2><div class="alert err">${esc(e.message)}</div>`; });
 }
 
 const GS = { sort: "players", show: "", offset: 0, lastQ: "" };
@@ -466,7 +466,7 @@ async function editGame(id) {
   const g = await api("/admin/games/" + encodeURIComponent(id));
   const o = g.override || {};
   const bust = "?t=" + Date.now();
-  box.innerHTML = `<h2>Edit game</h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="gf">
+  box.innerHTML = `<h2><span class="tab">Edit game</span></h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="gf">
     <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">Sources: ${srcChips(g)}${g.updated_at ? ` · last changed ${when(g.updated_at)}` : ""} · ${g.players} players · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})</div></div>
     <label>Display name override<input type="text" name="name" maxlength="80" value="${esc(o.name || "")}" placeholder="${esc(g.name)}"><small>Leave empty to use the list name.</small></label>
     <label class="check"><input type="checkbox" name="hidden" ${o.hidden ? "checked" : ""}> Hide from public (shown as "Playing a game")</label>
@@ -531,7 +531,7 @@ async function editGame(id) {
     if (typed.trim() !== id) return msg($("#dmsg"), "The id didn't match; nothing was deleted.");
     act(gd, async () => {
       await api("/admin/games/" + encodeURIComponent(id) + "/delete", { method: "POST", body: { confirm: typed.trim() } });
-      if ($("#gs")) { $("#gedit").innerHTML = `<h2>Edit game</h2><div class="body empty">Deleted ${esc(id)}.</div>`; listGames($("#gs").q.value.trim()); }
+      if ($("#gs")) { $("#gedit").innerHTML = `<h2><span class="tab">Edit game</span></h2><div class="body empty">Deleted ${esc(id)}.</div>`; listGames($("#gs").q.value.trim()); }
       else { AG.open = ""; listAll(); }
     }).catch(x => msg($("#dmsg"), x.message));
   });
@@ -540,7 +540,7 @@ async function editGame(id) {
 /* ---------- 3. users ---------- */
 async function users(q) {
   q = q || "";
-  view.innerHTML = `<section class="panel"><h2>Users</h2>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Users</span></h2>
     <form method="post" action="/api/v1/form-fallback" class="tools" id="us"><input class="in grow" name="q" value="${esc(q)}" placeholder="Username, display name or email" autocomplete="off"></form>
     <div id="ulist"></div></section>`;
   $("#us").addEventListener("submit", e => { e.preventDefault(); const v = e.target.q.value.trim(); history.replaceState(null, "", "#users/" + encodeURIComponent(v)); listUsers(v); });
@@ -566,7 +566,7 @@ async function userDetail(id) {
   const pres = p.status && p.status !== "offline" ? `${esc(p.status)}${p.game_id ? " · playing " + esc(p.game_name || p.game_id) + (p.game_hidden ? " (hidden from friends)" : "") : ""}${p.game_detail ? " · " + esc(p.game_detail) : ""}` : "offline";
   view.innerHTML = `<p><a href="#users">← Users</a></p>
   <div class="split"><div class="col">
-    <section class="panel"><h2>${esc(u.handle)} ${rolePill(u.role)}${u.banned_at ? `<span class="pill bad">banned</span>` : ""}${u.age_review_at ? `<span class="pill bad">age check</span>` : ""}${u.hours_flag_at ? `<span class="pill bad">unusual hours</span>` : ""}${u.is_minor ? `<span class="pill">13–17</span>` : ""}<span class="more"><a href="/u/${encodeURIComponent(u.handle)}">Public profile</a></span></h2><div class="body">
+    <section class="panel"><h2><span class="tab">${esc(u.handle)} ${rolePill(u.role)}${u.banned_at ? `<span class="pill bad">banned</span>` : ""}${u.age_review_at ? `<span class="pill bad">age check</span>` : ""}${u.hours_flag_at ? `<span class="pill bad">unusual hours</span>` : ""}${u.is_minor ? `<span class="pill">13–17</span>` : ""}</span><span class="more"><a href="/u/${encodeURIComponent(u.handle)}">Public profile</a></span></h2><div class="body">
       <dl class="kv"><dt>Display name</dt><dd>${esc(u.display_name)}</dd><dt>Email</dt><dd>${esc(u.email || "-")}${u.email ? (u.email_verified ? " (verified)" : " (not verified)") : ""}</dd>
       <dt>Member since</dt><dd>${day(u.created_at)}</dd><dt>Status</dt><dd>${pres}${p.connected ? ` <span class="pill ok">connected</span>` : ""}</dd>
       <dt>Friends</dt><dd>${u.friend_count}</dd><dt>Shares activity</dt><dd>${u.share_activity ? "Yes" : "No"}</dd>
@@ -576,14 +576,14 @@ async function userDetail(id) {
       ${u.hours_flag_at ? `<dt>Unusual hours</dt><dd>Flagged ${when(u.hours_flag_at)}: ${esc(u.hours_flag_reason || "")}. Nothing was removed (idle and away time count). Check the sessions below.</dd>` : ""}
       ${u.age_review_at ? `<dt>Age check</dt><dd>Paused ${when(u.age_review_at)}: entered a birthday under 13 (not saved). Can't sign in until cleared.</dd>` : ""}
       <dt>User id</dt><dd class="mono dimt">${esc(u.id)}</dd></dl></div></section>
-    <section class="panel"><h2>Games</h2>${u.games.length ? `<table><thead><tr><th></th><th>Game</th><th class="num">Past 7 days</th><th class="num">Total</th><th class="num"></th></tr></thead><tbody>
+    <section class="panel"><h2><span class="tab">Games</span></h2>${u.games.length ? `<table><thead><tr><th></th><th>Game</th><th class="num">Past 7 days</th><th class="num">Total</th><th class="num"></th></tr></thead><tbody>
       ${u.games.map(g => `<tr data-game="${esc(g.game_id)}"><td class="ic">${icon(g.game_id, g.name)}</td><td>${esc(g.name)}${g.name === "Unlisted game" && g.stored_name ? ` <span class="dimt">(${esc(g.stored_name)})</span>` : ""}<div class="mono dimt">${esc(g.game_id)}</div></td>
         <td class="num">${hrs(g.minutes_7d)}</td><td class="num">${hrs(g.display_min)}${g.display_tier !== "tracked" ? `<span class="tier">${esc(g.display_tier)}</span>` : ""}</td>
         <td class="num"><div class="acts"><button class="btn sm" data-cap>Lower…</button><button class="btn sm danger" data-remove>Remove</button></div></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No hours.</div>`}</section>
-    <section class="panel"><h2>Recent sessions <span class="more"><a href="#hourscheck/${esc(u.id)}">Hours checker</a></span></h2>${u.sessions.length ? `<table><thead><tr><th>Game</th><th>Started</th><th class="num">Length</th><th>Source</th><th></th></tr></thead><tbody>
+    <section class="panel"><h2><span class="tab">Recent sessions</span><span class="more"><a href="#hourscheck/${esc(u.id)}">Hours checker</a></span></h2>${u.sessions.length ? `<table><thead><tr><th>Game</th><th>Started</th><th class="num">Length</th><th>Source</th><th></th></tr></thead><tbody>
       ${u.sessions.map(s => `<tr data-sid="${esc(s.id)}"><td>${esc(s.name)}</td><td>${when(s.started_at)}</td><td class="num">${hrs(s.duration_s / 60)}${s.duration_s > 18 * 3600 ? `<span class="pill bad">long</span>` : ""}</td><td class="muted">${esc(s.source)}</td><td class="num"><button class="btn sm danger" data-delsess>Delete</button></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No sessions.</div>`}</section>
   </div><div class="col">
-    <section class="panel"><h2>Actions</h2><div class="body f">
+    <section class="panel"><h2><span class="tab">Actions</span></h2><div class="body f">
       <div><b>Email</b> ${u.email ? (u.email_verified ? `<span class="pill ok">confirmed</span>` : `<span class="pill bad">not confirmed</span>`) : `<span class="dimt">none</span>`}</div>
       ${u.email ? `<div class="row">${u.email_verified ? "" : `<button class="btn sm" id="vresend"${u.mail_live ? "" : " disabled"}>Resend confirmation email</button>`}${can.reset_password ? `<button class="btn sm" id="vset" data-v="${u.email_verified ? "0" : "1"}">${u.email_verified ? "Mark not confirmed" : "Mark confirmed"}</button>` : ""}</div>` : ""}
       ${can.reset_password && u.email ? `<div class="row"><button class="btn sm" id="resetlink"${u.mail_live ? "" : " disabled"}>Email a password reset link</button></div><small>Sends a 1-hour link to their address. Nothing changes until they use it.${u.mail_live ? "" : " Email is off on this server."}</small>` : ""}
@@ -598,10 +598,10 @@ async function userDetail(id) {
       <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div class="row"><button class="btn" id="rmav">Remove picture</button>${can.mfa_reset ? ` <button class="btn" id="mfareset">Reset two-step sign-in</button>` : ""}</div><small>Removing a picture resets it to the default and blocks that exact image. Resetting two-step sign-in lets them sign in with just their password (check it's really them first).</small>
       <hr style="border:0;border-top:1px solid var(--line);margin:6px 0"><div><b>WoW hours</b></div><div class="row"><button class="btn" data-wowrc="wow" data-gname="WoW">Recount WoW</button><button class="btn" data-wowrc="wow_forever" data-gname="WoW Forever">Recount WoW Forever</button></div><small>Recounts from their characters' /played only: drops the menu-time extra carried on top. Deleted characters keep their hours. Logged in the audit log.</small>
       <div class="alert" id="amsg" hidden></div></div></section>
-    ${can.staff && u.role !== "owner" && u.handle !== who.handle ? `<section class="panel"><h2>Staff role</h2><div class="body f"><div class="row"><select class="in" id="newrole"><option value="none"${u.role ? "" : " selected"}>No staff role</option><option value="moderator"${u.role === "moderator" ? " selected" : ""}>Moderator</option>${can.manage_admins || u.role === "admin" ? `<option value="admin"${u.role === "admin" ? " selected" : ""}${can.manage_admins ? "" : " disabled"}>Admin</option>` : ""}</select><button class="btn" id="setrole">Save role</button></div><small>Moderators handle approvals, users and hours. Only the owner adds or removes admins. Logged in the audit log.</small></div></section>` : ""}
-    ${can.user_delete && !u.role && u.handle !== who.handle ? `<section class="panel danger-zone"><h2>Delete account</h2><div class="body f"><p class="note">Deletes the account and everything in it for good: hours, sessions, friends, pictures and sign-ins. It can't be undone. Ban instead if you might need it back.</p>
+    ${can.staff && u.role !== "owner" && u.handle !== who.handle ? `<section class="panel"><h2><span class="tab">Staff role</span></h2><div class="body f"><div class="row"><select class="in" id="newrole"><option value="none"${u.role ? "" : " selected"}>No staff role</option><option value="moderator"${u.role === "moderator" ? " selected" : ""}>Moderator</option>${can.manage_admins || u.role === "admin" ? `<option value="admin"${u.role === "admin" ? " selected" : ""}${can.manage_admins ? "" : " disabled"}>Admin</option>` : ""}</select><button class="btn" id="setrole">Save role</button></div><small>Moderators handle approvals, users and hours. Only the owner adds or removes admins. Logged in the audit log.</small></div></section>` : ""}
+    ${can.user_delete && !u.role && u.handle !== who.handle ? `<section class="panel danger-zone"><h2><span class="tab">Delete account</span></h2><div class="body f"><p class="note">Deletes the account and everything in it for good: hours, sessions, friends, pictures and sign-ins. It can't be undone. Ban instead if you might need it back.</p>
       <label>Type <b class="mono">${esc(u.handle)}</b> to confirm<input type="text" id="delconfirm" autocomplete="off" spellcheck="false"></label><div class="row"><button class="btn danger" id="deluser" disabled>Delete account for good</button></div><div class="alert" id="delmsg" hidden></div></div></section>` : ""}
-    <section class="panel"><h2>Signed-in devices</h2>${u.devices.length ? u.devices.map(d => `<div class="fr"><div class="who"><div class="nm">${esc(d.name || (d.kind === "web" ? "Web browser" : "Fraglink desktop"))} <small>${esc(d.kind)}</small></div><div class="gm">signed in ${day(d.created_at)} · last used ${when(d.last_used_at)}</div></div></div>`).join("") : `<div class="body empty">None.</div>`}</section>
+    <section class="panel"><h2><span class="tab">Signed-in devices</span></h2>${u.devices.length ? u.devices.map(d => `<div class="fr"><div class="who"><div class="nm">${esc(d.name || (d.kind === "web" ? "Web browser" : "Fraglink desktop"))} <small>${esc(d.kind)}</small></div><div class="gm">signed in ${day(d.created_at)} · last used ${when(d.last_used_at)}</div></div></div>`).join("") : `<div class="body empty">None.</div>`}</section>
   </div></div>`;
   const amsg = $("#amsg");
   const sr = $("#setrole");
@@ -668,7 +668,7 @@ async function hoursReview(days) {
   days = Number(days) || 30;
   const show = (location.hash.split("/")[2]) || "open";
   const d = await api("/admin/hours/flags?" + new URLSearchParams({ days, show }));
-  view.innerHTML = `<section class="panel"><h2>Hours review</h2>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Hours review</span></h2>
     <div class="tools"><span class="muted">Suspicious totals in the last</span><select class="in" id="hd">${[7, 30, 90, 365].map(n => `<option ${n === days ? "selected" : ""}>${n}</option>`).join("")}</select><span class="muted">days. Days are UTC.</span>
       <a class="btn sm${show === "reviewed" ? " dl" : ""}" href="#hours/${days}/reviewed">Reviewed (${num(d.reviewed || 0)})</a>
       <a class="btn sm${show === "open" ? " dl" : ""}" href="#hours/${days}/open">Open (${num(d.open || 0)})</a></div>
@@ -700,7 +700,7 @@ async function server() {
     const m = s.memory, dk = s.disk || {};
     const memUsed = m.total - m.available, up = n => n > 86400 ? Math.floor(n / 86400) + "d " + Math.floor(n % 86400 / 3600) + "h" : Math.floor(n / 3600) + "h " + Math.floor(n % 3600 / 60) + "m";
     const card = (l, v, sub, p) => `<div class="card"><span>${l}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ""}${p != null ? `<div class="bar"><i class="${p > 85 ? "hot" : ""}" style="width:${p}%"></i></div>` : ""}</div>`;
-    view.innerHTML = `<section class="panel"><h2>Server <span class="more">checked ${when(s.checked_at)} · refreshes every 15 s</span></h2><div class="cards">
+    view.innerHTML = `<section class="panel"><h2><span class="tab">Server</span><span class="more">checked ${when(s.checked_at)} · refreshes every 15 s</span></h2><div class="cards">
       ${card("Online now", s.online.users, s.online.playing + " playing · " + s.online.sockets + " connections")}
       ${card("Accounts", s.accounts.total, s.accounts.banned ? s.accounts.banned + " banned" : "")}
       ${card("Sign-ups", s.accounts.signups_24h, "24 h · " + s.accounts.signups_7d + " in 7 days · " + s.accounts.signups_30d + " in 30")}
@@ -711,8 +711,8 @@ async function server() {
       ${card("Disk", bytes(dk.used), "of " + bytes(dk.total) + " · database " + bytes(s.database_bytes), pct(dk.used, dk.total))}
       ${card("Version", esc(s.version), "server up " + up(s.process_uptime_s) + " · system " + up(s.system_uptime_s))}
     </div></section>
-    <div class="split" style="margin-top:14px"><section class="panel"><h2>Recent server warnings and errors (48 h)</h2>${s.errors == null ? `<div class="body empty">The journal isn't readable by the server.</div>` : s.errors.length ? `<pre class="log">${esc(s.errors.map(l => l.replace(/ \S+ fraglink-server\[\d+\]: \S+Z /, "  ")).join("\n"))}</pre>` : `<div class="body empty">None.</div>`}</section>
-    <section class="panel"><h2>Services</h2>${s.services.map(v => `<div class="fr"><i class="dot ${v.state === "active" ? "online" : "away"}"></i><div class="who mono">${esc(v.name)}</div><span class="${v.state === "active" ? "" : "pill bad"}">${esc(v.state)}</span></div>`).join("")}</section></div>`;
+    <div class="split" style="margin-top:14px"><section class="panel"><h2><span class="tab">Recent server warnings and errors (48 h)</span></h2>${s.errors == null ? `<div class="body empty">The journal isn't readable by the server.</div>` : s.errors.length ? `<pre class="log">${esc(s.errors.map(l => l.replace(/ \S+ fraglink-server\[\d+\]: \S+Z /, "  ")).join("\n"))}</pre>` : `<div class="body empty">None.</div>`}</section>
+    <section class="panel"><h2><span class="tab">Services</span></h2>${s.services.map(v => `<div class="fr"><i class="dot ${v.state === "active" ? "online" : "away"}"></i><div class="who mono">${esc(v.name)}</div><span class="${v.state === "active" ? "" : "pill bad"}">${esc(v.state)}</span></div>`).join("")}</section></div>`;
   };
   await draw();
   timer = setInterval(() => { if (document.visibilityState === "visible") draw().catch(() => {}); }, 15000);
@@ -725,7 +725,7 @@ async function siteSettings() {
   const row = (s, kind) => `<tr><td style="width:56px"><label class="switch"><input type="checkbox" data-${kind}="${esc(s.key)}" ${s.enabled ? "checked" : ""} ${edit ? "" : "disabled"}><i></i></label></td>
     <td><b>${esc(s.label)}</b>${s.key === "maintenance" && s.enabled ? ` <span class="pill bad">ON</span>` : ""}${s.default !== undefined && s.enabled !== s.default ? ` <span class="pill">changed</span>` : ""}<div class="dimt">${esc(s.help)}</div></td>
     <td class="dimt" style="white-space:nowrap">${s.updated_at ? `${when(s.updated_at)}${s.updated_by ? " by " + esc(s.updated_by) : ""}` : "default"}</td></tr>`;
-  const alerts = al ? `<section class="panel"><h2>Email alerts</h2><div class="body">
+  const alerts = al ? `<section class="panel"><h2><span class="tab">Email alerts</span></h2><div class="body">
     <p class="note">Staff alerts by email, using the site's sending address. To keep within Cloudflare's 200 emails a day, alerts are batched (see each one) and capped at ${al.cap} a day. Sent in the last 24 hours: <b>${al.sent_24h}</b> of ${al.cap}.${al.mail_live ? "" : ` <span class="pill bad">Email sending is off on the server</span>`}</p>
     <form method="post" action="/api/v1/form-fallback" class="f" id="al-to" style="max-width:560px"><label>Send alerts to<div class="row"><input class="in" type="email" name="to" value="${esc(al.recipient)}" required maxlength="200" style="flex:1"><button class="btn">Save</button></div></label>
       <div class="dimt">Default: ${esc(al.default_recipient)}</div><div class="alert" id="al-msg" hidden></div></form>
@@ -733,13 +733,13 @@ async function siteSettings() {
     <div class="row" style="margin-top:12px"><button class="btn" id="al-test">Send a test alert</button><span class="dimt">Sends today's summary marked [Test] to the address above. Counts toward the daily cap.</span></div>
     ${al.recent.length ? `<h3 style="margin:16px 0 6px">Recent alerts</h3><table class="t"><tbody>${al.recent.map(r => `<tr><td class="dimt" style="white-space:nowrap">${when(r.at)}</td><td>${esc(r.subject)}</td><td>${r.ok ? `<span class="pill ok">sent</span>` : `<span class="pill warn" title="${esc(r.error || "")}">not sent</span>`}</td></tr>`).join("")}</tbody></table>` : ""}
     </div></section>` : "";
-  view.innerHTML = `<section class="panel"><h2>Site settings</h2><div class="body">
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Site settings</span></h2><div class="body">
     <p class="note">Switches apply to the website and the desktop app within about 30 seconds, and the server enforces them (hiding a button is not the only effect). Every change is written to the audit log.${edit ? "" : " Only admins can change them."} <a href="#suggested">Suggested Merge</a> compares the catalogue with launcher ids we actually have.</p>
     <table class="settings"><tbody>${d.settings.map(s => row(s, "key")).join("")}</tbody></table></div></section>
-    <section class="panel" id="hc"><h2>Home page user counts</h2><div class="body"><p class="note">How the registered and online player counts show at the top of the home page.</p>
+    <section class="panel" id="hc"><h2><span class="tab">Home page user counts</span></h2><div class="body"><p class="note">How the registered and online player counts show at the top of the home page.</p>
     ${(d.home_counts_options || []).map(o => `<label style="display:block;margin:4px 0"><input type="radio" name="home_counts" value="${esc(o.key)}" ${o.key === d.home_counts ? "checked" : ""} ${edit ? "" : "disabled"}> <b>${esc(o.key.toUpperCase())}</b> · ${esc(o.label)}</label>`).join("")}</div></section>
     ${notice(an)}
-    <section class="panel" id="links"><h2>Download page links</h2><div class="body"><p class="note">Change where the Download page points without a deploy. Live within about 30 seconds. Leave a box empty to use the built-in link.</p>
+    <section class="panel" id="links"><h2><span class="tab">Download page links</span></h2><div class="body"><p class="note">Change where the Download page points without a deploy. Live within about 30 seconds. Leave a box empty to use the built-in link.</p>
     ${(d.links || []).map(l => `<form method="post" action="/api/v1/form-fallback" class="f" data-link="${esc(l.key)}" style="max-width:640px;margin-bottom:12px"><label>${esc(l.label)}<div class="row"><input class="in" type="url" name="v" value="${esc(l.value)}" maxlength="200" placeholder="https://… (empty: built-in)" style="flex:1" ${edit ? "" : "disabled"}>${edit ? `<button class="btn">Save</button>` : ""}</div></label><div class="dimt">${esc(l.help)}${l.updated_at && l.value !== undefined ? ` · changed ${when(l.updated_at)}${l.updated_by ? " by " + esc(l.updated_by) : ""}` : ""}</div><div class="alert" hidden></div></form>`).join("")}</div></section>${alerts}`;
   $$("form[data-link]").forEach(f => f.addEventListener("submit", async e => {
     e.preventDefault();
@@ -785,7 +785,7 @@ async function siteSettings() {
 function notice(an) {
   if (!an) return "";
   const a = an.active;
-  return `<section class="panel" id="notice"><h2>Site notice <span class="more"><a href="#announcements">Full options</a></span></h2><div class="body">
+  return `<section class="panel" id="notice"><h2><span class="tab">Site notice</span><span class="more"><a href="#announcements">Full options</a></span></h2><div class="body">
     ${a ? `<p class="muted">Showing now (${esc(a.style)}${a.ends_at ? ", ends " + when(a.ends_at) : ", no end time"}):</p><div class="announce ${esc(a.style)}" style="border:1px solid;border-radius:3px"><div class="wrap" style="padding:6px 10px"><span>${esc(a.message)}</span></div></div><div class="row" style="margin-top:8px"><button class="btn sm danger" id="nclr">Clear notice</button></div>` : `<p class="empty" style="padding:0 0 8px">No notice is showing.</p>`}
     <form method="post" action="/api/v1/form-fallback" class="f" id="nf" style="max-width:640px;margin-top:10px"><label>Banner text<input type="text" name="message" maxlength="300" required placeholder="Servers restart at 10 pm AEDT for an update."></label>
       <div class="row"><select class="in" name="style"><option value="info">Info (blue)</option><option value="warning">Warning (amber)</option></select><label style="margin:0">Ends (optional) <input class="in" type="datetime-local" name="ends"></label><button class="btn dl">Show notice</button></div>
@@ -804,7 +804,7 @@ function wireNotice(again) {
 async function announcements() {
   const d = await api("/admin/announcements");
   const a = d.active;
-  view.innerHTML = `<div class="split"><section class="panel"><h2>Announcement</h2><div class="body">
+  view.innerHTML = `<div class="split"><section class="panel"><h2><span class="tab">Announcement</span></h2><div class="body">
     ${a ? `<p class="muted">Showing now:</p><div class="announce ${esc(a.style)}" style="border:1px solid;border-radius:3px"><div class="wrap" style="padding:6px 10px"><span>${esc(a.message)}${a.link ? ` <a href="${esc(a.link)}">More</a>` : ""}</span></div></div>
       <p class="dimt">${a.ends_at ? "Ends " + when(a.ends_at) : "No end time"}</p><button class="btn danger" id="clr">Clear announcement</button>` : `<p class="empty">No announcement is showing.</p>`}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
@@ -821,7 +821,7 @@ async function announcements() {
       <p class="dimt">Adds a button under the post. Links typed in the post itself are already clickable.</p>
       <div class="row"><button class="btn dl">Publish</button><span class="dimt">Replaces the current announcement.</span></div>
       <div class="alert" id="anmsg" hidden></div></form></div></section>
-    <section class="panel"><h2>Recent</h2>${d.recent.length ? d.recent.map(r => `<div class="fr"><div class="who"><div class="nm"><span>${esc(r.message)}</span></div><div class="gm"><span class="pill ${r.style === "warning" ? "warn" : ""}">${esc(r.style)}</span> ${when(r.created_at)}${r.cleared_at ? " · cleared " + when(r.cleared_at) : r.ends_at ? " · ends " + when(r.ends_at) : ""}</div></div></div>`).join("") : `<div class="body empty">None yet.</div>`}</section></div>`;
+    <section class="panel"><h2><span class="tab">Recent</span></h2>${d.recent.length ? d.recent.map(r => `<div class="fr"><div class="who"><div class="nm"><span>${esc(r.message)}</span></div><div class="gm"><span class="pill ${r.style === "warning" ? "warn" : ""}">${esc(r.style)}</span> ${when(r.created_at)}${r.cleared_at ? " · cleared " + when(r.cleared_at) : r.ends_at ? " · ends " + when(r.ends_at) : ""}</div></div></div>`).join("") : `<div class="body empty">None yet.</div>`}</section></div>`;
   const clr = $("#clr");
   if (clr) clr.addEventListener("click", () => act(clr, async () => { await api("/admin/announcements/clear", { method: "POST" }); announcements(); }));
   $("#af").addEventListener("submit", async e => {
@@ -883,7 +883,7 @@ const MD = (() => {
    announcement banner; "Also show as banner" publishes a banner that links to the post. */
 async function news(arg) {
   const PER = 20; let pg = 1, q = "";
-  view.innerHTML = `<div class="split"><section class="panel"><h2 id="nf-h">New post</h2><div class="body">
+  view.innerHTML = `<div class="split"><section class="panel"><h2 id="nf-h"><span class="tab">New post</span></h2><div class="body">
     <p class="note">News posts show in the <b>News</b> box on the home page (latest 4, pinned first), on <a href="/news" target="_blank">/news</a>, and each has its own page. For a short alert on every page and in the app, use <a href="#announcements">Announcements</a>, or tick “Also show as banner” below.</p>
     <form method="post" action="/api/v1/form-fallback" class="f" id="nf"><input type="hidden" name="id">
       <label>Title<input type="text" name="title" maxlength="140" required placeholder="Fraglink 0.3.0 beta 1 is out"></label>
@@ -902,7 +902,7 @@ async function news(arg) {
       <p class="dimt">Leave the date empty to publish now. A future date keeps the post hidden until then.</p>
       <div class="row"><button class="btn dl" id="nf-go">Publish</button><button type="button" class="btn" id="nf-cancel" hidden>Cancel edit</button></div>
       <div class="alert" id="nfmsg" hidden></div></form></div></section>
-    <section class="panel"><h2>Posts <span class="dimt" id="n-count"></span></h2><div class="body" style="padding-bottom:4px"><input class="in" type="search" id="n-q" placeholder="Search posts" style="width:100%"></div><div id="n-list"></div></section></div>`;
+    <section class="panel"><h2><span class="tab">Posts <span class="dimt" id="n-count"></span></span></h2><div class="body" style="padding-bottom:4px"><input class="in" type="search" id="n-q" placeholder="Search posts" style="width:100%"></div><div id="n-list"></div></section></div>`;
   const f = $("#nf"), local = iso => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
   let items = [], newsFormat = "markdown";
   const previewBody = MD.preview(()=>({kind:"news",format:newsFormat,body:f.body.value}),d=>{if(f.isConnected) $("#nf-mdprev").innerHTML=d.html;},()=>{if(f.isConnected) $("#nf-mdprev").textContent="Couldn't load the preview.";});
@@ -963,7 +963,7 @@ async function staff() {
   const owner = who.role === "owner";
   const roleOpts = owner ? ["admin", "moderator"] : ["moderator"];
   const short = v => v == null ? "" : esc(JSON.stringify(v)).slice(0, 300);
-  view.innerHTML = `<div class="split"><div class="col"><section class="panel"><h2>Staff</h2>
+  view.innerHTML = `<div class="split"><div class="col"><section class="panel"><h2><span class="tab">Staff</span></h2>
     <table><thead><tr><th>Username</th><th>Role</th><th>Member since</th><th class="num"></th></tr></thead><tbody>
     ${d.staff.map(s => {
       const canEdit = s.role !== "owner" && s.handle !== who.handle && (owner || s.role === "moderator");
@@ -973,10 +973,10 @@ async function staff() {
     <form method="post" action="/api/v1/form-fallback" class="tools" id="sf"><input class="in grow" name="handle" placeholder="Username" required><select class="in" name="role">${roleOpts.map(r => `<option>${r}</option>`).join("")}</select><button class="btn">Add to staff</button></form>
     <div class="note">Owner: everything, and the only one who adds or removes admins. Admin: everything except managing admins. Moderator: game approvals, user ban/unban and hours review.</div>
     <div class="alert" id="smsg" hidden style="margin:0 12px 12px"></div></section>
-    ${owner ? `<section class="panel"><h2>Transfer ownership</h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="tf"><label>New owner's username<input type="text" name="handle" required></label>
+    ${owner ? `<section class="panel"><h2><span class="tab">Transfer ownership</span></h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="tf"><label>New owner's username<input type="text" name="handle" required></label>
       <label>Type your own username to confirm<input type="text" name="confirm" required></label><div class="row"><button class="btn danger">Transfer</button><span class="dimt">You become an admin.</span></div><div class="alert" id="tmsg" hidden></div></form></div></section>` : ""}
     </div>
-    <section class="panel"><h2>Audit log</h2>${log.entries.length ? log.entries.map(x => `<div class="fr"><div class="who"><div class="nm"><span><b>${esc(x.actor)}</b> ${esc(x.action)} <span class="muted">${esc(x.target || "")}</span></span><small>${when(x.at)}</small></div>
+    <section class="panel"><h2><span class="tab">Audit log</span></h2>${log.entries.length ? log.entries.map(x => `<div class="fr"><div class="who"><div class="nm"><span><b>${esc(x.actor)}</b> ${esc(x.action)} <span class="muted">${esc(x.target || "")}</span></span><small>${when(x.at)}</small></div>
       ${x.before != null || x.after != null ? `<div class="diff">${x.before != null ? short(x.before) : "-"} → ${x.after != null ? short(x.after) : "-"}</div>` : ""}</div></div>`).join("") : `<div class="body empty">Nothing yet.</div>`}</section></div>`;
   const smsg = $("#smsg");
   $("#sf").addEventListener("submit", async e => {
@@ -1117,13 +1117,13 @@ async function polls() {
   const d = await api("/admin/polls");
   const bars = p => p.options.map(o => `<div style="margin:3px 0"><b>${esc(o.label)}</b> · ${o.votes} (${o.pct}%)<div class="bar" style="height:6px;background:#1c2a3a"><i style="display:block;height:6px;width:${o.pct}%;background:#e08a20"></i></div></div>`).join("");
   const st = p => p.active ? (p.closed ? `<span class="role">Active · closed</span>` : `<span class="role">Active</span>`) : (p.closed ? "Closed" : "Not shown");
-  view.innerHTML = `<section class="panel"><h2>New poll</h2><div class="body"><form id="pn">
+  view.innerHTML = `<section class="panel"><h2><span class="tab">New poll</span></h2><div class="body"><form id="pn">
     <p class="note">The active poll shows in the <b>Quick poll</b> box on the home page. One vote per account (players can change it); test accounts aren't counted. Closing keeps it on the home page with final results; making another poll active replaces it. Past polls are kept.</p>
     <p><input name="q" maxlength="140" placeholder="Question" style="width:100%" required></p>
     ${[1,2,3,4,5,6].map(i => `<p style="margin:4px 0"><input name="o" maxlength="60" placeholder="Answer ${i}${i > 2 ? " (optional)" : ""}" ${i <= 2 ? "required" : ""} style="width:60%"></p>`).join("")}
     <label><input type="checkbox" name="act" checked> Make it the active poll now</label>
     <p><button class="btn dl">Create poll</button></p></form></div></section>
-    <section class="panel"><h2>All polls (${d.polls.length})</h2><div class="body">${d.polls.length ? d.polls.map(p => `<div class="fr" style="display:block;padding:10px 0;border-bottom:1px solid #202c3a" data-id="${p.id}">
+    <section class="panel"><h2><span class="tab">All polls (${d.polls.length})</span></h2><div class="body">${d.polls.length ? d.polls.map(p => `<div class="fr" style="display:block;padding:10px 0;border-bottom:1px solid #202c3a" data-id="${p.id}">
       <div><b>${esc(p.question)}</b> · ${st(p)} · ${p.total} vote${p.total === 1 ? "" : "s"} · <span class="dimt">${new Date(p.created_at).toLocaleDateString()}</span></div>${bars(p)}
       <div style="margin-top:6px">${p.active && !p.closed ? "" : `<button class="btn sm" data-act="activate">${p.active ? "Reopen" : "Make active"}</button> `}${p.closed ? "" : `<button class="btn sm" data-act="close">Close voting</button>`} <button class="btn sm danger" data-act="delete">Delete</button></div></div>`).join("") : `<div class="empty">No polls yet.</div>`}</div></section>`;
   $("#pn").onsubmit = async e => {
@@ -1143,14 +1143,14 @@ async function polls() {
 async function incidents() {
   const d = await api("/admin/incidents");
   const when = t => new Date(t).toLocaleString();
-  view.innerHTML = `<section class="panel"><h2>New incident</h2><div class="body"><form id="inn">
+  view.innerHTML = `<section class="panel"><h2><span class="tab">New incident</span></h2><div class="body"><form id="inn">
     <p class="note">Shows under <b>Past incidents</b> on the public <a href="/status">Status</a> page. Write it for players: what broke and what they should do.</p>
     <p><input name="t" maxlength="140" placeholder="Title, e.g. Sign-in failing for some players" style="width:100%" required></p>
     <p><textarea name="b" maxlength="2000" rows="3" placeholder="Details (optional)" style="width:100%"></textarea></p>
     <p><select name="s"><option value="minor">Minor</option><option value="major">Major</option><option value="maintenance">Maintenance</option></select>
     <label><input type="checkbox" name="r"> Already resolved</label></p>
     <p><button class="btn dl">Add incident</button></p></form></div></section>
-    <section class="panel"><h2>Incidents (${d.incidents.length})</h2><div class="body">${d.incidents.length ? d.incidents.map(i => `<div class="fr" style="display:block;padding:8px 0;border-bottom:1px solid #202c3a" data-id="${i.id}">
+    <section class="panel"><h2><span class="tab">Incidents (${d.incidents.length})</span></h2><div class="body">${d.incidents.length ? d.incidents.map(i => `<div class="fr" style="display:block;padding:8px 0;border-bottom:1px solid #202c3a" data-id="${i.id}">
       <b>${esc(i.title)}</b> · ${esc(i.severity)} · <span class="dimt">${when(i.started_at)}${i.resolved_at ? " – " + when(i.resolved_at) : " · ongoing"}</span>${i.body ? `<div>${esc(i.body)}</div>` : ""}
       <div style="margin-top:5px">${i.resolved_at ? "" : `<button class="btn sm" data-act="resolve">Mark resolved</button> `}<button class="btn sm red" data-act="delete">Delete</button></div></div>`).join("") : `<div class="empty">No incidents yet.</div>`}</div></section>`;
   $("#inn").onsubmit = async e => {
@@ -1172,7 +1172,7 @@ const clLines = v => v.split("\n").map(l => l.replace(/^\s*[-*•]\s*/, "").trim
 const clLabel = d => { const t = new Date(d + "T00:00:00"); return isNaN(t) ? d : t.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); };
 function clPreview(e) {
   const list = (h, items, html) => items.length ? `<h4>${h}</h4><div class="md-content">${typeof html === "string" ? html : `<ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>`}</div>` : "";
-  return `<section class="panel"><h2><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(clLabel(e.date))}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new, e.new_html)}${list("Changes", e.changes, e.changes_html)}${list("Fixes", e.fixes, e.fixes_html)}${e.new.length + e.changes.length + e.fixes.length ? "" : `<p class="dimt">Add at least one line.</p>`}</div></section>`;
+  return `<section class="panel"><h2><span class="tab"><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(clLabel(e.date))}</span></h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new, e.new_html)}${list("Changes", e.changes, e.changes_html)}${list("Fixes", e.fixes, e.fixes_html)}${e.new.length + e.changes.length + e.fixes.length ? "" : `<p class="dimt">Add at least one line.</p>`}</div></section>`;
 }
 function clText(e) {
   const part = (h, items) => items.length ? `**${h}**\n${e.format === "markdown" ? items.join("\n\n") : items.map(i => "- " + i).join("\n")}\n` : "";
@@ -1180,7 +1180,7 @@ function clText(e) {
 }
 async function changelog(arg) {
   const today = new Date().toLocaleDateString("en-CA");
-  view.innerHTML = `<div class="split cl-ed"><section class="panel"><h2 id="clh">New entry</h2><form method="post" action="/api/v1/form-fallback" class="f body" id="clf">
+  view.innerHTML = `<div class="split cl-ed"><section class="panel"><h2 id="clh"><span class="tab">New entry</span></h2><form method="post" action="/api/v1/form-fallback" class="f body" id="clf">
       <input type="hidden" name="eid" value="">
       <div class="row"><label style="margin:0">Area<select class="in" name="area" style="min-width:110px"><option>Website</option><option>App</option></select></label><label style="margin:0">Date<input class="in" type="date" name="date" value="${today}" required></label><label style="margin:0;flex:1">Version (app only)<input class="in" type="text" name="version" maxlength="40" placeholder="0.3.0-beta.11"></label></div>
       <label for="cl-new">New</label>${MD.toolbar("new")}<textarea id="cl-new" name="new" rows="4" maxlength="20000" placeholder="- One change\n- Another change"></textarea>
@@ -1189,8 +1189,8 @@ async function changelog(arg) {
       <div class="dimt">Markdown: **bold**, *italic*, links, lists and code. A blank line starts a paragraph. Saved as a draft until you publish it.</div>
       <div class="row"><button class="btn">Save draft</button><button type="button" class="btn dl" id="clpub">Save and publish</button><button type="button" class="btn" id="clcopy">Copy for Discord</button><button type="button" class="btn" id="clnew" hidden>New entry</button></div>
       <div class="alert" id="clmsg" hidden></div></form></section>
-    <section class="panel"><h2>Preview <span class="more">as it shows on /changelog</span></h2><div class="body changelog" id="clprev"></div></section></div>
-    <section class="panel" style="margin-top:12px"><h2>Entries <span class="dimt" id="clcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+    <section class="panel"><h2><span class="tab">Preview</span><span class="more">as it shows on /changelog</span></h2><div class="body changelog" id="clprev"></div></section></div>
+    <section class="panel" style="margin-top:12px"><h2><span class="tab">Entries <span class="dimt" id="clcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></span></h2>
       <div class="ag-tb"><input class="in" type="search" id="clq" placeholder="Search the entries" value="${esc(CL.q)}"><span class="dimt" style="margin-left:auto">Only entries written here. The shipped ones stay in the site files.</span></div><div id="cllist"><div class="body empty">Loading…</div></div></section>`;
   const f = $("#clf");
   let clFormat = "markdown", legacyEntry = null;
@@ -1255,7 +1255,7 @@ async function changelog(arg) {
 /* ---------- Hours checker: does every view of one player's week agree? ---------- */
 async function hoursCheck(arg) {
   if (!arg) {
-    view.innerHTML = `<section class="panel"><h2>Hours checker</h2><div class="body"><p class="note">Pick a player to compare their weekly headline, daily bars and per-game totals side by side, find bad sessions, and close a stuck one. Every fix needs a reason and is logged.</p>
+    view.innerHTML = `<section class="panel"><h2><span class="tab">Hours checker</span></h2><div class="body"><p class="note">Pick a player to compare their weekly headline, daily bars and per-game totals side by side, find bad sessions, and close a stuck one. Every fix needs a reason and is logged.</p>
       <input class="in" type="search" id="hcq" placeholder="Search handle, name or email" autocomplete="off" style="max-width:420px"></div><div id="hclist"></div></section>`;
     const go = async q => { const d = await api("/admin/users?" + new URLSearchParams({ q })); $("#hclist").innerHTML = d.users.length ? `<table><thead><tr><th>Handle</th><th>Name</th><th>Last seen</th></tr></thead><tbody>${d.users.map(u => `<tr data-id="${esc(u.id)}" style="cursor:pointer"><td><a href="#hourscheck/${esc(u.id)}">${esc(u.handle)}</a> ${rolePill(u.role)}</td><td>${esc(u.display_name)}</td><td class="sm">${when(u.last_seen)}</td></tr>`).join("")}</tbody></table>${d.total > d.users.length ? `<div class="note">Showing ${d.users.length} of ${num(d.total)}. Search to narrow it down.</div>` : ""}` : `<div class="body empty">No accounts match.</div>`; };
     let t; $("#hcq").oninput = e => { clearTimeout(t); t = setTimeout(() => go(e.target.value.trim()), 250); };
@@ -1271,14 +1271,14 @@ async function hoursCheck(arg) {
   view.innerHTML = `<p><a href="#hourscheck">← Hours checker</a> · <a href="#user/${esc(d.user.id)}">${esc(d.user.handle)}'s account</a></p>
     <div class="hc-head ${d.mismatches ? "bad" : "ok"}"><b>${d.mismatches ? `${d.mismatches} mismatch${d.mismatches === 1 ? "" : "es"}` : "Everything agrees"}</b><span>${esc(d.user.handle)} · this week ${day(d.from)} – ${day(d.to)} (${esc(d.zone)})${d.problems ? ` · ${d.problems} session${d.problems === 1 ? "" : "s"} flagged` : ""}</span></div>
     <div class="hc-3">
-      <section class="panel"><h2>Weekly headline</h2><div class="body"><div class="hc-big">${th(d.headline.tenths)}</div><div class="dimt">What the profile shows · ${num(d.headline.seconds)} s</div><div class="dimt" style="margin-top:6px">Rolling 7 days: ${hrs(d.rolling_7d_minutes)}</div></div></section>
-      <section class="panel"><h2>Daily bars <span class="more">${th(d.days.reduce((a, x) => a + x.tenths, 0))}</span></h2><div class="body hc-bars">${d.days.map(x => `<div class="b"><i style="height:${Math.round(x.seconds / max * 100)}%"></i><span>${(x.tenths / 10).toFixed(1)}</span><em>${esc(x.label)}</em></div>`).join("")}</div></section>
-      <section class="panel"><h2>Per game <span class="more">${th(d.games.reduce((a, x) => a + x.tenths, 0))}</span></h2><div class="body">${d.games.length ? `<table>${d.games.map(g => `<tr><td><span class="gm">${icon(g.game_id, g.name)} ${esc(g.name)}</span></td><td class="nr">${th(g.tenths)}</td></tr>`).join("")}</table>` : `<div class="empty">No games this week.</div>`}</div></section></div>
-    <section class="panel"><h2>Checks</h2><table><thead><tr><th>Compare</th><th class="nr">Headline</th><th class="nr">Other view</th><th>Result</th></tr></thead><tbody>${d.checks.map(c => `<tr><td>${esc(c.label)}</td><td class="nr">${c.unit === "tenths" ? th(c.a) : num(c.a) + " s"}</td><td class="nr">${c.unit === "tenths" ? th(c.b) : num(c.b) + " s"}</td><td>${c.ok ? `<span class="st ok">Match</span>` : `<span class="st ret">Off by ${c.unit === "tenths" ? th(Math.abs(c.a - c.b)) : num(Math.abs(c.a - c.b)) + " s"}</span>`}</td></tr>`).join("")}</tbody></table></section>
-    <section class="panel"><h2>Open session</h2><div class="body">${o ? `<dl class="kv"><dt>Game</dt><dd>${esc(o.name)}${o.hidden ? " (hidden)" : ""}</dd><dt>Started</dt><dd>${when(o.started_at)}</dd><dt>Last heartbeat</dt><dd>${o.heartbeat_at ? when(o.heartbeat_at) : "none"}</dd><dt>Length so far</dt><dd>${h1(o.seconds)}${o.counting ? " · counting in the week" : ""}</dd></dl>
+      <section class="panel"><h2><span class="tab">Weekly headline</span></h2><div class="body"><div class="hc-big">${th(d.headline.tenths)}</div><div class="dimt">What the profile shows · ${num(d.headline.seconds)} s</div><div class="dimt" style="margin-top:6px">Rolling 7 days: ${hrs(d.rolling_7d_minutes)}</div></div></section>
+      <section class="panel"><h2><span class="tab">Daily bars</span><span class="more">${th(d.days.reduce((a, x) => a + x.tenths, 0))}</span></h2><div class="body hc-bars">${d.days.map(x => `<div class="b"><i style="height:${Math.round(x.seconds / max * 100)}%"></i><span>${(x.tenths / 10).toFixed(1)}</span><em>${esc(x.label)}</em></div>`).join("")}</div></section>
+      <section class="panel"><h2><span class="tab">Per game</span><span class="more">${th(d.games.reduce((a, x) => a + x.tenths, 0))}</span></h2><div class="body">${d.games.length ? `<table>${d.games.map(g => `<tr><td><span class="gm">${icon(g.game_id, g.name)} ${esc(g.name)}</span></td><td class="nr">${th(g.tenths)}</td></tr>`).join("")}</table>` : `<div class="empty">No games this week.</div>`}</div></section></div>
+    <section class="panel"><h2><span class="tab">Checks</span></h2><table><thead><tr><th>Compare</th><th class="nr">Headline</th><th class="nr">Other view</th><th>Result</th></tr></thead><tbody>${d.checks.map(c => `<tr><td>${esc(c.label)}</td><td class="nr">${c.unit === "tenths" ? th(c.a) : num(c.a) + " s"}</td><td class="nr">${c.unit === "tenths" ? th(c.b) : num(c.b) + " s"}</td><td>${c.ok ? `<span class="st ok">Match</span>` : `<span class="st ret">Off by ${c.unit === "tenths" ? th(Math.abs(c.a - c.b)) : num(Math.abs(c.a - c.b)) + " s"}</span>`}</td></tr>`).join("")}</tbody></table></section>
+    <section class="panel"><h2><span class="tab">Open session</span></h2><div class="body">${o ? `<dl class="kv"><dt>Game</dt><dd>${esc(o.name)}${o.hidden ? " (hidden)" : ""}</dd><dt>Started</dt><dd>${when(o.started_at)}</dd><dt>Last heartbeat</dt><dd>${o.heartbeat_at ? when(o.heartbeat_at) : "none"}</dd><dt>Length so far</dt><dd>${h1(o.seconds)}${o.counting ? " · counting in the week" : ""}</dd></dl>
       ${o.stuck ? `<div class="alert err">Stuck: no heartbeat for a while. Closing keeps play up to the last heartbeat (${when(o.would_end_at)}).</div>` : ""}
       ${d.may_edit ? `<div class="row"><button class="btn${o.stuck ? " dl" : ""}" data-close="keep">Close and keep time to last heartbeat</button><button class="btn danger" data-close="drop">Close and drop it</button></div>` : ""}` : `<div class="empty" style="padding:0">No open session.</div>`}<div class="alert" id="hcmsg" hidden></div></div></section>
-    <section class="panel"><h2>Sessions this week <span class="more">${d.sessions.length}</span></h2>${d.sessions.length ? `<table><thead><tr><th>Game</th><th>Start</th><th>End</th><th class="nr">Length</th><th>Source</th><th>Flags</th><th></th></tr></thead><tbody>${d.sessions.map(s => `<tr data-sid="${s.id}"${s.flags.length ? ` class="hc-flag"` : ""}><td>${esc(s.name)}</td><td class="sm">${when(s.started_at)}</td><td class="sm">${when(s.ended_at)}</td><td class="nr">${h1(s.duration_s)}</td><td class="sm">${esc(s.source)}</td><td>${s.flags.map(f => `<span class="pill bad">${esc(FLAG[f] || f)}</span>`).join(" ")}</td><td class="rt">${d.may_edit ? `<button class="btn sm danger" data-rm>Remove</button>` : ""}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No sessions this week.</div>`}</section>`;
+    <section class="panel"><h2><span class="tab">Sessions this week</span><span class="more">${d.sessions.length}</span></h2>${d.sessions.length ? `<table><thead><tr><th>Game</th><th>Start</th><th>End</th><th class="nr">Length</th><th>Source</th><th>Flags</th><th></th></tr></thead><tbody>${d.sessions.map(s => `<tr data-sid="${s.id}"${s.flags.length ? ` class="hc-flag"` : ""}><td>${esc(s.name)}</td><td class="sm">${when(s.started_at)}</td><td class="sm">${when(s.ended_at)}</td><td class="nr">${h1(s.duration_s)}</td><td class="sm">${esc(s.source)}</td><td>${s.flags.map(f => `<span class="pill bad">${esc(FLAG[f] || f)}</span>`).join(" ")}</td><td class="rt">${d.may_edit ? `<button class="btn sm danger" data-rm>Remove</button>` : ""}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No sessions this week.</div>`}</section>`;
   const uid = `/admin/users/${encodeURIComponent(d.user.id)}`;
   view.onclick = async e => {
     const c = e.target.closest("[data-close]"), r = e.target.closest("[data-rm]");
@@ -1308,14 +1308,14 @@ async function runAll(items, out, fn) {
 async function bulkFixes() {
   const sug = can.approvals ? await api("/admin/suggestions").catch(() => ({ suggestions: [] })) : { suggestions: [] };
   const s = sug.suggestions || [];
-  view.innerHTML = `<section class="panel"><h2>Approve submitted games <span class="more">${s.length} waiting</span></h2>${s.length ? `<div class="body"><div class="row"><label class="check" style="margin:0"><input type="checkbox" id="sgall"> Select all</label><button class="btn dl" id="sgok" disabled>Approve selected</button><a class="btn sm" href="#approvals">One at a time in Approvals</a></div></div>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Approve submitted games</span><span class="more">${s.length} waiting</span></h2>${s.length ? `<div class="body"><div class="row"><label class="check" style="margin:0"><input type="checkbox" id="sgall"> Select all</label><button class="btn dl" id="sgok" disabled>Approve selected</button><a class="btn sm" href="#approvals">One at a time in Approvals</a></div></div>
       <table class="gl"><thead><tr><th class="ck"></th><th>Exe</th><th>Name to approve</th><th class="nr">Reports</th><th class="nr">Players</th><th>First seen</th></tr></thead><tbody>${s.map((x, i) => `<tr data-i="${i}"><td class="ck"><input type="checkbox" data-sg></td><td class="mono">${esc(x.exe)}</td><td><input class="in" type="text" data-nm value="${esc(x.names[0] ? x.names[0].name : "")}" maxlength="120" style="width:100%"></td><td class="nr">${num(x.reports)}</td><td class="nr">${num(x.users)}</td><td class="sm">${when(x.first_seen)}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">Nothing waiting.</div>`}<div class="body"><div class="alert" id="sgmsg" hidden></div></div></section>
-    <section class="panel"><h2>Set status for many games</h2><form method="post" action="/api/v1/form-fallback" class="f body" id="bst">
+    <section class="panel"><h2><span class="tab">Set status for many games</span></h2><form method="post" action="/api/v1/form-fallback" class="f body" id="bst">
       <label>Game ids, one per line<textarea name="ids" rows="6" class="mono" placeholder="Tick games in All games, or paste ids here">${esc([...SEL].join("\n"))}</textarea></label>
       <div class="row"><select class="in" name="lifecycle">${Object.entries(LIFE).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select><label style="margin:0">Expected end / launch <input type="date" name="date"></label><label style="margin:0;flex:1">Note<input class="in" type="text" name="note" maxlength="500" style="width:100%"></label></div>
       <label class="check"><input type="checkbox" name="checked" checked> Mark as checked now</label>
       <div class="row"><button class="btn dl">Preview changes</button><span class="dimt" id="bstn"></span><a class="btn sm" href="#games">Pick in Games</a></div><div id="bstprev"></div><div class="alert" id="bstmsg" hidden></div></form></section>
-    ${can.games ? `<section class="panel"><h2>Upload icons or covers</h2><div class="body f"><p class="note">Name each file after its game id, e.g. <span class="mono">counter-strike-2.png</span>. Use <span class="mono">__</span> for a <span class="mono">:</span> in the id. PNG, JPG or WebP up to 1 MB each.</p>
+    ${can.games ? `<section class="panel"><h2><span class="tab">Upload icons or covers</span></h2><div class="body f"><p class="note">Name each file after its game id, e.g. <span class="mono">counter-strike-2.png</span>. Use <span class="mono">__</span> for a <span class="mono">:</span> in the id. PNG, JPG or WebP up to 1 MB each.</p>
       <div class="row"><select class="in" id="upk"><option value="icon">Icons</option><option value="cover">Covers</option></select><input type="file" id="upf" multiple accept="image/png,image/jpeg,image/webp"><button class="btn dl" id="upgo" disabled>Upload all</button></div>
       <div id="uplist"></div><div class="alert" id="upmsg" hidden></div></div></section>` : ""}`;
   const ids = () => [...new Set($("#bst").ids.value.split(/[\s,]+/).map(x => x.trim()).filter(Boolean))];
@@ -1394,11 +1394,11 @@ async function health() {
       ${tile("Last backup", !b.readable ? "Can't read" : nb ? ago(nb.modified) : "None", !b.readable ? esc(b.error || b.dir || "") : nb ? `${esc(nb.name)} · ${bytes(nb.bytes)} · ${num(b.count)} kept` : esc(b.dir || "no dumps"), !b.readable || bOld ? "bad" : nb ? "ok" : "")}
       ${tile("Jobs", jobLabel, jobSub, jobs.length ? (jbad ? "bad" : "ok") : "")}
       ${tile("Email", emailLabel, `${e.provider ? esc(e.provider) : "no provider"} · ${num(e.alerts_sent_24h)} staff alerts sent 24 h${e.alerts_failed_7d ? ` · ${num(e.alerts_failed_7d)} failed 7 d` : ""}`, e.alerts_failed_7d ? "bad" : e.live ? "ok" : "")}</div>
-    <div class="split" style="margin-top:12px"><section class="panel"><h2>Background jobs</h2>${jobs.length ? `<table><thead><tr><th>Job</th><th>Last run</th><th>Last OK</th><th>Detail</th><th>State</th></tr></thead><tbody>${jobs.map(j => `<tr><td class="mono">${esc(j.job)}</td><td class="sm">${when(j.last_run_at)}</td><td class="sm">${when(j.last_ok_at)}</td><td class="sm"><div class="exes" title="${esc(j.detail || "")}">${esc(j.detail || "-")}</div></td><td>${j.failing ? `<span class="st ret">Failing</span>` : j.stale ? `<span class="st beta">Late</span>` : j.scheduled ? `<span class="st ok">OK</span>` : `<span class="st hid">Recorded</span>`}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No job runs recorded yet. An empty list is not a healthy result.</div>`}</section>
-    <section class="panel"><h2>Server details</h2><div class="body"><dl class="kv"><dt>Version</dt><dd class="mono">${esc(d.version)}</dd><dt>Started</dt><dd>${d.started_at ? when(d.started_at) : "not recorded"}</dd><dt>Database</dt><dd>migration ${d.migration ? `${esc(String(d.migration.version))} · ${esc(d.migration.description)} (${when(d.migration.installed_on)})` : "-"}</dd>
+    <div class="split" style="margin-top:12px"><section class="panel"><h2><span class="tab">Background jobs</span></h2>${jobs.length ? `<table><thead><tr><th>Job</th><th>Last run</th><th>Last OK</th><th>Detail</th><th>State</th></tr></thead><tbody>${jobs.map(j => `<tr><td class="mono">${esc(j.job)}</td><td class="sm">${when(j.last_run_at)}</td><td class="sm">${when(j.last_ok_at)}</td><td class="sm"><div class="exes" title="${esc(j.detail || "")}">${esc(j.detail || "-")}</div></td><td>${j.failing ? `<span class="st ret">Failing</span>` : j.stale ? `<span class="st beta">Late</span>` : j.scheduled ? `<span class="st ok">OK</span>` : `<span class="st hid">Recorded</span>`}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No job runs recorded yet. An empty list is not a healthy result.</div>`}</section>
+    <section class="panel"><h2><span class="tab">Server details</span></h2><div class="body"><dl class="kv"><dt>Version</dt><dd class="mono">${esc(d.version)}</dd><dt>Started</dt><dd>${d.started_at ? when(d.started_at) : "not recorded"}</dd><dt>Database</dt><dd>migration ${d.migration ? `${esc(String(d.migration.version))} · ${esc(d.migration.description)} (${when(d.migration.installed_on)})` : "-"}</dd>
       <dt>Backups</dt><dd>${esc(b.dir || "-")}${b.readable === false ? " · not readable" : ""}</dd><dt>Email</dt><dd>${e.live ? "live" : "not live"} · last alert sent ${when(e.last_ok_at)}${e.last_failure ? `<div class="dimt">Last failure: ${esc(e.last_failure.error || "")} ${when(e.last_failure.at)}</div>` : ""}</dd></dl>
       <p class="dimt">Email counts cover staff alerts only; other mail isn't logged. Releases and deploys aren't run from Admin.</p></div></section></div>
-    <section class="panel" style="margin-top:12px"><h2>Recent warnings and errors (48 h)</h2>${d.errors == null ? `<div class="body empty">The journal isn't readable by the server.</div>` : d.errors.length ? `<pre class="log">${esc(d.errors.map(l => l.replace(/ \S+ fraglink-server\[\d+\]: \S+Z /, "  ")).join("\n"))}</pre>` : `<div class="body empty">None.</div>`}</section>`;
+    <section class="panel" style="margin-top:12px"><h2><span class="tab">Recent warnings and errors (48 h)</span></h2>${d.errors == null ? `<div class="body empty">The journal isn't readable by the server.</div>` : d.errors.length ? `<pre class="log">${esc(d.errors.map(l => l.replace(/ \S+ fraglink-server\[\d+\]: \S+Z /, "  ")).join("\n"))}</pre>` : `<div class="body empty">None.</div>`}</section>`;
 }
 
 /* ---------- Suggested Merge ---------- */
@@ -1406,10 +1406,10 @@ async function suggestedMerge() {
   const d = await api("/admin/suggested-merge");
   const cov = (d.coverage && d.coverage.sources) || [];
   const nm = (name, id) => name && name !== id ? name : id;
-  view.innerHTML = `<section class="panel"><h2>Suggested Merge</h2>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Suggested Merge</span></h2>
     <p class="note">You do not need to merge a Steam id onto the games list. The list already is the catalogue. Link records a fix-up for future detection and leaves every saved session and hour where it is. Merge is a separate step, only when both entries already have saved rows, and it can change the shown total. Shared Steam id alone is not a merge. Editions and folder splits are not offered.</p>
     <div class="ag-fresh">${cov.map(s => `<div><div class="k">${esc(s.label)}</div><div class="v">${s.available ? "Available" : "Not available"}</div><div class="d">${esc(s.detail)}</div></div>`).join("")}</div></section>
-    <section class="panel" style="margin-top:12px"><h2>Suggestions <span class="dimt">${num(d.open)} open · ${num(d.dismissed)} dismissed</span></h2>
+    <section class="panel" style="margin-top:12px"><h2><span class="tab">Suggestions <span class="dimt">${num(d.open)} open · ${num(d.dismissed)} dismissed</span></span></h2>
     ${d.rows.length ? `<table class="gl sm-suggest"><thead><tr><th>Would move</th><th>Stays</th><th>Evidence</th><th></th></tr></thead><tbody>
       ${d.rows.map(r => `<tr data-key="${esc(r.key)}" data-src="${esc(r.source)}" data-into="${esc(r.target)}" data-op="${esc(r.op)}">
         <td><div class="nm">${esc(nm(r.source_name, r.source))}</div><div class="id">${esc(r.source)}</div></td>
@@ -1468,7 +1468,7 @@ async function suggestedMerge() {
 
 /* ---------- Detection tester ---------- */
 async function detectTest() {
-  view.innerHTML = `<section class="panel"><h2>Detection tester</h2>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Detection tester</span></h2>
     <form method="post" action="/api/v1/form-fallback" class="f body" id="dtf">
       <div class="row"><label style="margin:0">Exe<input class="in" name="exe" placeholder="Wow.exe" required></label>
         <label style="margin:0;flex:1">Folder<input class="in" name="folder" placeholder="D:\\World of Warcraft\\_retail_" style="width:100%"></label>
@@ -1481,7 +1481,7 @@ async function detectTest() {
     try {
       const d = await api("/admin/detect-test", { method: "POST", body: { exe: f.exe.value.trim(), folder: f.folder.value.trim() } });
       const m = d.matched;
-      $("#dtout").innerHTML = `<section class="panel"><h2>${m ? esc(m.name) : "No game"}</h2><div class="body">
+      $("#dtout").innerHTML = `<section class="panel"><h2><span class="tab">${m ? esc(m.name) : "No game"}</span></h2><div class="body">
         ${m ? `<p><span class="st ok">${esc(m.source)}</span> <span class="mono">${esc(m.game_id)}</span></p>` : `<p>No rule matched this exe and folder.</p>`}
         ${d.ambiguous ? `<div class="alert err">${esc(d.ambiguous)}</div>` : ""}
         <table><tbody>${d.steps.map(s => `<tr><td>${esc(s.layer)}</td><td>${s.hit ? "matched" : "no"}</td><td class="mono">${typeof s.detail === "string" ? esc(s.detail) : esc(JSON.stringify(s.detail))}</td></tr>`).join("")}</tbody></table>
@@ -1495,7 +1495,7 @@ async function detectTest() {
 /* ---------- Missing artwork ---------- */
 async function missingArt() {
   const d = await api("/admin/artwork");
-  view.innerHTML = `<section class="panel"><h2>Missing artwork <span class="dimt">${num(d.total)}</span></h2>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Missing artwork <span class="dimt">${num(d.total)}</span></span></h2>
     <p class="note">${esc(d.note)} Replace one icon from the game editor. There is no bulk replace.</p>
     ${d.rows.length ? `<table class="gl"><thead><tr><th>Game</th><th>Status</th><th></th></tr></thead><tbody>
       ${d.rows.map(r => `<tr><td>${esc(r.name)} <span class="mono dimt">${esc(r.id)}</span></td><td>${esc(r.status)}<div class="dimt">${esc(r.detail)}</div></td><td class="rt"><a class="btn sm" href="#games/id:${encodeURIComponent(r.id)}">Edit artwork</a></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No missing icons in this page.</div>`}
@@ -1506,12 +1506,12 @@ async function missingArt() {
 async function dataChecks() {
   const d = await api("/admin/data-checks");
   const dup = d.duplicate_launchers || [], rules = d.conflicting_rules || [], hours = d.hours || {};
-  view.innerHTML = `<section class="panel"><h2>Data checks</h2><p class="note">${esc(d.note)}</p></section>
-    <section class="panel"><h2>Duplicate launcher ids <span class="dimt">${dup.length}</span></h2>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Data checks</span></h2><p class="note">${esc(d.note)}</p></section>
+    <section class="panel"><h2><span class="tab">Duplicate launcher ids <span class="dimt">${dup.length}</span></span></h2>
       ${dup.length ? `<table><thead><tr><th>Launcher</th><th>Id</th><th>Games</th></tr></thead><tbody>${dup.map(r => `<tr><td>${esc(r.launcher)}</td><td class="mono">${esc(String(r.product))}</td><td class="mono">${esc((r.ids || []).join(", "))}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No duplicate Steam app ids in game rows or fix-ups.</div>`}</section>
-    <section class="panel"><h2>Conflicting detection rules <span class="dimt">${rules.length}</span></h2>
+    <section class="panel"><h2><span class="tab">Conflicting detection rules <span class="dimt">${rules.length}</span></span></h2>
       ${rules.length ? `<table><tbody>${rules.map(r => `<tr><td class="mono">${esc(r.kind)} ${esc(r.pattern)}</td><td>${esc((r.ids || []).join(", "))}</td><td>${esc(r.detail)}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No pattern points at two games.</div>`}</section>
-    <section class="panel"><h2>Hours</h2>
+    <section class="panel"><h2><span class="tab">Hours</span></h2>
       <p class="note">${esc(hours.week_note || "")}</p>
       ${(hours.length_mismatches || []).length ? `<table><tbody>${hours.length_mismatches.map(r => `<tr><td class="mono">${esc(r.session_id)}</td><td>${esc(r.detail)}</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No session whose stored length disagrees with its start and end.</div>`}
       ${(hours.week_mismatches || []).length ? `<table><tbody>${hours.week_mismatches.map(r => `<tr><td class="mono">${esc(r.user_id)}</td><td>${esc(r.detail)} (${r.week_seconds} vs ${r.sql_seconds})</td></tr>`).join("")}</tbody></table>` : `<div class="body empty">The checked players' local weeks match the shared total.</div>`}</section>`;
@@ -1520,7 +1520,7 @@ async function dataChecks() {
 /* ---------- Review history ---------- */
 async function reviewHistory() {
   const d = await api("/admin/review-history");
-  view.innerHTML = `<section class="panel"><h2>Review history</h2>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Review history</span></h2>
     <p class="note">${esc(d.note)}</p>
     <div class="tools"><a class="btn sm" href="#" data-g="">All</a><a class="btn sm" href="#" data-g="reviewed">Reviewed</a><a class="btn sm" href="#" data-g="dismissed">Dismissed</a><a class="btn sm" href="#" data-g="merged">Merged</a><a class="btn sm" href="#" data-g="corrected">Corrected</a></div>
     <div id="hist">${histTable(d)}</div></section>`;
@@ -1540,7 +1540,7 @@ function histTable(d) {
 /* ---------- Undo ---------- */
 async function undoRecent() {
   const d = await api("/admin/undo");
-  view.innerHTML = `<section class="panel"><h2>Undo</h2>
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Undo</span></h2>
     <p class="note">Only edits whose before and after were stored, and which still match that after, can be put back. Merges, deleted sessions and deleted accounts are not undone here.</p>
     <table class="gl"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Can undo</th><th></th></tr></thead><tbody>
     ${d.rows.map(r => `<tr data-id="${r.id}"><td class="sm">${when(r.at)}</td><td>${esc(r.by || "")}</td><td class="mono">${esc(r.action)}</td><td>${r.undo ? "Yes" : "No"}<div class="dimt">${esc(r.why)}</div></td>

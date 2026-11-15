@@ -11,6 +11,7 @@ const DISCORD = "https://discord.gg/QbaYRtvADj";
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const htab = (title, right) => `<span class="tab">${title}</span>${right || ""}`;
 const token = () => localStorage.getItem(TK);
 /* No inline handlers (the site's Content-Security-Policy blocks them): broken images and a couple
    of buttons are handled here instead, by data attributes. */
@@ -221,7 +222,7 @@ function cropEditor(file, onSave) {
       const maxZoom = Math.max(1, minSide / 16);
       const m = document.createElement("div");
       m.className = "crop-modal";
-      m.innerHTML = `<div class="crop-box panel" role="dialog" aria-modal="true" aria-label="Crop your picture"><h2>Crop your picture</h2><div class="body">
+      m.innerHTML = `<div class="crop-box panel" role="dialog" aria-modal="true" aria-label="Crop your picture"><h2><span class="tab">Crop your picture</span></h2><div class="body">
         <div class="crop-main"><div class="crop-stage"><canvas width="${V}" height="${V}" data-c></canvas><div class="crop-frame"></div></div>
         <div class="crop-side"><div class="crop-prev"><div><canvas width="184" height="184" data-p="184"></canvas><small>184 profile</small></div>
           <div><canvas width="64" height="64" data-p="64"></canvas><small>64 panels</small><canvas width="32" height="32" data-p="32" style="margin-top:10px"></canvas><small>32 lists</small></div></div></div></div>
@@ -470,7 +471,7 @@ function clSection(e) {
   const list = (h, items, html) => items && items.length ? `<h4>${h}</h4><div class="md-content">${typeof html === "string" ? html : `<ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>`}</div>` : "";
   const sec = document.createElement("section");
   sec.className = "panel"; sec.dataset.k = e.area; sec.dataset.date = e.date;
-  sec.innerHTML = `<h2><span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(e.label)}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new, e.new_html)}${list("Changes", e.changes, e.changes_html)}${list("Fixes", e.fixes, e.fixes_html)}</div>`;
+  sec.innerHTML = `<h2>${htab(`<span class="cl-tag ${esc(e.area)}">${esc(e.area)}</span>${esc(e.label)}`)}</h2><div class="body">${e.version ? `<h3>${esc(e.version)}</h3>` : ""}${list("New", e.new, e.new_html)}${list("Changes", e.changes, e.changes_html)}${list("Fixes", e.fixes, e.fixes_html)}</div>`;
   return sec;
 }
 pages.changelog = async () => {
@@ -746,13 +747,13 @@ async function wowManager(el) {
         <div class="bn-acts"><a class="btn" href="/connect/battlenet/verify">Check account</a><button class="btn bn-unlink" type="button" data-unlink>Unlink</button></div></div>`
     : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify Retail characters.</div></div>
         <div class="bn-acts"><button class="btn" type="button" data-link>Link Battle.net</button></div></div>`;
-  el.innerHTML = `<section class="${Sec}"><${Hx}>Battle.net</${Hx}><div data-msg></div>${head}</section>
-    <section class="${Sec}"><${Hx}>Profile page display${handle ? `<a class="bn-view" href="/u/${encodeURIComponent(handle)}">View profile</a>` : ""}</${Hx}>
+  el.innerHTML = `<section class="${Sec}"><${Hx}>${htab("Battle.net")}</${Hx}><div data-msg></div>${head}</section>
+    <section class="${Sec}"><${Hx}>${htab("Profile page display", handle ? `<a class="bn-view" href="/u/${encodeURIComponent(handle)}">View profile</a>` : "")}</${Hx}>
       ${flavSeg}${s.linked ? `<div data-feat></div>` : ""}</section>
     <section class="${Sec} wow-version-control"><div class="seg wow-version-switch" data-tabs role="tablist" aria-label="Character version"></div></section>
-    <section class="${Sec}"><${Hx}>Add characters</${Hx}>
+    <section class="${Sec}"><${Hx}>${htab("Add characters")}</${Hx}>
       <div class="bn-addblock"><div data-addbox></div><div class="bn-upload"><div><b>Upload /played</b><p class="sub">From the Fraglink /played addon.</p></div><div class="bn-upload-actions"><a class="btn" data-upload href="/connect/wow?version=${def === "wow_forever" ? "forever" : "retail"}">Upload ${def === "wow_forever" ? "Forever" : "Retail"} /played</a><a class="sub" href="https://www.curseforge.com/wow/addons/fraglink-played" target="_blank" rel="noopener">Get the addon</a></div></div></div></section>
-    <section class="${Sec}"><${Hx}>Your characters</${Hx}>
+    <section class="${Sec}"><${Hx}>${htab("Your characters")}</${Hx}>
       <div class="bn-tools"><input type="search" data-q placeholder="Search" aria-label="Search name or realm" maxlength="64">
         <select data-sort aria-label="Sort"><option value="hours">Hours</option><option value="level">Level</option><option value="name">Name</option><option value="realm">Realm</option></select>
         <select data-class aria-label="Class"><option value="">Class</option></select>
@@ -761,7 +762,7 @@ async function wowManager(el) {
       <div class="bn-headrow" aria-hidden="true"><span></span><span>Name</span><span class="c-realm">Realm</span><span class="c-cls">Level / class</span><span class="c-hrs">Hours</span><span class="c-imp">Imported</span><span></span></div>
       <div data-list><p class="empty bn-empty">Loading…</p></div>
       <div class="bn-more"><span class="sub" data-cnt></span><button class="btn" type="button" data-more hidden>Show more</button></div></section>
-    <section class="${Sec}" data-review hidden><${Hx}>Held for review</${Hx}><div class="bn-review" data-rev></div></section>`;
+    <section class="${Sec}" data-review hidden><${Hx}>${htab("Held for review")}</${Hx}><div class="bn-review" data-rev></div></section>`;
   const msgBox = $("[data-msg]", el), list = $("[data-list]", el), more = $("[data-more]", el), cnt = $("[data-cnt]", el);
   const st = { q: "", sort: "hours", class: "", vis: "", items: [], data: null, seq: 0, game: def, extra: "" };
   const regions = `<select name="region" aria-label="Region"><option value="us">US</option><option value="eu">EU</option><option value="kr">KR</option><option value="tw">TW</option></select>`;
@@ -1054,7 +1055,7 @@ pages.home = async () => {
   if (act) act.items.forEach(i => ids.push(i.game_id));
   await loadIcons(ids);
   const s = h.stats, prof = n => `/u/${encodeURIComponent(n.handle)}`, nm = n => esc(n.display_name || n.handle);
-  const panel = (title, body, more, cls) => `<section class="panel f2p${cls ? " " + cls : ""}"><h2>${title}${more || ""}</h2>${body}</section>`;
+  const panel = (title, body, more, cls) => `<section class="panel f2p${cls ? " " + cls : ""}"><h2>${htab(title, more || "")}</h2>${body}</section>`;
   const gname = (id, n) => isUnlisted(id) ? "a game" : esc(n);
   // ---- crumb + community counters (Admin > Site settings: C1 header counters, C4 bar, off)
   const dg = (n, c) => `<span class="d${c ? " " + c : ""}">${nf.format(n).split("").map(ch => /\d/.test(ch) ? `<i>${ch}</i>` : `<i class="c">${esc(ch)}</i>`).join("")}</span>`;
@@ -1113,8 +1114,8 @@ pages.home = async () => {
       const top6 = b => { const mi = b.findIndex(r => r.me); let rows = b.slice(0, 6).map((r, i) => [r, i]); if (mi >= 6) rows = rows.slice(0, 5).concat([[b[mi], mi]]); return rows; };
       const trs = (b, f) => top6(b).map(([r, i]) => `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="/u/${encodeURIComponent(r.handle)}">${r.me ? "You" : nm(r)}</a></td><td class="n">${f(r)}</td></tr>`).join("");
       const allH = r => r.minutes > 0 && r.minutes < 60 ? "&lt;1 h" : nf.format(Math.round((r.minutes || 0) / 60)) + " h";
-      lbP = panel(`Friends leaderboard <span class="tabs"><a class="on" data-t="week" role="tab" tabindex="0" aria-selected="true">This week</a><a data-t="all" role="tab" tabindex="0" aria-selected="false">All time</a></span>`, `<table class="t2"><tbody data-p="week" class="on">${trs(wk.board, r => h1(r.tenths))}</tbody><tbody data-p="all">${trs(ba, allH)}</tbody></table>
-        <div class="per on" data-p="week">Hours this week, ${esc(wk.label)}</div><div class="per" data-p="all">Total hours, as shown on each profile</div>`, "", "o4 lb42"); }
+      lbP = panel("Friends leaderboard", `<table class="t2"><tbody data-p="week" class="on">${trs(wk.board, r => h1(r.tenths))}</tbody><tbody data-p="all">${trs(ba, allH)}</tbody></table>
+        <div class="per on" data-p="week">Hours this week, ${esc(wk.label)}</div><div class="per" data-p="all">Total hours, as shown on each profile</div>`, `<span class="tabs"><a class="on" data-t="week" role="tab" tabindex="0" aria-selected="true">This week</a><a data-t="all" role="tab" tabindex="0" aria-selected="false">All time</a></span>`, "o4 lb42"); }
     inner += `<div class="hub"><div>${rgP}${actP}</div><div>${frP}${lbP}</div></div>`;
     $("#h42-in").innerHTML = inner;
     fitAct42();
@@ -1345,17 +1346,17 @@ pages.profile = async () => {
   const wowAll = bits.length === 2 && bits[1] === "wow";
   const wowDeep = bits.length === 4 && bits[1] === "wow" && ["retail", "forever"].includes(bits[2]);
   if (!handle) { location.replace(me() ? "/u/" + encodeURIComponent(me().handle) : "/login"); return; }
-  if (bits.length > 1 && !wowAll && !wowDeep) { root.innerHTML = `<div class="narrow panel"><h2>Not found</h2><div class="body"><p>That page isn't on Fraglink.</p></div></div>`; return; }
+  if (bits.length > 1 && !wowAll && !wowDeep) { root.innerHTML = `<div class="narrow panel"><h2>${htab("Not found")}</h2><div class="body"><p>That page isn't on Fraglink.</p></div></div>`; return; }
   document.title = handle + " · Fraglink";
   let p;
   try { p = await api("/users/" + encodeURIComponent(handle) + "/profile?limit=" + GPAGE + "&tz=" + encodeURIComponent(TZ), { keepSession: true }); }
   catch (e) {
     if (e.status === 401) {
-      root.innerHTML = `<div class="narrow panel"><h2>${esc(handle)}</h2><div class="body"><p>This profile is only visible to signed-in Fraglink players.</p><p><a class="btn" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in</a> <a class="btn dl" href="/signup">Create an account</a></p></div></div>`;
+      root.innerHTML = `<div class="narrow panel"><h2>${htab(esc(handle))}</h2><div class="body"><p>This profile is only visible to signed-in Fraglink players.</p><p><a class="btn" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in</a> <a class="btn dl" href="/signup">Create an account</a></p></div></div>`;
       return;
     }
     root.innerHTML = e.status === 404
-      ? `<div class="narrow panel"><h2>Not found</h2><div class="body"><p>There's no Fraglink player called <b>${esc(handle)}</b>.</p></div></div>`
+      ? `<div class="narrow panel"><h2>${htab("Not found")}</h2><div class="body"><p>There's no Fraglink player called <b>${esc(handle)}</b>.</p></div></div>`
       : `<div class="narrow alert err">${esc(e.message)}</div>`;
     return;
   }
@@ -1369,7 +1370,7 @@ pages.profile = async () => {
     else if (p.relation === "incoming") act = `<button class="btn dl" type="button" data-accept>Accept friend request</button>`;
     else if (p.can_add) act = !token() ? `<a class="btn blue" href="/login?next=${next}">Sign in to add ${nm}</a>` : `<button class="btn blue" type="button" data-add>+ Add friend</button>`;
     else if (!token()) act = `<a class="btn" href="/login?next=${next}">Sign in</a>`;
-    root.innerHTML = `<div class="narrow panel"><h2>${nm}</h2><div class="body" style="display:flex;gap:16px;align-items:center">${avatar(p.avatar, 64)}<div><p>This profile is private. Only ${nm}'s friends can see it.</p>
+    root.innerHTML = `<div class="narrow panel"><h2>${htab(nm)}</h2><div class="body" style="display:flex;gap:16px;align-items:center">${avatar(p.avatar, 64)}<div><p>This profile is private. Only ${nm}'s friends can see it.</p>
       <div class="pact">${act}</div><div class="alert err" data-perr hidden style="margin-top:8px"></div></div></div></div>`;
     const box = $(".pact", root), perr = $("[data-perr]", root);
     const run = async (b, fn, done) => { b.disabled = true; perr.hidden = true; try { await fn(); box.innerHTML = done; wire(); } catch (x) { b.disabled = false; showErr(perr, x); } };
@@ -1517,7 +1518,7 @@ pages.profile = async () => {
   }).join("")}</div>` : "";
   const np = live ? `<div class="np">${gameArt(pres.game_id, pres.game_name, "npa")}<div><div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8">Now playing</div>
       <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
-  const sec = (title, body, right, cls, id) => `<section class="panel sx${cls ? " " + cls : ""}"${id ? ` id="${id}"` : ""}><h2>${title}${right ? `<span class="more">${right}</span>` : ""}</h2>${body}</section>`;
+  const sec = (title, body, right, cls, id) => `<section class="panel sx${cls ? " " + cls : ""}"${id ? ` id="${id}"` : ""}><h2>${htab(title, right ? `<span class="more">${right}</span>` : "")}</h2>${body}</section>`;
   const report = !self && token() ? `<div class="avlinks">${p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : ""}<a href="#" class="report flagit" data-report-profile>&#9873; Report this profile</a></div>` : "";
   const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div${p.overall.week_label ? ` title="Tracked hours, ${esc(p.overall.week_label)}"` : ""}><b>${p.overall.tenths_7d != null ? (p.overall.tenths_7d / 10).toFixed(1) : hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}${self || Array.isArray(p.friends) ? `<a href="${self ? "/friends" : "#friends"}" class="kf"><b>${p.friend_count}</b><span>Friends</span></a>` : `<div><b>${p.friend_count}</b><span>Friends</span></div>`}</div>`;
   const nick = p.display_name || p.handle, prevs = (p.previous_names || []).filter(n => n.toLowerCase() !== nick.toLowerCase() && n.toLowerCase() !== p.handle.toLowerCase());
@@ -1713,16 +1714,16 @@ pages.friends = async () => {
       feed += `<div class="ev">${icon(i.game_id, i.game_name)}<p><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${actText(i)}</p></div>`;
     });
     root.innerHTML = `<div class="grid"><div class="col">
-      ${fl.incoming.length ? `<section class="panel"><h2>Friend requests (${fl.incoming_count})</h2><div>${reqIn}</div></section>` : ""}
-      <section class="panel"><h2>Friends (${fl.all})${fl.all ? ` <span class="more" style="text-transform:none">${fl.online} online</span>` : ""}</h2>
+      ${fl.incoming.length ? `<section class="panel"><h2>${htab(`Friend requests (${fl.incoming_count})`)}</h2><div>${reqIn}</div></section>` : ""}
+      <section class="panel"><h2>${htab(`Friends (${fl.all})`, fl.all ? `<span class="more" style="text-transform:none">${fl.online} online</span>` : "")}</h2>
         ${fl.all > 0 ? `<div class="lbar" style="padding:0 10px">${searchBox("Find a friend", "fr-q")}<select class="t sm" data-fshow aria-label="Show"><option value="all">Everyone</option><option value="online">Online</option><option value="offline">Offline</option></select></div>` : ""}
         <div data-flist>${fl.friends.length ? fl.friends.map(f => friendRow(f, { actions: btns })).join("") : `<div class="body empty">${fs.q ? `No friends match “${esc(fs.q)}”. <a href="#" data-fclear>Clear search</a> · <a href="/u/${encodeURIComponent(fs.q)}">Look up “${esc(fs.q)}”</a>` : fl.all ? (fs.show === "online" ? "Nobody's online right now." : "Everyone's online.") : "No friends yet. Add someone by their Fraglink username."}</div>`}</div>
         <div data-fpager>${fl.total > FP ? pagerHtml(fs.offset, FP, fl.total, fs.q) : ""}</div></section>
-      ${fl.outgoing.length ? `<section class="panel"><h2>Sent requests (${fl.outgoing_count})</h2><div>${reqOut}</div></section>` : ""}
+      ${fl.outgoing.length ? `<section class="panel"><h2>${htab(`Sent requests (${fl.outgoing_count})`)}</h2><div>${reqOut}</div></section>` : ""}
     </div><aside class="col">
-      <section class="panel"><h2>Add a friend</h2><div class="body"><form ${FA} class="f" id="addf"><label>Username<input type="text" name="handle" maxlength="20" required placeholder="their Fraglink username" autocomplete="off"></label><div class="row"><button class="btn">Send request</button></div></form></div></section>
-      <section class="panel"><h2>Friends' activity</h2><div>${feed || `<div class="body empty">Nothing in the last 7 days.</div>`}</div></section>
-      ${fl.blocked.length ? `<section class="panel"><h2>Blocked</h2><div>${fl.blocked.map(h => `<div class="fr" data-h="${esc(h)}"><div class="who">${esc(h)}</div><div class="acts"><button class="btn sm" data-act="unblock">Unblock</button></div></div>`).join("")}</div></section>` : ""}
+      <section class="panel"><h2>${htab("Add a friend")}</h2><div class="body"><form ${FA} class="f" id="addf"><label>Username<input type="text" name="handle" maxlength="20" required placeholder="their Fraglink username" autocomplete="off"></label><div class="row"><button class="btn">Send request</button></div></form></div></section>
+      <section class="panel"><h2>${htab("Friends' activity")}</h2><div>${feed || `<div class="body empty">Nothing in the last 7 days.</div>`}</div></section>
+      ${fl.blocked.length ? `<section class="panel"><h2>${htab("Blocked")}</h2><div>${fl.blocked.map(h => `<div class="fr" data-h="${esc(h)}"><div class="who">${esc(h)}</div><div class="acts"><button class="btn sm" data-act="unblock">Unblock</button></div></div>`).join("")}</div></section>` : ""}
     </aside></div>`;
     const fq = $("#fr-q"), fsel = $("[data-fshow]");
     if (fq) {
@@ -1796,21 +1797,21 @@ pages.settings = async () => {
   function accountTab() {
     const verified = u.email ? (u.email_verified ? `<span style="color:var(--online)">✓ confirmed</span>` : `<span style="color:var(--away)">not confirmed</span> · ${u.mail_live ? `<a href="#" data-resend>Send the link again</a>` : `<span class="dimt">confirmation emails aren't switched on yet</span>`}`) : `<span class="empty">none</span>`;
     const canUp = u.avatar_upload_allowed;
-    return `<h3>Profile picture</h3>${msg}<div class="frm">
+    return `<h3>${htab("Profile picture")}</h3>${msg}<div class="frm">
       ${row("Current", `<div class="avsizes"><div>${avatar(u.avatar, 184)}<small>184 profile</small></div><div>${avatar(u.avatar, 64)}<small>64 panels</small></div><div>${avatar(u.avatar, 32)}<small>32 lists</small></div></div>`)}
       ${row("Upload", `<div class="row"><input type="file" id="av-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><button class="btn blue" type="button" data-upload ${canUp ? "" : "disabled"}>Upload a picture…</button><button class="btn" type="button" data-avreset>Reset to default</button></div>`,
         canUp ? "PNG, JPEG, WebP or GIF (first frame), up to 2 MB. Cropped to a square. Keep it clean, pictures can be reported and taken down. 5 changes a day." : esc(u.avatar_upload_block || "Uploads aren't available right now."))}
       ${row("Or pick a preset", `<div class="presets">${PRESET_GLYPHS.map((g, i) => `<button type="button" data-preset="${i}" class="${u.avatar.kind === "preset" && u.avatar.preset === i ? "on" : ""}" title="Preset ${i + 1}">${avatar({ kind: "preset", preset: i }, 48)}</button>`).join("")}</div>`, "Your default colour comes from your account.")}
     </div>
-    <h3>Account</h3><form ${FA} data-f="name">${msg}<div class="frm">
+    <h3>${htab("Account")}</h3><form ${FA} data-f="name">${msg}<div class="frm">
       ${row("Username", `<b>${esc(u.handle)}</b> <small style="color:#8a96a3">playfraglink.com/u/${esc(u.handle)}</small>`, "Your sign-in name and profile address. It's permanent; ask staff if it really needs changing.")}
       ${row("Nickname", `<input class="t" name="display_name" maxlength="32" value="${esc(u.display_name || "")}">`, "The name everyone sees, in the app and on the site. Up to 32 characters, 3 changes a day. It can't be someone else's name or look like staff. Leave empty to use your username.")}
       ${row("Email", `${esc(u.email || "")} ${verified}`)}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
-    <h3>Time zone</h3><form ${FA} data-f="tz">${msg}<div class="frm">
+    <h3>${htab("Time zone")}</h3><form ${FA} data-f="tz">${msg}<div class="frm">
       ${row("Time zone", `<div class="tzpick"><input class="t" type="search" data-tzq placeholder="Search, e.g. London or New York" aria-label="Search time zones" autocomplete="off"><select class="t" name="timezone" aria-label="Time zone">${zoneOptions(u.timezone || "", "")}</select></div>`, "Your week (Hours this week, Past 7 days, leaderboards) and the days and times on the site use this zone, on every device and in the app. Automatic uses this browser's zone.")}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
-    <h3>About you</h3><form ${FA} data-f="about">${msg}<div class="frm">
+    <h3>${htab("About you")}</h3><form ${FA} data-f="about">${msg}<div class="frm">
       ${row("About me", `<textarea class="t" name="about" maxlength="300">${esc(u.about || "")}</textarea>`, "Up to 300 characters.")}
       ${row("Location", `<input class="t" name="location" maxlength="40" value="${esc(u.location || "")}" placeholder="e.g. Sydney, Australia">`, "Optional. Shown on your profile as typed.")}
       ${row("Country", `<select class="t" name="country"><option value="">(not shown)</option>${COUNTRIES().map(([c, n]) => `<option value="${c}" ${(u.details || {}).country === c ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>`, "Shows a small flag next to your location.")}
@@ -1818,11 +1819,11 @@ pages.settings = async () => {
       ${row("Gender", `<input class="t" name="gender" maxlength="20" value="${esc((u.details || {}).gender || "")}">`, "Optional, as you'd like it shown.")}
       ${row("Gaming style", `<select class="t" name="gaming_style"><option value="">(none)</option>${STYLES.map(s => `<option ${u.gaming_style === s ? "selected" : ""}>${s}</option>`).join("")}</select>`)}
       ${row("", `<button class="btn dl">Save</button>`)}</div></form>
-    <h3>Change email</h3><form ${FA} data-f="email">${msg}<div class="frm">
+    <h3>${htab("Change email")}</h3><form ${FA} data-f="email">${msg}<div class="frm">
       ${row("New email", `<input class="t" type="email" name="new_email" required autocomplete="email">`)}
       ${row("Current password", `<input class="t" type="password" name="current_password" required autocomplete="current-password">`)}
       ${row("", `<button class="btn">Change email</button>`)}</div></form>
-    <h3>Your data</h3>${msg}<div class="frm">
+    <h3>${htab("Your data")}</h3>${msg}<div class="frm">
       ${row("Download my data", `<button class="btn" type="button" data-export>Download (zip)</button>`, "Everything we store about you: account, sessions, hours, friends, as JSON and CSV. Once an hour.")}
       ${row("Delete my account", `<button class="btn red" type="button" data-delete>Delete account…</button>`, "Signs you out everywhere now and deletes everything after 7 days. Signing in again during those 7 days cancels it.")}
     </div><form ${FA} data-f="delete" hidden>${msg}<div class="frm"><div class="danger" style="grid-column:1/-1">Your profile disappears now and your account and all data are deleted for good after 7 days.</div>
@@ -1832,15 +1833,15 @@ pages.settings = async () => {
   }
   function rigTab() {
     const r = u.rig || {};
-    return `<h3>Gaming rig</h3><form ${FA} data-f="rig">${msg}<div class="frm">${RIG_FIELDS.map(([k, l, ph]) => row(l, `<input class="t" name="${k}" maxlength="60" value="${esc(r[k] || "")}" placeholder="${esc(ph)}">`)).join("")}
+    return `<h3>${htab("Gaming rig")}</h3><form ${FA} data-f="rig">${msg}<div class="frm">${RIG_FIELDS.map(([k, l, ph]) => row(l, `<input class="t" name="${k}" maxlength="60" value="${esc(r[k] || "")}" placeholder="${esc(ph)}">`)).join("")}
       ${row("", `<button class="btn dl">Save rig</button>`, "Shown on your profile. Leave everything empty to hide the box.")}</div></form>`;
   }
   async function gamesTab(el) {
     const PG = 50, st = { offset: 0 };
-    el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">Loading…</div>`;
+    el.innerHTML = `<h3>${htab("Played games")}</h3>${msg}<div class="empty-v2">Loading…</div>`;
     let first; try { first = await api(`/me/games?limit=${PG}&tz=${encodeURIComponent(TZ)}`); } catch (e) { bad(el, e); return; }
-    if (!first.all) { el.innerHTML = `<h3>Played games</h3>${msg}<div class="empty-v2">No games yet. Games show up here after you play with the Fraglink app running.</div>`; return; }
-    el.innerHTML = `<h3>Played games</h3>${msg}
+    if (!first.all) { el.innerHTML = `<h3>${htab("Played games")}</h3>${msg}<div class="empty-v2">No games yet. Games show up here after you play with the Fraglink app running.</div>`; return; }
+    el.innerHTML = `<h3>${htab("Played games")}</h3>${msg}
       <p class="pg-help">Switch a game off to hide it from your profile, signature image and the home page. It still counts in your own totals.</p>
       <div class="lbar">${searchBox("Search your games", "pg-q")}
         <select class="t sm" data-sort aria-label="Sort"><option value="total">Most played</option><option value="recent">Recently played</option><option value="week">Past 7 days</option><option value="name">Name A–Z</option></select>
@@ -1890,7 +1891,7 @@ pages.settings = async () => {
     const pv = u.privacy || {};
     const priv = !u.public_profile;
     const sw = (k, label) => `<label style="display:block;margin:3px 0"><input type="checkbox" data-pv="${k}" ${pv[k] !== false ? "checked" : ""}>${label}</label>`;
-    return `<h3>Privacy</h3><form ${FA} data-f="privacy">${msg}<div class="frm">
+    return `<h3>${htab("Privacy")}</h3><form ${FA} data-f="privacy">${msg}<div class="frm">
       ${(() => {
         const dob = (u.details && u.details.birth_date) || null;
         if (dob) {
@@ -1918,13 +1919,13 @@ pages.settings = async () => {
   function notificationsTab() {
     const n = u.notify_prefs || {};
     const cb = (k, t) => `<label style="display:block;margin:2px 0"><input type="checkbox" name="${k}" ${n[k] ? "checked" : ""}>${t}</label>`;
-    return `<h3>Notifications</h3><form ${FA} data-f="notify">${msg}<div class="frm">
+    return `<h3>${htab("Notifications")}</h3><form ${FA} data-f="notify">${msg}<div class="frm">
       ${row("Email", cb("signin_email", "New sign-in to my account") + cb("friend_request_email", "Someone sends me a friend request") + cb("news_email", "Fraglink news (a few times a year)"), u.mail_live ? "" : "Email delivery isn't switched on yet. Your choices are saved for when it is.")}
       ${row("Desktop app", cb("friend_request_client", "Friend requests") + cb("friend_online_client", "A friend comes online or starts a game"), "The same switches as Options > General in the desktop app; a change here shows there next time you open Options.")}
       </div></form>`;
   }
   async function connectionsTab(el) {
-    el.innerHTML = `<h3>Connections</h3><div data-conn>${msg}<div class="empty-v2">Loading…</div></div>`;
+    el.innerHTML = `<h3>${htab("Connections")}</h3><div data-conn>${msg}<div class="empty-v2">Loading…</div></div>`;
     const box = $("[data-conn]", el);
     const q = new URLSearchParams(location.search), NAMES = { steam: "Steam", discord: "Discord", bnet: "Battle.net" };
     let c;
@@ -1958,18 +1959,18 @@ pages.settings = async () => {
   }
   async function securityTab(el) {
     const mf = u.mfa || {};
-    el.innerHTML = `<h3>Password</h3><form ${FA} data-f="pw">${msg}<div class="frm">
+    el.innerHTML = `<h3>${htab("Password")}</h3><form ${FA} data-f="pw">${msg}<div class="frm">
       ${row("Current password", `<input class="t" type="password" name="current_password" required autocomplete="current-password">`)}
       ${row("New password", `<input class="t" type="password" name="new_password" required minlength="10" maxlength="128" autocomplete="new-password">`)}
       ${row("New password again", `<input class="t" type="password" name="new_password2" required minlength="10" maxlength="128" autocomplete="new-password">`)}
       ${row("", `<button class="btn">Change password</button>`, "Every other device is signed out.")}</div></form>
-      <h3>Two-step sign-in</h3><div data-mfa>${msg}<div class="frm">${mf.enabled
+      <h3>${htab("Two-step sign-in")}</h3><div data-mfa>${msg}<div class="frm">${mf.enabled
         ? row("Status", `<b style="color:var(--online)">On</b> · ${mf.backup_codes_left} backup code${mf.backup_codes_left === 1 ? "" : "s"} left`) +
           row("Password", `<input class="t" type="password" name="password" autocomplete="current-password">`) + row("Code", `<input class="t" name="code" autocomplete="one-time-code" placeholder="6-digit code or backup code">`) +
           row("", `<button class="btn" type="button" data-mfa-codes>New backup codes</button> <button class="btn red" type="button" data-mfa-off>Turn off</button>`)
         : row("Status", `Off`, "Ask for a code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy...) when you sign in on the website or the app.") +
           row("Password", `<input class="t" type="password" name="password" autocomplete="current-password">`) + row("", `<button class="btn blue" type="button" data-mfa-setup>Set up two-step sign-in</button>`)}</div><div data-mfa-step></div></div>
-      <h3>Where you're signed in</h3><div data-sess>${msg}<div class="empty-v2">Loading…</div></div>`;
+      <h3>${htab("Where you're signed in")}</h3><div data-sess>${msg}<div class="empty-v2">Loading…</div></div>`;
     loadSessions(el);
   }
   async function loadSessions(el) {
