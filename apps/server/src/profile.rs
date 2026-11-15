@@ -656,6 +656,7 @@ async fn profile(
         "country": if show("location") { country } else { None },
         "events": events,
         "achievements": achievements,
+        "wow_refreshing": wow_characters.is_array() && crate::wow::stale_refresh_running(p.id),
         "wow_characters": wow_characters,
         "wow_default": wow_default,
         "wow_show": wow_show,

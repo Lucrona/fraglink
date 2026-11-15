@@ -84,3 +84,10 @@ test('popup details update the matching profile and gallery card level', () => {
   assert.ok(source.includes('c.level = d.level'));
   assert.ok(source.includes('.wc-lv') && source.includes('Level " + c.level'));
 });
+
+test('profile keeps pulling cards while the server is still refreshing them', () => {
+  const {readFileSync}=require('node:fs');
+  const source=readFileSync(__dirname+'/../static/assets/app.js','utf8');
+  assert.ok(source.includes('p.wow_refreshing = fresh.wow_refreshing === true'));
+  assert.ok(source.includes('if (p.wow_refreshing && tries < 8) pullFreshWowCards(tries + 1)'));
+});

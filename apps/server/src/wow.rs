@@ -26,6 +26,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use fraglink_core::wow_played::{verify, CharEntry, SigCheck};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -2284,7 +2285,6 @@ pub async fn apply_blizzard_profile(
 /// rate-limited so visitors cannot stampede the API.
 pub fn schedule_stale_refresh(st: &AppState, uid: Uuid) {
     use std::collections::HashMap;
-    use std::sync::{Mutex, OnceLock};
     use std::time::Instant;
     static SEEN: OnceLock<Mutex<HashMap<Uuid, Instant>>> = OnceLock::new();
     {
@@ -2298,36 +2298,107 @@ pub fn schedule_stale_refresh(st: &AppState, uid: Uuid) {
         }
         m.insert(uid, Instant::now());
     }
+    // Marked before the spawn so the response that started it already says so.
+    let running = RefreshRunning::start(uid);
     let st = st.clone();
     tokio::spawn(async move {
+        let _running = running;
         refresh_stale_for_user(&st, uid).await;
     });
 }
 
-async fn refresh_stale_for_user(st: &AppState, uid: Uuid) {
-    let rows: Vec<(Uuid, String, String, String, String)> = sqlx::query_as(
-        "SELECT id, game_id, region, realm_slug, name FROM wow_characters
-         WHERE user_id = $1
-           AND (game_id = 'wow_forever' OR verified)
-           AND (bnet_checked_at IS NULL
-                OR bnet_checked_at < now() - interval '30 minutes'
-                OR bnet_spec IS NULL
-                OR race IS NULL)
-         ORDER BY featured NULLS LAST, played_s DESC
+fn refreshing_set() -> &'static Mutex<std::collections::HashSet<Uuid>> {
+    static R: OnceLock<Mutex<std::collections::HashSet<Uuid>>> = OnceLock::new();
+    R.get_or_init(Default::default)
+}
+
+/// Clears the user's "refreshing" mark when the background refresh ends (or panics).
+struct RefreshRunning(Uuid);
+
+impl RefreshRunning {
+    fn start(uid: Uuid) -> Self {
+        refreshing_set()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(uid);
+        RefreshRunning(uid)
+    }
+}
+
+impl Drop for RefreshRunning {
+    fn drop(&mut self) {
+        refreshing_set()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.0);
+    }
+}
+
+/// True while a background card refresh for this user is still running, so the
+/// profile page keeps polling until the last (often Forever) card has its level.
+pub fn stale_refresh_running(uid: Uuid) -> bool {
+    refreshing_set()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains(&uid)
+}
+
+/// Characters to refresh, in the order the API calls are made. Rows are
+/// interleaved by flavour (each flavour's first card, then each one's second...)
+/// so Forever cards, which usually have far fewer hours, are not queued behind
+/// every Retail character. Forever profiles carry no active spec, so a missing
+/// spec only marks Retail rows stale.
+pub async fn stale_refresh_queue(
+    db: &sqlx::PgPool,
+    uid: Uuid,
+) -> Result<Vec<(Uuid, String, String, String, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, game_id, region, realm_slug, name FROM (
+             SELECT id, game_id, region, realm_slug, name,
+                    row_number() OVER (PARTITION BY game_id
+                                       ORDER BY featured NULLS LAST, played_s DESC, id) AS rk
+             FROM wow_characters
+             WHERE user_id = $1
+               AND (game_id = 'wow_forever' OR verified)
+               AND (bnet_checked_at IS NULL
+                    OR bnet_checked_at < now() - interval '30 minutes'
+                    OR (game_id = 'wow' AND bnet_spec IS NULL)
+                    OR race IS NULL)
+         ) s
+         ORDER BY rk, game_id DESC
          LIMIT 40",
     )
     .bind(uid)
-    .fetch_all(&st.db)
+    .fetch_all(db)
     .await
-    .unwrap_or_default();
+}
+
+/// Profile lookups made at once. Small enough to stay well inside Blizzard's
+/// per-second limit; a full 30-character refresh takes seconds, not half a minute.
+const REFRESH_PARALLEL: usize = 4;
+
+async fn refresh_stale_for_user(st: &AppState, uid: Uuid) {
+    let rows = stale_refresh_queue(&st.db, uid)
+        .await
+        .inspect_err(|e| tracing::warn!("wow profile refresh: queue for {uid}: {e}"))
+        .unwrap_or_default();
     if rows.is_empty() {
         return;
     }
     let mut ok = 0usize;
     let total = rows.len();
-    for (id, game, region, slug, name) in rows {
-        if refresh_character_profile(st, id, &game, &region, &slug, &name).await {
-            ok += 1;
+    for batch in rows.chunks(REFRESH_PARALLEL) {
+        let mut set = tokio::task::JoinSet::new();
+        for (id, game, region, slug, name) in batch.iter().cloned() {
+            let st = st.clone();
+            set.spawn(async move {
+                refresh_character_profile(&st, id, &game, &region, &slug, &name).await
+            });
+        }
+        while let Some(r) = set.join_next().await {
+            if r.unwrap_or(false) {
+                ok += 1;
+            }
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }

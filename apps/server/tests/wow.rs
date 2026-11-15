@@ -1396,3 +1396,103 @@ async fn profile_preserves_missing_and_blank_metadata(pool: PgPool, game: &str) 
         assert_eq!(related().await, related_before);
     }
 }
+
+/// Regression (15 Nov 2026): Forever cards kept an old level until the popup was
+/// opened. The background refresh queued every Retail character (more hours)
+/// ahead of Forever ones, one at a time, so the profile's refetch ran long before
+/// any Forever card was looked up.
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn stale_refresh_puts_forever_cards_in_the_first_batch(pool: PgPool) {
+    let _app = fraglink_server::router(state(pool.clone()));
+    sqlx::query(
+        "INSERT INTO games(id, name) VALUES ('wow', 'World of Warcraft'),
+            ('wow_forever', 'World of Warcraft: Forever') ON CONFLICT DO NOTHING",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let uid: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users(id, email, handle, display_name, password_hash)
+         VALUES ($1, 'queue@example.com', 'queue', 'queue', 'x') RETURNING id",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    // 25 Retail characters, all with more hours than any Forever one, all stale.
+    for i in 0..25i64 {
+        sqlx::query(
+            "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class, level,
+                 played_s, played_at, verified, race, bnet_spec, bnet_checked_at)
+             VALUES (gen_random_uuid(), $1, 'wow', 'us', 'Frostmourne', 'frostmourne', $2, 'MAGE', 80, $3,
+                 now() - interval '2 days', true, 'Human', 'Frost', now() - interval '2 hours')",
+        )
+        .bind(uid)
+        .bind(format!("Retail{i}"))
+        .bind(1_000_000 - i * 1000)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    for (name, played) in [
+        ("Lucroner Ashborne", 93_600i64),
+        ("Lucrona Ashborne", 79_200),
+    ] {
+        sqlx::query(
+            "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class, level,
+                 played_s, played_at, verified, race, bnet_checked_at)
+             VALUES (gen_random_uuid(), $1, 'wow_forever', 'us', '', '', $2, 'PALADIN', 22, $3,
+                 now() - interval '5 days', true, 'Undead', now() - interval '2 hours')",
+        )
+        .bind(uid)
+        .bind(name)
+        .bind(played)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    // Checked 5 minutes ago: not due. Forever has no spec in Blizzard's profile,
+    // so a missing spec must not requeue it on every view; Retail still fills it.
+    sqlx::query(
+        "INSERT INTO wow_characters(id, user_id, game_id, region, realm, realm_slug, name, class, level,
+             played_s, played_at, verified, race, bnet_checked_at)
+         VALUES (gen_random_uuid(), $1, 'wow_forever', 'us', '', '', 'Fresh Ashborne', 'MAGE', 30, 10,
+             now(), true, 'Human', now() - interval '5 minutes'),
+                (gen_random_uuid(), $1, 'wow', 'us', 'Frostmourne', 'frostmourne', 'Nospec', 'MAGE', 10, 10,
+             now(), true, 'Human', now() - interval '5 minutes')",
+    )
+    .bind(uid)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let q = fraglink_server::wow::stale_refresh_queue(&pool, uid)
+        .await
+        .unwrap();
+    let names: Vec<&str> = q.iter().map(|r| r.4.as_str()).collect();
+    assert_eq!(
+        &names[..4],
+        [
+            "Lucroner Ashborne",
+            "Retail0",
+            "Lucrona Ashborne",
+            "Retail1"
+        ],
+        "{names:?}"
+    );
+    assert!(!names.contains(&"Fresh Ashborne"), "{names:?}");
+    assert!(names.contains(&"Nospec"), "{names:?}");
+    assert_eq!(names.len(), 28);
+
+    // Read-only: building the queue never touches hours or levels.
+    let hours: i64 =
+        sqlx::query_scalar("SELECT sum(played_s)::bigint FROM wow_characters WHERE user_id = $1")
+            .bind(uid)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        hours,
+        (0..25i64).map(|i| 1_000_000 - i * 1000).sum::<i64>() + 93_600 + 79_200 + 20
+    );
+}
