@@ -1447,13 +1447,18 @@ pages.profile = async () => {
     box.innerHTML = rows.slice(0, 6).map(c => wowCard(c)).join("") || `<p class="empty" style="padding:8px 0">No ${flav === "wow_forever" ? "Forever" : "Retail"} characters.</p>`;
     WOWAV.fill(box, p.handle);
   };
-  const pullFreshWowCards = () => {
+  // The server refreshes stale cards in the background; keep pulling while it
+  // says it is still going (wow_refreshing), so the last cards get their level too.
+  const pullFreshWowCards = (tries = 0) => {
+    if (!p.wow_refreshing && tries > 0) return;
     setTimeout(async () => {
       try {
         const fresh = await api("/users/" + encodeURIComponent(p.handle) + "/profile?limit=" + GPAGE + "&tz=" + encodeURIComponent(TZ), { keepSession: true });
         if (!fresh || !Array.isArray(fresh.wow_characters)) return;
         p.wow_characters = fresh.wow_characters;
+        p.wow_refreshing = fresh.wow_refreshing === true;
         refreshVisibleWow();
+        if (p.wow_refreshing && tries < 8) pullFreshWowCards(tries + 1);
       } catch (e) {}
     }, 2500);
   };
