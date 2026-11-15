@@ -241,6 +241,7 @@ async fn edit(
             .fetch_optional(&st.db)
             .await?;
     let (bg, bn) = before.ok_or_else(AppError::not_found)?;
+    let mut tx = st.db.begin().await?;
     sqlx::query(
         "UPDATE detection_aliases SET game_id = $2, note = $3, updated_at = now(), updated_by = $4 WHERE id = $1",
     )
@@ -248,8 +249,25 @@ async fn edit(
     .bind(game)
     .bind(note)
     .bind(s.user.id)
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(
+            &s,
+            "detection",
+            format!("Changed detection rule to {game}"),
+        )
+        .game(game, None)
+        .diff(json!({
+            "rule_id": id,
+            "game_id": { "old": bg, "new": game },
+            "note": { "old": bn, "new": note },
+        })),
+    )
+    .await?;
+    tx.commit().await?;
     audit(
         &st,
         &s,
@@ -311,6 +329,7 @@ async fn add(
         ));
     }
     let note = r.note.as_deref().map(str::trim).filter(|n| !n.is_empty());
+    let mut tx = st.db.begin().await?;
     let id: Option<i64> = sqlx::query_scalar(
         "INSERT INTO detection_aliases(kind, pattern, game_id, note, updated_by) VALUES($1, $2, $3, $4, $5)
          ON CONFLICT DO NOTHING RETURNING id",
@@ -320,10 +339,23 @@ async fn add(
     .bind(game)
     .bind(note)
     .bind(s.user.id)
-    .fetch_optional(&st.db)
+    .fetch_optional(&mut *tx)
     .await?;
     let id =
         id.ok_or_else(|| AppError::bad_request("exists", "There is already a rule for that."))?;
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(
+            &s,
+            "detection",
+            format!("Added {kind} detection rule for {game}", kind = r.kind),
+        )
+        .game(game, None)
+        .diff(json!({ "rule_id": id, "kind": r.kind, "pattern": pattern, "game_id": game, "note": note })),
+    )
+    .await?;
+    tx.commit().await?;
     audit(
         &st,
         &s,
@@ -342,13 +374,27 @@ async fn remove(
     Path(id): Path<i64>,
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
+    let mut tx = st.db.begin().await?;
     let gone: Option<(String, String, String)> = sqlx::query_as(
         "DELETE FROM detection_aliases WHERE id = $1 RETURNING kind, pattern, game_id",
     )
     .bind(id)
-    .fetch_optional(&st.db)
+    .fetch_optional(&mut *tx)
     .await?;
     let (kind, pattern, game_id) = gone.ok_or_else(AppError::not_found)?;
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(
+            &s,
+            "detection",
+            format!("Removed {kind} detection rule from {game_id}"),
+        )
+        .game(&game_id, None)
+        .diff(json!({ "rule_id": id, "kind": kind, "pattern": pattern, "game_id": game_id })),
+    )
+    .await?;
+    tx.commit().await?;
     audit(
         &st,
         &s,

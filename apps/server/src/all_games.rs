@@ -863,6 +863,9 @@ async fn track(
         .execute(&mut *tx)
         .await?;
     }
+    if !first && !changes.is_empty() {
+        crate::game_history::record_list_sync(&mut tx, st, &changes, updated).await?;
+    }
     tx.commit().await?;
     let count = |k: &str| changes.iter().filter(|c| c.1 == k).count();
     Ok(if first {

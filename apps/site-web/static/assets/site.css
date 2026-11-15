@@ -1308,3 +1308,33 @@ tr.hc-flag td{background:#1d1010}
 
 /* Markdown content and compact Admin formatting tools. */
 .md-toolbar{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 6px}.md-toolbar .btn{box-shadow:none;min-height:26px;flex:0 0 auto;width:auto;padding:4px 7px;font-size:11.5px}.md-toolbar .btn:focus-visible{outline:2px solid #7894b2;outline-offset:2px}.md-preview{border-top:1px solid var(--line);padding-top:10px;margin:10px 0}.md-preview h3{font-size:13px;margin:0 0 8px}.md-content{overflow-wrap:anywhere}.md-content p{margin:0 0 .8em}.md-content p:last-child{margin-bottom:0}.md-content ul,.md-content ol{padding-left:22px;margin:6px 0}.md-content li{margin:3px 0}.md-content code{font-family:var(--mono);font-size:.92em;background:#101923;padding:1px 4px;border-radius:2px}.md-content pre{overflow:auto;background:#101923;padding:10px}.md-content pre code{padding:0}.md-content blockquote{border-left:2px solid var(--line2);padding-left:12px;margin:10px 0}
+
+/* Public /games catalogue and Admin > Games change log */
+.games-lay{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:800px){.games-lay{grid-template-columns:1fr}}
+.g-tools{padding:10px 12px;border-bottom:1px solid #1c2836}
+.g-tools .in{width:100%;max-width:320px}
+.g-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 10px}
+.g-row{display:flex;align-items:center;gap:8px;padding:5px 2px;color:var(--text);font-weight:600;font-size:13px}
+.g-row img{width:32px;height:32px;border-radius:3px;background:#0d1218;flex:0 0 32px;object-fit:cover}
+.g-upd{list-style:none;margin:0;padding:0}
+.g-upd li{display:grid;grid-template-columns:86px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #1a2532;font-size:12.5px}
+.g-upd li:last-child{border:0}
+.g-upd time{color:#8ea2b8;font-size:11.5px}
+.games-page .g-main .body{padding-top:10px}
+.games-page [data-more]{margin:12px 0 0}
+.glog-tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid #1c2836}
+.glog-tb input.in,.glog-tb select.in{width:auto;min-width:160px}
+.glog{font-size:12.5px}
+.glog details{border-bottom:1px solid #1a2532;padding:0}
+.glog details:last-child{border:0}
+.glog summary{display:grid;grid-template-columns:118px 1fr auto;gap:8px;align-items:baseline;padding:8px 12px;cursor:pointer;list-style:none}
+.glog summary::-webkit-details-marker{display:none}
+.glog time{color:#8ea2b8;font-size:11.5px}
+.glog .sum{color:#e8eef4}
+.glog .meta{color:#8ea2b8;font-size:11.5px;white-space:nowrap}
+.glog .diff{margin:0 12px 10px 118px;background:#0d1218;border:1px solid #1c2836;padding:8px 10px;font-family:var(--mono);font-size:11.5px;color:#c8d4e0;overflow:auto}
+.glog .diff div{display:grid;grid-template-columns:130px 1fr 1fr;gap:8px;padding:2px 0}
+.glog .old{color:#c98989}
+.glog .new{color:#9dca9d}
+.glog-add{padding:10px 12px;border-top:1px solid #1c2836}

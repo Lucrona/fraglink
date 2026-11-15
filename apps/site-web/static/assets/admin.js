@@ -244,14 +244,85 @@ function stTag(r) {
 async function games(arg) {
   arg = arg || "";
   try { arg = decodeURIComponent(arg); } catch (e) { /* the hash was already decoded */ }
+  if (arg === "log" || arg.startsWith("log/")) {
+    return gamesLog(arg.startsWith("log/") ? arg.slice(4) : "");
+  }
   if (arg.startsWith("id:")) {
     AG.open = arg.slice(3); AG.q = AG.open; AG.offset = 0; AG.src = ""; AG.status = ""; AG.flag = "";
   } else if (arg) { AG.q = arg; AG.offset = 0; AG.open = ""; }
   return allGames();
 }
+
+const GLOG_TYPES = [["", "Every type"], ["added", "Added"], ["edited", "Edited"], ["renamed", "Renamed"], ["merged", "Merged"], ["hidden", "Hidden"], ["unhidden", "Unhidden"], ["removed", "Removed"], ["retired", "Retired"], ["unretired", "Unretired"], ["detection", "Detection"], ["icon", "Icon"], ["steam_sync", "Steam sync"], ["list_sync", "Games list"], ["manual", "Manual"], ["history_started", "History started"]];
+function glogDiff(d) {
+  if (!d || typeof d !== "object") return "";
+  const rows = [];
+  for (const [k, v] of Object.entries(d)) {
+    if (v && typeof v === "object" && ("old" in v || "new" in v)) {
+      const show = x => x == null || x === "" ? "—" : Array.isArray(x) ? (x.length ? x.join(", ") : "—") : typeof x === "object" ? JSON.stringify(x) : String(x);
+      rows.push(`<div><b>${esc(k.replace(/_/g, " "))}</b><span class="old">${esc(show(v.old))}</span><span class="new">${esc(show(v.new))}</span></div>`);
+    }
+  }
+  if (rows.length) return `<div class="diff">${rows.join("")}</div>`;
+  return `<pre class="diff">${esc(JSON.stringify(d, null, 2))}</pre>`;
+}
+async function gamesLog(game) {
+  game = game || "";
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Change log</span><span class="more"><a href="#games">Back to games</a></span></h2>
+    <div class="glog-tb">
+      <input class="in" type="search" id="glog-game" placeholder="Filter by game id" value="${esc(game)}" autocomplete="off" aria-label="Filter by game">
+      <select class="in" id="glog-type" aria-label="Type">${GLOG_TYPES.map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
+      <span class="dimt" id="glog-count" style="margin-left:auto"></span>
+    </div>
+    <div id="glog"><div class="body empty">Loading…</div></div>
+    <form class="glog-add f" id="glog-add"><label>Add a public note</label>
+      <div class="row"><input class="in" name="summary" placeholder="What changed" required maxlength="300" style="flex:1" aria-label="Summary">
+        <input class="in" name="game_id" placeholder="Game id (optional)" value="${esc(game)}" style="width:180px" aria-label="Game id">
+        <button class="btn sm dl" type="submit">Add entry</button></div>
+      <div class="alert" id="glog-msg" hidden></div>
+    </form></section>`;
+  const st = { game, type: "", offset: 0 };
+  async function load() {
+    const box = $("#glog");
+    const d = await api("/admin/games-history?" + new URLSearchParams({ game: st.game, type: st.type, offset: st.offset, limit: 50 }));
+    const rows = d.entries || [];
+    $("#glog-count").textContent = (d.list_updated ? `Detection list ${d.list_updated} · ` : "") + num(d.total) + " entries";
+    if (!rows.length) { box.innerHTML = `<div class="body empty">No history matches these filters.</div>`; return; }
+    const from = st.offset + 1, to = st.offset + rows.length;
+    box.innerHTML = `<div class="glog">${rows.map(e => {
+      const vis = e.public && !e.hidden_from_public ? `<span class="pill">public</span>` : e.hidden_from_public ? `<span class="pill">hidden</span>` : "";
+      const hideBtn = e.public || e.hidden_from_public
+        ? `<button class="btn sm" type="button" data-hide="${e.id}" data-on="${e.hidden_from_public ? "0" : "1"}">${e.hidden_from_public ? "Show on /games" : "Hide from /games"}</button>`
+        : "";
+      const gameLink = e.game_id ? `<a href="#games/id:${encodeURIComponent(e.game_id)}">${esc(e.game_name || e.game_id)}</a>` : "";
+      const list = e.list_updated ? ` · list ${esc(e.list_updated)}` : "";
+      return `<details><summary><time>${when(e.at)}</time><span class="sum">${esc(e.summary)} ${vis}</span><span class="meta">${esc(e.by || "")}${gameLink ? " · " + gameLink : ""}${list}</span></summary>${glogDiff(e.diff)}${hideBtn ? `<div class="xact" style="margin:0 12px 10px 118px">${hideBtn}</div>` : ""}</details>`;
+    }).join("")}</div>
+      ${d.total > d.limit ? `<div class="pager"><button class="btn sm" data-loff="${Math.max(0, st.offset - d.limit)}" ${st.offset ? "" : "disabled"}>‹ Prev</button><span>${from}–${to} of ${num(d.total)}</span><button class="btn sm" data-loff="${st.offset + d.limit}" ${to < d.total ? "" : "disabled"}>Next ›</button></div>` : ""}`;
+  }
+  let t;
+  $("#glog-game").addEventListener("input", e => { clearTimeout(t); t = setTimeout(() => { st.game = e.target.value.trim(); st.offset = 0; load().catch(x => { $("#glog").innerHTML = `<div class="alert err">${esc(x.message)}</div>`; }); }, 300); });
+  $("#glog-type").addEventListener("change", e => { st.type = e.target.value; st.offset = 0; load().catch(x => { $("#glog").innerHTML = `<div class="alert err">${esc(x.message)}</div>`; }); });
+  view.onclick = e => {
+    const pg = e.target.closest("[data-loff]"); if (pg) { st.offset = +pg.dataset.loff; load().then(() => $("#glog").scrollIntoView({ block: "start" })); return; }
+    const h = e.target.closest("[data-hide]"); if (!h) return;
+    act(h, async () => { await api(`/admin/games-history/${h.dataset.hide}/visibility`, { method: "POST", body: { hidden: h.dataset.on === "1" } }); await load(); });
+  };
+  $("#glog-add").addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      await api("/admin/games-history", { method: "POST", body: { summary: f.summary.value.trim(), game_id: f.game_id.value.trim() || null, public: true } });
+      f.summary.value = "";
+      msg($("#glog-msg"), "Added.", true);
+      st.offset = 0; await load();
+    } catch (x) { msg($("#glog-msg"), x.message); }
+  });
+  await load();
+}
 async function allGames() {
   view.innerHTML = `<section class="panel" style="margin-bottom:12px"><h2><span class="tab">Where the list comes from</span></h2><div id="agfresh"><div class="body empty">Loading…</div></div></section>
-    <section class="panel"><h2><span class="tab">Games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></span></h2>
+    <section class="panel"><h2><span class="tab">Games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></span><span class="more"><a href="#games/log">Change log</a></span></h2>
     <div class="ag-tb"><input class="in" type="search" id="agq" placeholder="Search name, id, exe, alias or Steam app id" value="${esc(AG.q)}" autocomplete="off" aria-label="Search games">
       <select class="in" id="agflag" aria-label="Show only"><option value="">Everything</option>${AG_FLAG.map(([k, v]) => `<option value="${k}"${AG.flag === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
       <select class="in" id="agsort" aria-label="Sort"><option value="updated">Last change first</option><option value="added">Newest added</option><option value="name">Name A–Z</option><option value="players">Most players</option><option value="hours">Most hours</option></select>
@@ -371,7 +442,7 @@ async function toggleAll(tr, keep) {
     <div class="xb"><h4>Names &amp; links</h4><div class="xkv">${names.map(n => `<b>${esc(n[0])}</b><span>${n[2] ? n[1] : esc(n[1])}</span>`).join("")}
       <b>Players</b><span>${g ? `${num(g.players)} · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})` : "-"}</span>
       <b>Links</b><span>${links.join(" · ") || `<span class="dimt">none</span>`}</span></div></div>
-    <div class="xb wide"><h4>History <span>${ev.length} event${ev.length === 1 ? "" : "s"} · staff, Steam sync and Games list</span></h4>${ev.length ? `<div class="lg">${ev.map(histLine).join("")}</div>` : `<div class="xkv"><span class="dimt">Nothing recorded yet.</span></div>`}</div></div>
+    <div class="xb wide"><h4>History <span>${ev.length} event${ev.length === 1 ? "" : "s"} · staff, Steam sync and Games list</span></h4>${ev.length ? `<div class="lg">${ev.map(histLine).join("")}</div>` : `<div class="xkv"><span class="dimt">Nothing recorded yet.</span></div>`}<div class="xact" style="margin-top:8px"><a href="#games/log/${encodeURIComponent(id)}">Open in Change log</a></div></div></div>
     <div class="xact"><span class="note">Edits save here and land in History. Hours recorded under another id for this same game stay on that id.</span><a class="btn sm" href="#detection">Detection rules</a></div>
     <section class="panel inline-edit" id="gedit"><div class="body empty">Loading editor…</div></section></td>`;
   editGame(id).catch(e => { const box = $("#gedit"); if (box) box.innerHTML = `<h2><span class="tab">Edit game</span></h2><div class="alert err">${esc(e.message)}</div>`; });
@@ -466,7 +537,7 @@ async function editGame(id) {
   const g = await api("/admin/games/" + encodeURIComponent(id));
   const o = g.override || {};
   const bust = "?t=" + Date.now();
-  box.innerHTML = `<h2><span class="tab">Edit game</span></h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="gf">
+  box.innerHTML = `<h2><span class="tab">Edit game</span><span class="more"><a href="#games/log/${encodeURIComponent(id)}">Change log</a></span></h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="gf">
     <div><b>${esc(g.public_name || g.name || g.id)}</b> <span class="mono dimt">${esc(g.id)}</span><div class="dimt">Sources: ${srcChips(g)}${g.updated_at ? ` · last changed ${when(g.updated_at)}` : ""} · ${g.players} players · ${hrs(g.total_min)} (tracked ${hrs(g.tracked_min)} · imported ${hrs(g.imported_min)})</div></div>
     <label>Display name override<input type="text" name="name" maxlength="80" value="${esc(o.name || "")}" placeholder="${esc(g.name)}"><small>Leave empty to use the list name.</small></label>
     <label class="check"><input type="checkbox" name="hidden" ${o.hidden ? "checked" : ""}> Hide from public (shown as "Playing a game")</label>

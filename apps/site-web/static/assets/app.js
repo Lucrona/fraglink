@@ -321,7 +321,7 @@ function renderHeader() {
   if (nav) {
     const items = [["home", "/", "Home"]];
     if (u) items.push(["profile", "/u/" + encodeURIComponent(u.handle), "Profile"], ["friends", "/friends", "Friends"]);
-    items.push(["download", "/download", "Download"], ["faq", "/faq", "FAQ"]);
+    items.push(["download", "/download", "Download"], ["faq", "/faq", "FAQ"], ["games", "/games", "Games"]);
     const mine = page === "profile" && u && location.pathname.toLowerCase() === "/u/" + u.handle.toLowerCase();
     nav.innerHTML = items.map(([k, href, label]) => {
       const on = (k === page && (k !== "profile" || mine)) ? "on" : "";
@@ -1146,6 +1146,52 @@ pages.home = async () => {
   }
 };
 pages.download = () => fillDownload();
+pages.games = async () => {
+  const root = document.querySelector(".games-page");
+  if (!root) return;
+  const upd = root.querySelector("[data-updates]");
+  const list = root.querySelector("[data-list]");
+  const q = root.querySelector("#games-q");
+  const count = root.querySelector("[data-count]");
+  const more = root.querySelector("[data-more]");
+  const none = root.querySelector("[data-none]");
+  const updDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
+  try {
+    const u = await api("/games/updates");
+    const rows = u.updates || [];
+    upd.innerHTML = rows.length
+      ? `<ul class="g-upd">${rows.map(e => `<li><time>${updDate.format(new Date(e.at))}</time><span>${esc(e.summary)}</span></li>`).join("")}</ul>`
+      : `<p class="empty">No catalogue updates yet.</p>`;
+  } catch (e) {
+    upd.innerHTML = `<p class="empty">${esc(e.message || "Could not load updates.")}</p>`;
+  }
+  let offset = 0, total = 0, term = "";
+  async function load(reset) {
+    if (reset) { offset = 0; list.innerHTML = ""; }
+    const d = await api("/games/catalogue?" + new URLSearchParams({ q: term, offset, limit: 100 }));
+    total = d.total || 0;
+    const games = d.games || [];
+    if (reset && !games.length) {
+      none.hidden = false;
+      none.textContent = term ? "No games match that search." : "No games to show yet.";
+      more.hidden = true;
+      count.textContent = "";
+      return;
+    }
+    none.hidden = true;
+    const html = games.map(g => `<div class="g-row"><img src="${esc(g.icon)}" width="32" height="32" alt="" data-hide-broken><span>${esc(g.name)}</span></div>`).join("");
+    if (reset) list.innerHTML = html; else list.insertAdjacentHTML("beforeend", html);
+    offset += games.length;
+    count.textContent = total ? `${offset.toLocaleString("en")} of ${total.toLocaleString("en")}` : "";
+    more.hidden = offset >= total;
+    $$("img[data-hide-broken]", list).forEach(img => { img.addEventListener("error", () => { img.style.visibility = "hidden"; }, { once: true }); });
+  }
+  let t;
+  q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { term = q.value.trim(); load(true).catch(e => { list.innerHTML = ""; none.hidden = false; none.textContent = e.message; }); }, 250); });
+  more.addEventListener("click", () => load(false).catch(() => {}));
+  try { await load(true); } catch (e) { none.hidden = false; none.textContent = e.message || "Could not load the games list."; }
+};
+
 
 pages.login = () => {
   if (token() && me()) { location.replace(safeNext(qs("next")) || "/"); return; }
@@ -2210,7 +2256,7 @@ function applyFeatures() {
 }
 
 /* ---------- shared "You are here" breadcrumb (every page except home, which has its own bar) ---------- */
-const CRUMBS = { download: [["Download", "/download"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
+const CRUMBS = { download: [["Download", "/download"]], games: [["Games", "/games"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
   login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
   settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
   verify: [["Confirm your email"]], wowupload: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"], ["Upload /played"]], bnetverify: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"], ["Verify characters"]], bnet: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };

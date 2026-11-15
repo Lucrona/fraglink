@@ -590,6 +590,70 @@ async fn import_inner(state: &AppState, user_id: Uuid) -> ApiResult<ImportResult
         .execute(&mut *tx)
         .await?;
     }
+    if !changed.is_empty() {
+        let mut added = 0;
+        let mut renamed = 0;
+        let mut icons = 0;
+        let mut games_d = Vec::new();
+        for (gid, b, a) in &changed {
+            let was = b.as_ref();
+            let is_new = was.is_none();
+            let name_ch = was.is_some_and(|w| w.0 != a.0);
+            let icon_ch = was.is_some_and(|w| w.2 != a.2) || (is_new && a.2.is_some());
+            if is_new {
+                added += 1;
+            }
+            if name_ch {
+                renamed += 1;
+            }
+            if icon_ch {
+                icons += 1;
+            }
+            games_d.push(serde_json::json!({
+                "id": gid,
+                "name": a.0,
+                "added": is_new,
+                "renamed": name_ch,
+                "icon": icon_ch,
+            }));
+        }
+        let mut bits = Vec::new();
+        if added > 0 {
+            bits.push(format!(
+                "{added} game{} added",
+                if added == 1 { "" } else { "s" }
+            ));
+        }
+        if renamed > 0 {
+            bits.push(format!("{renamed} renamed"));
+        }
+        if icons > 0 {
+            bits.push(format!(
+                "{icons} icon{} updated",
+                if icons == 1 { "" } else { "s" }
+            ));
+        }
+        if bits.is_empty() {
+            bits.push(format!(
+                "{} catalogue row{} updated",
+                changed.len(),
+                if changed.len() == 1 { "" } else { "s" }
+            ));
+        }
+        let summary = format!("Steam sync: {}", bits.join(", "));
+        let public = added + renamed + icons > 0;
+        crate::game_history::insert(
+            &mut tx,
+            state,
+            crate::game_history::New::system("system: steam sync", "steam_sync", summary)
+                .diff(serde_json::json!({
+                    "added": added, "renamed": renamed, "icons": icons,
+                    "total": changed.len(), "games": games_d,
+                }))
+                .public(public),
+        )
+        .await?;
+    }
     sqlx::query("UPDATE linked_accounts SET sync_status = 'ok', last_sync_at = now() WHERE user_id = $1 AND provider = 'steam'")
         .bind(user_id)
         .execute(&mut *tx)
