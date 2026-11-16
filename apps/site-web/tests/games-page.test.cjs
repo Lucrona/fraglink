@@ -8,6 +8,7 @@ const layout = fs.readFileSync(path.join(root, 'layout.html'), 'utf8');
 const page = fs.readFileSync(path.join(root, 'pages/games.html'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'static/assets/app.js'), 'utf8');
 const admin = fs.readFileSync(path.join(root, 'static/assets/admin.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'static/assets/site.css'), 'utf8');
 
 test('Games is in the left nav after Profile and Friends when signed in, and after FAQ when signed out', () => {
   assert.match(layout, /<nav class="nav">[^<]*<a href="\/">Home<\/a><a href="\/download">Download<\/a><a href="\/faq">FAQ<\/a><a href="\/games">Games<\/a><\/nav>/);
@@ -53,7 +54,16 @@ test('games page is search-only, with live suggestions and a shareable query', (
   assert.match(app, /nameNorm/);
   assert.match(app, /\/games\/requests/);
   assert.match(app, /request it below/);
+  assert.match(app, /g-thumb/);
+  assert.match(app, /g-letter/);
+  assert.match(app, /paintThumbs/);
+  assert.match(app, /\/api\/v1\/art\//);
+  assert.match(app, /\/icons\/games\/64\//);
+  assert.match(app, /loading = box.closest\("#games-suggest"\) \? "eager" : "lazy"/);
+  assert.match(css, /width:92px/);
+  assert.match(css, /height:43px/);
 });
+
 
 test('admin games page has a change log and a requests queue', () => {
   assert.match(admin, /#games\/log/);

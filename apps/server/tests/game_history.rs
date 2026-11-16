@@ -541,7 +541,7 @@ async fn list_sync_and_public_updates_and_manual_hide(pool: PgPool) {
     }
 
     // catalogue: no hours or user fields, hidden games omitted, search works
-    sqlx::query("INSERT INTO games (id, name, verified) VALUES ('shown', 'Zebra Quest', true), ('hideme', 'Secret Game', true)")
+    sqlx::query("INSERT INTO games (id, name, verified, steam_appid) VALUES ('shown', 'Zebra Quest', true, 7940), ('hideme', 'Secret Game', true, 1)")
         .execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO game_overrides (game_id, hidden) VALUES ('hideme', true)")
         .execute(&pool)
@@ -551,9 +551,12 @@ async fn list_sync_and_public_updates_and_manual_hide(pool: PgPool) {
         .await
         .json();
     let games = cat["games"].as_array().unwrap();
-    assert!(games.iter().any(|g| g[1] == "Zebra Quest"));
+    let zebra = games.iter().find(|g| g[1] == "Zebra Quest").expect("zebra");
+    assert_eq!(zebra[0], "shown");
+    assert_eq!(zebra[1], "Zebra Quest");
+    assert_eq!(zebra[2], 7940);
     assert!(games.iter().all(|g| {
-        g.as_array().is_some_and(|a| a.len() == 2)
+        g.as_array().is_some_and(|a| a.len() == 2 || a.len() == 3)
             && g.get("hours").is_none()
             && g.get("players").is_none()
     }));
@@ -564,6 +567,22 @@ async fn list_sync_and_public_updates_and_manual_hide(pool: PgPool) {
     let full = api(&app, "GET", "/api/v1/games/catalogue", None, None).await;
     assert_eq!(full.status, StatusCode::OK, "{}", full.text);
     assert!(full.headers.get("etag").is_some());
+    assert_eq!(
+        full.headers
+            .get("cache-control")
+            .and_then(|v| v.to_str().ok()),
+        Some("public, max-age=3600")
+    );
+    let body: Value = serde_json::from_str(&full.text).unwrap();
+    for g in body["games"].as_array().unwrap() {
+        let a = g.as_array().expect("compact array");
+        assert!(a.len() == 2 || a.len() == 3, "{g}");
+        assert!(a[0].is_string() && a[1].is_string());
+        if a.len() == 3 {
+            assert!(a[2].as_u64().is_some_and(|n| n > 0), "{g}");
+        }
+        assert!(g.get("hours").is_none() && g.get("user_id").is_none());
+    }
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]

@@ -612,14 +612,20 @@ async fn catalogue(
     let term = q.q.as_deref().unwrap_or("").trim().to_lowercase();
     let mut games = public_catalogue(&st).await?;
     if !term.is_empty() {
-        games.retain(|(id, name)| {
-            name.to_lowercase().contains(&term) || id.to_lowercase().contains(&term)
+        games.retain(|g| {
+            g.name.to_lowercase().contains(&term) || g.id.to_lowercase().contains(&term)
         });
     }
     let total = games.len() as i64;
-    // Compact [id, name] pairs only — no icon URLs, hours or user fields.
+    // Compact [id, name] or [id, name, steam_appid] — no icon URLs, hours or user fields.
     let payload = json!({
-        "games": games.iter().map(|(id, name)| json!([id, name])).collect::<Vec<_>>(),
+        "games": games
+            .iter()
+            .map(|g| match g.steam_appid {
+                Some(a) => json!([g.id, g.name, a]),
+                None => json!([g.id, g.name]),
+            })
+            .collect::<Vec<_>>(),
         "total": total,
     });
     if !term.is_empty() {
@@ -637,11 +643,21 @@ async fn catalogue(
     Ok(crate::games::respond(&headers, &etag, &body, gz.as_deref()))
 }
 
-/// Every supported/detected game: icon + name only, no hours or player data.
-/// Hidden and unlisted entries are left out. Alphabetical by name, then id.
-pub async fn public_catalogue(st: &AppState) -> ApiResult<Vec<(String, String)>> {
-    use std::collections::BTreeMap;
+/// One public catalogue row. `steam_appid` is omitted from the JSON when unknown.
+#[derive(Clone, Debug)]
+pub struct CatalogueEntry {
+    pub id: String,
+    pub name: String,
+    pub steam_appid: Option<u32>,
+}
+
+/// Every supported/detected game: id, name, and a Steam app id when we know one.
+/// No hours or player data. Hidden and unlisted entries are left out.
+/// Alphabetical by name, then id.
+pub async fn public_catalogue(st: &AppState) -> ApiResult<Vec<CatalogueEntry>> {
+    use std::collections::{BTreeMap, HashMap};
     let mut map: BTreeMap<String, String> = BTreeMap::new();
+    let mut appids: HashMap<String, u32> = HashMap::new();
 
     if let Some(db) = crate::games::detectable_db(st) {
         for g in db.games() {
@@ -661,8 +677,15 @@ pub async fn public_catalogue(st: &AppState) -> ApiResult<Vec<(String, String)>>
         }
     }
 
-    let rows: Vec<(String, String, bool, Option<String>, Option<bool>)> = sqlx::query_as(
-        "SELECT g.id, g.name, g.verified, o.name, o.hidden
+    let rows: Vec<(
+        String,
+        String,
+        bool,
+        Option<String>,
+        Option<bool>,
+        Option<i32>,
+    )> = sqlx::query_as(
+        "SELECT g.id, g.name, g.verified, o.name, o.hidden, g.steam_appid
          FROM games g
          LEFT JOIN game_overrides o ON o.game_id = g.id",
     )
@@ -675,7 +698,12 @@ pub async fn public_catalogue(st: &AppState) -> ApiResult<Vec<(String, String)>>
         .map(|r| r.0.clone())
         .collect();
 
-    for (id, name, verified, ov_name, hid) in &rows {
+    for (id, name, verified, ov_name, hid, appid) in &rows {
+        if let Some(a) = *appid {
+            if a > 0 {
+                appids.insert(id.clone(), a as u32);
+            }
+        }
         if hid.unwrap_or(false) {
             map.remove(id);
             continue;
@@ -696,11 +724,41 @@ pub async fn public_catalogue(st: &AppState) -> ApiResult<Vec<(String, String)>>
         map.remove(id);
     }
 
-    let mut out: Vec<(String, String)> = map.into_iter().collect();
+    // Fill in app ids from the id itself, Steam signatures, and the detectable list
+    // when the games table didn't already have one.
+    for id in map.keys() {
+        if let Some(a) = fraglink_core::icons::appid_from_game_id(id) {
+            appids.entry(id.clone()).or_insert(a);
+        }
+    }
+    let sigs = crate::steam::sigs();
+    let icons = st.games.icon_index();
+    for id in map.keys() {
+        if appids.contains_key(id) {
+            continue;
+        }
+        if let Some(a) = sigs.get(id).and_then(|g| g.steam_appids.first().copied()) {
+            appids.insert(id.clone(), a);
+            continue;
+        }
+        if let Some(a) = icons.by_slug.get(id).and_then(|s| s.steam_appid) {
+            appids.insert(id.clone(), a);
+        }
+    }
+
+    let mut out: Vec<CatalogueEntry> = map
+        .into_iter()
+        .map(|(id, name)| CatalogueEntry {
+            steam_appid: appids.get(&id).copied(),
+            id,
+            name,
+        })
+        .collect();
     out.sort_by(|a, b| {
-        a.1.to_lowercase()
-            .cmp(&b.1.to_lowercase())
-            .then_with(|| a.0.cmp(&b.0))
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.id.cmp(&b.id))
     });
     Ok(out)
 }
