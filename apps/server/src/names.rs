@@ -242,6 +242,18 @@ pub fn lookup_steam_name(st: &AppState, id: &str) {
 /// Admin: approve a "Track this as a game?" program under a name. Its `exe:` game
 /// keeps every session already recorded and shows the approved name from now on.
 pub async fn approve(db: &sqlx::PgPool, exe: &str, name: &str) -> anyhow::Result<String> {
+    let mut tx = db.begin().await?;
+    let id = approve_tx(&mut tx, exe, name).await?;
+    tx.commit().await?;
+    Ok(id)
+}
+
+/// Same as [`approve`], on an open transaction so catalogue history can be written with it.
+pub async fn approve_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    exe: &str,
+    name: &str,
+) -> anyhow::Result<String> {
     let exe = exe.trim();
     let name = name.trim();
     if !crate::games::valid_exe(exe) {
@@ -257,11 +269,11 @@ pub async fn approve(db: &sqlx::PgPool, exe: &str, name: &str) -> anyhow::Result
     )
     .bind(&id)
     .bind(name)
-    .execute(db)
+    .execute(&mut **tx)
     .await?;
     sqlx::query("UPDATE game_suggestions SET status = 'accepted' WHERE lower(exe) = lower($1)")
         .bind(exe)
-        .execute(db)
+        .execute(&mut **tx)
         .await?;
     Ok(id)
 }

@@ -11,7 +11,8 @@
 
 use crate::auth::{self, AuthUser, User};
 use crate::error::{ApiResult, AppError};
-use crate::{api, game_overrides, names, AppState};
+use crate::game_overrides::{self, GameOverride};
+use crate::{api, names, AppState};
 use axum::body::Bytes;
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
@@ -108,6 +109,8 @@ pub fn routes() -> Router<AppState> {
         .merge(crate::hours_review::routes())
         .merge(crate::suggested_merge::routes())
         .merge(crate::admin_desk::routes())
+        .merge(crate::game_history::admin_routes())
+        .merge(crate::game_requests::admin_routes())
         .route("/api/v1/admin/server", get(server))
         .route(
             "/api/v1/admin/announcements",
@@ -387,9 +390,21 @@ async fn approve(
     let exe = r.exe.trim().to_lowercase();
     let id = format!("exe:{exe}");
     let before = game_row(&st, &id).await?;
-    let id = names::approve(&st.db, &exe, &r.name)
+    let mut tx = st.db.begin().await?;
+    let id = names::approve_tx(&mut tx, &exe, &r.name)
         .await
         .map_err(|e| bad("invalid", &e.to_string()))?;
+    let label = r.name.trim().to_string();
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(&s, "added", format!("Added {label}"))
+            .game(&id, Some(label.clone()))
+            .diff(json!({ "name": { "old": before, "new": label }, "verified": true }))
+            .public(true),
+    )
+    .await?;
+    tx.commit().await?;
     audit(
         &st,
         &s,
@@ -960,6 +975,19 @@ async fn game_save(
             .map(|b| b.path_hints.clone())
             .unwrap_or_default(),
     };
+    let after_ov = GameOverride {
+        game_id: id.clone(),
+        name: name.clone(),
+        hidden: r.hidden,
+        extra_exes: exes.clone(),
+        has_icon: before.as_ref().map(|b| b.has_icon).unwrap_or(false),
+        icon_pref: before.as_ref().and_then(|b| b.icon_pref.clone()),
+        art_pref: before.as_ref().and_then(|b| b.art_pref.clone()),
+        steam_appid: before.as_ref().and_then(|b| b.steam_appid),
+        aliases: aliases.clone(),
+        path_hints: hints.clone(),
+    };
+    let mut tx = st.db.begin().await?;
     sqlx::query(
         "INSERT INTO game_overrides(game_id, name, hidden, extra_exes, updated_by, aliases, path_hints)
          VALUES($1, $2, $3, $4, $5, $6, $7)
@@ -974,7 +1002,7 @@ async fn game_save(
     .bind(s.user.id)
     .bind(&aliases)
     .bind(&hints)
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
     // nothing left to keep: drop the row
     sqlx::query(
@@ -984,8 +1012,56 @@ async fn game_save(
            AND aliases = '{}' AND path_hints = '{}'",
     )
     .bind(&id)
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    let gh = crate::game_history::fields_changed(&[
+        (
+            "name",
+            crate::game_history::ov_name(before.as_ref()),
+            crate::game_history::ov_name(Some(&after_ov)),
+        ),
+        (
+            "hidden",
+            crate::game_history::ov_hidden(before.as_ref()),
+            crate::game_history::ov_hidden(Some(&after_ov)),
+        ),
+        (
+            "extra_exes",
+            crate::game_history::ov_exes(before.as_ref()),
+            crate::game_history::ov_exes(Some(&after_ov)),
+        ),
+        (
+            "aliases",
+            crate::game_history::ov_aliases(before.as_ref()),
+            crate::game_history::ov_aliases(Some(&after_ov)),
+        ),
+        (
+            "path_hints",
+            crate::game_history::ov_hints(before.as_ref()),
+            crate::game_history::ov_hints(Some(&after_ov)),
+        ),
+    ]);
+    if let Some(diff) = gh {
+        let label = crate::game_history::game_label(
+            &id,
+            after_ov
+                .name
+                .as_deref()
+                .or(before.as_ref().and_then(|b| b.name.as_deref()))
+                .or(Some(id.as_str())),
+        );
+        let (action, summary, public) = crate::game_history::edit_kind(&diff, &label);
+        crate::game_history::insert(
+            &mut tx,
+            &st,
+            crate::game_history::New::admin(&s, action, summary)
+                .game(&id, Some(label))
+                .diff(diff)
+                .public(public),
+        )
+        .await?;
+    }
+    tx.commit().await?;
     let m = game_overrides::reload(&st).await?;
     let after = m.get(&id).cloned();
     audit(&st, &s, "game.edit", &id, json!(before), json!(after)).await?;
@@ -1093,6 +1169,14 @@ async fn game_retire(
     .bind(&sugg)
     .execute(&mut *tx)
     .await?;
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(&s, "retired", format!("Retired {name}"))
+            .game(&id, Some(name.clone()))
+            .diff(json!({ "successor": successor, "exe": exe })),
+    )
+    .await?;
     tx.commit().await?;
     crate::retire::reload(&st).await?;
     audit(
@@ -1167,6 +1251,18 @@ async fn retire_partly(
         .execute(&mut *tx)
         .await?;
     }
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(
+            &s,
+            "retired",
+            format!("Detached {} from {name}", exes.join(", ")),
+        )
+        .game(&id, Some(name.clone()))
+        .diff(json!({ "exes": exes, "new_entries": ids, "partial": true })),
+    )
+    .await?;
     tx.commit().await?;
     crate::retire::reload(&st).await?;
     audit(
@@ -1234,6 +1330,14 @@ async fn game_unretire(
             .execute(&mut *tx)
             .await?;
     }
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(&s, "unretired", format!("Unretired {id}"))
+            .game(&id, None)
+            .diff(json!({ "successor": successor, "partial": partial })),
+    )
+    .await?;
     tx.commit().await?;
     crate::retire::reload(&st).await?;
     audit(
@@ -1283,14 +1387,25 @@ async fn game_icon_upload(
         .await?
         .get(&id)
         .map(|o| o.has_icon);
+    let mut tx = st.db.begin().await?;
     sqlx::query(
         "INSERT INTO game_overrides(game_id, has_icon, updated_by) VALUES($1, true, $2)
          ON CONFLICT (game_id) DO UPDATE SET has_icon = true, updated_at = now(), updated_by = excluded.updated_by",
     )
     .bind(&id)
     .bind(s.user.id)
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(&s, "icon", format!("Updated icon for {id}"))
+            .game(&id, None)
+            .diff(json!({ "icon": { "old": before.unwrap_or(false), "new": true } }))
+            .public(true),
+    )
+    .await?;
+    tx.commit().await?;
     game_overrides::reload(&st).await?;
     audit(
         &st,
@@ -1315,11 +1430,12 @@ async fn game_icon_delete(
     for px in crate::icons::SIZES {
         let _ = std::fs::remove_file(dir.join(format!("{k}-{px}.png")));
     }
+    let mut tx = st.db.begin().await?;
     sqlx::query(
         "UPDATE game_overrides SET has_icon = false, updated_at = now() WHERE game_id = $1",
     )
     .bind(&id)
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
     sqlx::query(
         "DELETE FROM game_overrides WHERE game_id = $1 AND name IS NULL AND NOT hidden
@@ -1328,8 +1444,18 @@ async fn game_icon_delete(
            AND aliases = '{}' AND path_hints = '{}'",
     )
     .bind(&id)
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(&s, "icon", format!("Removed custom icon for {id}"))
+            .game(&id, None)
+            .diff(json!({ "icon": { "old": true, "new": false } }))
+            .public(true),
+    )
+    .await?;
+    tx.commit().await?;
     game_overrides::reload(&st).await?;
     audit(
         &st,
@@ -2952,6 +3078,28 @@ async fn merge_into(
     .bind(s.user.id)
     .execute(&mut *tx)
     .await?;
+    let from_name = from["public_name"]
+        .as_str()
+        .or(from["name"].as_str())
+        .map(|s| s.to_string());
+    let into_name = to["public_name"]
+        .as_str()
+        .or(to["name"].as_str())
+        .map(|s| s.to_string());
+    let from_label = crate::game_history::game_label(&id, from_name.as_deref());
+    let into_label = crate::game_history::game_label(&into, into_name.as_deref());
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(
+            &s,
+            "merged",
+            format!("Merged {from_label} into {into_label}"),
+        )
+        .game(&into, into_name.clone())
+        .diff(json!({ "from": id, "from_name": from_name, "into": into, "into_name": into_name })),
+    )
+    .await?;
     tx.commit().await?;
     crate::retire::reload(&st).await?;
     crate::achievements::clear_all();
@@ -3101,6 +3249,7 @@ async fn media_set(
         Some(a) => Some(a),
         None => bs,
     };
+    let mut tx = st.db.begin().await?;
     sqlx::query(
         "INSERT INTO game_overrides(game_id, icon_pref, art_pref, steam_appid, updated_by) VALUES($1, $2, $3, $4, $5)
          ON CONFLICT (game_id) DO UPDATE SET icon_pref = $2, art_pref = $3, steam_appid = $4, updated_at = now(), updated_by = $5",
@@ -3110,8 +3259,25 @@ async fn media_set(
     .bind(&art)
     .bind(appid.map(|a| a as i32))
     .bind(s.user.id)
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    if let Some(diff) = crate::game_history::fields_changed(&[
+        ("icon_pref", json!(bi), json!(icon)),
+        ("art_pref", json!(ba), json!(art)),
+        ("steam_appid", json!(bs), json!(appid)),
+    ]) {
+        let (action, summary, public) = crate::game_history::edit_kind(&diff, &id);
+        crate::game_history::insert(
+            &mut tx,
+            &st,
+            crate::game_history::New::admin(&s, action, summary)
+                .game(&id, None)
+                .diff(diff)
+                .public(public),
+        )
+        .await?;
+    }
+    tx.commit().await?;
     game_overrides::reload(&st).await?;
     crate::icons::purge(&st, &id);
     crate::art::purge(&st, &id);
@@ -3210,6 +3376,14 @@ async fn unknown_map(
         .bind(&id)
         .execute(&mut *tx)
         .await?;
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(&s, "merged", format!("Mapped {id} to {to}"))
+            .game(&to, None)
+            .diff(json!({ "from": id, "into": to, "sessions": moved })),
+    )
+    .await?;
     tx.commit().await?;
     crate::achievements::clear_all();
     audit(
@@ -3241,19 +3415,30 @@ async fn unknown_approve(
     if name.is_empty() {
         return Err(AppError::bad_request("name", "Enter the official name."));
     }
+    let mut tx = st.db.begin().await?;
     sqlx::query(
         "INSERT INTO games(id, name, verified) VALUES($1, $2, true)
          ON CONFLICT (id) DO UPDATE SET name = excluded.name, verified = true",
     )
     .bind(&id)
     .bind(&name)
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
     sqlx::query("UPDATE unknown_games SET status = 'approved', decided_by = $2, decided_at = now() WHERE game_id = $1")
         .bind(&id)
         .bind(s.user.id)
-        .execute(&st.db)
+        .execute(&mut *tx)
         .await?;
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(&s, "added", format!("Added {name}"))
+            .game(&id, Some(name.clone()))
+            .diff(json!({ "name": name, "from": "unknown" }))
+            .public(true),
+    )
+    .await?;
+    tx.commit().await?;
     audit(
         &st,
         &s,
@@ -3345,6 +3530,19 @@ async fn game_delete(
     ] {
         sqlx::query(q).bind(&id).execute(&mut *tx).await?;
     }
+    let del_name = v["public_name"]
+        .as_str()
+        .or(v["name"].as_str())
+        .map(|s| s.to_string());
+    let del_label = crate::game_history::game_label(&id, del_name.as_deref());
+    crate::game_history::insert(
+        &mut tx,
+        &st,
+        crate::game_history::New::admin(&s, "removed", format!("Removed {del_label}"))
+            .game(&id, del_name)
+            .diff(json!({ "source": v["source"], "exes": v["exes"] })),
+    )
+    .await?;
     tx.commit().await?;
     game_overrides::reload(&st).await.ok();
     crate::achievements::clear_all();

@@ -331,6 +331,8 @@ function renderHeader() {
       return `<a href="${href}" class="${on}">${label}${badge}</a>`;
     }).join("");
   }
+  const gamesEnd = $(".nav-end");
+  if (gamesEnd) gamesEnd.innerHTML = `<a href="/games"${page === "games" ? ' class="on"' : ""}>Games</a>`;
   const right = $(".top .right");
   if (!right) return;
   if (u) {
@@ -1146,6 +1148,147 @@ pages.home = async () => {
   }
 };
 pages.download = () => fillDownload();
+pages.games = async () => {
+  const root = document.querySelector(".games-page");
+  if (!root) return;
+  const upd = root.querySelector("[data-updates]");
+  const list = root.querySelector("[data-list]");
+  const jump = root.querySelector("[data-jump]");
+  const q = root.querySelector("#games-q");
+  const count = root.querySelector("[data-count]");
+  const none = root.querySelector("[data-none]");
+  const form = root.querySelector("#games-req");
+  const updDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
+  try {
+    const u = await api("/games/updates");
+    const rows = u.updates || [];
+    upd.innerHTML = rows.length
+      ? `<ul class="g-upd">${rows.map(e => `<li><time>${updDate.format(new Date(e.at))}</time><span>${esc(e.summary)}</span></li>`).join("")}</ul>`
+      : `<p class="empty">No catalogue updates yet.</p>`;
+  } catch (e) {
+    upd.innerHTML = `<p class="empty">${esc(e.message || "Could not load updates.")}</p>`;
+  }
+
+  const LETTERS = ["#", "0-9", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
+  const letterLabel = k => k === "0-9" ? "0–9" : k;
+  const letterKey = name => {
+    const ch = (name || "").charAt(0).toUpperCase();
+    if (ch >= "A" && ch <= "Z") return ch;
+    if (ch >= "0" && ch <= "9") return "0-9";
+    return "#";
+  };
+  const iconSrc = id => "/icons/games/32/" + encodeURIComponent(id) + ".png";
+  const nameNorm = s => (s || "").normalize("NFKC").replace(/[™®©]/g, "").toLowerCase().replace(/[^a-z0-9]+/gi, " ").trim();
+  const fillLetter = sec => {
+    if (!sec || sec.dataset.ready) return;
+    const games = sec._games || [];
+    sec.querySelector(".az-cols").innerHTML = games.map(([id, name]) =>
+      `<div class="g-row" data-id="${esc(id)}"><span class="g-ico-miss" aria-hidden="true"></span><span>${esc(name)}</span></div>`).join("");
+    sec.dataset.ready = "1";
+    // Icons only once the letter is on screen, and only via lazy-loading.
+    requestAnimationFrame(() => {
+      $$(".g-row[data-id]", sec).forEach(row => {
+        const img = document.createElement("img");
+        img.width = 24; img.height = 24; img.alt = "";
+        img.loading = "lazy"; img.decoding = "async";
+        img.src = iconSrc(row.dataset.id);
+        img.addEventListener("error", () => img.remove(), { once: true });
+        img.addEventListener("load", () => { const ph = row.querySelector(".g-ico-miss"); if (ph) ph.replaceWith(img); }, { once: true });
+      });
+    });
+  };
+  const io = ("IntersectionObserver" in window)
+    ? new IntersectionObserver(ents => { ents.forEach(e => { if (e.isIntersecting) { fillLetter(e.target); io.unobserve(e.target); } }); }, { rootMargin: "600px 0px" })
+    : null;
+
+  let all = []; // [id, name]
+  function render(term) {
+    const t = (term || "").trim().toLowerCase();
+    const filtered = t
+      ? all.filter(([id, name]) => name.toLowerCase().includes(t) || id.toLowerCase().includes(t))
+      : all;
+    count.textContent = filtered.length ? filtered.length.toLocaleString("en") : "";
+    if (!filtered.length) {
+      list.innerHTML = "";
+      jump.hidden = true;
+      none.hidden = false;
+      none.textContent = t ? "No games match that search." : "No games to show yet.";
+      return;
+    }
+    none.hidden = true;
+    const groups = new Map();
+    filtered.forEach(g => {
+      const k = letterKey(g[1]);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(g);
+    });
+    jump.hidden = false;
+    jump.innerHTML = LETTERS.map(k => groups.has(k)
+      ? `<a href="#letter-${encodeURIComponent(k)}">${letterLabel(k)}</a>`
+      : `<span class="off">${letterLabel(k)}</span>`).join("");
+    list.innerHTML = LETTERS.filter(k => groups.has(k)).map(k =>
+      `<div class="az-sec" id="letter-${esc(k)}" data-letter="${esc(k)}"><div class="az-let" aria-hidden="true">${esc(letterLabel(k))}</div><div class="az-cols"></div></div>`
+    ).join("");
+    $$(".az-sec", list).forEach(sec => {
+      sec._games = groups.get(sec.dataset.letter) || [];
+      if (io) io.observe(sec); else fillLetter(sec);
+    });
+    const hash = location.hash.startsWith("#letter-") ? location.hash.slice(1) : "";
+    if (hash) { const el = document.getElementById(hash); if (el) { fillLetter(el); el.scrollIntoView(); } }
+  }
+
+  try {
+    // Public, cacheable catalogue: do not go through api() (that forces no-store).
+    const r = await fetch(API + "/games/catalogue", { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error("Could not load the games list.");
+    const d = await r.json();
+    all = (d.games || []).map(g => Array.isArray(g) ? g : [g.id, g.name]);
+    render("");
+  } catch (e) {
+    none.hidden = false;
+    none.textContent = e.message || "Could not load the games list.";
+  }
+  let timer;
+  q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => render(q.value), 250); });
+
+  const signedIn = !!(token() && me());
+  const out = root.querySelector(".g-ask-out");
+  if (form) form.hidden = !signedIn;
+  if (out) out.hidden = signedIn;
+  if (signedIn && form) {
+    loadTurnstile();
+    const listed = form.querySelector("[data-listed]");
+    const msg = form.querySelector("[data-ask-msg]");
+    const nameIn = form.name;
+    const hint = () => {
+      const n = nameNorm(nameIn.value);
+      const hit = n && all.find(([, name]) => nameNorm(name) === n);
+      if (hit) { listed.hidden = false; listed.textContent = "Already listed: " + hit[1]; form.querySelector("[type=submit]").disabled = true; }
+      else { listed.hidden = true; listed.textContent = ""; form.querySelector("[type=submit]").disabled = false; }
+    };
+    nameIn.addEventListener("input", hint);
+    form.addEventListener("submit", async e => {
+      e.preventDefault();
+      hint();
+      if (form.querySelector("[type=submit]").disabled) return;
+      const btn = form.querySelector("[type=submit]");
+      btn.disabled = true; msg.hidden = true;
+      try {
+        const r = await api("/games/requests", { method: "POST", body: {
+          name: form.name.value.trim(),
+          exe_or_link: form.exe_or_link.value.trim(),
+          note: form.note.value.trim(),
+          turnstile: turnstileToken(form)
+        }});
+        if (r.already_listed) { listed.hidden = false; listed.textContent = "Already listed: " + r.game.name; showOk(msg, "That game is already on the list."); }
+        else if (r.already_requested) showOk(msg, "That's already on the request list. We've noted another report.");
+        else { showOk(msg, "Thanks — we've got your request."); form.exe_or_link.value = ""; form.note.value = ""; }
+      } catch (x) { showErr(msg, x); }
+      finally { btn.disabled = false; turnstileReset(); hint(); }
+    });
+  }
+};
+
 
 pages.login = () => {
   if (token() && me()) { location.replace(safeNext(qs("next")) || "/"); return; }
@@ -2210,7 +2353,7 @@ function applyFeatures() {
 }
 
 /* ---------- shared "You are here" breadcrumb (every page except home, which has its own bar) ---------- */
-const CRUMBS = { download: [["Download", "/download"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
+const CRUMBS = { download: [["Download", "/download"]], games: [["Games", "/games"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
   login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
   settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
   verify: [["Confirm your email"]], wowupload: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"], ["Upload /played"]], bnetverify: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"], ["Verify characters"]], bnet: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };

@@ -26,6 +26,7 @@ pub const PAGES: &[&str] = &[
     "/privacy",
     "/terms",
     "/faq",
+    "/games",
     "/changelog",
     "/contact",
     "/status",
