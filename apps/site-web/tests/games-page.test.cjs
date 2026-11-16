@@ -9,10 +9,15 @@ const page = fs.readFileSync(path.join(root, 'pages/games.html'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'static/assets/app.js'), 'utf8');
 const admin = fs.readFileSync(path.join(root, 'static/assets/admin.js'), 'utf8');
 
-test('main nav and footer include a Games tab next to FAQ', () => {
-  assert.match(layout, /<nav class="nav">[^<]*<a href="\/">Home<\/a><a href="\/download">Download<\/a><a href="\/faq">FAQ<\/a><a href="\/games">Games<\/a><\/nav>/);
+test('Games sits on the right of the top bar, and stays in the footer', () => {
+  assert.match(layout, /<nav class="nav">[^<]*<a href="\/">Home<\/a><a href="\/download">Download<\/a><a href="\/faq">FAQ<\/a><\/nav>/);
+  assert.doesNotMatch(layout, /<nav class="nav"><a href="\/">Home<\/a><a href="\/download">Download<\/a><a href="\/faq">FAQ<\/a><a href="\/games">/);
+  assert.match(layout, /<div class="top-end"><nav class="nav nav-end"><a href="\/games">Games<\/a><\/nav><div class="right">/);
+  assert.match(layout, /<div class="right"><a class="btn" href="\/login">Sign in<\/a>/);
   assert.match(layout, /<a href="\/faq">FAQ<\/a><a href="\/games">Games<\/a><a href="\/changelog">Changelog<\/a>/);
-  assert.match(app, /\["games", "\/games", "Games"\]/);
+  assert.match(app, /nav-end/);
+  assert.match(app, /href="\/games".*Games/);
+  assert.doesNotMatch(app, /items\.push\(\["download", "\/download", "Download"\], \["faq", "\/faq", "FAQ"\], \["games", "\/games", "Games"\]\)/);
 });
 
 test('games page is an A–Z directory with slant-tab headers and no hours or user data', () => {

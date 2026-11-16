@@ -321,7 +321,7 @@ function renderHeader() {
   if (nav) {
     const items = [["home", "/", "Home"]];
     if (u) items.push(["profile", "/u/" + encodeURIComponent(u.handle), "Profile"], ["friends", "/friends", "Friends"]);
-    items.push(["download", "/download", "Download"], ["faq", "/faq", "FAQ"], ["games", "/games", "Games"]);
+    items.push(["download", "/download", "Download"], ["faq", "/faq", "FAQ"]);
     const mine = page === "profile" && u && location.pathname.toLowerCase() === "/u/" + u.handle.toLowerCase();
     nav.innerHTML = items.map(([k, href, label]) => {
       const on = (k === page && (k !== "profile" || mine)) ? "on" : "";
@@ -331,6 +331,8 @@ function renderHeader() {
       return `<a href="${href}" class="${on}">${label}${badge}</a>`;
     }).join("");
   }
+  const gamesEnd = $(".nav-end");
+  if (gamesEnd) gamesEnd.innerHTML = `<a href="/games"${page === "games" ? ' class="on"' : ""}>Games</a>`;
   const right = $(".top .right");
   if (!right) return;
   if (u) {

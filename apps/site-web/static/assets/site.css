@@ -34,6 +34,8 @@ h1,h2,h3{color:#eef2f6;font-weight:600}
 .nav a.on{color:#fff;border-bottom-color:var(--orange);background:#1a1f26}
 .nav-badge{display:inline-block;min-width:16px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--orange);color:#1b1006;font-size:11px;font-weight:700;line-height:16px;text-align:center;vertical-align:1px}
 .top .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.top-end{margin-left:auto;display:flex;align-items:stretch;align-self:stretch;gap:10px}
+.top-end .right{margin-left:0}
 .search{background:#0b0d10;border:1px solid var(--line2);border-radius:3px;color:var(--text);padding:6px 9px;width:190px;font:inherit}
 .who-menu{position:relative}
 .who-menu>button{display:flex;align-items:center;gap:7px;background:none;border:1px solid transparent;border-radius:3px;color:var(--silver);font:600 13px var(--font);padding:4px 8px;cursor:pointer}
@@ -194,8 +196,9 @@ html.beta-host .preview-flag{display:block} /* the strip only on beta.playfragli
 @media (max-width:980px){ .grid{grid-template-columns:1fr} .search{display:none} .feats{grid-template-columns:1fr} }
 @media (max-width:720px){
   .top .wrap{height:auto;flex-wrap:wrap;gap:8px 14px;padding-top:8px;padding-bottom:0}
-  .nav{order:3;width:100%;overflow-x:auto;height:38px}
+  .nav:not(.nav-end){order:3;width:100%;overflow-x:auto;height:38px}
   .nav a{padding:0 10px}
+  .top-end{height:36px}
   .head{flex-wrap:wrap;align-items:center;gap:12px}
   .head>div:nth-child(2){flex:1;min-width:0}
   .avatar{width:64px;height:64px;font-size:26px}
