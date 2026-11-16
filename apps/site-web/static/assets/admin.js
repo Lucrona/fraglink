@@ -593,7 +593,10 @@ function detHtml(g) {
 }
 async function editGame(id) {
   const box = $("#gedit");
-  const g = await api("/admin/games/" + encodeURIComponent(id));
+  const [g, page] = await Promise.all([
+    api("/admin/games/" + encodeURIComponent(id)),
+    api("/admin/games/" + encodeURIComponent(id) + "/page").catch(() => ({}))
+  ]);
   const o = g.override || {};
   const bust = "?t=" + Date.now();
   box.innerHTML = `<h2><span class="tab">Edit game</span><span class="more"><a href="#games/log/${encodeURIComponent(id)}">Change log</a></span></h2><div class="body"><form method="post" action="/api/v1/form-fallback" class="f" id="gf">
@@ -605,6 +608,20 @@ async function editGame(id) {
     <label>Folder hints (one per line)<textarea class="in" name="hints" placeholder="World of Warcraft/_retail_">${esc((o.path_hints || []).map(h => h.replace(/^\/|\/$/g, "")).join("\n"))}</textarea><small>This game's programs (${esc((g.exes || []).join(", ") || "none known")}) only count as this game inside a folder containing one of these. Use it when two games share an exe name. Empty = anywhere.</small></label>
     <div class="row"><button class="btn dl">Save</button><span class="dimt">Edits stay in place when the games list refreshes.</span></div>
     <div class="alert" id="gmsg" hidden></div></form>
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+    <form method="post" action="/api/v1/form-fallback" class="f" id="gpage">
+      <label>Game page</label>
+      <p class="dimt">Public page at /games/&lt;slug&gt;. Info and a news feed can be set here; otherwise store details and official news are used when we have them.</p>
+      <label>Page address <span class="dimt">(optional)</span><input class="in" type="text" name="slug" maxlength="80" value="${esc(page.slug || "")}" placeholder="auto from the name"><small>Letters, numbers and dashes. Leave empty to use the automatic address. Aliases like the game id still work.</small></label>
+      <label>Developer <input class="in" type="text" name="developer" maxlength="120" value="${esc(page.developer || "")}"></label>
+      <label>Publisher <input class="in" type="text" name="publisher" maxlength="120" value="${esc(page.publisher || "")}"></label>
+      <label>Release date <input class="in" type="text" name="release_date" maxlength="80" value="${esc(page.release_date || "")}" placeholder="4 Nov 2026"></label>
+      <label>Genres <input class="in" type="text" name="genres" maxlength="200" value="${esc(page.genres || "")}" placeholder="Action, RPG"></label>
+      <label>Platforms <input class="in" type="text" name="platforms" maxlength="120" value="${esc(page.platforms || "")}" placeholder="Windows, macOS"></label>
+      <label>News feed URL <span class="dimt">(optional)</span><input class="in" type="url" name="news_feed_url" maxlength="400" value="${esc(page.news_feed_url || "")}" placeholder="https://example.com/news/feed.xml"><small>An RSS or Atom feed. Use this for games that have no official store news, or to replace it.</small></label>
+      <div class="row"><button class="btn dl">Save page info</button></div>
+      <div class="alert" id="gpagemsg" hidden></div>
+    </form>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${detHtml(g)}
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
     <div id="media"><div class="dimt">Loading pictures…</div></div>
@@ -641,6 +658,18 @@ async function editGame(id) {
       await api("/admin/games/" + encodeURIComponent(id), { method: "POST", body: { name: f.name.value.trim() || null, hidden: f.hidden.checked, extra_exes: f.exes.value.split(/\n|,/).map(s => s.trim()).filter(Boolean), aliases: f.aliases.value.split("\n").map(s => s.trim()).filter(Boolean), path_hints: f.hints.value.split("\n").map(s => s.trim()).filter(Boolean) } });
       await relist(id); const sm = $("#gmsg"); if (sm) msg(sm, "Saved.", true);
     } catch (x) { msg($("#gmsg"), x.message); }
+  });
+  const gpf = $("#gpage");
+  if (gpf) gpf.addEventListener("submit", async e => {
+    e.preventDefault(); const f = e.target;
+    try {
+      await api("/admin/games/" + encodeURIComponent(id) + "/page", { method: "POST", body: {
+        slug: f.slug.value.trim(), developer: f.developer.value, publisher: f.publisher.value,
+        release_date: f.release_date.value, genres: f.genres.value, platforms: f.platforms.value,
+        news_feed_url: f.news_feed_url.value.trim()
+      }});
+      msg($("#gpagemsg"), "Saved.", true);
+    } catch (x) { msg($("#gpagemsg"), x.message); }
   });
   renderMedia(id, g);
   wireMerge(id);

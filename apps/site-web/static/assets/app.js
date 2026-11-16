@@ -150,7 +150,7 @@ const fullDay = d => isDay(d) ? utcDay.f.format(new Date(d + "T12:00:00Z")) : fu
 /* Friends' activity rows from the server: "playing" first, then one per friend/game/day. */
 function actDay(i) { return i.kind === "playing" ? "Now" : dayLabel(i.day || i.at); }
 function actText(i) {
-  const g = isUnlisted(i.game_id) ? "a game" : `<b>${esc(i.game_name)}</b>`;
+  const g = isUnlisted(i.game_id) ? "a game" : `<b>${gameLink(i.game_id, i.game_name)}</b>`;
   return i.kind === "playing" ? `is playing ${g} now` : `played ${g} for ${dur(i.duration_s)}`;
 }
 /* "Today", "Yesterday", a weekday or a date, counted in ZONE. */
@@ -203,6 +203,29 @@ function icon(id, name, cls) {
   const src = iconCache[id];
   if (src) return `<img class="${cls || ""}" src="${esc(src)}" alt="" loading="lazy" width="20" height="20" data-hide-broken>`;
   return `<span class="gi ${cls || ""}">${isUnlisted(id) ? "?" : initial(name)}</span>`;
+}
+function slugifyGame(s) {
+  return String(s || "").toLowerCase().replace(/[''`’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "game";
+}
+function gameSlug(id, name, slug) {
+  if (slug) return String(slug);
+  if (!id) return "";
+  return slugifyGame(String(id).replace(/_/g, "-"));
+}
+function gameHref(id, name, slug) {
+  if (!id || isUnlisted(id)) return "";
+  const s = gameSlug(id, name, slug);
+  return s ? "/games/" + encodeURIComponent(s) : "";
+}
+function gameLink(id, name, slug, inner) {
+  const href = gameHref(id, name, slug);
+  const body = inner != null ? inner : esc(name || "");
+  return href ? `<a class="glink" href="${href}">${body}</a>` : body;
+}
+function iconLink(id, name, cls, slug) {
+  const inner = icon(id, name, cls);
+  const href = gameHref(id, name, slug);
+  return href ? `<a class="glink-ico" href="${href}" title="${esc(name || "")}">${inner}</a>` : inner;
 }
 
 /* ---------- v2 helpers: avatars, game art, bot check ---------- */
@@ -328,7 +351,7 @@ function renderHeader() {
     }
     const mine = page === "profile" && u && location.pathname.toLowerCase() === "/u/" + u.handle.toLowerCase();
     nav.innerHTML = items.map(([k, href, label]) => {
-      const on = (k === page && (k !== "profile" || mine)) ? "on" : "";
+      const on = ((k === page || (k === "games" && page === "game")) && (k !== "profile" || mine)) ? "on" : "";
       const badge = (k === "friends" && LIVE_FRIENDS.incoming > 0)
         ? `<span class="nav-badge" title="${LIVE_FRIENDS.incoming} friend request${LIVE_FRIENDS.incoming === 1 ? "" : "s"}">${LIVE_FRIENDS.incoming > 99 ? "99+" : LIVE_FRIENDS.incoming}</span>`
         : "";
@@ -1060,7 +1083,7 @@ pages.home = async () => {
   await loadIcons(ids);
   const s = h.stats, prof = n => `/u/${encodeURIComponent(n.handle)}`, nm = n => esc(n.display_name || n.handle);
   const panel = (title, body, more, cls) => `<section class="panel f2p${cls ? " " + cls : ""}"><h2>${htab(title, more || "")}</h2>${body}</section>`;
-  const gname = (id, n) => isUnlisted(id) ? "a game" : esc(n);
+  const gname = (id, n) => isUnlisted(id) ? "a game" : gameLink(id, n);
   // ---- crumb + community counters (Admin > Site settings: C1 header counters, C4 bar, off)
   const dg = (n, c) => `<span class="d${c ? " " + c : ""}">${nf.format(n).split("").map(ch => /\d/.test(ch) ? `<i>${ch}</i>` : `<i class="c">${esc(ch)}</i>`).join("")}</span>`;
   const cs = h.counts_style || "off";
@@ -1077,7 +1100,7 @@ pages.home = async () => {
       const tg = wk.top_game;
       inner += panel("Your Fraglink", `<div class="mebar m42" id="me42"><div><div class="k">Welcome back</div><h1>${nm(u)}</h1></div>
         <div><b class="big" id="hw">${h1(wk.tenths)}</b><span>Hours this week</span></div>
-        <div><b class="big" id="mp">${tg ? esc(tg.name) : "—"}</b><span id="mps">${tg ? `Most played this week · ${h1(tg.tenths)}` : "Nothing played this week yet"}</span></div>
+        <div><b class="big" id="mp">${tg ? gameLink(tg.game_id, tg.name) : "—"}</b><span id="mps">${tg ? `Most played this week · ${h1(tg.tenths)}` : "Nothing played this week yet"}</span></div>
         <div class="ch"><div class="wk42${wk.seconds ? "" : " empty"}" id="wk42">${bars}<div class="none">No games tracked this week yet</div></div></div></div>`, ` <a class="more" href="${prof(u)}">My profile »</a>`);
     }
     // Recent games: this week's games, most recent first; the rows add up to "Hours this week".
@@ -1085,7 +1108,7 @@ pages.home = async () => {
     if (wk && wk.games.length) {
       const g = wk.games, show = g.length > 4 ? g.slice(0, 3) : g, rest = g.slice(show.length);
       const art = (id, n) => `<span class="a" style="background:${artBg(id, n)}"></span>`;
-      rg = show.map(x => `<div class="rg">${art(x.game_id, x.name)}<div class="w"><b>${gname(x.game_id, x.name)}</b><small>Last played ${ago42(x.last_played_at)}</small></div><div class="h">${h1(x.tenths)}<small>this week</small></div></div>`).join("");
+      rg = show.map(x => `<div class="rg">${gameHref(x.game_id, x.name) ? `<a class="glink-art" href="${gameHref(x.game_id, x.name)}">${art(x.game_id, x.name)}</a>` : art(x.game_id, x.name)}<div class="w"><b>${gname(x.game_id, x.name)}</b><small>Last played ${ago42(x.last_played_at)}</small></div><div class="h">${h1(x.tenths)}<small>this week</small></div></div>`).join("");
       if (rest.length) rg += `<div class="rg more"><span class="a" style="background:${artGrad("other")}"></span><div class="w"><b>${rest.length} other games</b><small>Last played ${ago42(rest[0].last_played_at)}</small></div><div class="h">${h1(rest.reduce((a, x) => a + x.tenths, 0))}<small>this week</small></div></div>`;
     }
     const rgP = rg ? panel("Your recent games", rg, ` <a class="more" href="${prof(u)}">All my games »</a>`, "o2") : "";
@@ -1095,7 +1118,7 @@ pages.home = async () => {
     if (act && act.items.length) { let last = "";
       act.items.slice(0, 10).forEach(i => { const live = i.kind === "playing", d = live ? "Today" : dayLabel(i.day || i.at);
         if (d !== last) { feed += `<div class="day">${d}</div>`; last = d; }
-        feed += `<div class="act">${icon(i.game_id, i.game_name, "g")}<span class="who42"><a href="${prof(i)}">${nm(i)}</a> ${live
+        feed += `<div class="act">${iconLink(i.game_id, i.game_name, "g")}<span class="who42"><a href="${prof(i)}">${nm(i)}</a> ${live
           ? `is playing <b>${gname(i.game_id, i.game_name)}</b>${i.started_at ? ` <span class="done">· started ${tFmt.format(new Date(i.started_at))}</span>` : ""}</span><span class="pnow">● playing now</span>`
           : `<span class="done">played</span> <b>${gname(i.game_id, i.game_name)}</b> <span class="done">for ${hm(i.duration_s)}</span></span><span class="w">${tFmt.format(new Date(i.at))}</span>`}</div>`; }); }
     const actP = feed ? panel("Friends' activity", `<div class="feed">${feed}</div>`, ` <a class="more" href="/friends">View all »</a>`, "o3") : "";
@@ -1107,7 +1130,7 @@ pages.home = async () => {
       const tm = p => { if (!p.game_name || !p.session_started_at) return ""; const sec = (Date.now() - new Date(p.session_started_at)) / 1000; return sec >= 0 && sec <= 86400 ? `<span class="tm" title="Started ${tFmt.format(new Date(p.session_started_at))}">${hm(sec)}</span>` : ""; };
       const rows = on.map(f => { const p = f.presence, st = p.game_name ? "playing" : p.status;
         return `<div class="fr"><div class="fa ${tint(f.handle)}">${initial(f.display_name || f.handle)}</div><div class="who"><div class="nm"><span><a href="${prof(f)}">${nm(f)}</a></span><span class="st ${st}">${st}</span></div>${p.game_name
-          ? `<div class="gm pl">${icon(p.game_id, p.game_name)}${isUnlisted(p.game_id) ? "Playing a game" : esc(p.game_name)}${tm(p)}</div>` : `<div class="gm">${st === "away" ? "Away for a bit" : "Online, not in a game"}</div>`}</div></div>`; }).join("");
+          ? `<div class="gm pl">${iconLink(p.game_id, p.game_name)}${isUnlisted(p.game_id) ? "Playing a game" : gameLink(p.game_id, p.game_name)}${tm(p)}</div>` : `<div class="gm">${st === "away" ? "Away for a bit" : "Online, not in a game"}</div>`}</div></div>`; }).join("");
       const extra = n - on.length;
       frP = panel(`Friends online (${n})`, on.length ? `<div class="fhd"><span class="g"><b>${bd.playing || 0}</b> playing</span><span class="o"><b>${bd.online || 0}</b> online</span><span class="a"><b>${bd.away || 0}</b> away</span></div>${rows}${extra > 0 ? `<div class="fr"><a href="/friends">+${extra} more »</a></div>` : ""}`
         : `<div class="in empty">${fl.all ? "None of your friends are online." : `No friends yet. <a href="/friends">Add someone</a>.`}</div>`, ` <a class="more" href="/friends">All friends »</a>`, "o1 fr42"); }
@@ -1134,7 +1157,7 @@ pages.home = async () => {
   }
   // ---- trending, how it works (signed out), news, poll + community
   const mp = h.most_played.slice(0, 4), m0 = (mp[0] && mp[0].minutes) || 1;
-  const trend = mp.length ? panel("Trending games this week", `<div class="tr">${mp.map((g, i) => `<div class="tile2"><div class="art" style="height:132px">${gameArt(g.game_id, g.name)}<span class="rk">#${i + 1}</span><span class="nmx">${esc(g.name)}</span></div><div class="st"><b>${hrsShort(g.minutes)} h</b> this week<span class="hb"><i style="width:${Math.max(2, Math.round(g.minutes / m0 * 100))}%"></i></span></div></div>`).join("")}</div>`, "", "strip4") : "";
+  const trend = mp.length ? panel("Trending games this week", `<div class="tr">${mp.map((g, i) => `<a class="tile2" href="${gameHref(g.game_id, g.name)}"><div class="art" style="height:132px">${gameArt(g.game_id, g.name)}<span class="rk">#${i + 1}</span><span class="nmx">${esc(g.name)}</span></div><div class="st"><b>${hrsShort(g.minutes)} h</b> this week<span class="hb"><i style="width:${Math.max(2, Math.round(g.minutes / m0 * 100))}%"></i></span></div></a>`).join("")}</div>`, "", "strip4") : "";
   const how = u ? "" : panel("How Fraglink works", `<div class="hows"><div><span class="n1">1</span><div><b>Install Fraglink</b><p>A lightweight Windows tray app. Takes a minute, then it sits down by your clock.</p></div></div><div><span class="n1">2</span><div><b>Play your games</b><p>Just play like you normally would. Your playtime gets tracked automatically.</p></div></div><div><span class="n1">3</span><div><b>Connect with friends</b><p>See who's playing what, and find out who's really put the most hours in.</p></div></div><a class="glass o go" data-dl href="/download" style="margin:0 14px">Get Fraglink</a></div>`);
   const news = h.news.length ? panel("News", h.news.slice(0, 3).map(n => `<div class="ni${n.image ? " has-img" : ""}">${n.image ? `<a class="nimg" href="${esc(n.url)}" tabindex="-1"><img src="${esc(n.image)}" alt="" loading="lazy"></a>` : ""}<div><h4><a href="${esc(n.url)}">${esc(n.title)}</a></h4><div class="d">${fullDate.format(new Date(n.at))}</div>${n.summary ? `<p class="sum">${esc(n.summary)}</p>` : ""}<a class="rm" href="${esc(n.url)}">Read more »</a></div></div>`).join(""), ` <a class="more" href="/news">More news »</a>`) : "";
   const two = `<div class="two" id="h42-two">${panel("Quick poll", `<div class="poll2" id="poll42"><span class="dimt">Loading…</span></div>`)}${panel("Community", `<div class="comm2"><a href="https://discord.gg/QbaYRtvADj" rel="noopener">» Discord server</a><br><a href="/news">» News</a><br><a href="/download">» Download the app</a></div>`)}</div>`;
@@ -1170,7 +1193,7 @@ pages.games = async () => {
     const u = await api("/games/updates");
     const rows = u.updates || [];
     upd.innerHTML = rows.length
-      ? `<ul class="g-upd">${rows.map(e => `<li><time>${updDate.format(new Date(e.at))}</time><span>${esc(e.summary)}</span></li>`).join("")}</ul>`
+      ? `<ul class="g-upd">${rows.map(e => `<li><time>${updDate.format(new Date(e.at))}</time><span>${e.game_id ? gameLink(e.game_id, e.game_name || e.summary, null, esc(e.summary)) : esc(e.summary)}</span></li>`).join("")}</ul>`
       : `<p class="empty">No catalogue updates yet.</p>`;
   } catch (e) {
     upd.innerHTML = `<p class="empty">${esc(e.message || "Could not load updates.")}</p>`;
@@ -1319,8 +1342,8 @@ pages.games = async () => {
       });
     });
   };
-  const rowHtml = (g, raw) =>
-    `<div class="g-row" data-id="${esc(g[0])}"${g[2] ? ` data-appid="${esc(String(g[2]))}"` : ""}>${thumbHtml(g)}<span class="g-name">${raw ? highlight(g[1], raw) : esc(g[1])}</span></div>`;
+  const rowHtml = (g, raw, extra) =>
+    `<a class="g-row glink" href="${gameHref(g[0], g[1], g[3])}" data-id="${esc(g[0])}"${g[2] ? ` data-appid="${esc(String(g[2]))}"` : ""}>${thumbHtml(g)}<span class="g-name">${raw ? highlight(g[1], raw) : esc(g[1])}</span>${extra || ""}</a>`;
 
   const readQuery = () => (new URLSearchParams(location.search).get("q") || "");
   const setUrl = (term, push) => {
@@ -1332,6 +1355,10 @@ pages.games = async () => {
   let all = [];
   let active = -1;
   let suggestions = [];
+  let genreFilter = null;
+  let trendingIds = new Set();
+  const catPool = () => genreFilter ? all.filter(g => genreFilter.ids.has(g[0])) : all;
+  const trendTag = id => trendingIds.has(id) ? `<span class="trend-tag">Trending</span>` : "";
 
   const closeSuggest = () => {
     suggest.hidden = true; suggest.innerHTML = ""; active = -1; suggestions = [];
@@ -1347,6 +1374,8 @@ pages.games = async () => {
   };
   const pickSuggestion = i => {
     const g = suggestions[i]; if (!g) return;
+    const href = gameHref(g[0], g[1], g[3]);
+    if (href) { location.href = href; return; }
     q.value = g[1];
     closeSuggest();
     setUrl(g[1], true);
@@ -1356,7 +1385,7 @@ pages.games = async () => {
     suggestions = hits.slice(0, SUGGEST);
     if (!suggestions.length || fold(term).length < MIN) { closeSuggest(); return; }
     suggest.innerHTML = suggestions.map((g, i) =>
-      `<li id="gsug-${i}" role="option" aria-selected="${i === 0 ? "true" : "false"}">${rowHtml(g, term)}</li>`
+      `<li id="gsug-${i}" role="option" aria-selected="${i === 0 ? "true" : "false"}">${rowHtml(g, term, trendTag(g[0]))}</li>`
     ).join("");
     suggest.hidden = false;
     active = 0;
@@ -1380,19 +1409,23 @@ pages.games = async () => {
     const f = fold(term);
     closeSuggest();
     refine.hidden = true;
-    if (f.length < MIN) {
+    const source = catPool();
+    if (f.length < MIN && !genreFilter) {
       list.hidden = true; list.innerHTML = "";
       none.hidden = true; none.textContent = "";
       if (tryRow) tryRow.hidden = false;
-      if (term) setUrl("", false);
-      else setUrl("", false);
+      setUrl("", false);
       return;
     }
     if (tryRow) tryRow.hidden = true;
     const scored = [];
-    for (const g of all) {
+    if (f.length < MIN && genreFilter) {
+      source.slice().sort((a, b) => a[1].localeCompare(b[1])).forEach(g => scored.push([4, g]));
+    } else {
+    for (const g of source) {
       const r = rank(g[1], term);
       if (r) scored.push([r, g]);
+    }
     }
     scored.sort((a, b) => b[0] - a[0] || a[1][1].localeCompare(b[1][1]));
     const strong = scored.filter(x => x[0] >= 2);
@@ -1400,13 +1433,16 @@ pages.games = async () => {
     const total = used.length;
     if (!total) {
       list.hidden = true; list.innerHTML = "";
-      offerRequest(term);
+      if (genreFilter && f.length < MIN) {
+        none.hidden = false;
+        none.textContent = "No games in this genre yet.";
+      } else offerRequest(term);
       return;
     }
     none.hidden = true; none.textContent = "";
     const shown = used.slice(0, LIMIT).map(x => x[1]);
     list.hidden = false;
-    list.innerHTML = shown.map(g => rowHtml(g, term)).join("");
+    list.innerHTML = shown.map(g => rowHtml(g, term, trendTag(g[0]))).join("");
     paintThumbs(list);
     refine.hidden = total <= LIMIT;
     if (total > LIMIT) refine.textContent = `Showing ${LIMIT} of ${total.toLocaleString("en")} matches. Refine your search to see more.`;
@@ -1416,7 +1452,7 @@ pages.games = async () => {
     const r = await fetch(API + "/games/catalogue", { headers: { Accept: "application/json" } });
     if (!r.ok) throw new Error("Could not load the games list.");
     const d = await r.json();
-    all = (d.games || []).map(g => Array.isArray(g) ? g : [g.id, g.name, g.steam_appid]);
+    all = (d.games || []).map(g => Array.isArray(g) ? g : [g.id, g.name, g.steam_appid, g.slug]);
     const n = d.total || all.length;
     if (hint) hint.textContent = "Search " + n.toLocaleString("en") + " supported games";
     if (tryRow) {
@@ -1426,6 +1462,7 @@ pages.games = async () => {
     const initial = readQuery();
     if (initial) { q.value = initial; render(); }
     else q.focus();
+    loadTabExtras();
   } catch (e) {
     if (hint) hint.textContent = e.message || "Could not load the games list.";
   }
@@ -1439,7 +1476,7 @@ pages.games = async () => {
     render();
     // Re-open suggestions after render() closes them, from the same ranking.
     const scored = [];
-    for (const g of all) {
+    for (const g of catPool()) {
       const r = rank(g[1], term);
       if (r) scored.push([r, g]);
     }
@@ -1474,6 +1511,63 @@ pages.games = async () => {
     render();
   });
 
+
+  const artThumb = (id, name, appid) => {
+    const srcs = [];
+    if (appid) srcs.push("/api/v1/art/" + appid + ".jpg");
+    if (id) srcs.push("/api/v1/game-art/" + encodeURIComponent(id) + ".jpg");
+    const letter = `<span class="g-letter">${initial(name)}</span>`;
+    return `<div class="art">${srcs.length ? `<img src="${esc(srcs[0])}" alt="" loading="lazy" data-broken-remove>` : letter}`;
+  };
+  const tile = (g, i, hours, tag, ranked) => {
+    const href = gameHref(g.game_id, g.name, g.slug);
+    const img = artThumb(g.game_id, g.name, g.steam_appid);
+    const rk = ranked === false ? "" : `<span class="rk">#${i + 1}</span>`;
+    return `<a class="tile2" href="${href}">${img}${rk}${tag ? `<span class="trend-tag">Trending</span>` : ""}<span class="nmx">${esc(g.name)}</span></div>${hours != null ? `<div class="st"><b>${hrsShort(g.minutes)} h</b> this week</div>` : `<div class="st">New on the list</div>`}</a>`;
+  };
+  async function loadTabExtras() {
+    const mostEl = root.querySelector("[data-most-played]");
+    const newEl = root.querySelector("[data-new-list]");
+    const genreEl = root.querySelector("[data-genres]");
+    const chips = root.querySelector("[data-genre-chips]");
+    let tab = null;
+    try { tab = await api("/games/tab"); } catch (e) { return; }
+    trendingIds = new Set(tab.trending || []);
+    const most = tab.most_played || [];
+    if (mostEl) {
+      if (!most.length) mostEl.hidden = true;
+      else {
+        mostEl.hidden = false;
+        root.querySelector("[data-most-body]").innerHTML = `<div class="tr">${most.map((g, i) => tile(g, i, g.minutes, trendingIds.has(g.game_id))).join("")}</div>`;
+      }
+    }
+    const fresh = tab.new_to_list || [];
+    if (newEl) {
+      if (!fresh.length) newEl.hidden = true;
+      else {
+        newEl.hidden = false;
+        root.querySelector("[data-new-body]").innerHTML = `<div class="tr">${fresh.map((g, i) => tile(g, i, null, trendingIds.has(g.game_id), false)).join("")}</div>`;
+      }
+    }
+    const genres = tab.genres || [];
+    if (genreEl && chips) {
+      if (!genres.length) genreEl.hidden = true;
+      else {
+        genreEl.hidden = false;
+        chips.innerHTML = genres.map(g => `<button type="button" class="chip" data-genre="${esc(g.name)}">${esc(g.name)} <b>${nf.format(g.count)}</b></button>`).join("");
+        chips.addEventListener("click", e => {
+          const b = e.target.closest("[data-genre]"); if (!b) return;
+          const name = b.dataset.genre;
+          const g = genres.find(x => x.name === name);
+          const on = genreFilter && genreFilter.name === name;
+          genreFilter = on || !g ? null : { name, ids: new Set(g.ids || []) };
+          $$(".chip", chips).forEach(c => c.classList.toggle("on", !!(genreFilter && c.dataset.genre === genreFilter.name)));
+          render();
+        });
+      }
+    }
+  }
+
   const signedIn = !!(token() && me());
   if (form) form.hidden = !signedIn;
   if (askOut) askOut.hidden = signedIn;
@@ -1485,7 +1579,7 @@ pages.games = async () => {
     const already = () => {
       const n = nameNorm(nameIn.value);
       const hit = n && all.find(([, name]) => nameNorm(name) === n);
-      if (hit) { listed.hidden = false; listed.textContent = "Already listed: " + hit[1]; form.querySelector("[type=submit]").disabled = true; }
+      if (hit) { listed.hidden = false; listed.innerHTML = "Already listed: " + gameLink(hit[0], hit[1], hit[3]); form.querySelector("[type=submit]").disabled = true; }
       else { listed.hidden = true; listed.textContent = ""; form.querySelector("[type=submit]").disabled = false; }
     };
     nameIn.addEventListener("input", already);
@@ -1507,6 +1601,98 @@ pages.games = async () => {
         else { showOk(msg, "Thanks — we've got your request."); form.exe_or_link.value = ""; form.note.value = ""; }
       } catch (x) { showErr(msg, x); }
       finally { btn.disabled = false; turnstileReset(); already(); }
+    });
+  }
+};
+
+
+pages.game = async () => {
+  const root = document.querySelector("[data-game-root]");
+  if (!root) return;
+  const slug = decodeURIComponent((location.pathname.split("/").filter(Boolean)[1] || "").trim());
+  if (!slug) {
+    root.innerHTML = `<p class="empty">That game is not on the list. <a href="/games">Back to Games</a>.</p>`;
+    return;
+  }
+  let d;
+  try { d = await api("/games/page/" + encodeURIComponent(slug)); }
+  catch (e) {
+    document.title = "Game not found · Fraglink";
+    root.innerHTML = `<section class="head"><div><h1>Game not found</h1><div class="sub">${esc(e.message || "That game is not on the list.")}</div></div></section><p><a href="/games">Back to Games</a></p>`;
+    return;
+  }
+  document.title = d.name + " · Fraglink";
+  window.flCrumb([[d.name]]);
+  const srcs = [];
+  if (d.game_id) srcs.push("/api/v1/game-art/" + encodeURIComponent(d.game_id) + ".jpg");
+  if (d.steam_appid) srcs.push("/api/v1/art/" + d.steam_appid + ".jpg");
+  const letter = `<span class="g-letter">${initial(d.name)}</span>`;
+  const art = srcs.length
+    ? `<img src="${esc(srcs[0])}" alt="${esc(d.name)}" width="230" height="107" data-art-fallbacks="${esc(srcs.slice(1).join(" "))}">`
+    : letter;
+  const stats = d.stats_visible && d.stats
+    ? `<div class="stats gp-stats" aria-label="Game stats">
+        <div><b>${hrsShort(d.stats.total_minutes)} h</b><span>Total hours</span></div>
+        <div><b>${nf.format(d.stats.players_this_week || 0)}</b><span>Players this week</span></div>
+        <div><b>${nf.format(d.stats.sessions || 0)}</b><span>Sessions</span></div>
+      </div>`
+    : "";
+  const top = (d.top_players_visible && d.top_players && d.top_players.length)
+    ? `<section class="panel">
+        <h2><span class="tab">Top players</span><span class="more">This week</span></h2>
+        <div class="body">
+          <table class="t2"><tbody>${d.top_players.map(p => {
+            const name = esc(p.display_name || p.handle);
+            return `<tr><td class="rk">${p.rank}</td><td><a href="/u/${encodeURIComponent(p.handle)}">${name}</a><span class="hndl">@${esc(p.handle)}</span></td><td class="n">${hrsShort(p.minutes)} h</td></tr>`;
+          }).join("")}</tbody></table>
+        </div>
+      </section>`
+    : "";
+  const newsItems = (d.news || []).map(n => {
+    const when = n.at ? `<time>${fullDate.format(new Date(n.at))}</time>` : `<time></time>`;
+    const title = n.url
+      ? `<a href="${esc(n.url)}" rel="noopener">${esc(n.title)}</a>`
+      : `<span>${esc(n.title)}</span>`;
+    return `<li>${when}${title}</li>`;
+  }).join("");
+  const news = newsItems
+    ? `<section class="panel">
+        <h2><span class="tab">News</span>${d.news_source ? `<span class="more">${esc(d.news_source)}</span>` : ""}</h2>
+        <div class="body"><ul class="g-upd">${newsItems}</ul></div>
+      </section>`
+    : "";
+  const info = d.info || {};
+  const rows = [["Developer", info.developer], ["Publisher", info.publisher], ["Released", info.release_date], ["Genres", info.genres], ["Platforms", info.platforms]]
+    .filter(([, v]) => v)
+    .map(([lab, v]) => `<dt>${esc(lab)}</dt><dd>${esc(v)}</dd>`)
+    .join("");
+  const infoPanel = `<section class="panel gp-info">
+      <h2><span class="tab">Game info</span>${d.info_source ? `<span class="more">${esc(d.info_source)}</span>` : ""}</h2>
+      <div class="body">${rows ? `<dl class="kv">${rows}</dl>` : `<p class="empty">No info yet.</p>`}</div>
+    </section>`;
+  root.innerHTML = `
+  <section class="head">
+    <div class="gp-art">${art}</div>
+    <div>
+      <h1>${esc(d.name)}</h1>
+      <div class="sub">Hours tracked on Fraglink, who is playing, and info for this game.</div>
+    </div>
+  </section>
+  ${stats}
+  <div class="g2v">
+    <div class="col stack">${top}${news}</div>
+    <aside class="col stack">${infoPanel}</aside>
+  </div>
+  <section class="panel g-ask">
+    <h2><span class="tab">Missing info?</span></h2>
+    <div class="body"><p>If something on this page is wrong or missing, <a href="/contact">tell us</a>.</p></div>
+  </section>`;
+  const img = root.querySelector("[data-art-fallbacks]");
+  if (img) {
+    const rest = (img.getAttribute("data-art-fallbacks") || "").split(/\s+/).filter(Boolean);
+    img.addEventListener("error", () => {
+      if (rest.length) { img.src = rest.shift(); return; }
+      img.replaceWith(Object.assign(document.createElement("span"), { className: "g-letter", textContent: (d.name || "?").trim().charAt(0).toUpperCase() || "?" }));
     });
   }
 };
@@ -1880,8 +2066,8 @@ pages.profile = async () => {
     const inner = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg><i class="vt" aria-hidden="true">✓</i>`;
     return l.url ? `<a class="lb" href="${esc(l.url)}" target="_blank" rel="noopener" style="--bc:${col}" data-tip="${tip}" aria-label="${tip}">${inner}</a>` : `<span class="lb" tabindex="0" style="--bc:${col}" data-tip="${tip}" aria-label="${tip}">${inner}</span>`;
   }).join("")}</div>` : "";
-  const np = live ? `<div class="np">${gameArt(pres.game_id, pres.game_name, "npa")}<div><div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8">Now playing</div>
-      <b>${isUnlisted(pres.game_id) ? "A game" : esc(pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
+  const np = live ? `<div class="np">${gameHref(pres.game_id, pres.game_name) ? `<a class="glink-art" href="${gameHref(pres.game_id, pres.game_name)}">${gameArt(pres.game_id, pres.game_name, "npa")}</a>` : gameArt(pres.game_id, pres.game_name, "npa")}<div><div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8">Now playing</div>
+      <b>${isUnlisted(pres.game_id) ? "A game" : gameLink(pres.game_id, pres.game_name)}</b>${pres.game_detail ? ` <span style="opacity:.8">· ${esc(pres.game_detail)}</span>` : ""}</div>${pres.session_started_at ? `<span style="opacity:.8">for ${since(pres.session_started_at)}</span>` : ""}</div>` : "";
   const sec = (title, body, right, cls, id) => `<section class="panel sx${cls ? " " + cls : ""}"${id ? ` id="${id}"` : ""}><h2>${htab(title, right ? `<span class="more">${right}</span>` : "")}</h2>${body}</section>`;
   const report = !self && token() ? `<div class="avlinks">${p.avatar && p.avatar.kind === "upload" ? `<a href="#" class="report" data-report>Report picture</a>` : ""}<a href="#" class="report flagit" data-report-profile>&#9873; Report this profile</a></div>` : "";
   const kpi = `<div class="kpi">${p.history_visible ? `<div><b>${total > 0 && total < 60 ? "&lt;1" : nf.format(Math.round(total / 60))}</b><span>Total hours</span></div><div${p.overall.week_label ? ` title="Tracked hours, ${esc(p.overall.week_label)}"` : ""}><b>${p.overall.tenths_7d != null ? (p.overall.tenths_7d / 10).toFixed(1) : hrsShort(p.overall.minutes_7d)}</b><span>Past 7 days</span></div>` : ""}${self || Array.isArray(p.friends) ? `<a href="${self ? "/friends" : "#friends"}" class="kf"><b>${p.friend_count}</b><span>Friends</span></a>` : `<div><b>${p.friend_count}</b><span>Friends</span></div>`}</div>`;
@@ -1908,12 +2094,12 @@ pages.profile = async () => {
   // Details + inset box
   const kv = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";
   const loc = [p.location ? esc(p.location) : (p.country ? esc(countryName(p.country)) : ""), flag(p.country)].filter(Boolean).join(" ");
-  const inset = `<div class="inset">${pres ? `<b>${live ? "Playing" : "Status"}</b><div>${live ? `${icon(pres.game_id, pres.game_name)} ${isUnlisted(pres.game_id) ? "A game" : `<span class="gl">${esc(pres.game_name)}</span>`}` : statusText(pres)}</div>` : ""}
+  const inset = `<div class="inset">${pres ? `<b>${live ? "Playing" : "Status"}</b><div>${live ? `${iconLink(pres.game_id, pres.game_name)} ${isUnlisted(pres.game_id) ? "A game" : gameLink(pres.game_id, pres.game_name)}` : statusText(pres)}</div>` : ""}
       ${p.member_since ? `<b>Member since</b><div>${fullDate.format(new Date(p.member_since))}</div>` : ""}${self ? `<a href="/friends" class="fc">${p.friend_count} friend${p.friend_count === 1 ? "" : "s"}</a>` : Array.isArray(p.friends) ? `<a href="#friends" class="fc">${p.friend_count} friend${p.friend_count === 1 ? "" : "s"}</a>` : ""}</div>`;
   const details = sec("Details", `<div class="body details2"><dl class="kv">
       ${kv("Name", `${esc(nick)}${nick !== p.handle ? ` <span class="mut">(${esc(p.handle)})</span>` : ""}`)}
       ${kv("Location", loc)}${kv("Age", p.age != null ? String(p.age) : "")}${kv("Gender", p.gender ? esc(p.gender) : "")}${kv("Real name", p.real_name ? esc(p.real_name) : "")}
-      ${kv("Style", p.gaming_style ? esc(p.gaming_style) : "")}${main ? kv("Main game", esc(main.name)) : ""}
+      ${kv("Style", p.gaming_style ? esc(p.gaming_style) : "")}${main ? kv("Main game", gameLink(main.game_id, main.name)) : ""}
     </dl>${inset}</div>${p.about ? `<p class="about">${esc(p.about)}</p>` : ""}`);
   let games, gamesRow;
   if (!p.history_visible && !p.games_visible) {
@@ -1923,7 +2109,7 @@ pages.profile = async () => {
     games = sec("Games", `<div class="body empty">No hours recorded yet.${self ? ` <a href="/download">Get the app</a> and play something.` : ""}</div>`);
   } else {
     const w7 = x => x.tenths_7d != null ? (x.tenths_7d > 0 ? h1(x.tenths_7d) : "-") : hours(x.minutes_7d);
-    const row = g => `<tr><td><span class="gico">${icon(g.listed === false && !self ? "manual:unlisted" : g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : esc(g.name)}${g.tier && g.tier !== "tracked" && g.tier !== "imported" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
+    const row = g => `<tr><td><span class="gico">${g.listed === false && !self ? icon("manual:unlisted", g.name) : iconLink(g.game_id, g.name)}</span>${g.listed === false && !self ? `<span class="empty">${esc(g.name)}</span>` : gameLink(g.game_id, g.name)}${g.tier && g.tier !== "tracked" && g.tier !== "imported" ? ` <span class="tier">${esc(g.tier)}</span>` : ""}</td>
       <td class="n">${w7(g)}</td><td class="n">${hours(g.total_min)}</td><td class="n hide-sm">${live && pres.game_id === g.game_id ? `<span style="color:var(--online)">Now</span>` : lastPlayed(g.last_played_at)}</td></tr>`;
     const many = (p.games_total || p.games.length) > GPAGE;
     games = sec("Games", `
@@ -1962,7 +2148,7 @@ pages.profile = async () => {
   (p.events || []).forEach(e => {
     const at = new Date(e.at);
     if (e.kind === "friend") items.push({ at, html: `<span class="ev">&#128101;</span><span><b>${esc(p.display_name || p.handle)}</b> is now friends with <a href="/u/${encodeURIComponent(e.handle)}">${esc(e.display_name || e.handle)}</a></span>` });
-    if (e.kind === "first_play") { const g = e.name ? { game_id: e.game_id, name: e.name } : null; if (g) items.push({ at, html: `${icon(g.game_id, g.name)}<span><b>${esc(p.display_name || p.handle)}</b> played <span class="gl">${esc(g.name)}</span> for the first time</span>` }); }
+    if (e.kind === "first_play") { const g = e.name ? { game_id: e.game_id, name: e.name } : null; if (g) items.push({ at, html: `${iconLink(g.game_id, g.name)}<span><b>${esc(p.display_name || p.handle)}</b> played ${isUnlisted(g.game_id) ? `<span class="gl">a game</span>` : gameLink(g.game_id, g.name)} for the first time</span>` }); }
   });
   const daysM = new Map();
   if (p.history_visible) (p.recent || []).forEach(r => {
@@ -1971,9 +2157,9 @@ pages.profile = async () => {
     const g = daysM.get(k).games, gk = r.game_id + "|" + r.game_name, cur = g.get(gk) || { id: r.game_id, name: r.game_name, secs: 0, at: d };
     cur.secs += r.duration_s || 0; if (d > cur.at) cur.at = d; g.set(gk, cur);
   });
-  daysM.forEach(d => d.games.forEach(g => items.push({ at: g.at, old: g.at < cut, html: `${icon(g.id, g.name)}<span>Played ${isUnlisted(g.id) ? "a game" : `<span class="gl">${esc(g.name)}</span>`} for ${dur(g.secs)}</span>` })));
+  daysM.forEach(d => d.games.forEach(g => items.push({ at: g.at, old: g.at < cut, html: `${iconLink(g.id, g.name)}<span>Played ${isUnlisted(g.id) ? "a game" : gameLink(g.id, g.name)} for ${dur(g.secs)}</span>` })));
   items.sort((x, y) => y.at - x.at);
-  let act = live ? `<div class="ma-day">Now</div><div class="ma-row">${icon(pres.game_id, pres.game_name)}<span>${isUnlisted(pres.game_id) ? "Playing a game now" : `Playing <span class="gl">${esc(pres.game_name)}</span> now`}${pres.session_started_at ? ` <span class="ma-tm">for ${since(pres.session_started_at)}</span>` : ""}</span></div>` : "";
+  let act = live ? `<div class="ma-day">Now</div><div class="ma-row">${iconLink(pres.game_id, pres.game_name)}<span>${isUnlisted(pres.game_id) ? "Playing a game now" : `Playing ${gameLink(pres.game_id, pres.game_name)} now`}${pres.session_started_at ? ` <span class="ma-tm">for ${since(pres.session_started_at)}</span>` : ""}</span></div>` : "";
   let lastDay = "", older = 0;
   items.forEach(it => {
     const lbl = dayLabel(it.at);
@@ -2050,7 +2236,7 @@ function rank(p) { return !p ? 0 : p.status === "online" ? (p.game_name ? 3 : 2)
 function friendRow(f, opts) {
   const p = f.presence || {};
   const st = p.status === "online" ? (p.game_name ? "● playing" : "● online") : p.status === "away" ? "away" : "offline";
-  const game = p.status !== "offline" && p.game_name ? `<div class="gm">${icon(p.game_id, p.game_name)}${isUnlisted(p.game_id) ? "Playing a game" : esc(p.game_name)}</div>` : "";
+  const game = p.status !== "offline" && p.game_name ? `<div class="gm">${iconLink(p.game_id, p.game_name)}${isUnlisted(p.game_id) ? "Playing a game" : gameLink(p.game_id, p.game_name)}</div>` : "";
   return `<div class="fr" data-h="${esc(f.handle)}">${f.avatar ? avatar(f.avatar, 32) : `<div class="fa ${tint(f.handle)}">${initial(f.display_name || f.handle)}</div>`}<div class="who">
     <div class="nm"><span><a href="/u/${encodeURIComponent(f.handle)}">${esc(f.display_name || f.handle)}</a>${f.display_name && f.display_name !== f.handle ? ` <small>${esc(f.handle)}</small>` : ""}</span><span class="st ${esc(p.status || "")}">${st}</span></div>${game}</div>
     ${opts && opts.actions ? `<div class="acts">${opts.actions}</div>` : ""}</div>`;
@@ -2075,7 +2261,7 @@ pages.friends = async () => {
     let feed = "", last = "";
     act.items.slice(0, 20).forEach(i => {
       const d = actDay(i); if (d !== last) { feed += `<div class="day">${d}</div>`; last = d; }
-      feed += `<div class="ev">${icon(i.game_id, i.game_name)}<p><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${actText(i)}</p></div>`;
+      feed += `<div class="ev">${iconLink(i.game_id, i.game_name)}<p><a href="/u/${encodeURIComponent(i.handle)}">${esc(i.display_name || i.handle)}</a> ${actText(i)}</p></div>`;
     });
     root.innerHTML = `<div class="grid"><div class="col">
       ${fl.incoming.length ? `<section class="panel"><h2>${htab(`Friend requests (${fl.incoming_count})`)}</h2><div>${reqIn}</div></section>` : ""}
@@ -2574,7 +2760,7 @@ function applyFeatures() {
 }
 
 /* ---------- shared "You are here" breadcrumb (every page except home, which has its own bar) ---------- */
-const CRUMBS = { download: [["Download", "/download"]], games: [["Games", "/games"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
+const CRUMBS = { download: [["Download", "/download"]], games: [["Games", "/games"]], game: [["Games", "/games"]], forgot: [["Sign in", "/login"], ["Forgot password"]], friends: [["Friends", "/friends"]],
   login: [["Sign in"]], news: [["News", "/news"]], privacy: [["Privacy Policy"]], reset: [["Sign in", "/login"], ["New password"]],
   settings: [["Account Settings", "/settings"]], signup: [["Create an account"]], terms: [["Terms of Use"]], profile: [["Profile"]],
   verify: [["Confirm your email"]], wowupload: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"], ["Upload /played"]], bnetverify: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"], ["Verify characters"]], bnet: [["Account settings", "/settings"], ["World of Warcraft", "/settings#wow"]], faq: [["FAQ", "/faq"]], changelog: [["Changelog", "/changelog"]], contact: [["Contact", "/contact"]], status: [["Status", "/status"]], media: [["Media", "/media"]], admin: [["Admin", "/admin"]], notfound: [["Page not found"]] };

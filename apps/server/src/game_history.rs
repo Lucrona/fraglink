@@ -617,14 +617,11 @@ async fn catalogue(
         });
     }
     let total = games.len() as i64;
-    // Compact [id, name] or [id, name, steam_appid] — no icon URLs, hours or user fields.
+    // Compact [id, name, steam_appid|null, slug] — no icon URLs, hours or user fields.
     let payload = json!({
         "games": games
             .iter()
-            .map(|g| match g.steam_appid {
-                Some(a) => json!([g.id, g.name, a]),
-                None => json!([g.id, g.name]),
-            })
+            .map(|g| json!([g.id, g.name, g.steam_appid, g.slug]))
             .collect::<Vec<_>>(),
         "total": total,
     });
@@ -649,6 +646,7 @@ pub struct CatalogueEntry {
     pub id: String,
     pub name: String,
     pub steam_appid: Option<u32>,
+    pub slug: String,
 }
 
 /// Every supported/detected game: id, name, and a Steam app id when we know one.
@@ -746,20 +744,30 @@ pub async fn public_catalogue(st: &AppState) -> ApiResult<Vec<CatalogueEntry>> {
         }
     }
 
-    let mut out: Vec<CatalogueEntry> = map
+    let mut out: Vec<(String, String, Option<u32>)> = map
         .into_iter()
-        .map(|(id, name)| CatalogueEntry {
-            steam_appid: appids.get(&id).copied(),
-            id,
-            name,
-        })
+        .map(|(id, name)| (id.clone(), name, appids.get(&id).copied()))
         .collect();
     out.sort_by(|a, b| {
-        a.name
-            .to_lowercase()
-            .cmp(&b.name.to_lowercase())
-            .then_with(|| a.id.cmp(&b.id))
+        a.1.to_lowercase()
+            .cmp(&b.1.to_lowercase())
+            .then_with(|| a.0.cmp(&b.0))
     });
+    let _ = crate::game_pages::refresh_slugs(st, &out).await;
+    let index = st
+        .game_slugs
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    let out: Vec<CatalogueEntry> = out
+        .into_iter()
+        .map(|(id, name, steam_appid)| CatalogueEntry {
+            slug: crate::game_pages::slug_for(&index, &id),
+            id,
+            name,
+            steam_appid,
+        })
+        .collect();
     // Public catalogue steam ids plus every games-table steam_appid (including hidden rows).
     crate::home::remember_art_appids(st, appids.values().copied());
     Ok(out)

@@ -53,6 +53,31 @@ pub struct Config {
     pub art_miss_ttl_secs: u64,
     /// `FRAGLINK_ART_MISS_PER_MIN` (default 30): cache-miss fetches allowed per client IP per minute.
     pub art_miss_per_min: usize,
+    /// `FRAGLINK_GAME_STATS_MIN_PLAYERS` (default 5): hide public game-page
+    /// aggregates, top players, most-played hours and trending until this
+    /// many distinct (non-test) players have contributed.
+    pub game_stats_min_players: usize,
+    /// `FRAGLINK_GAME_STORE_TTL_SECS` (default 7 days): how long a successful
+    /// store-details cache is reused.
+    pub game_store_ttl_secs: u64,
+    /// `FRAGLINK_GAME_NEWS_TTL_SECS` (default 3 hours): how long a successful
+    /// news cache is reused.
+    pub game_news_ttl_secs: u64,
+    /// `FRAGLINK_GAME_FEED_MISS_TTL_SECS` (default 1 day): how long a failed
+    /// store or news fetch is remembered before retrying.
+    pub game_feed_miss_ttl_secs: u64,
+    /// `FRAGLINK_GAME_FEED_PER_MIN` (default 30): process-wide cap on outbound
+    /// store and news fetches (catalogue app ids / admin feed URLs only).
+    pub game_feed_per_min: usize,
+    /// `FRAGLINK_TRENDING_RATIO` (default 1.5): this week's hours must be at
+    /// least this times last week's to earn a Trending tag.
+    pub game_trending_ratio: f64,
+    /// `FRAGLINK_TRENDING_MIN_SECS` (default 18000 = 5 hours): minimum this-week
+    /// hours and hour-delta before a game can be trending.
+    pub game_trending_min_secs: i64,
+    /// `FRAGLINK_PUBLIC_WEEK_TZ` (default Australia/Sydney): the zone used for
+    /// public "this week" figures on game pages and the Games tab.
+    pub public_week_tz: String,
 }
 
 impl Config {
@@ -126,6 +151,36 @@ impl Config {
                 .and_then(|s| s.trim().parse().ok())
                 .filter(|&n| n > 0)
                 .unwrap_or(30),
+            game_stats_min_players: var("FRAGLINK_GAME_STATS_MIN_PLAYERS")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(5),
+            game_store_ttl_secs: var("FRAGLINK_GAME_STORE_TTL_SECS")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(7 * 86_400),
+            game_news_ttl_secs: var("FRAGLINK_GAME_NEWS_TTL_SECS")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(3 * 3600),
+            game_feed_miss_ttl_secs: var("FRAGLINK_GAME_FEED_MISS_TTL_SECS")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(86_400),
+            game_feed_per_min: var("FRAGLINK_GAME_FEED_PER_MIN")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(30),
+            game_trending_ratio: var("FRAGLINK_TRENDING_RATIO")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 1.0)
+                .unwrap_or(1.5),
+            game_trending_min_secs: var("FRAGLINK_TRENDING_MIN_SECS")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(18_000),
+            public_week_tz: var("FRAGLINK_PUBLIC_WEEK_TZ")
+                .unwrap_or_else(|| crate::activity::DEFAULT_TZ.into()),
         })
     }
 
@@ -155,6 +210,14 @@ impl Config {
             art_max_bytes: 1_500_000,
             art_miss_ttl_secs: 86_400,
             art_miss_per_min: 30,
+            game_stats_min_players: 5,
+            game_store_ttl_secs: 7 * 86_400,
+            game_news_ttl_secs: 3 * 3600,
+            game_feed_miss_ttl_secs: 86_400,
+            game_feed_per_min: 30,
+            game_trending_ratio: 1.5,
+            game_trending_min_secs: 18_000,
+            public_week_tz: crate::activity::DEFAULT_TZ.into(),
         }
     }
 

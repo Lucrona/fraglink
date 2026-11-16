@@ -555,8 +555,9 @@ async fn list_sync_and_public_updates_and_manual_hide(pool: PgPool) {
     assert_eq!(zebra[0], "shown");
     assert_eq!(zebra[1], "Zebra Quest");
     assert_eq!(zebra[2], 7940);
+    assert_eq!(zebra[3], "zebra-quest");
     assert!(games.iter().all(|g| {
-        g.as_array().is_some_and(|a| a.len() == 2 || a.len() == 3)
+        g.as_array().is_some_and(|a| a.len() == 4)
             && g.get("hours").is_none()
             && g.get("players").is_none()
     }));
@@ -576,11 +577,13 @@ async fn list_sync_and_public_updates_and_manual_hide(pool: PgPool) {
     let body: Value = serde_json::from_str(&full.text).unwrap();
     for g in body["games"].as_array().unwrap() {
         let a = g.as_array().expect("compact array");
-        assert!(a.len() == 2 || a.len() == 3, "{g}");
+        assert!(a.len() == 4, "{g}");
+        assert!(a[3].as_str().is_some_and(|s| !s.is_empty()), "{g}");
         assert!(a[0].is_string() && a[1].is_string());
-        if a.len() == 3 {
-            assert!(a[2].as_u64().is_some_and(|n| n > 0), "{g}");
-        }
+        assert!(
+            a[2].is_null() || a[2].as_u64().is_some_and(|n| n > 0),
+            "{g}"
+        );
         assert!(g.get("hours").is_none() && g.get("user_id").is_none());
     }
 }

@@ -77,3 +77,55 @@ test('admin games page has a change log and a requests queue', () => {
   assert.match(admin, /\/admin\/game-requests/);
   assert.match(admin, /Approve and add/);
 });
+
+test('games tab adds most-played, new-to-the-list and genre chips, and keeps search plus updates', () => {
+  assert.match(page, /data-most-played/);
+  assert.match(page, /Most played this week/);
+  assert.match(page, /data-new-list/);
+  assert.match(page, /New to the list/);
+  assert.match(page, /data-genres/);
+  assert.match(page, /data-genre-chips/);
+  assert.match(page, /<span class="tab">Recent updates<\/span>/);
+  assert.match(page, /<span class="tab">Missing a game\?<\/span>/);
+  assert.match(app, /api\("\/games\/tab"/);
+  assert.match(app, /trend-tag/);
+  assert.match(app, /Trending/);
+  assert.match(app, /genreFilter/);
+  assert.match(css, /\.trend-tag/);
+  assert.match(css, /\.g-chips/);
+});
+
+test('one generic game page template, no screenshots or extras toggle', () => {
+  const one = fs.readFileSync(path.join(root, 'pages/games-one.html'), 'utf8');
+  assert.match(one, /page: game/);
+  assert.match(one, /data-game-root/);
+  assert.match(app, /pages\.game = async/);
+  assert.match(app, /api\("\/games\/page\/"/);
+  assert.match(app, /Missing info\?/);
+  assert.match(app, /Top players/);
+  assert.match(app, /Game info/);
+  assert.doesNotMatch(app.slice(app.indexOf('pages.game = async'), app.indexOf('pages.login')), /Screenshots|wow-version-switch|data-extras|Retail\/Forever/);
+  assert.doesNotMatch(one, /Screenshots|toggle|wow-version-switch/i);
+  assert.match(css, /\.gp-art/);
+  assert.match(css, /\.gp-stats/);
+});
+
+test('game names and icons link to /games/<slug> on profiles, friends, activity, search and updates', () => {
+  assert.match(app, /function gameHref/);
+  assert.match(app, /function gameLink/);
+  assert.match(app, /function iconLink/);
+  assert.match(app, /class="g-row glink"/);
+  assert.match(app, /location\.href = href/);
+  assert.match(app, /gameLink\(e\.game_id, e\.game_name/);
+  assert.match(app, /iconLink\(g\.game_id, g\.name\)/);
+  assert.match(app, /gameLink\(g\.game_id, g\.name\)/);
+  assert.match(app, /iconLink\(p\.game_id, p\.game_name\)/);
+  assert.match(app, /class="tile2" href="\$\{gameHref/);
+});
+
+test('admin can edit game page info and a news feed URL', () => {
+  assert.match(admin, /id="gpage"/);
+  assert.match(admin, /News feed URL/);
+  assert.match(admin, /\/admin\/games\/" \+ encodeURIComponent\(id\) \+ "\/page"/);
+  assert.match(admin, /news_feed_url/);
+});
