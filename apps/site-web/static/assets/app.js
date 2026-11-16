@@ -220,7 +220,8 @@ function gameHref(id, name, slug) {
 function gameLink(id, name, slug, inner) {
   const href = gameHref(id, name, slug);
   const body = inner != null ? inner : esc(name || "");
-  return href ? `<a class="glink" href="${href}">${body}</a>` : body;
+  const tip = name ? ` title="${esc(name)}"` : "";
+  return href ? `<a class="glink" href="${href}"${tip}>${body}</a>` : body;
 }
 function iconLink(id, name, cls, slug) {
   const inner = icon(id, name, cls);
@@ -1343,7 +1344,7 @@ pages.games = async () => {
     });
   };
   const rowHtml = (g, raw, extra) =>
-    `<a class="g-row glink" href="${gameHref(g[0], g[1], g[3])}" data-id="${esc(g[0])}"${g[2] ? ` data-appid="${esc(String(g[2]))}"` : ""}>${thumbHtml(g)}<span class="g-name">${raw ? highlight(g[1], raw) : esc(g[1])}</span>${extra || ""}</a>`;
+    `<a class="g-row glink" href="${gameHref(g[0], g[1], g[3])}" title="${esc(g[1])}" data-id="${esc(g[0])}"${g[2] ? ` data-appid="${esc(String(g[2]))}"` : ""}>${thumbHtml(g)}<span class="g-name">${raw ? highlight(g[1], raw) : esc(g[1])}</span>${extra || ""}</a>`;
 
   const readQuery = () => (new URLSearchParams(location.search).get("q") || "");
   const setUrl = (term, push) => {
