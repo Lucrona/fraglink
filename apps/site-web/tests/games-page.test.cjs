@@ -9,22 +9,28 @@ const page = fs.readFileSync(path.join(root, 'pages/games.html'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'static/assets/app.js'), 'utf8');
 const admin = fs.readFileSync(path.join(root, 'static/assets/admin.js'), 'utf8');
 
-test('Games sits on the right of the top bar, and stays in the footer', () => {
-  assert.match(layout, /<nav class="nav">[^<]*<a href="\/">Home<\/a><a href="\/download">Download<\/a><a href="\/faq">FAQ<\/a><\/nav>/);
-  assert.doesNotMatch(layout, /<nav class="nav"><a href="\/">Home<\/a><a href="\/download">Download<\/a><a href="\/faq">FAQ<\/a><a href="\/games">/);
-  assert.match(layout, /<div class="top-end"><nav class="nav nav-end"><a href="\/games">Games<\/a><\/nav><div class="right">/);
+test('Games is in the left nav after Profile and Friends when signed in, and after FAQ when signed out', () => {
+  assert.match(layout, /<nav class="nav">[^<]*<a href="\/">Home<\/a><a href="\/download">Download<\/a><a href="\/faq">FAQ<\/a><a href="\/games">Games<\/a><\/nav>/);
+  assert.doesNotMatch(layout, /top-end|nav-end/);
   assert.match(layout, /<div class="right"><a class="btn" href="\/login">Sign in<\/a>/);
   assert.match(layout, /<a href="\/faq">FAQ<\/a><a href="\/games">Games<\/a><a href="\/changelog">Changelog<\/a>/);
-  assert.match(app, /nav-end/);
-  assert.match(app, /href="\/games".*Games/);
-  assert.doesNotMatch(app, /items\.push\(\["download", "\/download", "Download"\], \["faq", "\/faq", "FAQ"\], \["games", "\/games", "Games"\]\)/);
+  assert.doesNotMatch(app, /nav-end/);
+  const start = app.indexOf('function renderHeader');
+  const hdr = app.slice(start, app.indexOf('async function logout'));
+  assert.match(hdr, /\["games", "\/games", "Games"\]/);
+  const friendsThenGames = hdr.indexOf('["friends"') >= 0 && hdr.indexOf('["games", "/games", "Games"]') > hdr.indexOf('["friends"');
+  assert.ok(friendsThenGames, 'signed-in Games should follow Profile and Friends');
+  assert.match(hdr, /items\.push\(\["download", "\/download", "Download"\], \["faq", "\/faq", "FAQ"\], \["games", "\/games", "Games"\]\)/);
 });
 
-test('games page is an A–Z directory with slant-tab headers and no hours or user data', () => {
+test('games page is search-only, with live suggestions and a shareable query', () => {
   assert.match(page, /page: games/);
   assert.match(page, /<span class="tab">Recent updates<\/span>/);
   assert.match(page, /<span class="tab">Games<\/span>/);
-  assert.match(page, /az-jump/);
+  assert.match(page, /id="games-q"/);
+  assert.match(page, /id="games-suggest"/);
+  assert.match(page, /data-try/);
+  assert.doesNotMatch(page, /az-jump|data-pager|Letters/);
   assert.match(page, /<span class="tab">Missing a game\?<\/span>/);
   assert.match(page, /sign in to request/i);
   assert.match(page, /id="games-req"/);
@@ -33,10 +39,20 @@ test('games page is an A–Z directory with slant-tab headers and no hours or us
   assert.match(app, /pages\.games = async/);
   assert.match(app, /\/games\/catalogue/);
   assert.match(app, /api\("\/games\/updates/);
-  assert.match(app, /IntersectionObserver/);
-  assert.match(app, /loading = "lazy"/);
+  assert.match(app, /const LIMIT = 50/);
+  assert.match(app, /const SUGGEST = 8/);
+  assert.match(app, /const MIN = 2/);
+  assert.match(app, /ALIASES/);
+  assert.match(app, /cs2: "counter strike 2"/);
+  assert.match(app, /cod: "call of duty"/);
+  assert.match(app, /showSuggest/);
+  assert.match(app, /ArrowDown/);
+  assert.match(app, /Refine your search/);
+  assert.match(app, /\/games\?q=/);
+  assert.doesNotMatch(app, /\?l=|az-jump|IntersectionObserver|const PAGE = 200/);
   assert.match(app, /nameNorm/);
   assert.match(app, /\/games\/requests/);
+  assert.match(app, /request it below/);
 });
 
 test('admin games page has a change log and a requests queue', () => {
