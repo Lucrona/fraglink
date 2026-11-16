@@ -320,8 +320,12 @@ function renderHeader() {
   const nav = $(".nav");
   if (nav) {
     const items = [["home", "/", "Home"]];
-    if (u) items.push(["profile", "/u/" + encodeURIComponent(u.handle), "Profile"], ["friends", "/friends", "Friends"]);
-    items.push(["download", "/download", "Download"], ["faq", "/faq", "FAQ"]);
+    if (u) {
+      items.push(["profile", "/u/" + encodeURIComponent(u.handle), "Profile"], ["friends", "/friends", "Friends"], ["games", "/games", "Games"]);
+      items.push(["download", "/download", "Download"], ["faq", "/faq", "FAQ"]);
+    } else {
+      items.push(["download", "/download", "Download"], ["faq", "/faq", "FAQ"], ["games", "/games", "Games"]);
+    }
     const mine = page === "profile" && u && location.pathname.toLowerCase() === "/u/" + u.handle.toLowerCase();
     nav.innerHTML = items.map(([k, href, label]) => {
       const on = (k === page && (k !== "profile" || mine)) ? "on" : "";
@@ -331,8 +335,6 @@ function renderHeader() {
       return `<a href="${href}" class="${on}">${label}${badge}</a>`;
     }).join("");
   }
-  const gamesEnd = $(".nav-end");
-  if (gamesEnd) gamesEnd.innerHTML = `<a href="/games"${page === "games" ? ' class="on"' : ""}>Games</a>`;
   const right = $(".top .right");
   if (!right) return;
   if (u) {
@@ -1154,6 +1156,7 @@ pages.games = async () => {
   const upd = root.querySelector("[data-updates]");
   const list = root.querySelector("[data-list]");
   const jump = root.querySelector("[data-jump]");
+  const pager = root.querySelector("[data-pager]");
   const q = root.querySelector("#games-q");
   const count = root.querySelector("[data-count]");
   const none = root.querySelector("[data-none]");
@@ -1170,6 +1173,7 @@ pages.games = async () => {
   }
 
   const LETTERS = ["#", "0-9", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
+  const PAGE = 200;
   const letterLabel = k => k === "0-9" ? "0–9" : k;
   const letterKey = name => {
     const ch = (name || "").charAt(0).toUpperCase();
@@ -1179,15 +1183,25 @@ pages.games = async () => {
   };
   const iconSrc = id => "/icons/games/32/" + encodeURIComponent(id) + ".png";
   const nameNorm = s => (s || "").normalize("NFKC").replace(/[™®©]/g, "").toLowerCase().replace(/[^a-z0-9]+/gi, " ").trim();
-  const fillLetter = sec => {
-    if (!sec || sec.dataset.ready) return;
-    const games = sec._games || [];
-    sec.querySelector(".az-cols").innerHTML = games.map(([id, name]) =>
-      `<div class="g-row" data-id="${esc(id)}"><span class="g-ico-miss" aria-hidden="true"></span><span>${esc(name)}</span></div>`).join("");
-    sec.dataset.ready = "1";
-    // Icons only once the letter is on screen, and only via lazy-loading.
+  const params = () => new URLSearchParams(location.search);
+  const readQuery = () => (params().get("q") || "").trim();
+  const readPage = () => { const n = parseInt(params().get("p") || "1", 10); return Number.isFinite(n) && n > 0 ? n : 1; };
+  const readLetter = present => {
+    const raw = (params().get("l") || "").trim();
+    if (raw && LETTERS.includes(raw)) return raw;
+    return present.has("A") ? "A" : (present.has("#") ? "#" : (LETTERS.find(k => present.has(k)) || "A"));
+  };
+  const setUrl = (letter, page, term, push) => {
+    const sp = new URLSearchParams();
+    if (term) sp.set("q", term);
+    else if (letter) sp.set("l", letter);
+    if (page > 1) sp.set("p", String(page));
+    const url = "/games" + (sp.toString() ? "?" + sp : "");
+    history[push ? "pushState" : "replaceState"]({ letter, page, q: term }, "", url);
+  };
+  const paintIcons = scope => {
     requestAnimationFrame(() => {
-      $$(".g-row[data-id]", sec).forEach(row => {
+      $$(".g-row[data-id]", scope).forEach(row => {
         const img = document.createElement("img");
         img.width = 24; img.height = 24; img.alt = "";
         img.loading = "lazy"; img.decoding = "async";
@@ -1197,44 +1211,86 @@ pages.games = async () => {
       });
     });
   };
-  const io = ("IntersectionObserver" in window)
-    ? new IntersectionObserver(ents => { ents.forEach(e => { if (e.isIntersecting) { fillLetter(e.target); io.unobserve(e.target); } }); }, { rootMargin: "600px 0px" })
-    : null;
+  const rowHtml = ([id, name]) =>
+    `<div class="g-row" data-id="${esc(id)}"><span class="g-ico-miss" aria-hidden="true"></span><span>${esc(name)}</span></div>`;
 
   let all = []; // [id, name]
-  function render(term) {
-    const t = (term || "").trim().toLowerCase();
-    const filtered = t
-      ? all.filter(([id, name]) => name.toLowerCase().includes(t) || id.toLowerCase().includes(t))
-      : all;
-    count.textContent = filtered.length ? filtered.length.toLocaleString("en") : "";
-    if (!filtered.length) {
-      list.innerHTML = "";
-      jump.hidden = true;
-      none.hidden = false;
-      none.textContent = t ? "No games match that search." : "No games to show yet.";
+  let groups = new Map();
+
+  function render({ push } = {}) {
+    const term = (q.value || "").trim();
+    const t = term.toLowerCase();
+    const present = new Set(groups.keys());
+    let letter = readLetter(present);
+    let page = readPage();
+
+    if (term) {
+      const hits = all.filter(([id, name]) => name.toLowerCase().includes(t) || id.toLowerCase().includes(t));
+      const pages = Math.max(1, Math.ceil(hits.length / PAGE));
+      if (page > pages) page = pages;
+      setUrl(null, page, term, push);
+      jump.hidden = false;
+      jump.innerHTML = LETTERS.map(k => present.has(k)
+        ? `<a href="/games?l=${encodeURIComponent(k)}">${letterLabel(k)}</a>`
+        : `<span class="off">${letterLabel(k)}</span>`).join("");
+      if (!hits.length) {
+        list.innerHTML = "";
+        pager.hidden = true;
+        none.hidden = false;
+        none.textContent = "No games match that search.";
+        count.textContent = "";
+        return;
+      }
+      none.hidden = true;
+      const start = (page - 1) * PAGE;
+      const slice = hits.slice(start, start + PAGE);
+      const last = start + slice.length;
+      count.textContent = `${(start + 1).toLocaleString("en")}–${last.toLocaleString("en")} of ${hits.length.toLocaleString("en")}`;
+      list.innerHTML = `<div class="az-sec az-search"><div class="az-cols">${slice.map(rowHtml).join("")}</div></div>`;
+      paintIcons(list);
+      pager.hidden = pages <= 1;
+      if (pages > 1) {
+        pager.innerHTML = `<button class="btn sm" type="button" data-prev${page <= 1 ? " disabled" : ""}>Prev</button><span class="dimt">Page ${page} of ${pages}</span><button class="btn sm" type="button" data-next${page >= pages ? " disabled" : ""}>Next</button>`;
+      }
       return;
     }
-    none.hidden = true;
-    const groups = new Map();
-    filtered.forEach(g => {
-      const k = letterKey(g[1]);
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(g);
-    });
+
+    if (!present.size) {
+      list.innerHTML = "";
+      jump.hidden = true;
+      pager.hidden = true;
+      none.hidden = false;
+      none.textContent = "No games to show yet.";
+      count.textContent = "";
+      return;
+    }
+    if (!present.has(letter)) letter = present.has("A") ? "A" : (present.has("#") ? "#" : LETTERS.find(k => present.has(k)));
+    const games = groups.get(letter) || [];
+    const pages = Math.max(1, Math.ceil(games.length / PAGE));
+    if (page > pages) page = pages;
+    setUrl(letter, page, "", push);
     jump.hidden = false;
-    jump.innerHTML = LETTERS.map(k => groups.has(k)
-      ? `<a href="#letter-${encodeURIComponent(k)}">${letterLabel(k)}</a>`
-      : `<span class="off">${letterLabel(k)}</span>`).join("");
-    list.innerHTML = LETTERS.filter(k => groups.has(k)).map(k =>
-      `<div class="az-sec" id="letter-${esc(k)}" data-letter="${esc(k)}"><div class="az-let" aria-hidden="true">${esc(letterLabel(k))}</div><div class="az-cols"></div></div>`
-    ).join("");
-    $$(".az-sec", list).forEach(sec => {
-      sec._games = groups.get(sec.dataset.letter) || [];
-      if (io) io.observe(sec); else fillLetter(sec);
-    });
-    const hash = location.hash.startsWith("#letter-") ? location.hash.slice(1) : "";
-    if (hash) { const el = document.getElementById(hash); if (el) { fillLetter(el); el.scrollIntoView(); } }
+    jump.innerHTML = LETTERS.map(k => {
+      if (!present.has(k)) return `<span class="off">${letterLabel(k)}</span>`;
+      const on = k === letter ? " on" : "";
+      return `<a href="/games?l=${encodeURIComponent(k)}" class="${on.trim()}">${letterLabel(k)}</a>`;
+    }).join("");
+    none.hidden = !games.length;
+    none.textContent = games.length ? "" : "No games in this letter.";
+    const start = (page - 1) * PAGE;
+    const slice = games.slice(start, start + PAGE);
+    const last = start + slice.length;
+    count.textContent = games.length
+      ? `${(start + 1).toLocaleString("en")}–${last.toLocaleString("en")} of ${games.length.toLocaleString("en")}`
+      : "";
+    list.innerHTML = games.length
+      ? `<div class="az-sec" data-letter="${esc(letter)}"><div class="az-let" aria-hidden="true">${esc(letterLabel(letter))}</div><div class="az-cols">${slice.map(rowHtml).join("")}</div></div>`
+      : "";
+    paintIcons(list);
+    pager.hidden = pages <= 1;
+    if (pages > 1) {
+      pager.innerHTML = `<button class="btn sm" type="button" data-prev${page <= 1 ? " disabled" : ""}>Prev</button><span class="dimt">Page ${page} of ${pages}</span><button class="btn sm" type="button" data-next${page >= pages ? " disabled" : ""}>Next</button>`;
+    }
   }
 
   try {
@@ -1243,13 +1299,55 @@ pages.games = async () => {
     if (!r.ok) throw new Error("Could not load the games list.");
     const d = await r.json();
     all = (d.games || []).map(g => Array.isArray(g) ? g : [g.id, g.name]);
-    render("");
+    groups = new Map();
+    all.forEach(g => {
+      const k = letterKey(g[1]);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(g);
+    });
+    const initialQ = readQuery();
+    if (initialQ) q.value = initialQ;
+    render({ push: false });
   } catch (e) {
     none.hidden = false;
     none.textContent = e.message || "Could not load the games list.";
   }
+
   let timer;
-  q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => render(q.value), 250); });
+  q.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const url = new URL(location.href);
+      url.searchParams.delete("p");
+      if (q.value.trim()) { url.searchParams.delete("l"); url.searchParams.set("q", q.value.trim()); }
+      else url.searchParams.delete("q");
+      history.replaceState({}, "", url.pathname + url.search);
+      render({ push: false });
+    }, 250);
+  });
+  jump.addEventListener("click", e => {
+    const a = e.target.closest("a"); if (!a || !jump.contains(a)) return;
+    e.preventDefault();
+    q.value = "";
+    const href = new URL(a.href, location.origin);
+    history.pushState({}, "", href.pathname + href.search);
+    render({ push: false });
+  });
+  pager.addEventListener("click", e => {
+    const b = e.target.closest("[data-prev],[data-next]"); if (!b || b.disabled) return;
+    const cur = readPage();
+    const url = new URL(location.href);
+    const next = b.hasAttribute("data-next") ? cur + 1 : cur - 1;
+    if (next > 1) url.searchParams.set("p", String(next)); else url.searchParams.delete("p");
+    history.pushState({}, "", url.pathname + url.search);
+    render({ push: false });
+    list.scrollIntoView({ block: "start" });
+  });
+  window.addEventListener("popstate", () => {
+    const initialQ = readQuery();
+    if (q.value !== initialQ) q.value = initialQ;
+    render({ push: false });
+  });
 
   const signedIn = !!(token() && me());
   const out = root.querySelector(".g-ask-out");
@@ -1288,7 +1386,6 @@ pages.games = async () => {
     });
   }
 };
-
 
 pages.login = () => {
   if (token() && me()) { location.replace(safeNext(qs("next")) || "/"); return; }
