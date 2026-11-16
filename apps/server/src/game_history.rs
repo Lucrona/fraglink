@@ -760,5 +760,7 @@ pub async fn public_catalogue(st: &AppState) -> ApiResult<Vec<CatalogueEntry>> {
             .cmp(&b.name.to_lowercase())
             .then_with(|| a.id.cmp(&b.id))
     });
+    // Public catalogue steam ids plus every games-table steam_appid (including hidden rows).
+    crate::home::remember_art_appids(st, appids.values().copied());
     Ok(out)
 }

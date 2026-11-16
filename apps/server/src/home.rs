@@ -1,6 +1,6 @@
 //! Home page data (`GET /api/v1/home`, signed in or out), Steam header art for game tiles
 //! (`/api/v1/art/<appid>.jpg`, fetched once and cached on disk so browsers never talk to
-//! Steam), and the shareable signature image (`/api/v1/sig/<handle>.png`).
+//! Steam, and only for app ids in the public catalogue or the games table), and the shareable signature image (`/api/v1/sig/<handle>.png`).
 //!
 //! Privacy: signed out, only aggregate numbers and people who turned on "public profile"
 //! appear. Signed in, top players are people who share their activity (like the game
@@ -11,13 +11,13 @@ use crate::error::ApiResult;
 use crate::{avatars, friends, names, presence, AppState};
 use axum::body::Body;
 use axum::extract::{Path, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
 
 pub fn routes() -> Router<AppState> {
@@ -458,47 +458,206 @@ pub async fn build(st: &AppState, viewer: Option<Uuid>, tz: &str) -> ApiResult<V
 }
 
 // ------------------------------------------------------------------ Steam header art
+//
+// Paths stay `{data_dir}/art/{appid}.jpg` and `{appid}.miss`. Unknown app ids
+// (not in the public catalogue or the games table) 404 without touching Steam
+// or disk. The in-memory allow set is refreshed whenever the catalogue is built.
+
+/// Allowed Steam app ids for `/api/v1/art`. Refreshed with the public catalogue
+/// (and rebuilt lazily if an art request arrives first).
+#[derive(Default)]
+pub struct ArtAppids {
+    ids: HashSet<u32>,
+    /// When the set was last built. `None` means it has never been populated.
+    at: Option<Instant>,
+}
+
+impl ArtAppids {
+    const TTL: Duration = Duration::from_secs(3600);
+
+    fn remember(&mut self, ids: impl IntoIterator<Item = u32>) {
+        self.ids = ids.into_iter().collect();
+        self.at = Some(Instant::now());
+    }
+
+    fn fresh(&self) -> bool {
+        self.at.is_some_and(|t| t.elapsed() < Self::TTL)
+    }
+
+    fn contains(&self, appid: u32) -> bool {
+        self.ids.contains(&appid)
+    }
+}
+
+/// Record the current allow set (called from `public_catalogue`).
+pub fn remember_art_appids(st: &AppState, ids: impl IntoIterator<Item = u32>) {
+    st.art_appids
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remember(ids);
+}
+
+async fn art_appid_allowed(st: &AppState, appid: u32) -> bool {
+    {
+        let g = st.art_appids.lock().unwrap_or_else(|e| e.into_inner());
+        if g.fresh() {
+            return g.contains(appid);
+        }
+    }
+    let _ = crate::game_history::public_catalogue(st).await;
+    st.art_appids
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains(appid)
+}
 
 fn art_dir(st: &AppState) -> std::path::PathBuf {
     st.cfg.data_dir.join("art")
 }
 
-async fn art(State(st): State<AppState>, Path(file): Path<String>) -> Response {
+fn is_art_cache_jpg(name: &str) -> bool {
+    name.strip_suffix(".jpg")
+        .is_some_and(|n| n.parse::<u32>().is_ok())
+}
+
+fn is_art_cache_miss(name: &str) -> bool {
+    name.strip_suffix(".miss")
+        .is_some_and(|n| n.parse::<u32>().is_ok())
+}
+
+fn art_fresh(path: &std::path::Path, secs: u64) -> bool {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .is_some_and(|e| e < Duration::from_secs(secs))
+}
+
+fn touch_mtime(path: &std::path::Path) {
+    if let Ok(f) = std::fs::File::open(path) {
+        let _ = f.set_modified(SystemTime::now());
+    }
+}
+
+/// Delete `{appid}.miss` markers whose mtime is at least `ttl_secs` old.
+/// Only files directly in `dir` matching `{appid}.miss` are touched.
+pub(crate) fn expire_art_misses(dir: &std::path::Path, ttl_secs: u64) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let ttl = Duration::from_secs(ttl_secs);
+    for e in rd.flatten() {
+        let name = e.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if !is_art_cache_miss(name) {
+            continue;
+        }
+        let stale = std::fs::metadata(e.path())
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_none_or(|age| age >= ttl);
+        if stale {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+}
+
+/// Evict least-recently-used (`mtime`) cached header jpegs until the art
+/// directory is at or under `cap` bytes. Only `{appid}.jpg` files directly in
+/// `dir` are considered (never `art/g` or `art/override`). `keep` (a file name
+/// like `730.jpg`) is never deleted, even if the cap is already exceeded.
+pub(crate) fn evict_art_cache(dir: &std::path::Path, cap: u64, keep: Option<&str>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut files: Vec<(SystemTime, u64, std::path::PathBuf)> = Vec::new();
+    for e in rd.flatten() {
+        let name = e.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if !is_art_cache_jpg(name) {
+            continue;
+        }
+        let Ok(meta) = e.metadata() else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let mtime = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        files.push((mtime, meta.len(), e.path()));
+    }
+    let mut total: u64 = files.iter().map(|f| f.1).sum();
+    if total <= cap {
+        return;
+    }
+    files.sort_by_key(|f| f.0);
+    for (_, size, path) in &files {
+        if total <= cap {
+            break;
+        }
+        if keep.is_some_and(|k| path.file_name().and_then(|n| n.to_str()) == Some(k)) {
+            continue;
+        }
+        if std::fs::remove_file(path).is_ok() {
+            total = total.saturating_sub(*size);
+        }
+    }
+}
+
+fn send_jpeg(b: Vec<u8>) -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "image/jpeg"),
+            (header::CACHE_CONTROL, "public, max-age=604800"),
+        ],
+        Body::from(b),
+    )
+        .into_response()
+}
+
+async fn art(State(st): State<AppState>, Path(file): Path<String>, headers: HeaderMap) -> Response {
     let Some(appid) = file
         .strip_suffix(".jpg")
         .and_then(|n| n.parse::<u32>().ok())
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
+    if !art_appid_allowed(&st, appid).await {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let d = art_dir(&st);
     let p = d.join(format!("{appid}.jpg"));
     let miss = d.join(format!("{appid}.miss"));
-    let fresh = |path: &std::path::Path, secs: u64| {
-        std::fs::metadata(path)
-            .and_then(|m| m.modified())
-            .ok()
-            .and_then(|t| t.elapsed().ok())
-            .is_some_and(|e| e < Duration::from_secs(secs))
-    };
-    let send = |b: Vec<u8>| {
-        (
-            [
-                (header::CONTENT_TYPE, "image/jpeg"),
-                (header::CACHE_CONTROL, "public, max-age=604800"),
-            ],
-            Body::from(b),
-        )
-            .into_response()
-    };
-    if fresh(&p, 30 * 86400) {
+    if art_fresh(&p, 30 * 86400) {
         if let Ok(b) = tokio::fs::read(&p).await {
-            return send(b);
+            touch_mtime(&p);
+            return send_jpeg(b);
         }
     }
-    if fresh(&miss, 86400) {
-        return StatusCode::NOT_FOUND.into_response();
+    if miss.exists() {
+        if art_fresh(&miss, st.cfg.art_miss_ttl_secs) {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        let _ = std::fs::remove_file(&miss);
+    }
+    let ip = crate::client_ip(&headers);
+    if let Err(e) = st.rate_limit(
+        format!("art:{ip}"),
+        st.cfg.art_miss_per_min,
+        Duration::from_secs(60),
+    ) {
+        if let Ok(b) = tokio::fs::read(&p).await {
+            return send_jpeg(b);
+        }
+        return e.into_response();
     }
     let url = format!("{}/{appid}/header.jpg", st.cfg.steam_art_cdn);
+    let max = st.cfg.art_max_bytes;
     let got = async {
         let r = reqwest::Client::new()
             .get(&url)
@@ -510,21 +669,80 @@ async fn art(State(st): State<AppState>, Path(file): Path<String>) -> Response {
             return None;
         }
         let b = r.bytes().await.ok()?;
-        (b.len() < 1_500_000 && b.starts_with(&[0xff, 0xd8])).then(|| b.to_vec())
+        (b.len() < max && b.starts_with(&[0xff, 0xd8])).then(|| b.to_vec())
     }
     .await;
     let _ = std::fs::create_dir_all(&d);
+    expire_art_misses(&d, st.cfg.art_miss_ttl_secs);
     match got {
         Some(b) => {
             let _ = std::fs::write(&p, &b);
-            send(b)
+            evict_art_cache(&d, st.cfg.art_cache_bytes, Some(&format!("{appid}.jpg")));
+            send_jpeg(b)
         }
         None => {
             if let Ok(b) = tokio::fs::read(&p).await {
-                return send(b); // stale copy beats nothing
+                return send_jpeg(b); // stale copy beats nothing
             }
             let _ = std::fs::write(&miss, b"");
             StatusCode::NOT_FOUND.into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod art_cache_tests {
+    use super::*;
+    use std::time::{Duration, SystemTime};
+
+    fn write_jpg(dir: &std::path::Path, name: &str, size: usize, age: Duration) {
+        let p = dir.join(name);
+        std::fs::write(&p, vec![0u8; size]).unwrap();
+        let m = SystemTime::now() - age;
+        let f = std::fs::File::options().write(true).open(&p).unwrap();
+        f.set_modified(m).unwrap();
+    }
+
+    #[test]
+    fn evicts_oldest_jpg_by_mtime_until_under_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        write_jpg(dir.path(), "111.jpg", 80, Duration::from_secs(30));
+        write_jpg(dir.path(), "222.jpg", 80, Duration::from_secs(20));
+        write_jpg(dir.path(), "333.jpg", 80, Duration::from_secs(1));
+        evict_art_cache(dir.path(), 160, Some("333.jpg"));
+        assert!(!dir.path().join("111.jpg").exists());
+        assert!(dir.path().join("222.jpg").exists());
+        assert!(dir.path().join("333.jpg").exists());
+    }
+
+    #[test]
+    fn evict_skips_subdirs_and_non_appid_files() {
+        let dir = tempfile::tempdir().unwrap();
+        write_jpg(dir.path(), "111.jpg", 80, Duration::from_secs(30));
+        std::fs::create_dir_all(dir.path().join("g")).unwrap();
+        std::fs::create_dir_all(dir.path().join("override")).unwrap();
+        std::fs::write(dir.path().join("g/keep.jpg"), vec![0u8; 200]).unwrap();
+        std::fs::write(dir.path().join("override/1.jpg"), vec![0u8; 200]).unwrap();
+        std::fs::write(dir.path().join("header.jpg"), vec![0u8; 200]).unwrap();
+        evict_art_cache(dir.path(), 0, None);
+        assert!(!dir.path().join("111.jpg").exists());
+        assert!(dir.path().join("g/keep.jpg").exists());
+        assert!(dir.path().join("override/1.jpg").exists());
+        assert!(dir.path().join("header.jpg").exists());
+    }
+
+    #[test]
+    fn expire_art_misses_deletes_stale_markers_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let stale = dir.path().join("111.miss");
+        let fresh = dir.path().join("222.miss");
+        std::fs::write(&stale, b"").unwrap();
+        std::fs::write(&fresh, b"").unwrap();
+        let f = std::fs::File::options().write(true).open(&stale).unwrap();
+        f.set_modified(SystemTime::now() - Duration::from_secs(86_400 * 2))
+            .unwrap();
+        expire_art_misses(dir.path(), 86_400);
+        assert!(!stale.exists());
+        assert!(fresh.exists());
     }
 }

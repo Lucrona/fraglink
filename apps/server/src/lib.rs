@@ -99,6 +99,8 @@ pub struct AppState {
     /// beta.5: user -> (`exe:` id, their own name for it) while they play an unapproved
     /// program. In memory (resent every heartbeat); shown only to that user.
     pub own_names: Arc<std::sync::Mutex<HashMap<uuid::Uuid, (String, String)>>>,
+    /// Steam app ids allowed through `GET /api/v1/art`, refreshed with the public catalogue.
+    pub art_appids: Arc<Mutex<crate::home::ArtAppids>>,
 }
 
 impl AppState {
@@ -120,6 +122,7 @@ impl AppState {
             realms: Arc::new(realms::RealmCache::default()),
             home_public: Arc::new(std::sync::Mutex::new(None)),
             own_names: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            art_appids: Arc::new(Mutex::new(crate::home::ArtAppids::default())),
         }
     }
 
