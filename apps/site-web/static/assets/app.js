@@ -1151,10 +1151,11 @@ pages.games = async () => {
   if (!root) return;
   const upd = root.querySelector("[data-updates]");
   const list = root.querySelector("[data-list]");
+  const jump = root.querySelector("[data-jump]");
   const q = root.querySelector("#games-q");
   const count = root.querySelector("[data-count]");
-  const more = root.querySelector("[data-more]");
   const none = root.querySelector("[data-none]");
+  const form = root.querySelector("#games-req");
   const updDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
   try {
     const u = await api("/games/updates");
@@ -1165,31 +1166,125 @@ pages.games = async () => {
   } catch (e) {
     upd.innerHTML = `<p class="empty">${esc(e.message || "Could not load updates.")}</p>`;
   }
-  let offset = 0, total = 0, term = "";
-  async function load(reset) {
-    if (reset) { offset = 0; list.innerHTML = ""; }
-    const d = await api("/games/catalogue?" + new URLSearchParams({ q: term, offset, limit: 100 }));
-    total = d.total || 0;
-    const games = d.games || [];
-    if (reset && !games.length) {
+
+  const LETTERS = ["#", "0-9", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
+  const letterLabel = k => k === "0-9" ? "0–9" : k;
+  const letterKey = name => {
+    const ch = (name || "").charAt(0).toUpperCase();
+    if (ch >= "A" && ch <= "Z") return ch;
+    if (ch >= "0" && ch <= "9") return "0-9";
+    return "#";
+  };
+  const iconSrc = id => "/icons/games/32/" + encodeURIComponent(id) + ".png";
+  const nameNorm = s => (s || "").normalize("NFKC").replace(/[™®©]/g, "").toLowerCase().replace(/[^a-z0-9]+/gi, " ").trim();
+  const fillLetter = sec => {
+    if (!sec || sec.dataset.ready) return;
+    const games = sec._games || [];
+    sec.querySelector(".az-cols").innerHTML = games.map(([id, name]) =>
+      `<div class="g-row" data-id="${esc(id)}"><span class="g-ico-miss" aria-hidden="true"></span><span>${esc(name)}</span></div>`).join("");
+    sec.dataset.ready = "1";
+    // Icons only once the letter is on screen, and only via lazy-loading.
+    requestAnimationFrame(() => {
+      $$(".g-row[data-id]", sec).forEach(row => {
+        const img = document.createElement("img");
+        img.width = 24; img.height = 24; img.alt = "";
+        img.loading = "lazy"; img.decoding = "async";
+        img.src = iconSrc(row.dataset.id);
+        img.addEventListener("error", () => img.remove(), { once: true });
+        img.addEventListener("load", () => { const ph = row.querySelector(".g-ico-miss"); if (ph) ph.replaceWith(img); }, { once: true });
+      });
+    });
+  };
+  const io = ("IntersectionObserver" in window)
+    ? new IntersectionObserver(ents => { ents.forEach(e => { if (e.isIntersecting) { fillLetter(e.target); io.unobserve(e.target); } }); }, { rootMargin: "600px 0px" })
+    : null;
+
+  let all = []; // [id, name]
+  function render(term) {
+    const t = (term || "").trim().toLowerCase();
+    const filtered = t
+      ? all.filter(([id, name]) => name.toLowerCase().includes(t) || id.toLowerCase().includes(t))
+      : all;
+    count.textContent = filtered.length ? filtered.length.toLocaleString("en") : "";
+    if (!filtered.length) {
+      list.innerHTML = "";
+      jump.hidden = true;
       none.hidden = false;
-      none.textContent = term ? "No games match that search." : "No games to show yet.";
-      more.hidden = true;
-      count.textContent = "";
+      none.textContent = t ? "No games match that search." : "No games to show yet.";
       return;
     }
     none.hidden = true;
-    const html = games.map(g => `<div class="g-row"><img src="${esc(g.icon)}" width="32" height="32" alt="" data-hide-broken><span>${esc(g.name)}</span></div>`).join("");
-    if (reset) list.innerHTML = html; else list.insertAdjacentHTML("beforeend", html);
-    offset += games.length;
-    count.textContent = total ? `${offset.toLocaleString("en")} of ${total.toLocaleString("en")}` : "";
-    more.hidden = offset >= total;
-    $$("img[data-hide-broken]", list).forEach(img => { img.addEventListener("error", () => { img.style.visibility = "hidden"; }, { once: true }); });
+    const groups = new Map();
+    filtered.forEach(g => {
+      const k = letterKey(g[1]);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(g);
+    });
+    jump.hidden = false;
+    jump.innerHTML = LETTERS.map(k => groups.has(k)
+      ? `<a href="#letter-${encodeURIComponent(k)}">${letterLabel(k)}</a>`
+      : `<span class="off">${letterLabel(k)}</span>`).join("");
+    list.innerHTML = LETTERS.filter(k => groups.has(k)).map(k =>
+      `<div class="az-sec" id="letter-${esc(k)}" data-letter="${esc(k)}"><div class="az-let" aria-hidden="true">${esc(letterLabel(k))}</div><div class="az-cols"></div></div>`
+    ).join("");
+    $$(".az-sec", list).forEach(sec => {
+      sec._games = groups.get(sec.dataset.letter) || [];
+      if (io) io.observe(sec); else fillLetter(sec);
+    });
+    const hash = location.hash.startsWith("#letter-") ? location.hash.slice(1) : "";
+    if (hash) { const el = document.getElementById(hash); if (el) { fillLetter(el); el.scrollIntoView(); } }
   }
-  let t;
-  q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { term = q.value.trim(); load(true).catch(e => { list.innerHTML = ""; none.hidden = false; none.textContent = e.message; }); }, 250); });
-  more.addEventListener("click", () => load(false).catch(() => {}));
-  try { await load(true); } catch (e) { none.hidden = false; none.textContent = e.message || "Could not load the games list."; }
+
+  try {
+    // Public, cacheable catalogue: do not go through api() (that forces no-store).
+    const r = await fetch(API + "/games/catalogue", { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error("Could not load the games list.");
+    const d = await r.json();
+    all = (d.games || []).map(g => Array.isArray(g) ? g : [g.id, g.name]);
+    render("");
+  } catch (e) {
+    none.hidden = false;
+    none.textContent = e.message || "Could not load the games list.";
+  }
+  let timer;
+  q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => render(q.value), 250); });
+
+  const signedIn = !!(token() && me());
+  const out = root.querySelector(".g-ask-out");
+  if (form) form.hidden = !signedIn;
+  if (out) out.hidden = signedIn;
+  if (signedIn && form) {
+    loadTurnstile();
+    const listed = form.querySelector("[data-listed]");
+    const msg = form.querySelector("[data-ask-msg]");
+    const nameIn = form.name;
+    const hint = () => {
+      const n = nameNorm(nameIn.value);
+      const hit = n && all.find(([, name]) => nameNorm(name) === n);
+      if (hit) { listed.hidden = false; listed.textContent = "Already listed: " + hit[1]; form.querySelector("[type=submit]").disabled = true; }
+      else { listed.hidden = true; listed.textContent = ""; form.querySelector("[type=submit]").disabled = false; }
+    };
+    nameIn.addEventListener("input", hint);
+    form.addEventListener("submit", async e => {
+      e.preventDefault();
+      hint();
+      if (form.querySelector("[type=submit]").disabled) return;
+      const btn = form.querySelector("[type=submit]");
+      btn.disabled = true; msg.hidden = true;
+      try {
+        const r = await api("/games/requests", { method: "POST", body: {
+          name: form.name.value.trim(),
+          exe_or_link: form.exe_or_link.value.trim(),
+          note: form.note.value.trim(),
+          turnstile: turnstileToken(form)
+        }});
+        if (r.already_listed) { listed.hidden = false; listed.textContent = "Already listed: " + r.game.name; showOk(msg, "That game is already on the list."); }
+        else if (r.already_requested) showOk(msg, "That's already on the request list. We've noted another report.");
+        else { showOk(msg, "Thanks — we've got your request."); form.exe_or_link.value = ""; form.note.value = ""; }
+      } catch (x) { showErr(msg, x); }
+      finally { btn.disabled = false; turnstileReset(); hint(); }
+    });
+  }
 };
 
 

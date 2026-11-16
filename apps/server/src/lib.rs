@@ -27,6 +27,7 @@ pub mod features;
 pub mod friends;
 pub mod game_history;
 pub mod game_overrides;
+pub mod game_requests;
 pub mod game_status;
 pub mod games;
 pub mod geo;
@@ -169,6 +170,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(api::routes())
         .merge(crate::game_history::routes())
+        .merge(crate::game_requests::routes())
         .merge(web::routes())
         .merge(profile::routes())
         .merge(admin::routes())

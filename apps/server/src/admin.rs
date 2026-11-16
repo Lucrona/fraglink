@@ -110,6 +110,7 @@ pub fn routes() -> Router<AppState> {
         .merge(crate::suggested_merge::routes())
         .merge(crate::admin_desk::routes())
         .merge(crate::game_history::admin_routes())
+        .merge(crate::game_requests::admin_routes())
         .route("/api/v1/admin/server", get(server))
         .route(
             "/api/v1/admin/announcements",

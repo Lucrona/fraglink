@@ -26,6 +26,7 @@ const TABS = [
   ["hourscheck", "Hours checker", can.hours, "To do"],
   ["avatars", "Reported pictures", can.avatars, "To do"],
   ["games", "Games", can.games, "Games"],
+  ["gamesreqs", "Requests", can.games, "Games"],
   ["detection", "Detection rules", can.games, "Games"],
   ["suggested", "Suggested Merge", can.approvals || can.games, "Games"],
   ["detect", "Detection tester", can.games, "Games"],
@@ -49,7 +50,7 @@ const GROUPS = [...new Set(TABS.map(t => t[3]))];
 
 root.innerHTML = `<div class="wrap adm adm-console">
   <div class="adm-head"><h1>Admin</h1><span class="role">${esc(who.role)}</span><span class="dimt">Signed in as ${esc(who.handle)}. Every action is logged.</span></div>
-  <div class="adm-lay"><nav class="adm-side" aria-label="Admin sections">${GROUPS.map(g => `<h3>${esc(g)}</h3>` + TABS.filter(t => t[3] === g).map(t => `<a href="#${t[0]}" data-tab="${t[0]}">${esc(t[1])}<span class="n" hidden></span></a>`).join("")).join("")}</nav>
+  <div class="adm-lay"><nav class="adm-side" aria-label="Admin sections">${GROUPS.map(g => `<h3>${esc(g)}</h3>` + TABS.filter(t => t[3] === g).map(t => `<a href="${t[0] === "gamesreqs" ? "#games/requests" : "#" + t[0]}" data-tab="${t[0]}">${esc(t[1])}<span class="n" hidden></span></a>`).join("")).join("")}</nav>
   <div id="view"></div></div></div>`;
 const view = $("#view");
 let timer = null;
@@ -62,9 +63,11 @@ function route() {
   const tab = slash < 0 ? hash : hash.slice(0, slash);
   const arg = slash < 0 ? "" : hash.slice(slash + 1);
   if (tab === "allgames") { location.replace("#games" + (arg ? "/" + arg : "")); return; }
-  const t = tab === "user" ? "users" : tab;
-  $$(".adm-side a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
-  { const tb = TABS.find(x => x[0] === t); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
+  const t = tab === "user" ? "users" : (tab === "gamesreqs" ? "gamesreqs" : tab);
+  if (tab === "gamesreqs") { location.replace("#games/requests"); return; }
+  const onReqs = tab === "games" && arg === "requests";
+  $$(".adm-side a").forEach(a => a.classList.toggle("on", onReqs ? a.dataset.tab === "gamesreqs" : a.dataset.tab === t));
+  { const tb = TABS.find(x => x[0] === (onReqs ? "gamesreqs" : t)); if (window.flCrumb) window.flCrumb(tb ? [[tb[1], onReqs ? "#games/requests" : "#" + t], ...(tab === "user" && arg ? [[decodeURIComponent(arg)]] : [])] : []); }
   const fn = { approvals, games, detection, users, hours: hoursReview, avatars: avatarReports, server, announcements, news, polls, incidents, settings: siteSettings, staff, user: userDetail, hourscheck: hoursCheck, bulk: bulkFixes, changelog, health, suggested: suggestedMerge, detect: detectTest, artwork: missingArt, checks: dataChecks, history: reviewHistory, undo: undoRecent }[tab];
   if (!fn || !TABS.some(x => x[0] === t)) { location.hash = TABS[0][0]; return; }
   view.innerHTML = `<div class="panel"><div class="body empty">Loading…</div></div>`;
@@ -247,6 +250,9 @@ async function games(arg) {
   if (arg === "log" || arg.startsWith("log/")) {
     return gamesLog(arg.startsWith("log/") ? arg.slice(4) : "");
   }
+  if (arg === "requests" || arg.startsWith("requests/")) {
+    return gamesRequests();
+  }
   if (arg.startsWith("id:")) {
     AG.open = arg.slice(3); AG.q = AG.open; AG.offset = 0; AG.src = ""; AG.status = ""; AG.flag = "";
   } else if (arg) { AG.q = arg; AG.offset = 0; AG.open = ""; }
@@ -320,9 +326,62 @@ async function gamesLog(game) {
   });
   await load();
 }
+
+async function gamesRequests() {
+  const st = (new URLSearchParams(location.hash.split("?")[1] || "")).get("status") || "open";
+  view.innerHTML = `<section class="panel"><h2><span class="tab">Requests</span><span class="more"><a href="#games">Back to games</a></span></h2>
+    <div class="glog-tb">
+      <select class="in" id="greq-st" aria-label="Status">${[["open","Open"],["approved","Approved"],["done","Done"],["duplicate","Duplicate"],["dismissed","Dismissed"],["all","All"]].map(([k,l]) => `<option value="${k}"${k===st?" selected":""}>${l}</option>`).join("")}</select>
+      <span class="dimt" id="greq-count" style="margin-left:auto"></span>
+    </div>
+    <div id="greq"><div class="body empty">Loading…</div></div></section>`;
+  $("#greq-st").onchange = () => { gamesRequests.state = $("#greq-st").value; load(); };
+  async function load() {
+    const status = $("#greq-st").value;
+    const d = await api("/admin/game-requests?status=" + encodeURIComponent(status));
+    badge("gamesreqs", d.open);
+    $("#greq-count").textContent = `${(d.total||0).toLocaleString("en")} · ${d.open||0} open`;
+    const rows = d.requests || [];
+    const box = $("#greq");
+    if (!rows.length) { box.innerHTML = `<div class="body empty">No ${status === "all" ? "" : status + " "}requests.</div>`; return; }
+    box.innerHTML = `<div class="glog">${rows.map(r => {
+      const when = dt.format(new Date(r.at));
+      const extra = [r.exe_or_link, r.note].filter(Boolean).map(x => esc(x)).join(" · ");
+      const decided = r.status !== "open" ? `${esc(r.status)}${r.game_id ? ` · <a href="#games/id:${encodeURIComponent(r.game_id)}">${esc(r.game_id)}</a>` : ""}${r.decided_by ? " · " + esc(r.decided_by) : ""}` : "";
+      return `<details data-id="${r.id}"><summary><time>${esc(when)}</time><span class="sum">${esc(r.name)}${r.reports > 1 ? ` <span class="pill">${r.reports}</span>` : ""}</span><span class="meta">${esc(r.by)}${decided ? " · " + decided : ""}</span></summary>
+        <div class="glog-add">${extra ? `<p class="dimt" style="margin:0 0 8px">${extra}</p>` : ""}
+        ${r.status === "open" ? `<form class="f" data-ap><div class="row">
+          <input class="in" name="name" value="${esc(r.name)}" maxlength="80" aria-label="Official name" style="flex:1">
+          <input class="in" name="exe" value="${esc((r.exe_or_link && /\.exe$/i.test(r.exe_or_link)) ? r.exe_or_link : "")}" placeholder="Game.exe" maxlength="120" aria-label="Program name">
+          <input class="in" name="game_id" placeholder="or existing game id" maxlength="120" aria-label="Existing game id">
+          <button class="btn sm dl" type="submit">Approve and add</button>
+          <button class="btn sm" type="button" data-st="done">Done</button>
+          <button class="btn sm" type="button" data-st="duplicate">Duplicate</button>
+          <button class="btn sm danger" type="button" data-st="dismissed">Dismiss</button>
+        </div></form>` : `<p class="dimt" style="margin:0">${decided}</p>`}
+        </div></details>`;
+    }).join("")}</div>`;
+    box.onclick = e => {
+      const b = e.target.closest("[data-st]"); if (!b) return;
+      const id = b.closest("details").dataset.id;
+      act(b, async () => { await api(`/admin/game-requests/${id}/status`, { method: "POST", body: { status: b.dataset.st } }); load(); });
+    };
+    box.onsubmit = e => {
+      const f = e.target.closest("[data-ap]"); if (!f) return;
+      e.preventDefault();
+      const id = f.closest("details").dataset.id;
+      const btn = f.querySelector("[type=submit]");
+      act(btn, async () => {
+        await api(`/admin/game-requests/${id}/approve`, { method: "POST", body: { name: f.name.value.trim(), exe: f.exe.value.trim(), game_id: f.game_id.value.trim() } });
+        load();
+      });
+    };
+  }
+  await load();
+}
 async function allGames() {
   view.innerHTML = `<section class="panel" style="margin-bottom:12px"><h2><span class="tab">Where the list comes from</span></h2><div id="agfresh"><div class="body empty">Loading…</div></div></section>
-    <section class="panel"><h2><span class="tab">Games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></span><span class="more"><a href="#games/log">Change log</a></span></h2>
+    <section class="panel"><h2><span class="tab">Games <span class="dimt" id="agcount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></span><span class="more"><a href="#games/requests">Requests</a> · <a href="#games/log">Change log</a></span></h2>
     <div class="ag-tb"><input class="in" type="search" id="agq" placeholder="Search name, id, exe, alias or Steam app id" value="${esc(AG.q)}" autocomplete="off" aria-label="Search games">
       <select class="in" id="agflag" aria-label="Show only"><option value="">Everything</option>${AG_FLAG.map(([k, v]) => `<option value="${k}"${AG.flag === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
       <select class="in" id="agsort" aria-label="Sort"><option value="updated">Last change first</option><option value="added">Newest added</option><option value="name">Name A–Z</option><option value="players">Most players</option><option value="hours">Most hours</option></select>
@@ -1628,5 +1687,6 @@ async function undoRecent() {
 route();
 if (can.approvals && !location.hash.startsWith("#approvals")) Promise.all([api("/admin/suggestions"), api("/admin/unknown_games").catch(() => ({ unknown: [] }))]).then(([d, u]) => badge("approvals", d.suggestions.length + u.unknown.length)).catch(() => {});
 api("/admin/suggested-merge").then(d => badge("suggested", d.open)).catch(() => {});
+if (can.games) api("/admin/game-requests?status=open&limit=1").then(d => badge("gamesreqs", d.open)).catch(() => {});
 };
 

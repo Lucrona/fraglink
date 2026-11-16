@@ -10,6 +10,8 @@
 
 use axum::{
     extract::{Path, Query, State},
+    http::HeaderMap,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -23,15 +25,12 @@ use crate::{
     admin::{self, Role, Staff},
     error::{ApiResult, AppError},
     game_overrides::GameOverride,
-    icons,
     names::UNLISTED_TITLE,
     AppState,
 };
 
 pub const PAGE: i64 = 50;
 pub const PUBLIC_UPDATES: i64 = 5;
-pub const CATALOGUE_PAGE: i64 = 100;
-pub const CATALOGUE_MAX: i64 = 500;
 
 /// One history row waiting to be inserted on the current transaction.
 pub struct New {
@@ -603,14 +602,14 @@ async fn public_updates(
 #[derive(Deserialize, Default)]
 struct CatQ {
     q: Option<String>,
-    offset: Option<i64>,
-    limit: Option<i64>,
 }
 
-async fn catalogue(State(st): State<AppState>, Query(q): Query<CatQ>) -> ApiResult<Json<Value>> {
+async fn catalogue(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<CatQ>,
+) -> ApiResult<Response> {
     let term = q.q.as_deref().unwrap_or("").trim().to_lowercase();
-    let limit = q.limit.unwrap_or(CATALOGUE_PAGE).clamp(1, CATALOGUE_MAX);
-    let offset = q.offset.unwrap_or(0).max(0);
     let mut games = public_catalogue(&st).await?;
     if !term.is_empty() {
         games.retain(|(id, name)| {
@@ -618,24 +617,24 @@ async fn catalogue(State(st): State<AppState>, Query(q): Query<CatQ>) -> ApiResu
         });
     }
     let total = games.len() as i64;
-    let page: Vec<Value> = games
-        .into_iter()
-        .skip(offset as usize)
-        .take(limit as usize)
-        .map(|(id, name)| {
-            json!({
-                "id": id,
-                "name": name,
-                "icon": icons::icon_path(&id, 32),
-            })
-        })
-        .collect();
-    Ok(Json(json!({
-        "games": page,
+    // Compact [id, name] pairs only — no icon URLs, hours or user fields.
+    let payload = json!({
+        "games": games.iter().map(|(id, name)| json!([id, name])).collect::<Vec<_>>(),
         "total": total,
-        "offset": offset,
-        "limit": limit,
-    })))
+    });
+    if !term.is_empty() {
+        return Ok(Json(payload).into_response());
+    }
+    let body = serde_json::to_vec(&payload).map_err(|e| {
+        AppError::new(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "encode",
+            e.to_string(),
+        )
+    })?;
+    let etag = crate::games::etag_of(&body);
+    let gz = crate::games::gzip(&body).ok();
+    Ok(crate::games::respond(&headers, &etag, &body, gz.as_deref()))
 }
 
 /// Every supported/detected game: icon + name only, no hours or player data.

@@ -551,14 +551,19 @@ async fn list_sync_and_public_updates_and_manual_hide(pool: PgPool) {
         .await
         .json();
     let games = cat["games"].as_array().unwrap();
-    assert!(games.iter().any(|g| g["name"] == "Zebra Quest"));
-    assert!(games.iter().all(|g| g.get("hours").is_none()
-        && g.get("players").is_none()
-        && g.get("total_min").is_none()));
+    assert!(games.iter().any(|g| g[1] == "Zebra Quest"));
+    assert!(games.iter().all(|g| {
+        g.as_array().is_some_and(|a| a.len() == 2)
+            && g.get("hours").is_none()
+            && g.get("players").is_none()
+    }));
     let all = api(&app, "GET", "/api/v1/games/catalogue?q=Secret", None, None)
         .await
         .json();
     assert_eq!(all["total"], 0, "hidden games stay off the public list");
+    let full = api(&app, "GET", "/api/v1/games/catalogue", None, None).await;
+    assert_eq!(full.status, StatusCode::OK, "{}", full.text);
+    assert!(full.headers.get("etag").is_some());
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
