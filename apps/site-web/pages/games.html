@@ -1,22 +1,28 @@
 <!-- title: Games · Fraglink | page: games | desc: Every game Fraglink can detect, plus recent additions, renames and icon updates. -->
 <div class="mid wrap stack games-page">
-  <section class="head"><div><h1>Games</h1><div class="sub">The games Fraglink can detect. Search the list, or see what was added or renamed recently.</div></div></section>
+  <section class="head"><div><h1>Games</h1><div class="sub">Search the games Fraglink can detect, or see what was added or renamed recently.</div></div></section>
+  <section class="panel g-main">
+    <h2><span class="tab">Games</span></h2>
+    <div class="body g-search">
+      <div class="g-search-box">
+        <input class="in" type="search" id="games-q" placeholder="Search games" autocomplete="off" aria-label="Search games" aria-autocomplete="list" aria-controls="games-suggest" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+        <ul class="g-suggest" id="games-suggest" role="listbox" hidden></ul>
+      </div>
+      <p class="g-search-hint" data-hint>Search supported games</p>
+      <p class="g-try" data-try hidden></p>
+      <div class="g-results" data-list hidden></div>
+      <p class="empty" data-none hidden></p>
+      <p class="g-refine" data-refine hidden>Refine your search to see more.</p>
+    </div>
+  </section>
   <section class="panel">
     <h2><span class="tab">Recent updates</span></h2>
     <div class="body" data-updates><p class="empty">Loading…</p></div>
   </section>
-  <section class="panel g-main">
-    <h2><span class="tab">Games</span><span class="more"><span class="dimt" data-count></span></span></h2>
-    <div class="g-tools"><input class="in" type="search" id="games-q" placeholder="Search games" autocomplete="off" aria-label="Search games"></div>
-    <nav class="az-jump" data-jump aria-label="Letters" hidden></nav>
-    <div class="body az-dir" data-list></div>
-    <nav class="g-page" data-pager hidden></nav>
-    <p class="empty" data-none hidden></p>
-  </section>
   <section class="panel g-ask">
     <h2><span class="tab">Missing a game?</span></h2>
     <div class="body" data-ask>
-      <p class="g-ask-out">If Fraglink doesn't detect a game you play, <a href="/login?next=/games">sign in to request</a> it.</p>
+      <p class="g-ask-out">If Fraglink doesn't detect a game you play, <a href="/login?next=/games" data-ask-in>sign in to request</a> it.</p>
       <form class="f" id="games-req" hidden>
         <p class="g-ask-in">If a game you play isn't on the list, tell us and we'll look at adding it.</p>
         <label>Game name <input class="in" name="name" required maxlength="80" autocomplete="off"></label>

@@ -1154,13 +1154,17 @@ pages.games = async () => {
   const root = document.querySelector(".games-page");
   if (!root) return;
   const upd = root.querySelector("[data-updates]");
-  const list = root.querySelector("[data-list]");
-  const jump = root.querySelector("[data-jump]");
-  const pager = root.querySelector("[data-pager]");
+  const box = root.querySelector(".g-search-box");
   const q = root.querySelector("#games-q");
-  const count = root.querySelector("[data-count]");
+  const hint = root.querySelector("[data-hint]");
+  const tryRow = root.querySelector("[data-try]");
+  const list = root.querySelector("[data-list]");
   const none = root.querySelector("[data-none]");
+  const refine = root.querySelector("[data-refine]");
+  const suggest = root.querySelector("#games-suggest");
   const form = root.querySelector("#games-req");
+  const askOut = root.querySelector(".g-ask-out");
+  const askLink = root.querySelector("[data-ask-in]");
   const updDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
   try {
     const u = await api("/games/updates");
@@ -1172,33 +1176,114 @@ pages.games = async () => {
     upd.innerHTML = `<p class="empty">${esc(e.message || "Could not load updates.")}</p>`;
   }
 
-  const LETTERS = ["#", "0-9", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
-  const PAGE = 200;
-  const letterLabel = k => k === "0-9" ? "0–9" : k;
-  const letterKey = name => {
-    const ch = (name || "").charAt(0).toUpperCase();
-    if (ch >= "A" && ch <= "Z") return ch;
-    if (ch >= "0" && ch <= "9") return "0-9";
-    return "#";
+  const LIMIT = 50;
+  const SUGGEST = 8;
+  const MIN = 2;
+  const ALIASES = {
+    cs2: "counter strike 2",
+    gta: "grand theft auto",
+    wow: "world of warcraft",
+    pubg: "battlegrounds",
+    cod: "call of duty",
+    lol: "league of legends",
+    ff: "final fantasy",
+    r6: "rainbow six"
+  };
+  const TRIES = ["Call of Duty", "World of Warcraft", "Counter-Strike", "GTA", "Final Fantasy"];
+  const fold = s => (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[™®©]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const nameNorm = s => fold(s);
+  const romanVars = s => {
+    const out = new Set([s]);
+    [["iii", "3"], ["ii", "2"], ["iv", "4"]].forEach(([rom, num]) => {
+      if (new RegExp(`\\b${rom}\\b`).test(s)) out.add(s.replace(new RegExp(`\\b${rom}\\b`, "g"), num));
+      if (new RegExp(`\\b${num}\\b`).test(s)) out.add(s.replace(new RegExp(`\\b${num}\\b`, "g"), rom));
+    });
+    return [...out];
+  };
+  const expand = raw => {
+    const f = fold(raw);
+    const out = new Set(romanVars(f));
+    if (ALIASES[f]) romanVars(ALIASES[f]).forEach(v => out.add(v));
+    const swapped = f.split(" ").map(w => ALIASES[w] || w).join(" ");
+    if (swapped !== f) romanVars(swapped).forEach(v => out.add(v));
+    return [...out].filter(Boolean);
+  };
+  const dist = (a, b, max) => {
+    if (a === b) return 0;
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    const prev = new Array(b.length + 1);
+    for (let j = 0; j <= b.length; j++) prev[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      let last = prev[0], min = (prev[0] = i);
+      for (let j = 1; j <= b.length; j++) {
+        const cur = prev[j];
+        prev[j] = a[i - 1] === b[j - 1] ? last : 1 + Math.min(last, prev[j], prev[j - 1]);
+        last = cur;
+        if (prev[j] < min) min = prev[j];
+      }
+      if (min > max) return max + 1;
+    }
+    return prev[b.length];
+  };
+  const fuzzy = (n, q) => {
+    if (q.length < 3) return false;
+    const max = q.length >= 6 ? 2 : 1;
+    if (n.length >= q.length && dist(n.slice(0, q.length), q, max) <= max) return true;
+    return n.split(" ").some(w => Math.abs(w.length - q.length) <= max && dist(w, q, max) <= max);
+  };
+  const startsWord = (n, q) => n.startsWith(q) && (n.length === q.length || n[q.length] === " ");
+  const wordStart = (n, q) => {
+    const qw = q.split(" ").filter(Boolean), nw = n.split(" ").filter(Boolean);
+    if (!qw.length) return false;
+    if (qw.length === 1) return nw.some(w => w.startsWith(qw[0]));
+    for (let i = 0; i <= nw.length - qw.length; i++) {
+      if (qw.every((w, k) => {
+        const nwWord = nw[i + k];
+        const last = k === qw.length - 1;
+        return last ? nwWord.startsWith(w) : startsWord(nwWord, w);
+      })) return true;
+    }
+    return false;
+  };
+  // 4 prefix, 3 word-start, 2 contains, 1 fuzzy, 0 none
+  const rank = (name, raw) => {
+    let best = 0;
+    const nVars = romanVars(fold(name));
+    for (const qv of expand(raw)) {
+      for (const n of nVars) {
+        if (startsWord(n, qv)) return 4;
+        if (wordStart(n, qv)) best = Math.max(best, 3);
+        else if (n.includes(qv)) best = Math.max(best, 2);
+        else if (fuzzy(n, qv)) best = Math.max(best, 1);
+      }
+    }
+    return best;
+  };
+  const highlight = (name, raw) => {
+    const qs = expand(raw).sort((a, b) => b.length - a.length);
+    const lower = name.toLowerCase();
+    for (const qv of qs) {
+      const i = lower.indexOf(qv);
+      if (i >= 0) return esc(name.slice(0, i)) + "<mark>" + esc(name.slice(i, i + qv.length)) + "</mark>" + esc(name.slice(i + qv.length));
+    }
+    // Folded match: walk the original and mark the span that folds to the first query variant.
+    const target = qs[0];
+    if (!target) return esc(name);
+    let built = "", fi = 0, start = -1, end = -1, acc = "";
+    for (let i = 0; i < name.length; i++) {
+      const f = fold(name[i]);
+      if (!f) continue;
+      if (start < 0 && target[fi] && f === target[fi]) { start = i; fi++; acc = f; if (fi === target.length) { end = i + 1; break; } }
+      else if (start >= 0) {
+        if (target[fi] && (acc + f) === target.slice(0, fi + 1)) { fi++; acc += f; if (fi === target.length) { end = i + 1; break; } }
+        else if (f === target[0]) { start = i; fi = 1; acc = f; }
+        else { start = -1; fi = 0; acc = ""; }
+      }
+    }
+    if (start >= 0 && end > start) return esc(name.slice(0, start)) + "<mark>" + esc(name.slice(start, end)) + "</mark>" + esc(name.slice(end));
+    return esc(name);
   };
   const iconSrc = id => "/icons/games/32/" + encodeURIComponent(id) + ".png";
-  const nameNorm = s => (s || "").normalize("NFKC").replace(/[™®©]/g, "").toLowerCase().replace(/[^a-z0-9]+/gi, " ").trim();
-  const params = () => new URLSearchParams(location.search);
-  const readQuery = () => (params().get("q") || "").trim();
-  const readPage = () => { const n = parseInt(params().get("p") || "1", 10); return Number.isFinite(n) && n > 0 ? n : 1; };
-  const readLetter = present => {
-    const raw = (params().get("l") || "").trim();
-    if (raw && LETTERS.includes(raw)) return raw;
-    return present.has("A") ? "A" : (present.has("#") ? "#" : (LETTERS.find(k => present.has(k)) || "A"));
-  };
-  const setUrl = (letter, page, term, push) => {
-    const sp = new URLSearchParams();
-    if (term) sp.set("q", term);
-    else if (letter) sp.set("l", letter);
-    if (page > 1) sp.set("p", String(page));
-    const url = "/games" + (sp.toString() ? "?" + sp : "");
-    history[push ? "pushState" : "replaceState"]({ letter, page, q: term }, "", url);
-  };
   const paintIcons = scope => {
     requestAnimationFrame(() => {
       $$(".g-row[data-id]", scope).forEach(row => {
@@ -1211,163 +1296,179 @@ pages.games = async () => {
       });
     });
   };
-  const rowHtml = ([id, name]) =>
-    `<div class="g-row" data-id="${esc(id)}"><span class="g-ico-miss" aria-hidden="true"></span><span>${esc(name)}</span></div>`;
+  const rowHtml = (g, raw) =>
+    `<div class="g-row" data-id="${esc(g[0])}"><span class="g-ico-miss" aria-hidden="true"></span><span>${raw ? highlight(g[1], raw) : esc(g[1])}</span></div>`;
 
-  let all = []; // [id, name]
-  let groups = new Map();
+  const readQuery = () => (new URLSearchParams(location.search).get("q") || "");
+  const setUrl = (term, push) => {
+    const url = term.trim() ? "/games?q=" + encodeURIComponent(term.trim()) : "/games";
+    history[push ? "pushState" : "replaceState"]({ q: term }, "", url);
+    if (askLink) askLink.setAttribute("href", "/login?next=" + encodeURIComponent(term.trim() ? "/games?q=" + term.trim() : "/games"));
+  };
 
-  function render({ push } = {}) {
+  let all = [];
+  let active = -1;
+  let suggestions = [];
+
+  const closeSuggest = () => {
+    suggest.hidden = true; suggest.innerHTML = ""; active = -1; suggestions = [];
+    q.setAttribute("aria-expanded", "false");
+    q.removeAttribute("aria-activedescendant");
+  };
+  const moveActive = dir => {
+    if (!suggestions.length) return;
+    active = (active + dir + suggestions.length) % suggestions.length;
+    $$("li", suggest).forEach((li, i) => li.setAttribute("aria-selected", i === active ? "true" : "false"));
+    const on = suggest.children[active];
+    if (on) { q.setAttribute("aria-activedescendant", on.id); on.scrollIntoView({ block: "nearest" }); }
+  };
+  const pickSuggestion = i => {
+    const g = suggestions[i]; if (!g) return;
+    q.value = g[1];
+    closeSuggest();
+    setUrl(g[1], true);
+    render();
+  };
+  const showSuggest = (term, hits) => {
+    suggestions = hits.slice(0, SUGGEST);
+    if (!suggestions.length || fold(term).length < MIN) { closeSuggest(); return; }
+    suggest.innerHTML = suggestions.map((g, i) =>
+      `<li id="gsug-${i}" role="option" aria-selected="${i === 0 ? "true" : "false"}">${rowHtml(g, term)}</li>`
+    ).join("");
+    suggest.hidden = false;
+    active = 0;
+    q.setAttribute("aria-expanded", "true");
+    q.setAttribute("aria-activedescendant", "gsug-0");
+    paintIcons(suggest);
+  };
+
+  const offerRequest = term => {
+    none.hidden = false;
+    none.innerHTML = `No games match “${esc(term)}”. You can request it below.`;
+    if (form) {
+      form.name.value = term.slice(0, 80);
+      form.name.dispatchEvent(new Event("input"));
+    }
+    root.querySelector(".g-ask")?.scrollIntoView({ block: "nearest" });
+  };
+
+  function render() {
     const term = (q.value || "").trim();
-    const t = term.toLowerCase();
-    const present = new Set(groups.keys());
-    let letter = readLetter(present);
-    let page = readPage();
-
-    if (term) {
-      const hits = all.filter(([id, name]) => name.toLowerCase().includes(t) || id.toLowerCase().includes(t));
-      const pages = Math.max(1, Math.ceil(hits.length / PAGE));
-      if (page > pages) page = pages;
-      setUrl(null, page, term, push);
-      jump.hidden = false;
-      jump.innerHTML = LETTERS.map(k => present.has(k)
-        ? `<a href="/games?l=${encodeURIComponent(k)}">${letterLabel(k)}</a>`
-        : `<span class="off">${letterLabel(k)}</span>`).join("");
-      if (!hits.length) {
-        list.innerHTML = "";
-        pager.hidden = true;
-        none.hidden = false;
-        none.textContent = "No games match that search.";
-        count.textContent = "";
-        return;
-      }
-      none.hidden = true;
-      const start = (page - 1) * PAGE;
-      const slice = hits.slice(start, start + PAGE);
-      const last = start + slice.length;
-      count.textContent = `${(start + 1).toLocaleString("en")}–${last.toLocaleString("en")} of ${hits.length.toLocaleString("en")}`;
-      list.innerHTML = `<div class="az-sec az-search"><div class="az-cols">${slice.map(rowHtml).join("")}</div></div>`;
-      paintIcons(list);
-      pager.hidden = pages <= 1;
-      if (pages > 1) {
-        pager.innerHTML = `<button class="btn sm" type="button" data-prev${page <= 1 ? " disabled" : ""}>Prev</button><span class="dimt">Page ${page} of ${pages}</span><button class="btn sm" type="button" data-next${page >= pages ? " disabled" : ""}>Next</button>`;
-      }
+    const f = fold(term);
+    closeSuggest();
+    refine.hidden = true;
+    if (f.length < MIN) {
+      list.hidden = true; list.innerHTML = "";
+      none.hidden = true; none.textContent = "";
+      if (tryRow) tryRow.hidden = false;
+      if (term) setUrl("", false);
+      else setUrl("", false);
       return;
     }
-
-    if (!present.size) {
-      list.innerHTML = "";
-      jump.hidden = true;
-      pager.hidden = true;
-      none.hidden = false;
-      none.textContent = "No games to show yet.";
-      count.textContent = "";
+    if (tryRow) tryRow.hidden = true;
+    const scored = [];
+    for (const g of all) {
+      const r = rank(g[1], term);
+      if (r) scored.push([r, g]);
+    }
+    scored.sort((a, b) => b[0] - a[0] || a[1][1].localeCompare(b[1][1]));
+    const strong = scored.filter(x => x[0] >= 2);
+    const used = strong.length ? strong : scored;
+    const total = used.length;
+    if (!total) {
+      list.hidden = true; list.innerHTML = "";
+      offerRequest(term);
       return;
     }
-    if (!present.has(letter)) letter = present.has("A") ? "A" : (present.has("#") ? "#" : LETTERS.find(k => present.has(k)));
-    const games = groups.get(letter) || [];
-    const pages = Math.max(1, Math.ceil(games.length / PAGE));
-    if (page > pages) page = pages;
-    setUrl(letter, page, "", push);
-    jump.hidden = false;
-    jump.innerHTML = LETTERS.map(k => {
-      if (!present.has(k)) return `<span class="off">${letterLabel(k)}</span>`;
-      const on = k === letter ? " on" : "";
-      return `<a href="/games?l=${encodeURIComponent(k)}" class="${on.trim()}">${letterLabel(k)}</a>`;
-    }).join("");
-    none.hidden = !games.length;
-    none.textContent = games.length ? "" : "No games in this letter.";
-    const start = (page - 1) * PAGE;
-    const slice = games.slice(start, start + PAGE);
-    const last = start + slice.length;
-    count.textContent = games.length
-      ? `${(start + 1).toLocaleString("en")}–${last.toLocaleString("en")} of ${games.length.toLocaleString("en")}`
-      : "";
-    list.innerHTML = games.length
-      ? `<div class="az-sec" data-letter="${esc(letter)}"><div class="az-let" aria-hidden="true">${esc(letterLabel(letter))}</div><div class="az-cols">${slice.map(rowHtml).join("")}</div></div>`
-      : "";
+    none.hidden = true; none.textContent = "";
+    const shown = used.slice(0, LIMIT).map(x => x[1]);
+    list.hidden = false;
+    list.innerHTML = shown.map(g => rowHtml(g, term)).join("");
     paintIcons(list);
-    pager.hidden = pages <= 1;
-    if (pages > 1) {
-      pager.innerHTML = `<button class="btn sm" type="button" data-prev${page <= 1 ? " disabled" : ""}>Prev</button><span class="dimt">Page ${page} of ${pages}</span><button class="btn sm" type="button" data-next${page >= pages ? " disabled" : ""}>Next</button>`;
-    }
+    refine.hidden = total <= LIMIT;
+    if (total > LIMIT) refine.textContent = `Showing ${LIMIT} of ${total.toLocaleString("en")} matches. Refine your search to see more.`;
   }
 
   try {
-    // Public, cacheable catalogue: do not go through api() (that forces no-store).
     const r = await fetch(API + "/games/catalogue", { headers: { Accept: "application/json" } });
     if (!r.ok) throw new Error("Could not load the games list.");
     const d = await r.json();
     all = (d.games || []).map(g => Array.isArray(g) ? g : [g.id, g.name]);
-    groups = new Map();
-    all.forEach(g => {
-      const k = letterKey(g[1]);
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(g);
-    });
-    const initialQ = readQuery();
-    if (initialQ) q.value = initialQ;
-    render({ push: false });
+    const n = d.total || all.length;
+    if (hint) hint.textContent = "Search " + n.toLocaleString("en") + " supported games";
+    if (tryRow) {
+      tryRow.hidden = false;
+      tryRow.innerHTML = "Try: " + TRIES.map(s => `<button type="button" data-try-q="${esc(s)}">${esc(s)}</button>`).join("");
+    }
+    const initial = readQuery();
+    if (initial) { q.value = initial; render(); }
+    else q.focus();
   } catch (e) {
-    none.hidden = false;
-    none.textContent = e.message || "Could not load the games list.";
+    if (hint) hint.textContent = e.message || "Could not load the games list.";
   }
 
   let timer;
-  q.addEventListener("input", () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      const url = new URL(location.href);
-      url.searchParams.delete("p");
-      if (q.value.trim()) { url.searchParams.delete("l"); url.searchParams.set("q", q.value.trim()); }
-      else url.searchParams.delete("q");
-      history.replaceState({}, "", url.pathname + url.search);
-      render({ push: false });
-    }, 250);
+  const onType = () => {
+    const term = q.value;
+    setUrl(term, false);
+    const f = fold(term);
+    if (f.length < MIN) { render(); return; }
+    render();
+    // Re-open suggestions after render() closes them, from the same ranking.
+    const scored = [];
+    for (const g of all) {
+      const r = rank(g[1], term);
+      if (r) scored.push([r, g]);
+    }
+    scored.sort((a, b) => b[0] - a[0] || a[1][1].localeCompare(b[1][1]));
+    const strong = scored.filter(x => x[0] >= 2);
+    showSuggest(term, (strong.length ? strong : scored).map(x => x[1]));
+  };
+  q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(onType, 60); });
+  q.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { e.preventDefault(); if (suggest.hidden) onType(); else moveActive(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); moveActive(-1); }
+    else if (e.key === "Enter") {
+      if (!suggest.hidden && active >= 0) { e.preventDefault(); pickSuggestion(active); }
+    } else if (e.key === "Escape") { if (!suggest.hidden) { e.preventDefault(); closeSuggest(); } }
   });
-  jump.addEventListener("click", e => {
-    const a = e.target.closest("a"); if (!a || !jump.contains(a)) return;
+  suggest.addEventListener("mousedown", e => {
+    const li = e.target.closest("li"); if (!li) return;
     e.preventDefault();
-    q.value = "";
-    const href = new URL(a.href, location.origin);
-    history.pushState({}, "", href.pathname + href.search);
-    render({ push: false });
+    pickSuggestion([...suggest.children].indexOf(li));
   });
-  pager.addEventListener("click", e => {
-    const b = e.target.closest("[data-prev],[data-next]"); if (!b || b.disabled) return;
-    const cur = readPage();
-    const url = new URL(location.href);
-    const next = b.hasAttribute("data-next") ? cur + 1 : cur - 1;
-    if (next > 1) url.searchParams.set("p", String(next)); else url.searchParams.delete("p");
-    history.pushState({}, "", url.pathname + url.search);
-    render({ push: false });
-    list.scrollIntoView({ block: "start" });
+  document.addEventListener("click", e => { if (box && !box.contains(e.target)) closeSuggest(); });
+  tryRow.addEventListener("click", e => {
+    const b = e.target.closest("[data-try-q]"); if (!b) return;
+    q.value = b.dataset.tryQ;
+    setUrl(q.value, true);
+    render();
+    q.focus();
   });
   window.addEventListener("popstate", () => {
-    const initialQ = readQuery();
-    if (q.value !== initialQ) q.value = initialQ;
-    render({ push: false });
+    const term = readQuery();
+    if (q.value !== term) q.value = term;
+    render();
   });
 
   const signedIn = !!(token() && me());
-  const out = root.querySelector(".g-ask-out");
   if (form) form.hidden = !signedIn;
-  if (out) out.hidden = signedIn;
+  if (askOut) askOut.hidden = signedIn;
   if (signedIn && form) {
     loadTurnstile();
     const listed = form.querySelector("[data-listed]");
     const msg = form.querySelector("[data-ask-msg]");
     const nameIn = form.name;
-    const hint = () => {
+    const already = () => {
       const n = nameNorm(nameIn.value);
       const hit = n && all.find(([, name]) => nameNorm(name) === n);
       if (hit) { listed.hidden = false; listed.textContent = "Already listed: " + hit[1]; form.querySelector("[type=submit]").disabled = true; }
       else { listed.hidden = true; listed.textContent = ""; form.querySelector("[type=submit]").disabled = false; }
     };
-    nameIn.addEventListener("input", hint);
+    nameIn.addEventListener("input", already);
     form.addEventListener("submit", async e => {
       e.preventDefault();
-      hint();
+      already();
       if (form.querySelector("[type=submit]").disabled) return;
       const btn = form.querySelector("[type=submit]");
       btn.disabled = true; msg.hidden = true;
@@ -1382,7 +1483,7 @@ pages.games = async () => {
         else if (r.already_requested) showOk(msg, "That's already on the request list. We've noted another report.");
         else { showOk(msg, "Thanks — we've got your request."); form.exe_or_link.value = ""; form.note.value = ""; }
       } catch (x) { showErr(msg, x); }
-      finally { btn.disabled = false; turnstileReset(); hint(); }
+      finally { btn.disabled = false; turnstileReset(); already(); }
     });
   }
 };

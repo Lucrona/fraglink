@@ -23,13 +23,14 @@ test('Games is in the left nav after Profile and Friends when signed in, and aft
   assert.match(hdr, /items\.push\(\["download", "\/download", "Download"\], \["faq", "\/faq", "FAQ"\], \["games", "\/games", "Games"\]\)/);
 });
 
-test('games page shows one letter at a time, with shareable tabs, paging and search', () => {
+test('games page is search-only, with live suggestions and a shareable query', () => {
   assert.match(page, /page: games/);
   assert.match(page, /<span class="tab">Recent updates<\/span>/);
   assert.match(page, /<span class="tab">Games<\/span>/);
-  assert.match(page, /az-jump/);
-  assert.match(page, /aria-label="Letters"/);
-  assert.match(page, /data-pager/);
+  assert.match(page, /id="games-q"/);
+  assert.match(page, /id="games-suggest"/);
+  assert.match(page, /data-try/);
+  assert.doesNotMatch(page, /az-jump|data-pager|Letters/);
   assert.match(page, /<span class="tab">Missing a game\?<\/span>/);
   assert.match(page, /sign in to request/i);
   assert.match(page, /id="games-req"/);
@@ -38,13 +39,20 @@ test('games page shows one letter at a time, with shareable tabs, paging and sea
   assert.match(app, /pages\.games = async/);
   assert.match(app, /\/games\/catalogue/);
   assert.match(app, /api\("\/games\/updates/);
-  assert.match(app, /const PAGE = 200/);
-  assert.match(app, /sp\.set\("l"/);
-  assert.match(app, /sp\.set\("q"/);
-  assert.doesNotMatch(app, /IntersectionObserver/);
-  assert.match(app, /loading = "lazy"/);
+  assert.match(app, /const LIMIT = 50/);
+  assert.match(app, /const SUGGEST = 8/);
+  assert.match(app, /const MIN = 2/);
+  assert.match(app, /ALIASES/);
+  assert.match(app, /cs2: "counter strike 2"/);
+  assert.match(app, /cod: "call of duty"/);
+  assert.match(app, /showSuggest/);
+  assert.match(app, /ArrowDown/);
+  assert.match(app, /Refine your search/);
+  assert.match(app, /\/games\?q=/);
+  assert.doesNotMatch(app, /\?l=|az-jump|IntersectionObserver|const PAGE = 200/);
   assert.match(app, /nameNorm/);
   assert.match(app, /\/games\/requests/);
+  assert.match(app, /request it below/);
 });
 
 test('admin games page has a change log and a requests queue', () => {
