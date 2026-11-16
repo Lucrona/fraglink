@@ -1283,21 +1283,44 @@ pages.games = async () => {
     if (start >= 0 && end > start) return esc(name.slice(0, start)) + "<mark>" + esc(name.slice(start, end)) + "</mark>" + esc(name.slice(end));
     return esc(name);
   };
-  const iconSrc = id => "/icons/games/32/" + encodeURIComponent(id) + ".png";
-  const paintIcons = scope => {
+  const letterOf = name => {
+    const ch = [...(name || "")].find(c => /\p{L}|\p{N}/u.test(c));
+    return (ch || "?").toUpperCase();
+  };
+  const thumbHtml = g => {
+    const app = g[2] ? ` data-appid="${esc(String(g[2]))}"` : "";
+    return `<span class="g-thumb" aria-hidden="true"${app} style="background:${artGrad(g[1])}"><span class="g-letter">${esc(letterOf(g[1]))}</span></span>`;
+  };
+  const paintThumbs = scope => {
     requestAnimationFrame(() => {
       $$(".g-row[data-id]", scope).forEach(row => {
+        const box = row.querySelector(".g-thumb");
+        if (!box || box.querySelector("img")) return;
+        const sources = [];
+        // The slot is a 92x43 capsule, so a known Steam header fills it first.
+        // The site's cached/curated icon is next; a 404 leaves the lettered tile.
+        if (row.dataset.appid) sources.push("/api/v1/art/" + encodeURIComponent(row.dataset.appid) + ".jpg");
+        sources.push("/icons/games/64/" + encodeURIComponent(row.dataset.id) + ".png");
         const img = document.createElement("img");
-        img.width = 24; img.height = 24; img.alt = "";
-        img.loading = "lazy"; img.decoding = "async";
-        img.src = iconSrc(row.dataset.id);
-        img.addEventListener("error", () => img.remove(), { once: true });
-        img.addEventListener("load", () => { const ph = row.querySelector(".g-ico-miss"); if (ph) ph.replaceWith(img); }, { once: true });
+        img.width = 92; img.height = 43; img.alt = "";
+        img.loading = box.closest("#games-suggest") ? "eager" : "lazy";
+        img.decoding = "async";
+        let i = 0;
+        const next = () => {
+          if (i >= sources.length) { img.remove(); return; }
+          const u = sources[i++];
+          img.classList.toggle("sq", u.includes("/icons/games/"));
+          img.src = u;
+        };
+        img.addEventListener("error", next);
+        img.addEventListener("load", () => img.classList.add("on"), { once: true });
+        box.appendChild(img);
+        next();
       });
     });
   };
   const rowHtml = (g, raw) =>
-    `<div class="g-row" data-id="${esc(g[0])}"><span class="g-ico-miss" aria-hidden="true"></span><span>${raw ? highlight(g[1], raw) : esc(g[1])}</span></div>`;
+    `<div class="g-row" data-id="${esc(g[0])}"${g[2] ? ` data-appid="${esc(String(g[2]))}"` : ""}>${thumbHtml(g)}<span class="g-name">${raw ? highlight(g[1], raw) : esc(g[1])}</span></div>`;
 
   const readQuery = () => (new URLSearchParams(location.search).get("q") || "");
   const setUrl = (term, push) => {
@@ -1339,7 +1362,7 @@ pages.games = async () => {
     active = 0;
     q.setAttribute("aria-expanded", "true");
     q.setAttribute("aria-activedescendant", "gsug-0");
-    paintIcons(suggest);
+    paintThumbs(suggest);
   };
 
   const offerRequest = term => {
@@ -1384,7 +1407,7 @@ pages.games = async () => {
     const shown = used.slice(0, LIMIT).map(x => x[1]);
     list.hidden = false;
     list.innerHTML = shown.map(g => rowHtml(g, term)).join("");
-    paintIcons(list);
+    paintThumbs(list);
     refine.hidden = total <= LIMIT;
     if (total > LIMIT) refine.textContent = `Showing ${LIMIT} of ${total.toLocaleString("en")} matches. Refine your search to see more.`;
   }
@@ -1393,7 +1416,7 @@ pages.games = async () => {
     const r = await fetch(API + "/games/catalogue", { headers: { Accept: "application/json" } });
     if (!r.ok) throw new Error("Could not load the games list.");
     const d = await r.json();
-    all = (d.games || []).map(g => Array.isArray(g) ? g : [g.id, g.name]);
+    all = (d.games || []).map(g => Array.isArray(g) ? g : [g.id, g.name, g.steam_appid]);
     const n = d.total || all.length;
     if (hint) hint.textContent = "Search " + n.toLocaleString("en") + " supported games";
     if (tryRow) {

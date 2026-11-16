@@ -1331,9 +1331,13 @@ tr.hc-flag td{background:#1d1010}
 .g-results{display:grid;grid-template-columns:1fr 1fr;gap:0 18px;margin-top:16px}
 @media (max-width:600px){.g-results{grid-template-columns:1fr}}
 .g-refine{margin:12px 0 0;color:var(--muted);font-size:12.5px}
-.g-row{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--text);font-weight:600;font-size:12.5px}
-.g-row img,.g-ico-miss{width:24px;height:24px;border-radius:3px;background:#151c26;flex:0 0 24px;object-fit:cover}
-.g-ico-miss{display:block;border:1px solid #2a3544;background:linear-gradient(180deg,#1b2430,#141b24)}
+.g-row{display:flex;align-items:center;gap:10px;padding:5px 0;color:var(--text);font-weight:600;font-size:12.5px}
+.g-thumb{position:relative;flex:0 0 92px;width:92px;height:43px;border-radius:3px;overflow:hidden;background:#151c26;border:1px solid #2a3544}
+.g-letter{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:800 18px/1 var(--font);color:#e8eef4;letter-spacing:.02em;text-shadow:0 1px 2px #0008}
+.g-thumb img{position:absolute;inset:0;width:92px;height:43px;object-fit:cover;display:none}
+.g-thumb img.on{display:block}
+.g-thumb img.sq{object-fit:contain;padding:4px;box-sizing:border-box;background:#0e141c}
+.g-name{min-width:0}
 .g-none-ask{margin:0 0 8px}
 .g-ask .f{max-width:520px;display:grid;gap:8px}
 .g-ask .f label{display:grid;gap:4px;font-size:12.5px}

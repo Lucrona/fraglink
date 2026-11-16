@@ -71,9 +71,10 @@ fn clean_line(s: &str, max: usize) -> String {
         .join(" ")
 }
 
-fn already_listed(games: &[(String, String)], norm: &str) -> Option<(String, String)> {
-    games.iter().find_map(|(id, name)| {
-        (name_norm(name) == *norm || name_norm(id) == *norm).then(|| (id.clone(), name.clone()))
+fn already_listed(games: &[game_history::CatalogueEntry], norm: &str) -> Option<(String, String)> {
+    games.iter().find_map(|g| {
+        (name_norm(&g.name) == *norm || name_norm(&g.id) == *norm)
+            .then(|| (g.id.clone(), g.name.clone()))
     })
 }
 
@@ -391,7 +392,7 @@ async fn admin_approve(
             .await?;
         if !in_db {
             let listed = game_history::public_catalogue(&st).await?;
-            if !listed.iter().any(|(id, _)| id == &game_id_in) {
+            if !listed.iter().any(|g| g.id == game_id_in) {
                 return Err(AppError::bad_request(
                     "game_id",
                     "That game id isn't on the list.",
