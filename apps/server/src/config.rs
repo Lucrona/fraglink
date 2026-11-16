@@ -45,6 +45,14 @@ pub struct Config {
     /// `FRAGLINK_SITE_DIR` (default `/var/www/fraglink-beta`): the built website, for the
     /// profile page the server sends with per-profile robots tags.
     pub site_dir: std::path::PathBuf,
+    /// `FRAGLINK_ART_CACHE_BYTES` (default 1 GiB): max total size of `{data_dir}/art/{appid}.jpg`.
+    pub art_cache_bytes: u64,
+    /// `FRAGLINK_ART_MAX_BYTES` (default 1_500_000): max size of one fetched header image.
+    pub art_max_bytes: usize,
+    /// `FRAGLINK_ART_MISS_TTL_SECS` (default 86400): how long a `.miss` failure marker is honoured.
+    pub art_miss_ttl_secs: u64,
+    /// `FRAGLINK_ART_MISS_PER_MIN` (default 30): cache-miss fetches allowed per client IP per minute.
+    pub art_miss_per_min: usize,
 }
 
 impl Config {
@@ -102,6 +110,22 @@ impl Config {
             site_dir: var("FRAGLINK_SITE_DIR")
                 .unwrap_or_else(|| "/var/www/fraglink-beta".into())
                 .into(),
+            art_cache_bytes: var("FRAGLINK_ART_CACHE_BYTES")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(1_073_741_824),
+            art_max_bytes: var("FRAGLINK_ART_MAX_BYTES")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(1_500_000),
+            art_miss_ttl_secs: var("FRAGLINK_ART_MISS_TTL_SECS")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(86_400),
+            art_miss_per_min: var("FRAGLINK_ART_MISS_PER_MIN")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(30),
         })
     }
 
@@ -127,6 +151,10 @@ impl Config {
             site_url: "http://localhost:8787".into(),
             canonical_url: "https://playfraglink.com".into(),
             site_dir: std::env::temp_dir().join("fraglink-site-tests"),
+            art_cache_bytes: 1_073_741_824,
+            art_max_bytes: 1_500_000,
+            art_miss_ttl_secs: 86_400,
+            art_miss_per_min: 30,
         }
     }
 
