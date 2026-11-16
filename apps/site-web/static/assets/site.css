@@ -1358,3 +1358,36 @@ tr.hc-flag td{background:#1d1010}
 .glog .old{color:#c98989}
 .glog .new{color:#9dca9d}
 .glog-add{padding:10px 12px;border-top:1px solid #1c2836}
+
+/* Game pages and Games tab extras */
+a.tile2, a.tile2:hover{display:block;color:inherit;text-decoration:none}
+a.tile2:hover{border-color:#3b5878}
+a.tile2:hover .nmx{text-decoration:underline}
+a.glink{color:inherit;text-decoration:none;font-weight:inherit}
+a.glink:hover{text-decoration:underline;color:#fff}
+a.glink-ico,a.glink-art{display:inline-flex;color:inherit;text-decoration:none}
+a.glink-art{width:100%;height:100%}
+.g-chips{display:flex;flex-wrap:wrap;gap:8px}
+.g-chips .chip{text-decoration:none}
+.g-chips .chip:hover{border-color:#4f8bc9;color:#fff}
+.trend-tag{display:inline-block;margin-left:6px;border:1px solid var(--orange,#e09040);color:var(--orange,#e09040);background:#0006;border-radius:2px;padding:0 5px;font-size:10px;letter-spacing:.4px;text-transform:uppercase;vertical-align:middle}
+.tile2 .trend-tag{position:absolute;top:4px;right:5px;left:auto;margin:0}
+.gp .head{align-items:center}
+.gp-art{flex:none;width:230px;height:107px;border-radius:3px;overflow:hidden;background:#151c26;border:1px solid #2a3544;box-shadow:0 0 0 3px #0f1216}
+.gp-art img,.gp-art .ga,.gp-art .g-letter{width:230px;height:107px;object-fit:cover;display:block}
+.gp-art .g-letter{display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:700;color:#9fb2c6}
+.gp-stats{grid-template-columns:repeat(3,1fr);margin:0 0 12px}
+.gp .t2 td a{font-weight:600}
+.gp .t2 td .hndl{display:block;color:var(--muted);font-weight:400;font-size:11.5px}
+.gp-info dl.kv{grid-template-columns:100px minmax(0,1fr)}
+.gp .g-upd{grid-template-columns:1fr}
+.g-upd a{font-weight:600}
+.g-row{cursor:pointer}
+.g-row a.glink,.g-suggest a.glink{display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none;width:100%}
+.g-row a.glink:hover,.g-suggest a.glink:hover{text-decoration:none;color:#fff}
+@media (max-width:600px){
+  .gp .head{flex-wrap:wrap}
+  .gp-art{width:184px;height:86px}
+  .gp-art img,.gp-art .ga,.gp-art .g-letter{width:184px;height:86px}
+  .gp-stats{grid-template-columns:1fr}
+}

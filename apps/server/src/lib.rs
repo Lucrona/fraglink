@@ -27,6 +27,7 @@ pub mod features;
 pub mod friends;
 pub mod game_history;
 pub mod game_overrides;
+pub mod game_pages;
 pub mod game_requests;
 pub mod game_status;
 pub mod games;
@@ -101,6 +102,10 @@ pub struct AppState {
     pub own_names: Arc<std::sync::Mutex<HashMap<uuid::Uuid, (String, String)>>>,
     /// Steam app ids allowed through `GET /api/v1/art`, refreshed with the public catalogue.
     pub art_appids: Arc<Mutex<crate::home::ArtAppids>>,
+    /// Public `/games/<slug>` aliases, refreshed with the catalogue.
+    pub game_slugs: Arc<Mutex<crate::game_pages::SlugIndex>>,
+    /// Process-wide cap on outbound store / news fetches.
+    pub feed_gate: Arc<crate::game_pages::FeedGate>,
 }
 
 impl AppState {
@@ -123,6 +128,8 @@ impl AppState {
             home_public: Arc::new(std::sync::Mutex::new(None)),
             own_names: Arc::new(std::sync::Mutex::new(HashMap::new())),
             art_appids: Arc::new(Mutex::new(crate::home::ArtAppids::default())),
+            game_slugs: Arc::new(Mutex::new(crate::game_pages::SlugIndex::default())),
+            feed_gate: Arc::new(crate::game_pages::FeedGate::default()),
         }
     }
 
@@ -173,6 +180,8 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(api::routes())
         .merge(crate::game_history::routes())
+        .merge(crate::game_pages::routes())
+        .merge(crate::game_pages::admin_routes())
         .merge(crate::game_requests::routes())
         .merge(web::routes())
         .merge(profile::routes())

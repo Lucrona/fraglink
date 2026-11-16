@@ -484,7 +484,7 @@ impl ArtAppids {
         self.at.is_some_and(|t| t.elapsed() < Self::TTL)
     }
 
-    fn contains(&self, appid: u32) -> bool {
+    pub fn contains(&self, appid: u32) -> bool {
         self.ids.contains(&appid)
     }
 }

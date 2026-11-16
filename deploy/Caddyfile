@@ -81,9 +81,10 @@ playfraglink.com {
 		rewrite * /icons/games{path}
 		reverse_proxy 127.0.0.1:8787
 	}
-	# the server also answers the sitemap and the profile page (/u/*: u.html from the site files
-	# with that profile's robots, canonical and preview tags; see apps/server/src/seo.rs)
-	@server path /api/* /icons/* /pair /auth/* /web/* /logout /sitemap.xml /sitemaps/* /u/*
+	# the server also answers the sitemap, the profile page (/u/*: u.html from the site files
+	# with that profile's robots, canonical and preview tags; see apps/server/src/seo.rs),
+	# and public game pages (/games/<slug>; /games itself stays a static file).
+	@server path /api/* /icons/* /pair /auth/* /web/* /logout /sitemap.xml /sitemaps/* /u/* /games/*
 	handle @server {
 		reverse_proxy 127.0.0.1:8787
 	}
@@ -189,6 +190,12 @@ Disallow: /
 	handle /u/* {
 		root * /var/www/fraglink-beta
 		rewrite * /u.html
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle /games/* {
+		root * /var/www/fraglink-beta
+		rewrite * /games-one.html
 		header Cache-Control "no-cache"
 		file_server
 	}
