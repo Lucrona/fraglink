@@ -1,10 +1,12 @@
 //! Public `/games/<slug>` pages, the Games tab extras, and a cached Steam / RSS
-//! feed for game info and news.
+//! feed for game info and news (plus a Wikipedia/Wikidata fallback).
 //!
 //! Hours and player lists are hidden until a configurable number of distinct
 //! players have contributed, so one person's time is never published as a
-//! community figure. Outbound Steam and news fetches are limited to catalogue
-//! app ids (or an admin-set feed URL) and share a process-wide rate cap.
+//! community figure. Outbound Steam, Wikipedia and news fetches are limited to
+//! catalogue app ids (or an admin-set / curated feed URL) and share a
+//! process-wide rate cap. A background warmer walks the catalogue so pages
+//! fill in without waiting for a first view.
 
 use crate::admin::{Role, Staff};
 use crate::error::{ApiResult, AppError};
@@ -28,8 +30,11 @@ use url::Url;
 const SEO_START: &str = "<!--seo-->";
 const SEO_END: &str = "<!--/seo-->";
 const PAGE_HTML: &str = "games-one.html";
-const MAX_NEWS: usize = 8;
-const MAX_FEED_BYTES: usize = 512_000;
+pub(crate) const MAX_NEWS: usize = 8;
+pub(crate) const MAX_FEED_BYTES: usize = 512_000;
+pub(crate) const FEED_UA: &str = "Fraglink/1.0 (https://playfraglink.com; hello@playfraglink.com)";
+const VIEW_WAIT: Duration = Duration::from_secs(2);
+const BACKOFF_CAP_SECS: u64 = 7 * 86_400;
 const MOST_PLAYED: i64 = 8;
 const NEW_TO_LIST: i64 = 8;
 const TOP_PLAYERS: i64 = 10;
@@ -59,6 +64,13 @@ impl FeedGate {
         }
         v.push(Instant::now());
         true
+    }
+
+    /// Whether a new fetch would be allowed right now (does not consume a slot).
+    pub fn available(&self, max: usize, window: Duration) -> bool {
+        let mut v = self.hits.lock().unwrap_or_else(|e| e.into_inner());
+        v.retain(|t| t.elapsed() < window);
+        v.len() < max
     }
 }
 
@@ -726,7 +738,8 @@ async fn page_payload(st: &AppState, index: &SlugIndex, game_id: &str) -> ApiRes
     let Some(game) = cat.into_iter().find(|g| g.id == game_id) else {
         return Err(AppError::not_found());
     };
-    maybe_refresh_one(st, &game.id, game.steam_appid);
+    increment_views(&st.db, game_id).await;
+    ensure_fresh(st, &game.id, game.steam_appid, &game.name).await;
     let (this_w, _) = windows(st);
     let min = min_players(st);
     let n = distinct_all_time(&st.db, game_id).await?;
@@ -751,6 +764,7 @@ async fn page_payload(st: &AppState, index: &SlugIndex, game_id: &str) -> ApiRes
     };
     let (info, info_source) = game_info(st, game_id, game.steam_appid).await?;
     let (news, news_source) = game_news(st, game_id).await?;
+    let (description, description_source, description_url) = game_blurb(st, game_id).await?;
     Ok(json!({
         "game_id": game.id,
         "name": game.name,
@@ -762,11 +776,67 @@ async fn page_payload(st: &AppState, index: &SlugIndex, game_id: &str) -> ApiRes
         "top_players": top,
         "info": info,
         "info_source": info_source,
+        "description": description,
+        "description_source": description_source,
+        "description_url": description_url,
         "news": news,
         "news_source": news_source,
         "week_tz": st.cfg.public_week_tz,
         "min_players": min,
     }))
+}
+
+async fn increment_views(db: &PgPool, game_id: &str) {
+    let _ = sqlx::query(
+        "INSERT INTO game_page_views (game_id, views, last_viewed_at)
+         VALUES ($1, 1, now())
+         ON CONFLICT (game_id) DO UPDATE SET
+           views = game_page_views.views + 1,
+           last_viewed_at = now()",
+    )
+    .bind(game_id)
+    .execute(db)
+    .await;
+}
+
+async fn ensure_fresh(st: &AppState, game_id: &str, appid: Option<u32>, name: &str) {
+    let due = game_needs_refresh(st, game_id, appid, st.cfg.game_news_ttl_secs)
+        .await
+        .unwrap_or(true);
+    if !due {
+        return;
+    }
+    let empty = cache_is_empty(st, game_id).await && can_wait_for_fetch(st, game_id, appid);
+    let st2 = st.clone();
+    let id = game_id.to_string();
+    let n = name.to_string();
+    let handle = tokio::spawn(async move {
+        if let Err(e) = refresh_game(&st2, &id, appid, Some(&n)).await {
+            tracing::debug!("game feed {id}: {e}");
+        }
+    });
+    if empty {
+        let _ = tokio::time::timeout(VIEW_WAIT, handle).await;
+    }
+}
+
+fn can_wait_for_fetch(st: &AppState, game_id: &str, appid: Option<u32>) -> bool {
+    let https = |u: &str| u.starts_with("https://");
+    (appid.is_some() && st.cfg.steam_store_url.as_deref().is_some_and(https))
+        || (appid.is_some() && https(&st.cfg.steam_api_base))
+        || (appid.is_none() && st.cfg.wikipedia_url.as_deref().is_some_and(https))
+        || crate::game_feed_defaults::official_news_url(game_id).is_some()
+}
+
+async fn cache_is_empty(st: &AppState, game_id: &str) -> bool {
+    let row: Option<(Option<bool>, Option<bool>)> =
+        sqlx::query_as("SELECT details_ok, news_ok FROM game_feed_cache WHERE game_id = $1")
+            .bind(game_id)
+            .fetch_optional(&st.db)
+            .await
+            .ok()
+            .flatten();
+    !matches!(row, Some((Some(true), _)) | Some((_, Some(true))))
 }
 
 // ------------------------------------------------------------------ info + news
@@ -780,11 +850,12 @@ struct MetaRow {
     genres: Option<String>,
     platforms: Option<String>,
     news_feed_url: Option<String>,
+    description: Option<String>,
 }
 
 async fn load_meta(db: &PgPool, game_id: &str) -> ApiResult<Option<MetaRow>> {
     Ok(sqlx::query_as(
-        "SELECT slug, developer, publisher, release_date, genres, platforms, news_feed_url
+        "SELECT slug, developer, publisher, release_date, genres, platforms, news_feed_url, description
          FROM game_page_meta WHERE game_id = $1",
     )
     .bind(game_id)
@@ -807,6 +878,9 @@ async fn game_info(
         .as_ref()
         .and_then(|(j, ok)| if *ok == Some(true) { j.clone() } else { None });
     let parsed = details.as_ref().map(info_from_details).unwrap_or_default();
+    let wiki = details
+        .as_ref()
+        .and_then(crate::game_wiki::bits_from_cached);
     let over = |field: Option<&String>, fallback: Option<String>| {
         field
             .map(|s| s.trim())
@@ -854,7 +928,11 @@ async fn game_info(
         None
     } else if has_over {
         Some("Edited".to_string())
-    } else if appid.is_some() && details.is_some() {
+    } else if appid.is_some() && details.is_some() && wiki.is_none() {
+        Some("Store listing".to_string())
+    } else if wiki.is_some() {
+        Some("Wikipedia".to_string())
+    } else if details.is_some() {
         Some("Store listing".to_string())
     } else {
         None
@@ -862,13 +940,48 @@ async fn game_info(
     Ok((info, source))
 }
 
-#[derive(Default)]
-struct InfoBits {
-    developer: Option<String>,
-    publisher: Option<String>,
-    release_date: Option<String>,
-    genres: Option<String>,
-    platforms: Option<String>,
+async fn game_blurb(
+    st: &AppState,
+    game_id: &str,
+) -> ApiResult<(Option<String>, Option<String>, Option<String>)> {
+    let meta = load_meta(&st.db, game_id).await?;
+    if let Some(d) = meta
+        .as_ref()
+        .and_then(|m| m.description.as_ref())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        return Ok((Some(d.to_string()), Some("Edited".into()), None));
+    }
+    let cached: Option<(Option<Value>, Option<bool>)> =
+        sqlx::query_as("SELECT details_json, details_ok FROM game_feed_cache WHERE game_id = $1")
+            .bind(game_id)
+            .fetch_optional(&st.db)
+            .await?;
+    let details = cached
+        .as_ref()
+        .and_then(|(j, ok)| if *ok == Some(true) { j.clone() } else { None });
+    let Some(v) = details else {
+        return Ok((None, None, None));
+    };
+    if let Some(w) = crate::game_wiki::bits_from_cached(&v) {
+        if let Some(extract) = w.extract {
+            return Ok((Some(extract), Some("Wikipedia".into()), w.url));
+        }
+    }
+    if let Some(s) = short_description(&v) {
+        return Ok((Some(s), Some("Store listing".into()), None));
+    }
+    Ok((None, None, None))
+}
+
+#[derive(Default, Clone)]
+pub struct InfoBits {
+    pub developer: Option<String>,
+    pub publisher: Option<String>,
+    pub release_date: Option<String>,
+    pub genres: Option<String>,
+    pub platforms: Option<String>,
 }
 
 fn info_from_details(v: &Value) -> InfoBits {
@@ -882,6 +995,14 @@ fn info_from_details(v: &Value) -> InfoBits {
             .unwrap_or(v)
     };
     let list = |key: &str| -> Option<String> {
+        if let Some(s) = data.get(key).and_then(|x| x.as_str()) {
+            let t = s.trim();
+            return if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            };
+        }
         let arr = data.get(key)?.as_array()?;
         let parts: Vec<String> = arr
             .iter()
@@ -932,12 +1053,33 @@ fn info_from_details(v: &Value) -> InfoBits {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     InfoBits {
-        developer: list("developers"),
-        publisher: list("publishers"),
-        release_date: release,
-        genres,
-        platforms,
+        developer: list("developers").or_else(|| list("developer")),
+        publisher: list("publishers").or_else(|| list("publisher")),
+        release_date: release.or_else(|| {
+            data.get("release_date")
+                .and_then(|d| d.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        }),
+        genres: genres.or_else(|| list("genres")),
+        platforms: platforms.or_else(|| list("platforms")),
     }
+}
+
+pub fn short_description(v: &Value) -> Option<String> {
+    let data = if v.get("short_description").is_some() || v.get("extract").is_some() {
+        v
+    } else {
+        v.as_object()
+            .and_then(|m| m.values().next())
+            .and_then(|x| x.get("data"))
+            .unwrap_or(v)
+    };
+    data.get("short_description")
+        .or_else(|| data.get("extract"))
+        .and_then(|s| s.as_str())
+        .map(crate::game_wiki::trim_extract)
+        .filter(|s| !s.is_empty())
 }
 
 pub fn genres_from_details(v: &Value) -> Vec<String> {
@@ -1007,16 +1149,6 @@ fn maybe_refresh_feeds(st: &AppState) {
     });
 }
 
-fn maybe_refresh_one(st: &AppState, game_id: &str, appid: Option<u32>) {
-    let st = st.clone();
-    let id = game_id.to_string();
-    tokio::spawn(async move {
-        if let Err(e) = refresh_game(&st, &id, appid).await {
-            tracing::debug!("game feed {id}: {e}");
-        }
-    });
-}
-
 async fn refresh_stale(st: &AppState, n: usize) -> anyhow::Result<()> {
     let cat = match crate::game_history::public_catalogue(st).await {
         Ok(c) => c,
@@ -1072,33 +1204,158 @@ async fn refresh_stale(st: &AppState, n: usize) -> anyhow::Result<()> {
         if !need {
             continue;
         }
-        refresh_game(st, &g.id, g.steam_appid).await?;
+        refresh_game(st, &g.id, g.steam_appid, Some(&g.name)).await?;
         did += 1;
     }
     Ok(())
 }
 
-async fn refresh_game(st: &AppState, game_id: &str, appid: Option<u32>) -> anyhow::Result<()> {
+pub(crate) async fn refresh_game(
+    st: &AppState,
+    game_id: &str,
+    appid: Option<u32>,
+    name: Option<&str>,
+) -> anyhow::Result<()> {
     let meta = load_meta(&st.db, game_id).await.ok().flatten();
-    let feed_url = meta
+    let admin_feed = meta
         .as_ref()
         .and_then(|m| m.news_feed_url.as_deref())
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
+    let curated = crate::game_feed_defaults::official_news_url(game_id).map(|s| s.to_string());
     if let Some(a) = appid {
         if !allowed_appid(st, a) {
             anyhow::bail!("appid {a} is not on the catalogue allow-list");
         }
         refresh_store(st, game_id, a).await?;
-        if feed_url.is_none() {
-            refresh_steam_news(st, game_id, a).await?;
+        let _ = copy_steam_details(st, game_id, a).await;
+    } else {
+        let label = name.unwrap_or(game_id);
+        let _ = crate::game_wiki::refresh_wiki(st, game_id, label).await;
+    }
+    let mut news_ok = false;
+    if let Some(url) = admin_feed.as_deref() {
+        news_ok =
+            refresh_rss(st, game_id, url, false).await.is_ok() && news_cache_ok(st, game_id).await;
+    }
+    if !news_ok {
+        if let Some(url) = curated.as_deref() {
+            if admin_feed.as_deref() != Some(url) {
+                news_ok = refresh_rss(st, game_id, url, true).await.is_ok()
+                    && news_cache_ok(st, game_id).await;
+            }
         }
     }
-    if let Some(url) = feed_url {
-        refresh_rss(st, game_id, &url).await?;
+    if !news_ok {
+        if let Some(a) = appid {
+            refresh_steam_news(st, game_id, a).await?;
+            let _ = copy_steam_news(st, game_id, a).await;
+        }
     }
     Ok(())
+}
+
+async fn news_cache_ok(st: &AppState, game_id: &str) -> bool {
+    let ok: Option<bool> =
+        sqlx::query_scalar("SELECT news_ok FROM game_feed_cache WHERE game_id = $1")
+            .bind(game_id)
+            .fetch_optional(&st.db)
+            .await
+            .ok()
+            .flatten()
+            .flatten();
+    ok == Some(true)
+}
+
+async fn sibling_ids(st: &AppState, appid: u32, except: &str) -> Vec<String> {
+    let cat = crate::game_history::public_catalogue(st)
+        .await
+        .unwrap_or_default();
+    cat.into_iter()
+        .filter(|g| g.steam_appid == Some(appid) && g.id != except)
+        .map(|g| g.id)
+        .collect()
+}
+
+async fn copy_steam_details(st: &AppState, from_id: &str, appid: u32) -> anyhow::Result<()> {
+    let row: Option<(Option<Value>, Option<bool>)> =
+        sqlx::query_as("SELECT details_json, details_ok FROM game_feed_cache WHERE game_id = $1")
+            .bind(from_id)
+            .fetch_optional(&st.db)
+            .await?;
+    let Some((Some(data), Some(true))) = row else {
+        return Ok(());
+    };
+    for id in sibling_ids(st, appid, from_id).await {
+        upsert_details(
+            st,
+            &id,
+            Some(appid as i32),
+            Some(&data),
+            true,
+            Some("steam"),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn copy_steam_news(st: &AppState, from_id: &str, appid: u32) -> anyhow::Result<()> {
+    let row: Option<(Option<Value>, Option<bool>)> =
+        sqlx::query_as("SELECT news_json, news_ok FROM game_feed_cache WHERE game_id = $1")
+            .bind(from_id)
+            .fetch_optional(&st.db)
+            .await?;
+    let Some((Some(items), Some(true))) = row else {
+        return Ok(());
+    };
+    let arr = items.as_array().cloned().unwrap_or_default();
+    for id in sibling_ids(st, appid, from_id).await {
+        upsert_news(st, &id, &arr, true, "steam").await?;
+    }
+    Ok(())
+}
+
+pub(crate) fn gate_available(st: &AppState) -> bool {
+    st.feed_gate
+        .available(st.cfg.game_feed_per_min.max(1), Duration::from_secs(60))
+}
+
+/// Whether store, news, or (for non-Steam) Wikipedia data is missing or stale.
+pub(crate) async fn game_needs_refresh(
+    st: &AppState,
+    game_id: &str,
+    appid: Option<u32>,
+    news_ttl: u64,
+) -> anyhow::Result<bool> {
+    let meta = load_meta(&st.db, game_id).await.ok().flatten();
+    let has_feed = meta
+        .as_ref()
+        .and_then(|m| m.news_feed_url.as_deref())
+        .is_some_and(|s| !s.trim().is_empty())
+        || crate::game_feed_defaults::official_news_url(game_id).is_some();
+    let need_details = appid.is_some() || st.cfg.wikipedia_url.is_some();
+    let need_news = appid.is_some() || has_feed;
+    if !need_details && !need_news {
+        return Ok(false);
+    }
+    if need_details
+        && cache_due(
+            st,
+            game_id,
+            "details_ok",
+            "details_fetched_at",
+            st.cfg.game_store_ttl_secs,
+        )
+        .await?
+    {
+        return Ok(true);
+    }
+    if need_news && cache_due(st, game_id, "news_ok", "news_fetched_at", news_ttl).await? {
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 fn allowed_appid(st: &AppState, appid: u32) -> bool {
@@ -1128,11 +1385,19 @@ async fn refresh_store(st: &AppState, game_id: &str, appid: u32) -> anyhow::Resu
     let body = fetch_text(&url).await;
     match body.and_then(|t| parse_appdetails(&t, appid)) {
         Ok(data) => {
-            upsert_details(st, game_id, Some(appid as i32), Some(&data), true).await?;
+            upsert_details(
+                st,
+                game_id,
+                Some(appid as i32),
+                Some(&data),
+                true,
+                Some("steam"),
+            )
+            .await?;
         }
         Err(e) => {
             tracing::debug!("store {appid}: {e}");
-            upsert_details(st, game_id, Some(appid as i32), None, false).await?;
+            upsert_details(st, game_id, Some(appid as i32), None, false, Some("steam")).await?;
         }
     }
     Ok(())
@@ -1222,15 +1487,21 @@ pub fn parse_steam_news(text: &str, appid: u32) -> anyhow::Result<Vec<Value>> {
     Ok(out)
 }
 
-async fn refresh_rss(st: &AppState, game_id: &str, raw_url: &str) -> anyhow::Result<()> {
-    if !cache_due(
-        st,
-        game_id,
-        "news_ok",
-        "news_fetched_at",
-        st.cfg.game_news_ttl_secs,
-    )
-    .await?
+async fn refresh_rss(
+    st: &AppState,
+    game_id: &str,
+    raw_url: &str,
+    force: bool,
+) -> anyhow::Result<()> {
+    if !force
+        && !cache_due(
+            st,
+            game_id,
+            "news_ok",
+            "news_fetched_at",
+            st.cfg.game_news_ttl_secs,
+        )
+        .await?
     {
         return Ok(());
     }
@@ -1238,7 +1509,7 @@ async fn refresh_rss(st: &AppState, game_id: &str, raw_url: &str) -> anyhow::Res
     if !acquire(st) {
         return Ok(());
     }
-    match fetch_text(url.as_str())
+    match fetch_follow(url.as_str())
         .await
         .and_then(|t| parse_feed(&t).map_err(|e| anyhow::anyhow!(e)))
     {
@@ -1251,12 +1522,12 @@ async fn refresh_rss(st: &AppState, game_id: &str, raw_url: &str) -> anyhow::Res
     Ok(())
 }
 
-fn acquire(st: &AppState) -> bool {
+pub(crate) fn acquire(st: &AppState) -> bool {
     st.feed_gate
         .try_acquire(st.cfg.game_feed_per_min.max(1), Duration::from_secs(60))
 }
 
-async fn cache_due(
+pub(crate) async fn cache_due(
     st: &AppState,
     game_id: &str,
     ok_col: &str,
@@ -1265,17 +1536,17 @@ async fn cache_due(
 ) -> anyhow::Result<bool> {
     // Column names are from a fixed allow-list, never user input.
     let sql = if ok_col == "details_ok" && at_col == "details_fetched_at" {
-        "SELECT details_ok, details_fetched_at FROM game_feed_cache WHERE game_id = $1"
+        "SELECT details_ok, details_fetched_at, details_fail_count FROM game_feed_cache WHERE game_id = $1"
     } else if ok_col == "news_ok" && at_col == "news_fetched_at" {
-        "SELECT news_ok, news_fetched_at FROM game_feed_cache WHERE game_id = $1"
+        "SELECT news_ok, news_fetched_at, news_fail_count FROM game_feed_cache WHERE game_id = $1"
     } else {
         anyhow::bail!("unknown cache columns");
     };
-    let row: Option<(Option<bool>, Option<DateTime<Utc>>)> = sqlx::query_as(sql)
+    let row: Option<(Option<bool>, Option<DateTime<Utc>>, i32)> = sqlx::query_as(sql)
         .bind(game_id)
         .fetch_optional(&st.db)
         .await?;
-    let Some((ok, at)) = row else {
+    let Some((ok, at, fails)) = row else {
         return Ok(true);
     };
     let Some(at) = at else {
@@ -1288,36 +1559,48 @@ async fn cache_due(
     if ok == Some(true) {
         Ok(age >= Duration::from_secs(ttl))
     } else {
-        Ok(age >= Duration::from_secs(st.cfg.game_feed_miss_ttl_secs))
+        let exp = fails.max(0) as u32;
+        let factor = 2u64.saturating_pow(exp.min(5));
+        let wait = st
+            .cfg
+            .game_feed_miss_ttl_secs
+            .saturating_mul(factor)
+            .min(BACKOFF_CAP_SECS);
+        Ok(age >= Duration::from_secs(wait))
     }
 }
 
-async fn upsert_details(
+pub(crate) async fn upsert_details(
     st: &AppState,
     game_id: &str,
     appid: Option<i32>,
     data: Option<&Value>,
     ok: bool,
+    kind: Option<&str>,
 ) -> anyhow::Result<()> {
     sqlx::query(
-        "INSERT INTO game_feed_cache (game_id, steam_appid, details_json, details_fetched_at, details_ok)
-         VALUES ($1, $2, $3, now(), $4)
+        "INSERT INTO game_feed_cache (
+            game_id, steam_appid, details_json, details_fetched_at, details_ok, details_kind, details_fail_count
+         ) VALUES ($1, $2, $3, now(), $4, $5, CASE WHEN $4 THEN 0 ELSE 1 END)
          ON CONFLICT (game_id) DO UPDATE SET
            steam_appid = coalesce(excluded.steam_appid, game_feed_cache.steam_appid),
            details_json = CASE WHEN $4 THEN excluded.details_json ELSE game_feed_cache.details_json END,
            details_fetched_at = excluded.details_fetched_at,
-           details_ok = excluded.details_ok",
+           details_ok = excluded.details_ok,
+           details_kind = CASE WHEN $4 THEN excluded.details_kind ELSE game_feed_cache.details_kind END,
+           details_fail_count = CASE WHEN $4 THEN 0 ELSE game_feed_cache.details_fail_count + 1 END",
     )
     .bind(game_id)
     .bind(appid)
     .bind(data)
     .bind(ok)
+    .bind(kind)
     .execute(&st.db)
     .await?;
     Ok(())
 }
 
-async fn upsert_news(
+pub(crate) async fn upsert_news(
     st: &AppState,
     game_id: &str,
     items: &[Value],
@@ -1326,13 +1609,14 @@ async fn upsert_news(
 ) -> anyhow::Result<()> {
     let payload = if ok { Some(json!(items)) } else { None };
     sqlx::query(
-        "INSERT INTO game_feed_cache (game_id, news_json, news_fetched_at, news_ok, news_kind)
-         VALUES ($1, $2, now(), $3, $4)
+        "INSERT INTO game_feed_cache (game_id, news_json, news_fetched_at, news_ok, news_kind, news_fail_count)
+         VALUES ($1, $2, now(), $3, $4, CASE WHEN $3 THEN 0 ELSE 1 END)
          ON CONFLICT (game_id) DO UPDATE SET
            news_json = CASE WHEN $3 THEN excluded.news_json ELSE game_feed_cache.news_json END,
            news_fetched_at = excluded.news_fetched_at,
            news_ok = excluded.news_ok,
-           news_kind = excluded.news_kind",
+           news_kind = excluded.news_kind,
+           news_fail_count = CASE WHEN $3 THEN 0 ELSE game_feed_cache.news_fail_count + 1 END",
     )
     .bind(game_id)
     .bind(payload)
@@ -1343,12 +1627,38 @@ async fn upsert_news(
     Ok(())
 }
 
+fn feed_client(follow: bool) -> anyhow::Result<reqwest::Client> {
+    let redirect = if follow {
+        reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 3 {
+                return attempt.error(anyhow::anyhow!("too many redirects"));
+            }
+            if parse_public_http_url(attempt.url().as_str()).is_none() {
+                return attempt.error(anyhow::anyhow!("redirect to a non-public URL"));
+            }
+            attempt.follow()
+        })
+    } else {
+        reqwest::redirect::Policy::none()
+    };
+    Ok(reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .redirect(redirect)
+        .user_agent(FEED_UA)
+        .build()?)
+}
+
 async fn fetch_text(url: &str) -> anyhow::Result<String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
-    let res = client.get(url).send().await?;
+    fetch_with(url, false).await
+}
+
+/// Follow a small number of redirects, but only to other public http(s) URLs.
+pub(crate) async fn fetch_follow(url: &str) -> anyhow::Result<String> {
+    fetch_with(url, true).await
+}
+
+async fn fetch_with(url: &str, follow: bool) -> anyhow::Result<String> {
+    let res = feed_client(follow)?.get(url).send().await?;
     if !res.status().is_success() {
         anyhow::bail!("HTTP {}", res.status());
     }
@@ -1564,6 +1874,7 @@ async fn admin_get_page(
         "genres": meta.as_ref().and_then(|m| m.genres.clone()),
         "platforms": meta.as_ref().and_then(|m| m.platforms.clone()),
         "news_feed_url": meta.as_ref().and_then(|m| m.news_feed_url.clone()),
+        "description": meta.as_ref().and_then(|m| m.description.clone()),
     })))
 }
 
@@ -1583,6 +1894,8 @@ struct PageSave {
     platforms: Option<String>,
     #[serde(default)]
     news_feed_url: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
 }
 
 fn clean_field(s: Option<String>, max: usize) -> ApiResult<Option<String>> {
@@ -1662,10 +1975,11 @@ async fn admin_save_page(
             Some(u)
         }
     };
+    let description = clean_field(r.description, 2000)?;
     sqlx::query(
         "INSERT INTO game_page_meta (
-            game_id, slug, developer, publisher, release_date, genres, platforms, news_feed_url, updated_at, updated_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now(), $9)
+            game_id, slug, developer, publisher, release_date, genres, platforms, news_feed_url, description, updated_at, updated_by
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), $10)
          ON CONFLICT (game_id) DO UPDATE SET
             slug = excluded.slug,
             developer = excluded.developer,
@@ -1674,6 +1988,7 @@ async fn admin_save_page(
             genres = excluded.genres,
             platforms = excluded.platforms,
             news_feed_url = excluded.news_feed_url,
+            description = excluded.description,
             updated_at = now(),
             updated_by = excluded.updated_by",
     )
@@ -1685,6 +2000,7 @@ async fn admin_save_page(
     .bind(clean_field(r.genres, 200)?)
     .bind(clean_field(r.platforms, 120)?)
     .bind(&news_url)
+    .bind(&description)
     .bind(s.user.id)
     .execute(&st.db)
     .await?;

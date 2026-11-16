@@ -78,6 +78,18 @@ pub struct Config {
     /// `FRAGLINK_PUBLIC_WEEK_TZ` (default Australia/Sydney): the zone used for
     /// public "this week" figures on game pages and the Games tab.
     pub public_week_tz: String,
+    /// `FRAGLINK_GAME_WARMER` (default on): background walk of the catalogue
+    /// so game pages fill in without waiting for a first view.
+    pub game_warmer: bool,
+    /// `FRAGLINK_GAME_WARMER_NEWS_TTL_SECS` (default 12 hours): how often the
+    /// warmer refreshes news. On-view still uses `game_news_ttl_secs`.
+    pub game_warmer_news_ttl_secs: u64,
+    /// `FRAGLINK_WIKIPEDIA_URL` (default https://en.wikipedia.org; `off` to
+    /// disable): base for summary + search fallbacks on non-Steam games.
+    pub wikipedia_url: Option<String>,
+    /// `FRAGLINK_WIKIDATA_URL` (default https://www.wikidata.org; `off` to
+    /// disable): entity API for developer/publisher/genre/date.
+    pub wikidata_url: Option<String>,
 }
 
 impl Config {
@@ -181,6 +193,28 @@ impl Config {
                 .unwrap_or(18_000),
             public_week_tz: var("FRAGLINK_PUBLIC_WEEK_TZ")
                 .unwrap_or_else(|| crate::activity::DEFAULT_TZ.into()),
+            game_warmer: var("FRAGLINK_GAME_WARMER")
+                .map(|s| {
+                    !matches!(
+                        s.to_ascii_lowercase().as_str(),
+                        "off" | "0" | "false" | "no"
+                    )
+                })
+                .unwrap_or(true),
+            game_warmer_news_ttl_secs: var("FRAGLINK_GAME_WARMER_NEWS_TTL_SECS")
+                .and_then(|s| s.trim().parse().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or(12 * 3600),
+            wikipedia_url: match var("FRAGLINK_WIKIPEDIA_URL").as_deref() {
+                Some("off") => None,
+                Some(u) => Some(u.trim_end_matches('/').to_string()),
+                None => Some("https://en.wikipedia.org".into()),
+            },
+            wikidata_url: match var("FRAGLINK_WIKIDATA_URL").as_deref() {
+                Some("off") => None,
+                Some(u) => Some(u.trim_end_matches('/').to_string()),
+                None => Some("https://www.wikidata.org".into()),
+            },
         })
     }
 
@@ -218,6 +252,10 @@ impl Config {
             game_trending_ratio: 1.5,
             game_trending_min_secs: 18_000,
             public_week_tz: crate::activity::DEFAULT_TZ.into(),
+            game_warmer: false,
+            game_warmer_news_ttl_secs: 12 * 3600,
+            wikipedia_url: None,
+            wikidata_url: None,
         }
     }
 

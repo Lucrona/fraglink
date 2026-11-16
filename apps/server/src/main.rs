@@ -38,6 +38,7 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(fraglink_server::account::purge_loop(state.clone()));
     tokio::spawn(fraglink_server::alerts::run(state.clone()));
     tokio::spawn(fraglink_server::wow::backfill_ids(state.clone()));
+    tokio::spawn(fraglink_server::game_warm::warm_loop(state.clone()));
     // WoW realm lists: on the back burner (dev.18), not fetched.
     // tokio::spawn(fraglink_server::realms::refresh_loop(state.clone()));
     // Steam hours are imported by hand only (Oct 2026): imports are one-off, and play the app
