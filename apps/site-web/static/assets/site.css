@@ -1391,3 +1391,11 @@ a.glink-art{width:100%;height:100%}
   .gp-art img,.gp-art .ga,.gp-art .g-letter{width:184px;height:86px}
   .gp-stats{grid-template-columns:1fr}
 }
+
+.gp-about{margin:.7rem 0 0;max-width:46rem;color:var(--muted);line-height:1.45;font-size:.95rem}
+.gp-about .gp-src{margin-left:.35rem;font-size:.8rem;white-space:nowrap}
+.gp-stats.gp-muted{position:relative;padding-bottom:2.4rem}
+.gp-stats .gp-note{position:absolute;left:1rem;right:1rem;bottom:.55rem;margin:0;font-size:.8rem;color:var(--muted);text-align:center}
+
+.gp-store{margin:.7rem 0 0}
+.gp-store .btn{display:inline-block}

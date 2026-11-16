@@ -1630,13 +1630,24 @@ pages.game = async () => {
   const art = srcs.length
     ? `<img src="${esc(srcs[0])}" alt="${esc(d.name)}" width="230" height="107" data-art-fallbacks="${esc(srcs.slice(1).join(" "))}">`
     : letter;
+  const about = d.description
+    ? `<p class="gp-about">${esc(d.description)}${d.description_source === "Wikipedia" && d.description_url ? ` <a class="gp-src" href="${esc(d.description_url)}" rel="noopener">From Wikipedia</a>` : ""}</p>`
+    : "";
+  const store = (d.store && d.store.url)
+    ? `<p class="gp-store"><a class="btn" href="${esc(d.store.url)}" rel="noopener nofollow" target="_blank">${esc(d.store.label || "Official site")}</a></p>`
+    : "";
   const stats = d.stats_visible && d.stats
     ? `<div class="stats gp-stats" aria-label="Game stats">
         <div><b>${hrsShort(d.stats.total_minutes)} h</b><span>Total hours</span></div>
         <div><b>${nf.format(d.stats.players_this_week || 0)}</b><span>Players this week</span></div>
         <div><b>${nf.format(d.stats.sessions || 0)}</b><span>Sessions</span></div>
       </div>`
-    : "";
+    : `<div class="stats gp-stats gp-muted" aria-label="Game stats">
+        <div><b>—</b><span>Total hours</span></div>
+        <div><b>—</b><span>Players this week</span></div>
+        <div><b>—</b><span>Sessions</span></div>
+        <p class="gp-note">Tracked hours and player counts appear once enough people have played this game on Fraglink.</p>
+      </div>`;
   const top = (d.top_players_visible && d.top_players && d.top_players.length)
     ? `<section class="panel">
         <h2><span class="tab">Top players</span><span class="more">This week</span></h2>
@@ -1647,7 +1658,10 @@ pages.game = async () => {
           }).join("")}</tbody></table>
         </div>
       </section>`
-    : "";
+    : `<section class="panel">
+        <h2><span class="tab">Top players</span><span class="more">This week</span></h2>
+        <div class="body"><p class="empty">A public player list appears here once enough people have tracked this game with a public profile.</p></div>
+      </section>`;
   const newsItems = (d.news || []).map(n => {
     const when = n.at ? `<time>${fullDate.format(new Date(n.at))}</time>` : `<time></time>`;
     const title = n.url
@@ -1660,7 +1674,10 @@ pages.game = async () => {
         <h2><span class="tab">News</span>${d.news_source ? `<span class="more">${esc(d.news_source)}</span>` : ""}</h2>
         <div class="body"><ul class="g-upd">${newsItems}</ul></div>
       </section>`
-    : "";
+    : `<section class="panel">
+        <h2><span class="tab">News</span></h2>
+        <div class="body"><p class="empty">No news feed for this game yet. If you know an official one, <a href="/contact">tell us</a>.</p></div>
+      </section>`;
   const info = d.info || {};
   const rows = [["Developer", info.developer], ["Publisher", info.publisher], ["Released", info.release_date], ["Genres", info.genres], ["Platforms", info.platforms]]
     .filter(([, v]) => v)
@@ -1668,7 +1685,7 @@ pages.game = async () => {
     .join("");
   const infoPanel = `<section class="panel gp-info">
       <h2><span class="tab">Game info</span>${d.info_source ? `<span class="more">${esc(d.info_source)}</span>` : ""}</h2>
-      <div class="body">${rows ? `<dl class="kv">${rows}</dl>` : `<p class="empty">No info yet.</p>`}</div>
+      <div class="body">${rows ? `<dl class="kv">${rows}</dl>` : `<p class="empty">We don't have store or catalogue info for this game yet. If you can fill it in, <a href="/contact">tell us</a>.</p>`}</div>
     </section>`;
   root.innerHTML = `
   <section class="head">
@@ -1676,6 +1693,8 @@ pages.game = async () => {
     <div>
       <h1>${esc(d.name)}</h1>
       <div class="sub">Hours tracked on Fraglink, who is playing, and info for this game.</div>
+      ${about}
+      ${store}
     </div>
   </section>
   ${stats}
@@ -1694,6 +1713,12 @@ pages.game = async () => {
       if (rest.length) { img.src = rest.shift(); return; }
       img.replaceWith(Object.assign(document.createElement("span"), { className: "g-letter", textContent: (d.name || "?").trim().charAt(0).toUpperCase() || "?" }));
     });
+  }
+  const thin = !d.description && !(info.developer || info.publisher || info.release_date || info.genres || info.platforms) && !(d.news || []).length;
+  const tries = Number(root.getAttribute("data-gp-tries") || "0");
+  if (thin && tries < 2) {
+    root.setAttribute("data-gp-tries", String(tries + 1));
+    setTimeout(() => { if (location.pathname.indexOf("/games/") === 0) pages.game(); }, tries ? 5000 : 2000);
   }
 };
 

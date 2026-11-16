@@ -129,3 +129,31 @@ test('admin can edit game page info and a news feed URL', () => {
   assert.match(admin, /\/admin\/games\/" \+ encodeURIComponent\(id\) \+ "\/page"/);
   assert.match(admin, /news_feed_url/);
 });
+
+test('game page shows a description, tidy empty fallbacks, and never hides the layout', () => {
+  const start = app.indexOf('pages.game = async');
+  const body = app.slice(start, app.indexOf('pages.login'));
+  assert.match(body, /gp-about/);
+  assert.match(body, /From Wikipedia/);
+  assert.match(body, /description_source/);
+  assert.match(body, /No news feed for this game yet/);
+  assert.match(body, /We don't have store or catalogue info/);
+  assert.match(body, /Tracked hours and player counts appear once enough people/);
+  assert.match(body, /A public player list appears here/);
+  assert.match(body, /data-gp-tries/);
+  assert.match(css, /\.gp-about/);
+});
+
+test('admin can edit a short description on the game page', () => {
+  assert.match(admin, /name="description"/);
+  assert.match(admin, /description: f\.description\.value\.trim/);
+});
+
+test('game page can show an official or store link, hidden when missing', () => {
+  const start = app.indexOf('pages.game = async');
+  const body = app.slice(start, app.indexOf('pages.login'));
+  assert.match(body, /gp-store/);
+  assert.match(body, /rel="noopener nofollow"/);
+  assert.match(body, /d\.store && d\.store\.url/);
+  assert.match(admin, /name="official_url"/);
+});

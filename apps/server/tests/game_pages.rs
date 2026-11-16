@@ -293,13 +293,19 @@ async fn admin_can_set_info_and_a_news_feed(pool: PgPool) {
             "release_date": "4 Nov 2026",
             "genres": "MMORPG",
             "platforms": "Windows, macOS",
-            "news_feed_url": "https://worldofwarcraft.blizzard.com/en-us/news"
+            "description": "A World of Warcraft private realm with its own news.",
+            "news_feed_url": "https://worldofwarcraft.blizzard.com/en-us/news",
+            "official_url": "https://example.test/wow-shop"
         })),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{}", saved.text);
     assert_eq!(saved.json()["developer"], "Blizzard Entertainment");
     assert_eq!(saved.json()["slug"], "wow-forever");
+    assert_eq!(
+        saved.json()["official_url"],
+        "https://example.test/wow-shop"
+    );
 
     // Cached news (no outbound fetch in tests): pretends the feed already landed.
     sqlx::query(
@@ -319,9 +325,18 @@ async fn admin_can_set_info_and_a_news_feed(pool: PgPool) {
     assert_eq!(page["info"]["developer"], "Blizzard Entertainment");
     assert_eq!(page["info"]["genres"], "MMORPG");
     assert_eq!(page["info_source"], "Edited");
+    assert_eq!(
+        page["description"],
+        "A World of Warcraft private realm with its own news."
+    );
+    assert_eq!(page["description_source"], "Edited");
     let news = page["news"].as_array().unwrap();
     assert_eq!(news[0]["title"], "Hotfixes");
-    assert_eq!(page["news_source"], "News feed");
+    // The stored Blizzard HTML news URL is ignored in code, so this is not
+    // labelled as a custom "News feed".
+    assert_eq!(page["news_source"], "News");
+    assert_eq!(page["store"]["url"], "https://example.test/wow-shop");
+    assert_eq!(page["store"]["label"], "Official site");
 
     // Store cache for CS2, no admin override.
     sqlx::query(
@@ -334,7 +349,8 @@ async fn admin_can_set_info_and_a_news_feed(pool: PgPool) {
         "publishers": ["Valve"],
         "release_date": {"date": "27 Sep 2023"},
         "genres": [{"description": "Action"}],
-        "platforms": {"windows": true, "mac": false, "linux": true}
+        "platforms": {"windows": true, "mac": false, "linux": true},
+        "short_description": "Counter-Strike 2 is the next era of tactical FPS action."
     }))
     .execute(&pool)
     .await
@@ -352,6 +368,121 @@ async fn admin_can_set_info_and_a_news_feed(pool: PgPool) {
     assert_eq!(cs["info"]["platforms"], "Windows, Linux");
     assert_eq!(cs["info"]["release_date"], "27 Sep 2023");
     assert_eq!(cs["info_source"], "Store listing");
+    assert_eq!(
+        cs["description"],
+        "Counter-Strike 2 is the next era of tactical FPS action."
+    );
+    assert_eq!(cs["description_source"], "Store listing");
+    assert_eq!(cs["store"]["url"], "https://store.steampowered.com/app/730");
+    assert_eq!(cs["store"]["label"], "View on Steam");
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn store_link_uses_curated_site_wiki_and_admin_override(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    seed_games(&pool).await;
+    let _ = api(&app, "GET", "/api/v1/games/catalogue", None, None).await;
+
+    // No admin override: WoW Forever uses the curated official site.
+    let forever = api(&app, "GET", "/api/v1/games/page/wow-forever", None, None)
+        .await
+        .json();
+    assert_eq!(
+        forever["store"]["url"],
+        "https://worldofwarcraft.blizzard.com/en-us/"
+    );
+    assert_eq!(forever["store"]["label"], "View on Battle.net");
+
+    // Non-Steam, no curated site: Wikidata P856 / cached official_url.
+    sqlx::query(
+        "INSERT INTO game_feed_cache (game_id, details_json, details_fetched_at, details_ok, details_kind)
+         VALUES ('niche', $1::jsonb, now(), true, 'wiki')
+         ON CONFLICT (game_id) DO UPDATE SET details_json = excluded.details_json, details_ok = true, details_kind = 'wiki'",
+    )
+    .bind(json!({
+        "kind": "wiki",
+        "title": "Niche Quest",
+        "official_url": "https://nichequest.example.test",
+        "extract": "Niche Quest is a tiny adventure game."
+    }))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let niche = api(&app, "GET", "/api/v1/games/page/niche-quest", None, None)
+        .await
+        .json();
+    assert_eq!(niche["store"]["url"], "https://nichequest.example.test");
+    assert_eq!(niche["store"]["label"], "Official site");
+
+    // Steam website is unused when the game has a Steam appid — the store
+    // page wins unless an admin override is set.
+    let admin = signup(&app, "admin@example.test", "staffer").await;
+    sqlx::query("UPDATE users SET role = 'admin' WHERE handle = 'staffer'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let saved = api(
+        &app,
+        "POST",
+        "/api/v1/admin/games/cs2/page",
+        Some(&admin),
+        Some(json!({ "official_url": "https://www.counter-strike.net" })),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.text);
+    let cs = api(
+        &app,
+        "GET",
+        "/api/v1/games/page/counter-strike-2",
+        None,
+        None,
+    )
+    .await
+    .json();
+    assert_eq!(cs["store"]["url"], "https://www.counter-strike.net");
+    assert_eq!(cs["store"]["label"], "Official site");
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn wikipedia_cache_fills_info_and_blurb(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    seed_games(&pool).await;
+    let _ = api(&app, "GET", "/api/v1/games/catalogue", None, None).await;
+    sqlx::query(
+        "INSERT INTO game_feed_cache (game_id, details_json, details_fetched_at, details_ok, details_kind)
+         VALUES ('niche', $1::jsonb, now(), true, 'wiki')
+         ON CONFLICT (game_id) DO UPDATE SET details_json = excluded.details_json, details_ok = true, details_kind = 'wiki'",
+    )
+    .bind(json!({
+        "kind": "wiki",
+        "title": "Niche Quest",
+        "extract": "Niche Quest is a tiny adventure game.",
+        "url": "https://en.wikipedia.org/wiki/Niche_Quest",
+        "developers": "Quiet Studio",
+        "publishers": "Quiet Studio",
+        "release_date": "1 Jan 2020",
+        "genres": "Adventure",
+        "platforms": "Windows",
+        "official_url": "https://nichequest.example.test",
+        "short_description": "Niche Quest is a tiny adventure game."
+    }))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let page = api(&app, "GET", "/api/v1/games/page/niche-quest", None, None)
+        .await
+        .json();
+    assert_eq!(page["info"]["developer"], "Quiet Studio");
+    assert_eq!(page["info"]["genres"], "Adventure");
+    assert_eq!(page["info_source"], "Wikipedia");
+    assert_eq!(page["description"], "Niche Quest is a tiny adventure game.");
+    assert_eq!(page["description_source"], "Wikipedia");
+    assert_eq!(
+        page["description_url"],
+        "https://en.wikipedia.org/wiki/Niche_Quest"
+    );
+    assert_eq!(page["store"]["url"], "https://nichequest.example.test");
+    assert_eq!(page["store"]["label"], "Official site");
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
