@@ -1611,6 +1611,191 @@ pub(crate) fn acquire(st: &AppState) -> bool {
         .try_acquire(st.cfg.game_feed_per_min.max(1), Duration::from_secs(60))
 }
 
+/// When a store/news cache field should next be fetched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DueAt {
+    /// No row or no timestamp: due immediately.
+    Now,
+    /// This game has no source the warmer can fetch.
+    Never,
+    At(DateTime<Utc>),
+}
+
+impl DueAt {
+    pub fn is_due(self, now: DateTime<Utc>) -> bool {
+        match self {
+            DueAt::Now => true,
+            DueAt::Never => false,
+            DueAt::At(t) => now >= t,
+        }
+    }
+
+    pub fn to_sql(self) -> String {
+        match self {
+            DueAt::Now => "-infinity".into(),
+            DueAt::Never => "infinity".into(),
+            DueAt::At(t) => t.to_rfc3339(),
+        }
+    }
+
+    fn sooner(self, other: DueAt) -> DueAt {
+        match (self, other) {
+            (DueAt::Now, _) | (_, DueAt::Now) => DueAt::Now,
+            (DueAt::Never, x) | (x, DueAt::Never) => x,
+            (DueAt::At(a), DueAt::At(b)) => DueAt::At(a.min(b)),
+        }
+    }
+}
+
+/// Success uses `ttl`; failures back off from `miss_ttl` up to `BACKOFF_CAP_SECS`.
+pub fn field_due_at(
+    ok: Option<bool>,
+    at: Option<DateTime<Utc>>,
+    fails: i32,
+    ttl_secs: u64,
+    miss_ttl_secs: u64,
+) -> DueAt {
+    let Some(at) = at else {
+        return DueAt::Now;
+    };
+    if ok == Some(true) {
+        return DueAt::At(at + chrono::Duration::seconds(ttl_secs as i64));
+    }
+    let exp = fails.max(0) as u32;
+    let factor = 2u64.saturating_pow(exp.min(5));
+    let wait = miss_ttl_secs.saturating_mul(factor).min(BACKOFF_CAP_SECS) as i64;
+    DueAt::At(at + chrono::Duration::seconds(wait))
+}
+
+pub(crate) fn has_news_source(game_id: &str, admin_feed: Option<&str>) -> bool {
+    let admin = admin_feed
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter(|s| !crate::game_feed_defaults::ignore_admin_news_url(game_id, s));
+    admin.is_some() || crate::game_feed_defaults::official_news_url(game_id).is_some()
+}
+
+/// TTLs used to compute the warmer's next_due_at.
+pub struct WarmTtls {
+    pub wikipedia: bool,
+    pub store_ttl: u64,
+    pub news_ttl: u64,
+    pub miss_ttl: u64,
+}
+
+/// Cache timestamps used to compute the warmer's next_due_at.
+pub struct CacheTimes {
+    pub details_ok: Option<bool>,
+    pub details_at: Option<DateTime<Utc>>,
+    pub details_fails: i32,
+    pub news_ok: Option<bool>,
+    pub news_at: Option<DateTime<Utc>>,
+    pub news_fails: i32,
+}
+
+impl CacheTimes {
+    pub fn from_row(
+        row: (
+            Option<bool>,
+            Option<DateTime<Utc>>,
+            i32,
+            Option<bool>,
+            Option<DateTime<Utc>>,
+            i32,
+        ),
+    ) -> Self {
+        Self {
+            details_ok: row.0,
+            details_at: row.1,
+            details_fails: row.2,
+            news_ok: row.3,
+            news_at: row.4,
+            news_fails: row.5,
+        }
+    }
+}
+
+/// When the warmer should next look at this catalogue game (warmer news TTL).
+pub fn compute_warm_due_at(
+    game_id: &str,
+    appid: Option<u32>,
+    admin_feed: Option<&str>,
+    row: Option<CacheTimes>,
+    ttl: &WarmTtls,
+) -> DueAt {
+    let need_details = appid.is_some() || ttl.wikipedia;
+    let need_news = appid.is_some() || has_news_source(game_id, admin_feed);
+    if !need_details && !need_news {
+        return DueAt::Never;
+    }
+    let Some(row) = row else {
+        return DueAt::Now;
+    };
+    let mut due = DueAt::Never;
+    if need_details {
+        due = due.sooner(field_due_at(
+            row.details_ok,
+            row.details_at,
+            row.details_fails,
+            ttl.store_ttl,
+            ttl.miss_ttl,
+        ));
+    }
+    if need_news {
+        due = due.sooner(field_due_at(
+            row.news_ok,
+            row.news_at,
+            row.news_fails,
+            ttl.news_ttl,
+            ttl.miss_ttl,
+        ));
+    }
+    due
+}
+
+/// Keep the warmer queue in sync after a cache write. No-op if the game is
+/// not on the queue yet (the next rebuild will pick it up).
+pub(crate) async fn sync_warm_queue_due(st: &AppState, game_id: &str) -> anyhow::Result<()> {
+    let cache: Option<(
+        Option<i32>,
+        Option<bool>,
+        Option<DateTime<Utc>>,
+        i32,
+        Option<bool>,
+        Option<DateTime<Utc>>,
+        i32,
+    )> = sqlx::query_as(
+        "SELECT steam_appid, details_ok, details_fetched_at, details_fail_count,
+                news_ok, news_fetched_at, news_fail_count
+         FROM game_feed_cache WHERE game_id = $1",
+    )
+    .bind(game_id)
+    .fetch_optional(&st.db)
+    .await?;
+    let appid = cache.as_ref().and_then(|r| r.0).map(|n| n as u32);
+    let row = cache.map(|r| CacheTimes::from_row((r.1, r.2, r.3, r.4, r.5, r.6)));
+    let meta = load_meta(&st.db, game_id).await.ok().flatten();
+    let admin = meta.as_ref().and_then(|m| m.news_feed_url.as_deref());
+    let due = compute_warm_due_at(
+        game_id,
+        appid,
+        admin,
+        row,
+        &WarmTtls {
+            wikipedia: st.cfg.wikipedia_url.is_some(),
+            store_ttl: st.cfg.game_store_ttl_secs,
+            news_ttl: st.cfg.game_warmer_news_ttl_secs,
+            miss_ttl: st.cfg.game_feed_miss_ttl_secs,
+        },
+    );
+    sqlx::query("UPDATE game_warm_queue SET next_due_at = $2::timestamptz WHERE game_id = $1")
+        .bind(game_id)
+        .bind(due.to_sql())
+        .execute(&st.db)
+        .await?;
+    Ok(())
+}
+
 pub(crate) async fn cache_due(
     st: &AppState,
     game_id: &str,
@@ -1633,25 +1818,7 @@ pub(crate) async fn cache_due(
     let Some((ok, at, fails)) = row else {
         return Ok(true);
     };
-    let Some(at) = at else {
-        return Ok(true);
-    };
-    let age = Utc::now()
-        .signed_duration_since(at)
-        .to_std()
-        .unwrap_or(Duration::from_secs(0));
-    if ok == Some(true) {
-        Ok(age >= Duration::from_secs(ttl))
-    } else {
-        let exp = fails.max(0) as u32;
-        let factor = 2u64.saturating_pow(exp.min(5));
-        let wait = st
-            .cfg
-            .game_feed_miss_ttl_secs
-            .saturating_mul(factor)
-            .min(BACKOFF_CAP_SECS);
-        Ok(age >= Duration::from_secs(wait))
-    }
+    Ok(field_due_at(ok, at, fails, ttl, st.cfg.game_feed_miss_ttl_secs).is_due(Utc::now()))
 }
 
 pub(crate) async fn upsert_details(
@@ -1681,6 +1848,9 @@ pub(crate) async fn upsert_details(
     .bind(kind)
     .execute(&st.db)
     .await?;
+    if let Err(e) = sync_warm_queue_due(st, game_id).await {
+        tracing::debug!("warm queue due {game_id}: {e}");
+    }
     Ok(())
 }
 
@@ -1708,6 +1878,9 @@ pub(crate) async fn upsert_news(
     .bind(kind)
     .execute(&st.db)
     .await?;
+    if let Err(e) = sync_warm_queue_due(st, game_id).await {
+        tracing::debug!("warm queue due {game_id}: {e}");
+    }
     Ok(())
 }
 
@@ -2114,6 +2287,10 @@ async fn admin_save_page(
         .bind(&id)
         .execute(&st.db)
         .await?;
+        sqlx::query("UPDATE game_warm_queue SET next_due_at = '-infinity' WHERE game_id = $1")
+            .bind(&id)
+            .execute(&st.db)
+            .await?;
     }
     let _ = refresh_slugs(
         &st,
