@@ -1633,6 +1633,9 @@ pages.game = async () => {
   const about = d.description
     ? `<p class="gp-about">${esc(d.description)}${d.description_source === "Wikipedia" && d.description_url ? ` <a class="gp-src" href="${esc(d.description_url)}" rel="noopener">From Wikipedia</a>` : ""}</p>`
     : "";
+  const store = (d.store && d.store.url)
+    ? `<p class="gp-store"><a class="btn" href="${esc(d.store.url)}" rel="noopener nofollow" target="_blank">${esc(d.store.label || "Official site")}</a></p>`
+    : "";
   const stats = d.stats_visible && d.stats
     ? `<div class="stats gp-stats" aria-label="Game stats">
         <div><b>${hrsShort(d.stats.total_minutes)} h</b><span>Total hours</span></div>
@@ -1691,6 +1694,7 @@ pages.game = async () => {
       <h1>${esc(d.name)}</h1>
       <div class="sub">Hours tracked on Fraglink, who is playing, and info for this game.</div>
       ${about}
+      ${store}
     </div>
   </section>
   ${stats}

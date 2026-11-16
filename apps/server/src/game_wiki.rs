@@ -15,6 +15,7 @@ pub struct WikiBits {
     pub extract: Option<String>,
     pub url: Option<String>,
     pub wikidata_id: Option<String>,
+    pub official_url: Option<String>,
     pub info: InfoBits,
 }
 
@@ -76,7 +77,12 @@ pub async fn refresh_wiki(
     if let (Some(wd_base), Some(qid)) = (st.cfg.wikidata_url.clone(), bits.wikidata_id.clone()) {
         if acquire(st) {
             match fetch_entity(&wd_base, &qid).await {
-                Ok(info) => bits.info = merge_info(bits.info, info),
+                Ok((info, site)) => {
+                    bits.info = merge_info(bits.info, info);
+                    if bits.official_url.is_none() {
+                        bits.official_url = site;
+                    }
+                }
                 Err(e) => tracing::debug!("wikidata {qid}: {e}"),
             }
         }
@@ -97,6 +103,7 @@ fn wiki_payload(b: &WikiBits) -> Value {
         "extract": b.extract,
         "url": b.url,
         "wikidata_id": b.wikidata_id,
+        "official_url": b.official_url,
         "developers": b.info.developer,
         "publishers": b.info.publisher,
         "release_date": b.info.release_date,
@@ -125,6 +132,7 @@ pub fn bits_from_cached(v: &Value) -> Option<WikiBits> {
         extract: text("extract").or_else(|| text("short_description")),
         url: text("url"),
         wikidata_id: text("wikidata_id"),
+        official_url: text("official_url").or_else(|| text("website")),
         info: InfoBits {
             developer: text("developers").or_else(|| text("developer")),
             publisher: text("publishers").or_else(|| text("publisher")),
@@ -243,11 +251,12 @@ pub fn parse_summary(v: &Value) -> Option<WikiBits> {
         extract,
         url,
         wikidata_id,
+        official_url: None,
         info: InfoBits::default(),
     })
 }
 
-async fn fetch_entity(base: &str, qid: &str) -> anyhow::Result<InfoBits> {
+async fn fetch_entity(base: &str, qid: &str) -> anyhow::Result<(InfoBits, Option<String>)> {
     if !qid.starts_with('Q') || !qid[1..].chars().all(|c| c.is_ascii_digit()) {
         anyhow::bail!("bad wikidata id");
     }
@@ -348,13 +357,26 @@ async fn fetch_entity(base: &str, qid: &str) -> anyhow::Result<InfoBits> {
         .filter_map(|x| x.as_str())
         .filter_map(format_wd_date)
         .min();
-    Ok(InfoBits {
-        developer: join(&dev_ids, tidy_list),
-        publisher: join(&pub_ids, tidy_list),
-        release_date: released,
-        genres: join(&genre_ids, tidy_list),
-        platforms: join(&plat_ids, tidy_platforms),
-    })
+    let official_url = claims
+        .get("P856")
+        .and_then(|c| c.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c.pointer("/mainsnak/datavalue/value"))
+        .filter_map(|x| x.as_str())
+        .map(str::trim)
+        .find(|s| s.starts_with("http://") || s.starts_with("https://"))
+        .map(|s| s.to_string());
+    Ok((
+        InfoBits {
+            developer: join(&dev_ids, tidy_list),
+            publisher: join(&pub_ids, tidy_list),
+            release_date: released,
+            genres: join(&genre_ids, tidy_list),
+            platforms: join(&plat_ids, tidy_platforms),
+        },
+        official_url,
+    ))
 }
 
 fn merge_info(base: InfoBits, extra: InfoBits) -> InfoBits {
@@ -502,6 +524,7 @@ mod tests {
             extract: Some("Roblox is a game platform.".into()),
             url: Some("https://en.wikipedia.org/wiki/Roblox".into()),
             wikidata_id: Some("Q12873706".into()),
+            official_url: Some("https://www.roblox.com".into()),
             info: InfoBits {
                 developer: Some("Roblox Corporation".into()),
                 publisher: Some("Roblox Corporation".into()),
@@ -514,5 +537,6 @@ mod tests {
         let back = bits_from_cached(&v).unwrap();
         assert_eq!(back.info.developer.as_deref(), Some("Roblox Corporation"));
         assert_eq!(back.extract.as_deref(), Some("Roblox is a game platform."));
+        assert_eq!(back.official_url.as_deref(), Some("https://www.roblox.com"));
     }
 }

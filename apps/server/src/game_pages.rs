@@ -31,6 +31,7 @@ const SEO_START: &str = "<!--seo-->";
 const SEO_END: &str = "<!--/seo-->";
 const PAGE_HTML: &str = "games-one.html";
 pub(crate) const MAX_NEWS: usize = 8;
+pub(crate) const MAX_FEED_ITEMS: usize = 80;
 pub(crate) const MAX_FEED_BYTES: usize = 512_000;
 pub(crate) const FEED_UA: &str = "Fraglink/1.0 (https://playfraglink.com; hello@playfraglink.com)";
 const VIEW_WAIT: Duration = Duration::from_secs(2);
@@ -765,6 +766,7 @@ async fn page_payload(st: &AppState, index: &SlugIndex, game_id: &str) -> ApiRes
     let (info, info_source) = game_info(st, game_id, game.steam_appid).await?;
     let (news, news_source) = game_news(st, game_id).await?;
     let (description, description_source, description_url) = game_blurb(st, game_id).await?;
+    let store = official_link(st, game_id, game.steam_appid).await?;
     Ok(json!({
         "game_id": game.id,
         "name": game.name,
@@ -779,6 +781,7 @@ async fn page_payload(st: &AppState, index: &SlugIndex, game_id: &str) -> ApiRes
         "description": description,
         "description_source": description_source,
         "description_url": description_url,
+        "store": store,
         "news": news,
         "news_source": news_source,
         "week_tz": st.cfg.public_week_tz,
@@ -851,11 +854,12 @@ struct MetaRow {
     platforms: Option<String>,
     news_feed_url: Option<String>,
     description: Option<String>,
+    official_url: Option<String>,
 }
 
 async fn load_meta(db: &PgPool, game_id: &str) -> ApiResult<Option<MetaRow>> {
     Ok(sqlx::query_as(
-        "SELECT slug, developer, publisher, release_date, genres, platforms, news_feed_url, description
+        "SELECT slug, developer, publisher, release_date, genres, platforms, news_feed_url, description, official_url
          FROM game_page_meta WHERE game_id = $1",
     )
     .bind(game_id)
@@ -975,6 +979,59 @@ async fn game_blurb(
     Ok((None, None, None))
 }
 
+async fn official_link(st: &AppState, game_id: &str, appid: Option<u32>) -> ApiResult<Value> {
+    let meta = load_meta(&st.db, game_id).await?;
+    if let Some(url) = meta
+        .as_ref()
+        .and_then(|m| m.official_url.as_ref())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        return Ok(json!({
+            "url": url,
+            "label": crate::game_feed_defaults::official_link_label(url),
+        }));
+    }
+    if let Some(id) = appid {
+        let url = format!("https://store.steampowered.com/app/{id}");
+        return Ok(json!({
+            "url": url,
+            "label": "View on Steam",
+        }));
+    }
+    if let Some(url) = crate::game_feed_defaults::official_site_url(game_id) {
+        return Ok(json!({
+            "url": url,
+            "label": crate::game_feed_defaults::official_link_label(url),
+        }));
+    }
+    let cached: Option<(Option<Value>, Option<bool>)> =
+        sqlx::query_as("SELECT details_json, details_ok FROM game_feed_cache WHERE game_id = $1")
+            .bind(game_id)
+            .fetch_optional(&st.db)
+            .await?;
+    let details = cached
+        .as_ref()
+        .and_then(|(j, ok)| if *ok == Some(true) { j.clone() } else { None });
+    if let Some(v) = details.as_ref() {
+        if let Some(w) = crate::game_wiki::bits_from_cached(v) {
+            if let Some(url) = w.official_url {
+                return Ok(json!({
+                    "url": url,
+                    "label": crate::game_feed_defaults::official_link_label(&url),
+                }));
+            }
+        }
+        if let Some(url) = website_from_details(v) {
+            return Ok(json!({
+                "url": url,
+                "label": crate::game_feed_defaults::official_link_label(&url),
+            }));
+        }
+    }
+    Ok(Value::Null)
+}
+
 #[derive(Default, Clone)]
 pub struct InfoBits {
     pub developer: Option<String>,
@@ -1082,6 +1139,23 @@ pub fn short_description(v: &Value) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+pub fn website_from_details(v: &Value) -> Option<String> {
+    let data = if v.get("website").is_some() || v.get("official_url").is_some() {
+        v
+    } else {
+        v.as_object()
+            .and_then(|m| m.values().next())
+            .and_then(|x| x.get("data"))
+            .unwrap_or(v)
+    };
+    data.get("website")
+        .or_else(|| data.get("official_url"))
+        .and_then(|s| s.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && parse_public_http_url(s).is_some())
+        .map(|s| s.to_string())
+}
+
 pub fn genres_from_details(v: &Value) -> Vec<String> {
     info_from_details(v)
         .genres
@@ -1109,7 +1183,8 @@ async fn game_news(st: &AppState, game_id: &str) -> ApiResult<(Vec<Value>, Optio
         .as_ref()
         .and_then(|m| m.news_feed_url.as_deref())
         .map(str::trim)
-        .filter(|s| !s.is_empty());
+        .filter(|s| !s.is_empty())
+        .filter(|s| !crate::game_feed_defaults::ignore_admin_news_url(game_id, s));
     let row: Option<(Option<Value>, Option<bool>, Option<String>)> = sqlx::query_as(
         "SELECT news_json, news_ok, news_kind FROM game_feed_cache WHERE game_id = $1",
     )
@@ -1176,7 +1251,10 @@ async fn refresh_stale(st: &AppState, n: usize) -> anyhow::Result<()> {
         let has_feed = meta
             .as_ref()
             .and_then(|m| m.news_feed_url.as_deref())
-            .is_some_and(|s| !s.trim().is_empty());
+            .is_some_and(|s| {
+                !s.trim().is_empty() && !crate::game_feed_defaults::ignore_admin_news_url(&g.id, s)
+            })
+            || crate::game_feed_defaults::official_news_url(&g.id).is_some();
         if g.steam_appid.is_none() && !has_feed {
             continue;
         }
@@ -1222,6 +1300,7 @@ pub(crate) async fn refresh_game(
         .and_then(|m| m.news_feed_url.as_deref())
         .map(str::trim)
         .filter(|s| !s.is_empty())
+        .filter(|s| !crate::game_feed_defaults::ignore_admin_news_url(game_id, s))
         .map(|s| s.to_string());
     let curated = crate::game_feed_defaults::official_news_url(game_id).map(|s| s.to_string());
     if let Some(a) = appid {
@@ -1333,7 +1412,9 @@ pub(crate) async fn game_needs_refresh(
     let has_feed = meta
         .as_ref()
         .and_then(|m| m.news_feed_url.as_deref())
-        .is_some_and(|s| !s.trim().is_empty())
+        .is_some_and(|s| {
+            !s.trim().is_empty() && !crate::game_feed_defaults::ignore_admin_news_url(game_id, s)
+        })
         || crate::game_feed_defaults::official_news_url(game_id).is_some();
     let need_details = appid.is_some() || st.cfg.wikipedia_url.is_some();
     let need_news = appid.is_some() || has_feed;
@@ -1513,7 +1594,10 @@ async fn refresh_rss(
         .await
         .and_then(|t| parse_feed(&t).map_err(|e| anyhow::anyhow!(e)))
     {
-        Ok(items) => upsert_news(st, game_id, &items, true, "rss").await?,
+        Ok(items) => {
+            let items = crate::game_feed_defaults::refine_news(game_id, url.as_str(), items);
+            upsert_news(st, game_id, &items, true, "rss").await?;
+        }
         Err(e) => {
             tracing::debug!("rss {game_id}: {e}");
             upsert_news(st, game_id, &[], false, "rss").await?;
@@ -1733,7 +1817,7 @@ pub fn parse_feed(xml: &str) -> Result<Vec<Value>, &'static str> {
             rest = &after[stop + end.len()..];
             if let Some(it) = feed_item(inner, tag == "<entry") {
                 items.push(it);
-                if items.len() >= MAX_NEWS {
+                if items.len() >= MAX_FEED_ITEMS {
                     return Ok(items);
                 }
             }
@@ -1875,6 +1959,7 @@ async fn admin_get_page(
         "platforms": meta.as_ref().and_then(|m| m.platforms.clone()),
         "news_feed_url": meta.as_ref().and_then(|m| m.news_feed_url.clone()),
         "description": meta.as_ref().and_then(|m| m.description.clone()),
+        "official_url": meta.as_ref().and_then(|m| m.official_url.clone()),
     })))
 }
 
@@ -1896,6 +1981,8 @@ struct PageSave {
     news_feed_url: Option<String>,
     #[serde(default)]
     description: Option<String>,
+    #[serde(default)]
+    official_url: Option<String>,
 }
 
 fn clean_field(s: Option<String>, max: usize) -> ApiResult<Option<String>> {
@@ -1976,10 +2063,23 @@ async fn admin_save_page(
         }
     };
     let description = clean_field(r.description, 2000)?;
+    let official_url = match clean_field(r.official_url, 400)? {
+        None => None,
+        Some(u) => {
+            if parse_public_http_url(&u).is_none() {
+                return Err(AppError::bad_request(
+                    "invalid_url",
+                    "Official site must be a public http or https URL.",
+                ));
+            }
+            Some(u)
+        }
+    };
     sqlx::query(
         "INSERT INTO game_page_meta (
-            game_id, slug, developer, publisher, release_date, genres, platforms, news_feed_url, description, updated_at, updated_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), $10)
+            game_id, slug, developer, publisher, release_date, genres, platforms,
+            news_feed_url, description, official_url, updated_at, updated_by
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now(), $11)
          ON CONFLICT (game_id) DO UPDATE SET
             slug = excluded.slug,
             developer = excluded.developer,
@@ -1989,6 +2089,7 @@ async fn admin_save_page(
             platforms = excluded.platforms,
             news_feed_url = excluded.news_feed_url,
             description = excluded.description,
+            official_url = excluded.official_url,
             updated_at = now(),
             updated_by = excluded.updated_by",
     )
@@ -2001,6 +2102,7 @@ async fn admin_save_page(
     .bind(clean_field(r.platforms, 120)?)
     .bind(&news_url)
     .bind(&description)
+    .bind(&official_url)
     .bind(s.user.id)
     .execute(&st.db)
     .await?;

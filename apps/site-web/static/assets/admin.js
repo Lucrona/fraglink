@@ -619,6 +619,7 @@ async function editGame(id) {
       <label>Genres <input class="in" type="text" name="genres" maxlength="200" value="${esc(page.genres || "")}" placeholder="Action, RPG"></label>
       <label>Platforms <input class="in" type="text" name="platforms" maxlength="120" value="${esc(page.platforms || "")}" placeholder="Windows, macOS"></label>
       <label>Short description <span class="dimt">(optional)</span><textarea class="in" name="description" maxlength="2000" rows="4" placeholder="A short about blurb for the public page">${esc(page.description || "")}</textarea><small>Leave empty to use the store or Wikipedia text when we have it.</small></label>
+      <label>Official site or store URL <span class="dimt">(optional)</span><input class="in" type="url" name="official_url" maxlength="400" value="${esc(page.official_url || "")}" placeholder="https://example.com"><small>Replaces the automatic Steam, Battle.net or official-site link on the public page.</small></label>
       <label>News feed URL <span class="dimt">(optional)</span><input class="in" type="url" name="news_feed_url" maxlength="400" value="${esc(page.news_feed_url || "")}" placeholder="https://example.com/news/feed.xml"><small>An RSS or Atom feed. Use this for games that have no official store news, or to replace it. Must be a real feed, not a news web page.</small></label>
       <div class="row"><button class="btn dl">Save page info</button></div>
       <div class="alert" id="gpagemsg" hidden></div>
@@ -668,7 +669,8 @@ async function editGame(id) {
         slug: f.slug.value.trim(), developer: f.developer.value, publisher: f.publisher.value,
         release_date: f.release_date.value, genres: f.genres.value, platforms: f.platforms.value,
         news_feed_url: f.news_feed_url.value.trim(),
-        description: f.description.value.trim()
+        description: f.description.value.trim(),
+        official_url: f.official_url.value.trim()
       }});
       msg($("#gpagemsg"), "Saved.", true);
     } catch (x) { msg($("#gpagemsg"), x.message); }

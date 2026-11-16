@@ -148,3 +148,12 @@ test('admin can edit a short description on the game page', () => {
   assert.match(admin, /name="description"/);
   assert.match(admin, /description: f\.description\.value\.trim/);
 });
+
+test('game page can show an official or store link, hidden when missing', () => {
+  const start = app.indexOf('pages.game = async');
+  const body = app.slice(start, app.indexOf('pages.login'));
+  assert.match(body, /gp-store/);
+  assert.match(body, /rel="noopener nofollow"/);
+  assert.match(body, /d\.store && d\.store\.url/);
+  assert.match(admin, /name="official_url"/);
+});
