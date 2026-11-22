@@ -1372,9 +1372,6 @@ a.glink-art{width:auto;height:auto;max-width:100%}
 .gp-art a.glink-art,
 .artbox a.glink-art,
 .g-thumb a.glink-art{width:100%;height:100%}
-.g-chips{display:flex;flex-wrap:wrap;gap:8px}
-.g-chips .chip{text-decoration:none}
-.g-chips .chip:hover{border-color:#4f8bc9;color:#fff}
 .trend-tag{display:inline-block;margin-left:6px;border:1px solid var(--orange,#e09040);color:var(--orange,#e09040);background:#0006;border-radius:2px;padding:0 5px;font-size:10px;letter-spacing:.4px;text-transform:uppercase;vertical-align:middle}
 .tile2 .trend-tag{position:absolute;top:4px;right:5px;left:auto;margin:0}
 .gp .head{align-items:center}

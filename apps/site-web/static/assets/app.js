@@ -1356,9 +1356,7 @@ pages.games = async () => {
   let all = [];
   let active = -1;
   let suggestions = [];
-  let genreFilter = null;
   let trendingIds = new Set();
-  const catPool = () => genreFilter ? all.filter(g => genreFilter.ids.has(g[0])) : all;
   const trendTag = id => trendingIds.has(id) ? `<span class="trend-tag">Trending</span>` : "";
 
   const closeSuggest = () => {
@@ -1410,8 +1408,7 @@ pages.games = async () => {
     const f = fold(term);
     closeSuggest();
     refine.hidden = true;
-    const source = catPool();
-    if (f.length < MIN && !genreFilter) {
+    if (f.length < MIN) {
       list.hidden = true; list.innerHTML = "";
       none.hidden = true; none.textContent = "";
       if (tryRow) tryRow.hidden = false;
@@ -1420,13 +1417,9 @@ pages.games = async () => {
     }
     if (tryRow) tryRow.hidden = true;
     const scored = [];
-    if (f.length < MIN && genreFilter) {
-      source.slice().sort((a, b) => a[1].localeCompare(b[1])).forEach(g => scored.push([4, g]));
-    } else {
-    for (const g of source) {
+    for (const g of all) {
       const r = rank(g[1], term);
       if (r) scored.push([r, g]);
-    }
     }
     scored.sort((a, b) => b[0] - a[0] || a[1][1].localeCompare(b[1][1]));
     const strong = scored.filter(x => x[0] >= 2);
@@ -1434,10 +1427,7 @@ pages.games = async () => {
     const total = used.length;
     if (!total) {
       list.hidden = true; list.innerHTML = "";
-      if (genreFilter && f.length < MIN) {
-        none.hidden = false;
-        none.textContent = "No games in this genre yet.";
-      } else offerRequest(term);
+      offerRequest(term);
       return;
     }
     none.hidden = true; none.textContent = "";
@@ -1477,7 +1467,7 @@ pages.games = async () => {
     render();
     // Re-open suggestions after render() closes them, from the same ranking.
     const scored = [];
-    for (const g of catPool()) {
+    for (const g of all) {
       const r = rank(g[1], term);
       if (r) scored.push([r, g]);
     }
@@ -1529,8 +1519,6 @@ pages.games = async () => {
   async function loadTabExtras() {
     const mostEl = root.querySelector("[data-most-played]");
     const newEl = root.querySelector("[data-new-list]");
-    const genreEl = root.querySelector("[data-genres]");
-    const chips = root.querySelector("[data-genre-chips]");
     let tab = null;
     try { tab = await api("/games/tab"); } catch (e) { return; }
     trendingIds = new Set(tab.trending || []);
@@ -1548,23 +1536,6 @@ pages.games = async () => {
       else {
         newEl.hidden = false;
         root.querySelector("[data-new-body]").innerHTML = `<div class="tr">${fresh.map((g, i) => tile(g, i, null, trendingIds.has(g.game_id), false)).join("")}</div>`;
-      }
-    }
-    const genres = tab.genres || [];
-    if (genreEl && chips) {
-      if (!genres.length) genreEl.hidden = true;
-      else {
-        genreEl.hidden = false;
-        chips.innerHTML = genres.map(g => `<button type="button" class="chip" data-genre="${esc(g.name)}">${esc(g.name)} <b>${nf.format(g.count)}</b></button>`).join("");
-        chips.addEventListener("click", e => {
-          const b = e.target.closest("[data-genre]"); if (!b) return;
-          const name = b.dataset.genre;
-          const g = genres.find(x => x.name === name);
-          const on = genreFilter && genreFilter.name === name;
-          genreFilter = on || !g ? null : { name, ids: new Set(g.ids || []) };
-          $$(".chip", chips).forEach(c => c.classList.toggle("on", !!(genreFilter && c.dataset.genre === genreFilter.name)));
-          render();
-        });
       }
     }
   }

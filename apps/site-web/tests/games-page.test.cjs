@@ -78,21 +78,23 @@ test('admin games page has a change log and a requests queue', () => {
   assert.match(admin, /Approve and add/);
 });
 
-test('games tab adds most-played, new-to-the-list and genre chips, and keeps search plus updates', () => {
+test('games tab adds most-played and new-to-the-list, and keeps search plus updates', () => {
   assert.match(page, /data-most-played/);
   assert.match(page, /Most played this week/);
   assert.match(page, /data-new-list/);
   assert.match(page, /New to the list/);
-  assert.match(page, /data-genres/);
-  assert.match(page, /data-genre-chips/);
+  assert.doesNotMatch(page, /data-genres/);
+  assert.doesNotMatch(page, /data-genre-chips/);
+  assert.doesNotMatch(page, /<span class="tab">Genres<\/span>/);
   assert.match(page, /<span class="tab">Recent updates<\/span>/);
   assert.match(page, /<span class="tab">Missing a game\?<\/span>/);
   assert.match(app, /api\("\/games\/tab"/);
   assert.match(app, /trend-tag/);
   assert.match(app, /Trending/);
-  assert.match(app, /genreFilter/);
+  assert.doesNotMatch(app, /genreFilter/);
+  assert.doesNotMatch(app, /data-genre-chips/);
   assert.match(css, /\.trend-tag/);
-  assert.match(css, /\.g-chips/);
+  assert.doesNotMatch(css, /\.g-chips/);
 });
 
 test('one generic game page template, no screenshots or extras toggle', () => {

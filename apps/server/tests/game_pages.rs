@@ -191,7 +191,7 @@ async fn slugs_and_privacy_threshold(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
-async fn tab_most_played_trending_new_and_genres(pool: PgPool) {
+async fn tab_most_played_trending_and_new(pool: PgPool) {
     let app = fraglink_server::router(state(pool.clone()));
     seed_games(&pool).await;
     let names = ["pika", "nova", "ember", "quill", "ridge", "maple"];
@@ -216,13 +216,6 @@ async fn tab_most_played_trending_new_and_genres(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query(
-        "INSERT INTO game_page_meta (game_id, genres) VALUES ('cs2', 'Action, Free To Play')",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
     // Build slug/catalogue index.
     let _ = api(&app, "GET", "/api/v1/games/catalogue", None, None).await;
     let tab_r = api(&app, "GET", "/api/v1/games/tab", None, None).await;
@@ -247,17 +240,10 @@ async fn tab_most_played_trending_new_and_genres(pool: PgPool) {
     assert!(fresh
         .iter()
         .any(|g| g["game_id"] == "cs2" && g["slug"] == "counter-strike-2"));
-    let genres = tab["genres"].as_array().unwrap();
-    let action = genres
-        .iter()
-        .find(|g| g["name"] == "Action")
-        .expect("Action");
-    assert!(action["count"].as_i64().unwrap() >= 1);
-    assert!(action["ids"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|id| id == "cs2"));
+    assert!(
+        tab.get("genres").is_none(),
+        "genre chips were removed from the tab payload: {tab}"
+    );
 }
 
 #[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
