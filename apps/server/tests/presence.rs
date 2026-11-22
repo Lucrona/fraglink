@@ -72,6 +72,15 @@ impl Client {
             panic!("unexpected message: {t}");
         }
     }
+    /// Drop messages already sitting on the socket, waiting up to `ms` for quiet.
+    async fn drain(&mut self, ms: u64) {
+        while tokio::time::timeout(Duration::from_millis(ms), self.ws.next())
+            .await
+            .ok()
+            .flatten()
+            .is_some()
+        {}
+    }
 }
 
 async fn befriend(app: &axum::Router, a: &str, b: &str, b_handle: &str, a_handle: &str) {
@@ -257,6 +266,10 @@ async fn requests_accepts_and_blocks_are_pushed(pool: PgPool) {
     assert_eq!(hello["friends"]["friends"][0]["handle"], "alice");
     assert_eq!(hello["friends"]["friends"][0]["presence"]["game_id"], "cs2");
     drop(ws);
+    // Accept can leave a second presence update still queued on bob's first
+    // socket. Drain those so a leftover cs2 frame is not mistaken for a leak
+    // after the block.
+    cb.drain(200).await;
 
     // bob blocks alice: alice just sees "removed"; later presence from alice never reaches bob
     api(
