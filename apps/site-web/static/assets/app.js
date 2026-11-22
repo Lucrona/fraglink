@@ -549,6 +549,7 @@ pages.wowupload = async () => {
     <div class="seg wow-version-switch" role="tablist" aria-label="Which version to upload"><button type="button" role="tab" data-ver="wow">Retail</button><button type="button" role="tab" data-ver="wow_forever">Forever</button></div>
     <h2 data-title>Upload Retail /played</h2>
     <p class="sub">Log in to each character with the addon on, then /reload or log out so WoW saves the file.</p>
+    <div class="alert info" data-bnwarn hidden>Heads up: Retail uploads only count once Battle.net is linked and the character's verified. <a href="/connect/battlenet" data-bnlink>Link Battle.net</a></div>
     <div class="wu-paths" data-paths></div>
     <form class="wu-form" data-form>
       <input type="hidden" name="game" value="wow">
@@ -560,6 +561,14 @@ pages.wowupload = async () => {
     <div data-res></div>`;
   const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
   const res = $("[data-res]", el), form = $("[data-form]", el), steps = $("[data-steps]", el);
+  // Retail characters only count once verified on a linked Battle.net account; Forever counts without.
+  let bnLinked = true;
+  const bnWarn = () => { $("[data-bnwarn]", el).hidden = bnLinked || game !== "wow"; };
+  api("/me/bnet").then(s => { bnLinked = !!(s && s.linked); bnWarn(); }).catch(() => {});
+  $("[data-bnlink]", el).addEventListener("click", async e => {
+    e.preventDefault();
+    try { const r = await api("/connect/bnet/start", { method: "POST" }); location.href = r.url; } catch { location.href = "/connect/battlenet"; }
+  });
   const setGame = next => {
     game = next === "wow_forever" ? "wow_forever" : "wow";
     form.game.value = game;
@@ -570,6 +579,7 @@ pages.wowupload = async () => {
     const names = { wow: "Retail", wow_forever: "Forever" };
     $("[data-paths]", el).innerHTML = order.map(id => `<p class="${id === game ? "on" : ""}"><span>${names[id]}</span><code>${esc(PATHS[id])}</code></p>`).join("");
     $$("[data-ver]", el).forEach(b => { const on = b.dataset.ver === game; b.classList.toggle("on", on); b.setAttribute("aria-selected", on ? "true" : "false"); });
+    bnWarn();
   };
   setGame(game);
   el.addEventListener("click", e => { const b = e.target.closest("[data-ver]"); if (b) setGame(b.dataset.ver); });

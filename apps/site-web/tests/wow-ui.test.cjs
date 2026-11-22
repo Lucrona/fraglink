@@ -91,3 +91,12 @@ test('profile keeps pulling cards while the server is still refreshing them', ()
   assert.ok(source.includes('p.wow_refreshing = fresh.wow_refreshing === true'));
   assert.ok(source.includes('if (p.wow_refreshing && tries < 8) pullFreshWowCards(tries + 1)'));
 });
+
+test('Retail upload warns when Battle.net is not linked, Forever does not', () => {
+  const start = source.indexOf('pages.wowupload = async');
+  const body = source.slice(start, source.indexOf('\n};', start));
+  assert.match(body, /data-bnwarn hidden/);
+  assert.match(body, /Retail uploads only count once Battle\.net is linked/);
+  assert.match(body, /hidden = bnLinked \|\| game !== "wow"/);
+  assert.match(body, /\/connect\/bnet\/start/);
+});
