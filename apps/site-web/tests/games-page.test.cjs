@@ -140,8 +140,9 @@ test('game page shows a description, tidy empty fallbacks, and never hides the l
   assert.match(body, /description_source/);
   assert.match(body, /No news feed for this game yet/);
   assert.match(body, /We don't have store or catalogue info/);
-  assert.match(body, /Tracked hours and player counts appear once enough people/);
-  assert.match(body, /A public player list appears here/);
+  assert.match(body, /Hours and player counts show up once someone plays this/);
+  assert.match(body, /d\.min_players/);
+  assert.match(body, /No public players this week yet/);
   assert.match(body, /data-gp-tries/);
   assert.match(css, /\.gp-about/);
 });

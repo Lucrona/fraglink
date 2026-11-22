@@ -549,6 +549,7 @@ pages.wowupload = async () => {
     <div class="seg wow-version-switch" role="tablist" aria-label="Which version to upload"><button type="button" role="tab" data-ver="wow">Retail</button><button type="button" role="tab" data-ver="wow_forever">Forever</button></div>
     <h2 data-title>Upload Retail /played</h2>
     <p class="sub">Log in to each character with the addon on, then /reload or log out so WoW saves the file.</p>
+    <div class="alert info" data-bnwarn hidden>Heads up: Retail uploads only count once Battle.net is linked and the character's verified. <a href="/connect/battlenet" data-bnlink>Link Battle.net</a></div>
     <div class="wu-paths" data-paths></div>
     <form class="wu-form" data-form>
       <input type="hidden" name="game" value="wow">
@@ -560,6 +561,14 @@ pages.wowupload = async () => {
     <div data-res></div>`;
   const step = (k, state, note) => { const li = $(`[data-s="${k}"]`, el); li.className = state; if (note != null) $("small", li).textContent = note; };
   const res = $("[data-res]", el), form = $("[data-form]", el), steps = $("[data-steps]", el);
+  // Retail characters only count once verified on a linked Battle.net account; Forever counts without.
+  let bnLinked = true;
+  const bnWarn = () => { $("[data-bnwarn]", el).hidden = bnLinked || game !== "wow"; };
+  api("/me/bnet").then(s => { bnLinked = !!(s && s.linked); bnWarn(); }).catch(() => {});
+  $("[data-bnlink]", el).addEventListener("click", async e => {
+    e.preventDefault();
+    try { const r = await api("/connect/bnet/start", { method: "POST" }); location.href = r.url; } catch { location.href = "/connect/battlenet"; }
+  });
   const setGame = next => {
     game = next === "wow_forever" ? "wow_forever" : "wow";
     form.game.value = game;
@@ -570,6 +579,7 @@ pages.wowupload = async () => {
     const names = { wow: "Retail", wow_forever: "Forever" };
     $("[data-paths]", el).innerHTML = order.map(id => `<p class="${id === game ? "on" : ""}"><span>${names[id]}</span><code>${esc(PATHS[id])}</code></p>`).join("");
     $$("[data-ver]", el).forEach(b => { const on = b.dataset.ver === game; b.classList.toggle("on", on); b.setAttribute("aria-selected", on ? "true" : "false"); });
+    bnWarn();
   };
   setGame(game);
   el.addEventListener("click", e => { const b = e.target.closest("[data-ver]"); if (b) setGame(b.dataset.ver); });
@@ -773,7 +783,7 @@ async function wowManager(el) {
     ? `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">${esc(s.battletag)} ${s.needs_reconnect ? `<span class="srbadge">Reconnect</span>` : `<span class="vbadge">Verified</span>`}</div>
         <div class="sub">${[s.linked_at ? "Linked " + fullDate.format(new Date(s.linked_at)) : "", s.regions.length ? s.regions.map(r => r.toUpperCase()).join(", ") : "", s.last_verified ? "checked " + ago(s.last_verified) : ""].filter(Boolean).join(" · ")}</div></div>
         <div class="bn-acts"><a class="btn" href="/connect/battlenet/verify">Check account</a><button class="btn bn-unlink" type="button" data-unlink>Unlink</button></div></div>`
-    : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify Retail characters.</div></div>
+    : `<div class="bn-acct"><span class="bn-av">${logo(26)}</span><div><div class="bn-nm">Not linked</div><div class="sub">Link Battle.net to verify your characters.</div></div>
         <div class="bn-acts"><button class="btn" type="button" data-link>Link Battle.net</button></div></div>`;
   el.innerHTML = `<section class="${Sec}"><${Hx}>${htab("Battle.net")}</${Hx}><div data-msg></div>${head}</section>
     <section class="${Sec}"><${Hx}>${htab("Profile page display", handle ? `<a class="bn-view" href="/u/${encodeURIComponent(handle)}">View profile</a>` : "")}</${Hx}>
@@ -1618,7 +1628,7 @@ pages.game = async () => {
         <div><b>—</b><span>Total hours</span></div>
         <div><b>—</b><span>Players this week</span></div>
         <div><b>—</b><span>Sessions</span></div>
-        <p class="gp-note">Tracked hours and player counts appear once enough people have played this game on Fraglink.</p>
+        <p class="gp-note">${(d.min_players || 1) <= 1 ? "Hours and player counts show up once someone plays this with Fraglink." : `Hours and player counts show up once ${nf.format(d.min_players)} people have played this with Fraglink.`}</p>
       </div>`;
   const top = (d.top_players_visible && d.top_players && d.top_players.length)
     ? `<section class="panel">
@@ -1632,7 +1642,7 @@ pages.game = async () => {
       </section>`
     : `<section class="panel">
         <h2><span class="tab">Top players</span><span class="more">This week</span></h2>
-        <div class="body"><p class="empty">A public player list appears here once enough people have tracked this game with a public profile.</p></div>
+        <div class="body"><p class="empty">${(d.min_players || 1) <= 1 ? "No public players this week yet." : `Shows up once ${nf.format(d.min_players)} public players have played this week.`}</p></div>
       </section>`;
   const newsItems = (d.news || []).map(n => {
     const when = n.at ? `<time>${fullDate.format(new Date(n.at))}</time>` : `<time></time>`;
@@ -1664,7 +1674,7 @@ pages.game = async () => {
     <div class="gp-art">${art}</div>
     <div>
       <h1>${esc(d.name)}</h1>
-      <div class="sub">Hours tracked on Fraglink, who is playing, and info for this game.</div>
+      <div class="sub">Hours on Fraglink, who's playing, info and news.</div>
       ${about}
       ${store}
     </div>
@@ -2453,14 +2463,14 @@ pages.settings = async () => {
         const years = Array.from({length:new Date().getFullYear()-1899},(_,i)=>new Date().getFullYear()-i).map(y=>`<option value="${y}">${y}</option>`).join("");
         return row("Date of birth", `<span class="dob"><select name="dob_day" aria-label="Day"><option value="">Day</option>${days}</select><select name="dob_month" aria-label="Month"><option value="">Month</option>${months}</select><select name="dob_year" aria-label="Year"><option value="">Year</option>${years}</select><button class="btn sm" type="button" data-save-dob>Save</button></span>`,
           "Please add your date of birth. You must be at least 13. Under-18 accounts start private; you can switch to public any time. Once saved, only support can correct it.");
-      })()}${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""}>Only my friends can see my profile</label>`, u.is_minor ? "Under-18 accounts start private. You can make your profile public any time; everyone will be able to see it." : "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page lists, and your signature image is switched off.")}
+      })()}${row("Private profile", `<label><input type="checkbox" name="private_profile" ${priv ? "checked" : ""}>Only my friends can see my profile</label>`, u.is_minor ? "Under-18 accounts start private. You can make your profile public any time; everyone will be able to see it." : "Your profile is public by default. Private: everyone else just sees your name and picture, you're left out of the home page and game page lists, and your signature image is switched off.")}
       ${row("Show on my profile", `${sw("now_playing", "Now Playing (the game I'm in right now)")}${sw("games", "Games &amp; hours")}<label style="display:block;margin:3px 0"><input type="checkbox" name="share_activity" ${u.share_activity ? "checked" : ""}>Activity (recent play history)</label><label style="display:block;margin:3px 0"><input type="checkbox" name="show_friends" ${u.show_friends ? "checked" : ""}>Friends list</label>${sw("rig", "Gaming rig")}${sw("name_history", "Previous nicknames (\"Previously known as\")")}`, "Hiding Now Playing also keeps you off the home page Now Playing list and your signature image. Your friends still see your status in the app; pick Invisible there to hide it.")}
       ${row("Personal details", `${sw("about", "About me")}${sw("location", "Location &amp; country")}${sw("gaming_style", "Gaming style")}${sw("real_name", "Real name")}${sw("gender", "Gender")}${sw("age", "Age")}`)}
       ${row("Achievements", `${sw("achievements", "Show my achievements")}`, "Needs Games &amp; hours shown.")}
-      ${FEATURES.wow_characters ? row("WoW characters", `${sw("wow_characters", "Show my WoW characters and /played")}`, "Cards for each character from the Fraglink WoW addon. You can also hide single characters on your profile.") : ""}
+      ${FEATURES.wow_characters ? row("WoW characters", `${sw("wow_characters", "Show my WoW characters and /played")}`, "Cards for each character from the Fraglink /played addon. You can also hide single characters on your profile.") : ""}
       ${row("Connected accounts", `${sw("connection_names", "Show connected account names")}`, "Off: visitors still see your Steam, Battle.net and Discord icons with the verified tick, but not your account names or links. You always see your own.")}
       ${row("In the app", `<span class="sub">Whether friends see the game you're in right now (and friends of friends) is set per PC in the desktop app: Options &gt; Privacy. The switches on this page show there too.</span>`)}
-      ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page")}`, "Needs Games &amp; hours shown.")}
+      ${row("Leaderboards", `${sw("leaderboards", "Show me in Top players on the home page and game pages")}`, "Needs Games &amp; hours shown.")}
       ${row("Your link", `<div class="share"><input class="t" readonly value="${esc(share)}"><button class="btn sm" type="button" data-copy="${esc(share)}">Copy</button></div>`)}
       ${!priv ? row("Signature image", `${sigPreview(u.handle)}<div class="share" style="margin-top:6px"><input class="t" readonly value="${esc(sigUrl(u.handle))}"><button class="btn sm" type="button" data-copy="${esc(sigUrl(u.handle))}">Copy</button></div>`, "Paste the image link into forum signatures. It refreshes within about 30 seconds. New accounts show a default card until you have hours.") : ""}
       </div></form>`;
