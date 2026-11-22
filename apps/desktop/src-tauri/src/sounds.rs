@@ -63,8 +63,14 @@ fn play_wav(bytes: &'static [u8]) {
 
 #[cfg(windows)]
 unsafe fn play_wav_windows(bytes: &'static [u8]) {
-    use windows_sys::Win32::Media::{PlaySoundA, SND_MEMORY, SND_NODEFAULT, SND_SYNC};
-    let _ = PlaySoundA(bytes.as_ptr(), 0, SND_MEMORY | SND_NODEFAULT | SND_SYNC);
+    use windows_sys::Win32::Media::Audio::{PlaySoundA, SND_MEMORY, SND_NODEFAULT, SND_SYNC};
+    // SAFETY: SND_MEMORY means pszSound is a WAV buffer; it is 'static and
+    // PlaySoundA is called with SND_SYNC, so the buffer stays valid for the call.
+    let _ = PlaySoundA(
+        bytes.as_ptr(),
+        core::ptr::null_mut(),
+        SND_MEMORY | SND_NODEFAULT | SND_SYNC,
+    );
 }
 
 #[cfg(test)]

@@ -91,7 +91,6 @@ pub fn apply() {
 
 #[cfg(windows)]
 fn migrate_run_key(install_dir: &std::path::Path, new_exe: &std::path::Path) {
-    use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::ERROR_SUCCESS;
     use windows_sys::Win32::System::Registry::{
         RegCloseKey, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY_CURRENT_USER, KEY_READ,
@@ -173,6 +172,7 @@ fn migrate_run_key(install_dir: &std::path::Path, new_exe: &std::path::Path) {
 
 #[cfg(windows)]
 fn wide(s: &str) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
     std::ffi::OsStr::new(s)
         .encode_wide()
         .chain(std::iter::once(0))
