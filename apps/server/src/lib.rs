@@ -100,6 +100,8 @@ pub struct AppState {
     pub realms: Arc<realms::RealmCache>,
     /// Signed-out `GET /api/v1/home` response, short-lived (see `home`).
     pub home_public: Arc<std::sync::Mutex<Option<(std::time::Instant, serde_json::Value)>>>,
+    /// Public `GET /api/v1/games/tab` response, shared for 5 minutes (see `game_pages`).
+    pub games_tab: Arc<std::sync::Mutex<Option<(std::time::Instant, serde_json::Value)>>>,
     /// beta.5: user -> (`exe:` id, their own name for it) while they play an unapproved
     /// program. In memory (resent every heartbeat); shown only to that user.
     pub own_names: Arc<std::sync::Mutex<HashMap<uuid::Uuid, (String, String)>>>,
@@ -129,6 +131,7 @@ impl AppState {
             retired: Arc::new(retire::RetireCache::default()),
             realms: Arc::new(realms::RealmCache::default()),
             home_public: Arc::new(std::sync::Mutex::new(None)),
+            games_tab: Arc::new(std::sync::Mutex::new(None)),
             own_names: Arc::new(std::sync::Mutex::new(HashMap::new())),
             art_appids: Arc::new(Mutex::new(crate::home::ArtAppids::default())),
             game_slugs: Arc::new(Mutex::new(crate::game_pages::SlugIndex::default())),

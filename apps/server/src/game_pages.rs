@@ -398,25 +398,41 @@ async fn public_board_count(db: &PgPool, game_id: &str, w: &week::Window) -> Api
         .await?)
 }
 
-// ------------------------------------------------------------------ tab (most played, trending, new, genres)
+// ------------------------------------------------------------------ tab (most played, trending, new)
+
+const TAB_CACHE_TTL: Duration = Duration::from_secs(300);
 
 async fn tab(State(st): State<AppState>) -> ApiResult<Json<Value>> {
-    let index = ensure_slugs(&st).await?;
-    let (this_w, prev_w) = windows(&st);
-    let min = min_players(&st);
-    maybe_refresh_feeds(&st);
-    let most = most_played(&st, &index, &this_w, min).await?;
-    let trending = trending_ids(&st, &this_w, &prev_w, min).await?;
-    let new_to_list = new_to_list(&st, &index).await?;
-    let genres = genre_counts(&st).await?;
-    Ok(Json(json!({
+    if let Some((t, v)) = st
+        .games_tab
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+    {
+        if t.elapsed() < TAB_CACHE_TTL {
+            return Ok(Json(v.clone()));
+        }
+    }
+    let v = build_tab(&st).await?;
+    *st.games_tab.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), v.clone()));
+    Ok(Json(v))
+}
+
+async fn build_tab(st: &AppState) -> ApiResult<Value> {
+    let index = ensure_slugs(st).await?;
+    let (this_w, prev_w) = windows(st);
+    let min = min_players(st);
+    maybe_refresh_feeds(st);
+    let most = most_played(st, &index, &this_w, min).await?;
+    let trending = trending_ids(st, &this_w, &prev_w, min).await?;
+    let new_to_list = new_to_list(st, &index).await?;
+    Ok(json!({
         "week_tz": st.cfg.public_week_tz,
         "min_players": min,
         "most_played": most,
         "trending": trending,
         "new_to_list": new_to_list,
-        "genres": genres,
-    })))
+    }))
 }
 
 async fn most_played(
@@ -559,56 +575,6 @@ async fn new_to_list(st: &AppState, index: &SlugIndex) -> ApiResult<Vec<Value>> 
                 "slug": slug_for(index, &id),
                 "at": at,
             })
-        })
-        .collect())
-}
-
-async fn genre_counts(st: &AppState) -> ApiResult<Vec<Value>> {
-    let mut counts: HashMap<String, Vec<String>> = HashMap::new();
-    let live: HashSet<String> = slugs_of(st).canonical.keys().cloned().collect();
-    let overrides: Vec<(String, Option<String>)> = sqlx::query_as(
-        "SELECT game_id, genres FROM game_page_meta WHERE genres IS NOT NULL AND genres <> ''",
-    )
-    .fetch_all(&st.db)
-    .await?;
-    let mut overridden = HashSet::new();
-    for (id, g) in &overrides {
-        if !live.contains(id) {
-            continue;
-        }
-        overridden.insert(id.clone());
-        for part in split_list(g.as_deref().unwrap_or("")) {
-            counts.entry(part).or_default().push(id.clone());
-        }
-    }
-    let cached: Vec<(String, Option<Value>)> = sqlx::query_as(
-        "SELECT game_id, details_json FROM game_feed_cache
-         WHERE details_ok IS TRUE AND details_json IS NOT NULL",
-    )
-    .fetch_all(&st.db)
-    .await?;
-    for (id, details) in cached {
-        if !live.contains(&id) || overridden.contains(&id) {
-            continue;
-        }
-        if let Some(v) = details {
-            for part in genres_from_details(&v) {
-                counts.entry(part).or_default().push(id.clone());
-            }
-        }
-    }
-    let mut list: Vec<(String, Vec<String>)> = counts.into_iter().collect();
-    list.sort_by(|a, b| {
-        b.1.len()
-            .cmp(&a.1.len())
-            .then_with(|| a.0.to_lowercase().cmp(&b.0.to_lowercase()))
-    });
-    Ok(list
-        .into_iter()
-        .map(|(name, mut ids)| {
-            ids.sort();
-            ids.dedup();
-            json!({ "name": name, "count": ids.len() as i64, "ids": ids })
         })
         .collect())
 }
@@ -1154,13 +1120,6 @@ pub fn website_from_details(v: &Value) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty() && parse_public_http_url(s).is_some())
         .map(|s| s.to_string())
-}
-
-pub fn genres_from_details(v: &Value) -> Vec<String> {
-    info_from_details(v)
-        .genres
-        .map(|s| split_list(&s))
-        .unwrap_or_default()
 }
 
 pub fn split_list(s: &str) -> Vec<String> {
