@@ -16,7 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - If a Steam game in the catalogue has exactly one app id, the app uses that game's name instead of a generic steam id
 
 ### Fixes
-- The game name under your own account was getting cut off early in Flat Navy and Flat Grey. It now uses the space it has, and hovering still shows the full name
+- The game name under your own account was getting cut off early in Flat Navy and Flat Grey. It now sits under your username, uses the space it has, and hovering still shows the full name
 
 ## [0.3.0-beta.10.1] - 2026-11-02
 

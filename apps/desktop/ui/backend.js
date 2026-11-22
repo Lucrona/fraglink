@@ -111,7 +111,7 @@
   ];
   const settings = { skin: localStorage.getItem('fl-skin') || 'dark', friend_toasts: '1', friend_toasts_dnd: '1', zoom: '2', toasts: '1', status: 'online' };
   try { Object.assign(settings, JSON.parse(new URLSearchParams(location.search).get('set') || '{}')); } catch (e) { /* preview only */ }
-  let paused = false;
+  let paused = new URLSearchParams(location.search).get('paused') === '1';
   const ok = v => Promise.resolve(v);
   const ago = d => Math.floor(Date.now() / 1000) - d * 86400;
   const prompted = [
