@@ -43,6 +43,7 @@ fn playing(status: &str, game: Option<(&str, &str)>) -> MyPresence {
             detail: None,
             hidden: false,
         }),
+        custom_status: None,
     }
 }
 
@@ -74,14 +75,14 @@ async fn tray_clients_share_presence(pool: PgPool) {
         wait_for(&mut sb, "hello", |e| matches!(e, Event::Hello { .. }));
 
         // request by username (case-insensitive, @ allowed); bob is told live
-        assert_eq!(alice.friend_request("@BOB_B").unwrap(), "pending");
+        assert_eq!(alice.friend_request("@BOB_B", None).unwrap(), "pending");
         let ev = wait_for(&mut sb, "request", |e| {
             matches!(e, Event::FriendRequest { .. })
         });
         assert!(matches!(ev, Event::FriendRequest { ref handle, .. } if handle == "Alice"));
         assert_eq!(bob.friends().unwrap()["incoming"][0]["handle"], "Alice");
         assert!(matches!(
-            alice.friend_request("nobody-here"),
+            alice.friend_request("nobody-here", None),
             Err(SyncError::Server { status: 404, .. })
         ));
 
@@ -148,7 +149,7 @@ async fn tray_clients_share_presence(pool: PgPool) {
             0
         );
         // alice's new request is swallowed silently
-        assert_eq!(alice.friend_request("bob_b").unwrap(), "pending");
+        assert_eq!(alice.friend_request("bob_b", None).unwrap(), "pending");
         assert_eq!(
             bob.friends().unwrap()["incoming"].as_array().unwrap().len(),
             0
@@ -160,7 +161,7 @@ async fn tray_clients_share_presence(pool: PgPool) {
         // bob closes the tray: once unblocked and friends again, alice sees him offline
         bob.unblock("alice").unwrap();
         sb.close();
-        alice.friend_request("bob_b").unwrap();
+        alice.friend_request("bob_b", None).unwrap();
         bob.friend_respond("Alice", true).unwrap();
         // the server notices the closed socket asynchronously
         let deadline = Instant::now() + Duration::from_secs(5);

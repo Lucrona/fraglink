@@ -2234,8 +2234,9 @@ function friendRow(f, opts) {
   const p = f.presence || {};
   const st = p.status === "online" ? (p.game_name ? "● playing" : "● online") : p.status === "away" ? "away" : "offline";
   const game = p.status !== "offline" && p.game_name ? `<div class="gm">${iconLink(p.game_id, p.game_name)}${isUnlisted(p.game_id) ? "Playing a game" : gameLink(p.game_id, p.game_name)}</div>` : "";
+  const custom = p.status !== "offline" && p.custom_status ? `<div class="gm">${esc(p.custom_status)}</div>` : "";
   return `<div class="fr" data-h="${esc(f.handle)}">${f.avatar ? avatar(f.avatar, 32) : `<div class="fa ${tint(f.handle)}">${initial(f.display_name || f.handle)}</div>`}<div class="who">
-    <div class="nm"><span><a href="/u/${encodeURIComponent(f.handle)}">${esc(f.display_name || f.handle)}</a>${f.display_name && f.display_name !== f.handle ? ` <small>${esc(f.handle)}</small>` : ""}</span><span class="st ${esc(p.status || "")}">${st}</span></div>${game}</div>
+    <div class="nm"><span><a href="/u/${encodeURIComponent(f.handle)}">${esc(f.display_name || f.handle)}</a>${f.display_name && f.display_name !== f.handle ? ` <small>${esc(f.handle)}</small>` : ""}</span><span class="st ${esc(p.status || "")}">${st}</span></div>${game}${custom}</div>
     ${opts && opts.actions ? `<div class="acts">${opts.actions}</div>` : ""}</div>`;
 }
 
@@ -2251,7 +2252,7 @@ pages.friends = async () => {
     catch (e) { if (!token()) return requireLogin(); showErr(msg, e); return; }
     await loadIcons([].concat(fl.friends.map(f => f.presence && f.presence.game_id), act.items.map(i => i.game_id)));
     const btns = `<button class="btn sm" data-act="remove">Remove</button>`;
-    const reqIn = fl.incoming.map(r => `<div class="fr" data-h="${esc(r.handle)}"><div class="fa ${tint(r.handle)}">${initial(r.display_name || r.handle)}</div><div class="who"><div class="nm"><a href="/u/${encodeURIComponent(r.handle)}">${esc(r.display_name || r.handle)}</a></div><div class="gm">wants to be friends</div></div>
+    const reqIn = fl.incoming.map(r => `<div class="fr" data-h="${esc(r.handle)}"><div class="fa ${tint(r.handle)}">${initial(r.display_name || r.handle)}</div><div class="who"><div class="nm"><a href="/u/${encodeURIComponent(r.handle)}">${esc(r.display_name || r.handle)}</a></div><div class="gm">wants to be friends${r.message ? ` — “${esc(r.message)}”` : ""}</div></div>
       <div class="acts"><button class="btn sm dl" data-act="accept">Accept</button><button class="btn sm" data-act="decline">Decline</button><button class="btn sm" data-act="block">Block</button></div></div>`).join("");
     const reqOut = fl.outgoing.map(r => `<div class="fr" data-h="${esc(r.handle)}"><div class="fa ${tint(r.handle)}">${initial(r.handle)}</div><div class="who"><div class="nm"><a href="/u/${encodeURIComponent(r.handle)}">${esc(r.display_name || r.handle)}</a></div><div class="gm">request sent ${dateFmt.format(new Date(r.created_at))}</div></div>
       <div class="acts"><button class="btn sm" data-act="cancel">Cancel</button></div></div>`).join("");
@@ -2268,7 +2269,7 @@ pages.friends = async () => {
         <div data-fpager>${fl.total > FP ? pagerHtml(fs.offset, FP, fl.total, fs.q) : ""}</div></section>
       ${fl.outgoing.length ? `<section class="panel"><h2>${htab(`Sent requests (${fl.outgoing_count})`)}</h2><div>${reqOut}</div></section>` : ""}
     </div><aside class="col">
-      <section class="panel"><h2>${htab("Add a friend")}</h2><div class="body"><form ${FA} class="f" id="addf"><label>Username<input type="text" name="handle" maxlength="20" required placeholder="their Fraglink username" autocomplete="off"></label><div class="row"><button class="btn">Send request</button></div></form></div></section>
+      <section class="panel"><h2>${htab("Add a friend")}</h2><div class="body"><form ${FA} class="f" id="addf"><label>Username<input type="text" name="handle" maxlength="20" required placeholder="their Fraglink username" autocomplete="off"></label><label>Personal message <small>(optional)</small><textarea name="message" maxlength="200" rows="3" placeholder="Add me to your friends list"></textarea></label><div class="row"><button class="btn">Send request</button></div></form></div></section>
       <section class="panel"><h2>${htab("Friends' activity")}</h2><div>${feed || `<div class="body empty">Nothing in the last 7 days.</div>`}</div></section>
       ${fl.blocked.length ? `<section class="panel"><h2>${htab("Blocked")}</h2><div>${fl.blocked.map(h => `<div class="fr" data-h="${esc(h)}"><div class="who">${esc(h)}</div><div class="acts"><button class="btn sm" data-act="unblock">Unblock</button></div></div>`).join("")}</div></section>` : ""}
     </aside></div>`;
@@ -2283,7 +2284,8 @@ pages.friends = async () => {
     const fcl = $("[data-fclear]"); if (fcl) fcl.addEventListener("click", e => { e.preventDefault(); fs.q = ""; fs.offset = 0; load(); });
     $("#addf").addEventListener("submit", async e => {
       e.preventDefault(); const h = e.target.handle.value.trim().replace(/^@/, ""); if (!h) return;
-      try { const r = await api("/friends/request", { method: "POST", body: { handle: h } });
+      const message = (e.target.message && e.target.message.value.trim()) || undefined;
+      try { const r = await api("/friends/request", { method: "POST", body: { handle: h, message } });
         showOk(msg, r && r.status === "accepted" ? `You and ${h} are now friends.` : `Friend request sent to ${h}.`); load(); refreshFriendsLive(); }
       catch (x) { showErr(msg, x); }
     });

@@ -97,6 +97,35 @@ Var SplashLabel
   ${EndIf}
 !macroend
 
+; beta.11: if an older build is still running under a previous exe name, close
+; it so the update can replace files. fraglink.exe is already the 10.1 name;
+; this only matters for a leftover fraglink-desktop.exe.
+!macro NSIS_HOOK_PREINSTALL
+  !insertmacro CheckIfAppIsRunning "fraglink-desktop.exe" "${PRODUCTNAME}"
+!macroend
+
+; Delete a leftover older binary and rewrite an autostart Run entry that still
+; points at it. Do not delete Fraglink.exe when MAINBINARYNAME is fraglink:
+; on Windows those are the same file. Shortcuts are migrated later via
+; OldMainBinaryName / SetShortcutTarget (below).
+!macro NSIS_HOOK_POSTINSTALL
+  ${If} ${FileExists} "$INSTDIR\fraglink-desktop.exe"
+  ${AndIf} "${MAINBINARYNAME}.exe" != "fraglink-desktop.exe"
+    Delete "$INSTDIR\fraglink-desktop.exe"
+  ${EndIf}
+  Push $R0
+  Push $R1
+  ReadRegStr $R0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+  ${If} $R0 != ""
+    ${StrLoc} $R1 $R0 "fraglink-desktop.exe" ">"
+    ${If} $R1 != ""
+      WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\""
+    ${EndIf}
+  ${EndIf}
+  Pop $R1
+  Pop $R0
+!macroend
+
 Name "${PRODUCTNAME}"
 Caption "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"

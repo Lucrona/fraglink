@@ -426,12 +426,12 @@ impl Client {
     }
 
     /// Returns `"pending"` or `"accepted"`.
-    pub fn friend_request(&self, handle: &str) -> Result<String, SyncError> {
-        let v: serde_json::Value = self.call(
-            "POST",
-            "/api/v1/friends/request",
-            Some(serde_json::json!({ "handle": handle })),
-        )?;
+    pub fn friend_request(&self, handle: &str, message: Option<&str>) -> Result<String, SyncError> {
+        let mut body = serde_json::json!({ "handle": handle });
+        if let Some(m) = message.map(str::trim).filter(|m| !m.is_empty()) {
+            body["message"] = serde_json::Value::String(m.chars().take(200).collect());
+        }
+        let v: serde_json::Value = self.call("POST", "/api/v1/friends/request", Some(body))?;
         Ok(v["status"].as_str().unwrap_or("pending").to_string())
     }
 

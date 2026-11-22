@@ -340,3 +340,107 @@ async fn notify_off_link_turns_off_friend_request_email(pool: PgPool) {
             .unwrap();
     assert_eq!(prefs["friend_request_email"], false);
 }
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn personal_message_is_stored_and_listed(pool: PgPool) {
+    let app = fraglink_server::router(state(pool.clone()));
+    let a = signup(&app, "a@example.com", "Alice").await;
+    let b = signup(&app, "b@example.com", "bob").await;
+
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/friends/request",
+        Some(&a),
+        Some(json!({ "handle": "bob", "message": "  Add me\u{0007} to your list  " })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+
+    let incoming = list(&app, &b).await;
+    assert_eq!(incoming["incoming"][0]["handle"], "Alice");
+    assert_eq!(incoming["incoming"][0]["message"], "Add me to your list");
+
+    let outgoing = list(&app, &a).await;
+    assert_eq!(outgoing["outgoing"][0]["message"], "Add me to your list");
+
+    // control characters and a long string are trimmed to 200
+    let long = "x".repeat(250);
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/friends/request",
+        Some(&a),
+        Some(json!({ "handle": "bob", "message": long })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let incoming = list(&app, &b).await;
+    assert_eq!(
+        incoming["incoming"][0]["message"].as_str().unwrap().len(),
+        200
+    );
+}
+
+#[sqlx::test(migrator = "fraglink_server::MIGRATOR")]
+async fn custom_status_is_visible_to_friends(pool: PgPool) {
+    use fraglink_server::presence;
+    let st = state(pool.clone());
+    let app = fraglink_server::router(st.clone());
+    let a = signup(&app, "a@example.com", "Alice").await;
+    let b = signup(&app, "b@example.com", "bob").await;
+    // become friends
+    assert_eq!(req(&app, &a, "bob").await.0, StatusCode::OK);
+    let r = api(
+        &app,
+        "POST",
+        "/api/v1/friends/respond",
+        Some(&b),
+        Some(json!({ "handle": "alice", "accept": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{}", r.text);
+
+    let alice_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM users WHERE lower(handle) = 'alice'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    presence::set_from_with(
+        &st,
+        alice_id,
+        "Alice",
+        "online",
+        Some(None),
+        Some(Some("Looking to Play".into())),
+    )
+    .await
+    .unwrap();
+
+    let lb = list(&app, &b).await;
+    assert_eq!(lb["friends"][0]["handle"], "Alice");
+    assert_eq!(lb["friends"][0]["presence"]["status"], "online");
+    assert_eq!(
+        lb["friends"][0]["presence"]["custom_status"],
+        "Looking to Play"
+    );
+
+    // a status-only update (website) keeps the custom line
+    presence::set_from(&st, alice_id, "Alice", "away", None)
+        .await
+        .unwrap();
+    let lb = list(&app, &b).await;
+    assert_eq!(lb["friends"][0]["presence"]["status"], "away");
+    assert_eq!(
+        lb["friends"][0]["presence"]["custom_status"],
+        "Looking to Play"
+    );
+
+    // clearing
+    presence::set_from_with(&st, alice_id, "Alice", "online", Some(None), Some(None))
+        .await
+        .unwrap();
+    let lb = list(&app, &b).await;
+    assert_eq!(lb["friends"][0]["presence"]["status"], "online");
+    assert!(lb["friends"][0]["presence"]["custom_status"].is_null());
+}

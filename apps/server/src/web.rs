@@ -814,6 +814,8 @@ fn status_page(code: StatusCode, msg: &str) -> Response {
 #[derive(Deserialize)]
 struct HandleForm {
     handle: String,
+    #[serde(default)]
+    message: Option<String>,
 }
 
 async fn web_friend_add(
@@ -825,7 +827,7 @@ async fn web_friend_add(
     if let Err(e) = same_origin(&headers, &st) {
         return e.into_response();
     }
-    match crate::friends::request(&st, &api::person(&a), &f.handle).await {
+    match crate::friends::request(&st, &api::person(&a), &f.handle, f.message.as_deref()).await {
         Ok(crate::friends::RequestOutcome::Accepted) => {
             back(&format!("You and {} are now friends.", f.handle.trim()))
         }

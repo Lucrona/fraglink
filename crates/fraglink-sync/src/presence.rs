@@ -36,6 +36,9 @@ pub struct GameRef {
 pub struct MyPresence {
     pub status: String,
     pub game: Option<GameRef>,
+    /// Friends-visible custom status. Empty / None clears it on the server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -50,6 +53,9 @@ pub struct FriendPresence {
     #[serde(default)]
     pub game_detail: Option<String>,
     pub session_started_at: Option<String>,
+    /// Friends-visible custom status line. Absent on older servers or when unset.
+    #[serde(default)]
+    pub custom_status: Option<String>,
 }
 
 /// Server → client events.
@@ -63,6 +69,8 @@ pub enum Event {
     FriendRequest {
         handle: String,
         display_name: String,
+        #[serde(default)]
+        message: Option<String>,
     },
     FriendAccepted {
         handle: String,
@@ -138,9 +146,13 @@ impl PresenceSocket {
     }
 
     pub fn send_presence(&mut self, p: &MyPresence) -> Result<(), SyncError> {
-        self.send_json(
-            serde_json::json!({ "type": "presence", "status": p.status, "game": p.game }),
-        )
+        self.send_json(serde_json::json!({
+            "type": "presence",
+            "status": p.status,
+            "game": p.game,
+            // Always send the key so an empty string can clear a previous line.
+            "custom_status": p.custom_status.as_deref().unwrap_or(""),
+        }))
     }
 
     pub fn ping(&mut self) -> Result<(), SyncError> {
@@ -193,9 +205,28 @@ mod tests {
             e,
             Event::FriendRequest {
                 handle: "a".into(),
-                display_name: "A".into()
+                display_name: "A".into(),
+                message: None,
             }
         );
+        let e: Event = serde_json::from_str(
+            r#"{"type":"friend_request","handle":"a","display_name":"A","message":"Add me"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            e,
+            Event::FriendRequest {
+                handle: "a".into(),
+                display_name: "A".into(),
+                message: Some("Add me".into()),
+            }
+        );
+        let e: Event = serde_json::from_str(
+            r#"{"type":"presence","handle":"bob","status":"online","custom_status":"Looking to Play"}"#,
+        )
+        .unwrap();
+        let Event::Presence(p) = e else { panic!() };
+        assert_eq!(p.custom_status.as_deref(), Some("Looking to Play"));
     }
 
     #[test]

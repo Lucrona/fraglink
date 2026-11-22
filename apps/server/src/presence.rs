@@ -53,6 +53,9 @@ pub struct PresenceView {
     #[serde(default)]
     pub game_detail: Option<String>,
     pub session_started_at: Option<DateTime<Utc>>,
+    /// Friends-visible custom status line. Absent when offline or unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_status: Option<String>,
 }
 
 impl PresenceView {
@@ -91,6 +94,8 @@ pub enum ServerMsg {
     FriendRequest {
         handle: String,
         display_name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
     },
     FriendAccepted {
         handle: String,
@@ -127,6 +132,10 @@ pub enum ClientMsg {
     Presence {
         status: String,
         game: Option<GameRef>,
+        /// Present on current desktop apps; omitted by the website and older apps
+        /// (those leave the stored custom status alone). An empty string clears it.
+        #[serde(default)]
+        custom_status: Option<String>,
     },
     Ping,
 }
@@ -252,12 +261,13 @@ type Row = (
     Option<DateTime<Utc>>,
     DateTime<Utc>,
     bool,
+    Option<String>,
 );
 
 /// `presence.game_name` holds the server's public name (NULL = unlisted), never a
 /// client-sent one, and `game_id` the user's own (private) id.
 fn to_view(r: Row) -> PresenceView {
-    let (status, game_id, game_name, game_detail, started, heartbeat, hidden) = r;
+    let (status, game_id, game_name, game_detail, started, heartbeat, hidden, custom_status) = r;
     let stale = (Utc::now() - heartbeat).num_seconds() > IDLE_TIMEOUT_SECS as i64;
     if status == "invisible" || status == "offline" || stale {
         return PresenceView::offline();
@@ -279,6 +289,9 @@ fn to_view(r: Row) -> PresenceView {
         game_name,
         game_detail,
         session_started_at: started,
+        custom_status: custom_status
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
     }
 }
 
@@ -335,7 +348,7 @@ pub async fn own_names_for(
 
 /// What friends are allowed to see of `user` right now.
 pub async fn visible_presence(st: &AppState, user: Uuid) -> ApiResult<Option<PresenceView>> {
-    let r: Option<Row> = sqlx::query_as("SELECT status, game_id, game_name, game_detail, session_started_at, heartbeat_at, game_hidden FROM presence WHERE user_id = $1")
+    let r: Option<Row> = sqlx::query_as("SELECT status, game_id, game_name, game_detail, session_started_at, heartbeat_at, game_hidden, custom_status FROM presence WHERE user_id = $1")
         .bind(user)
         .fetch_optional(&st.db)
         .await?;
@@ -349,8 +362,8 @@ pub async fn visible_presence_many(
     users: &[Uuid],
 ) -> ApiResult<HashMap<Uuid, PresenceView>> {
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>, Option<DateTime<Utc>>, DateTime<Utc>, bool)> = sqlx::query_as(
-        "SELECT user_id, status, game_id, game_name, game_detail, session_started_at, heartbeat_at, game_hidden FROM presence WHERE user_id = ANY($1)",
+    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>, Option<DateTime<Utc>>, DateTime<Utc>, bool, Option<String>)> = sqlx::query_as(
+        "SELECT user_id, status, game_id, game_name, game_detail, session_started_at, heartbeat_at, game_hidden, custom_status FROM presence WHERE user_id = ANY($1)",
     )
     .bind(users)
     .fetch_all(&st.db)
@@ -359,8 +372,11 @@ pub async fn visible_presence_many(
         .iter()
         .map(|u| (*u, PresenceView::offline()))
         .collect();
-    for (u, s, gid, gname, gdetail, started, hb, hidden) in rows {
-        m.insert(u, to_view((s, gid, gname, gdetail, started, hb, hidden)));
+    for (u, s, gid, gname, gdetail, started, hb, hidden, custom) in rows {
+        m.insert(
+            u,
+            to_view((s, gid, gname, gdetail, started, hb, hidden, custom)),
+        );
     }
     // beta.6: a program someone added shows the name they gave it, to everyone (like Discord)
     let unlisted: Vec<Uuid> = m
@@ -387,7 +403,7 @@ pub async fn visible_presence_many(
     Ok(m)
 }
 
-fn clean(s: &str, max: usize) -> String {
+pub(crate) fn clean(s: &str, max: usize) -> String {
     s.chars()
         .filter(|c| !c.is_control())
         .take(max)
@@ -506,6 +522,19 @@ pub async fn set_from(
     handle: &str,
     status: &str,
     game: Option<Option<GameRef>>,
+) -> ApiResult<()> {
+    set_from_with(st, user, handle, status, game, None).await
+}
+
+/// `custom_status`: `None` keeps whatever is stored; `Some(None)` clears it;
+/// `Some(Some(text))` stores the sanitised line (max 60 characters).
+pub async fn set_from_with(
+    st: &AppState,
+    user: Uuid,
+    handle: &str,
+    status: &str,
+    game: Option<Option<GameRef>>,
+    custom_status: Option<Option<String>>,
 ) -> ApiResult<()> {
     let keep_game = game.is_none();
     let game = game.flatten();
@@ -628,12 +657,18 @@ pub async fn set_from(
         }
         None => None,
     };
+    let set_custom = custom_status.is_some();
+    let custom_val = custom_status
+        .flatten()
+        .map(|s| clean(&s, 60))
+        .filter(|s| !s.is_empty());
     sqlx::query(
-        "INSERT INTO presence(user_id, status, game_id, game_name, session_started_at, game_detail, game_hidden, heartbeat_at, updated_at)
-         VALUES($1, $2, $3, $4, $5, $6, $7, now(), now())
+        "INSERT INTO presence(user_id, status, game_id, game_name, session_started_at, game_detail, game_hidden, custom_status, heartbeat_at, updated_at)
+         VALUES($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
          ON CONFLICT (user_id) DO UPDATE SET status = excluded.status, game_id = excluded.game_id,
              game_name = excluded.game_name, session_started_at = excluded.session_started_at,
              game_detail = excluded.game_detail, game_hidden = excluded.game_hidden,
+             custom_status = CASE WHEN $9 THEN excluded.custom_status ELSE presence.custom_status END,
              heartbeat_at = now(), updated_at = now()",
     )
     .bind(user)
@@ -644,6 +679,8 @@ pub async fn set_from(
     // WoW realm (game_detail) is ignored for now: detection wasn't reliable (dev.18)
     .bind(None::<String>)
     .bind(game.as_ref().is_some_and(|g| g.2))
+    .bind(&custom_val)
+    .bind(set_custom)
     .execute(&st.db)
     .await?;
     let after = visible_presence(st, user)
@@ -780,11 +817,29 @@ async fn connection(st: AppState, a: AuthUser, socket: WebSocket) {
         };
         match msg {
             Message::Text(t) => match serde_json::from_str::<ClientMsg>(&t) {
-                Ok(ClientMsg::Presence { status, game }) => {
+                Ok(ClientMsg::Presence {
+                    status,
+                    game,
+                    custom_status,
+                }) => {
                     // Only the desktop app reports games; the website (and any other
                     // sign-in) can change the status, and its game field is ignored.
                     let game = (a.kind == "device").then_some(game);
-                    if let Err(e) = set_from(&st, user, &handle, &status, game).await {
+                    // Desktop always sends custom_status (empty string clears it). Older
+                    // apps and the website omit the field, so we leave the stored line.
+                    let custom = if a.kind == "device" {
+                        custom_status.map(|s| {
+                            let t = clean(&s, 60);
+                            if t.is_empty() {
+                                None
+                            } else {
+                                Some(t)
+                            }
+                        })
+                    } else {
+                        None
+                    };
+                    if let Err(e) = set_from_with(&st, user, &handle, &status, game, custom).await {
                         tracing::warn!("presence set failed: {}", e.message);
                     }
                 }

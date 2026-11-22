@@ -6,10 +6,12 @@
 
 mod avatars;
 mod commands;
+mod exe_migrate;
 mod friends;
 mod gamelist;
 mod health;
 mod icons;
+mod sounds;
 mod sync;
 mod updater;
 mod whatsnew;
@@ -50,6 +52,9 @@ pub struct ToastPayload {
     pub avatar: Option<String>,
     pub avatar_color: u8,
     pub avatar_preset: Option<u8>,
+    /// Personal message on a friend-request toast (empty otherwise).
+    #[serde(default)]
+    pub message: String,
 }
 
 pub struct AppState {
@@ -1099,6 +1104,7 @@ pub fn run() {
                 auto_away: Default::default(),
                 track_prompt: Mutex::new(None),
             });
+            crate::exe_migrate::apply();
             build_tray(&handle)?;
             let start_min = windows::flag(&handle, "start_minimized");
             // beta.6: "Start hidden in the tray when Windows starts". Windows autostart passes

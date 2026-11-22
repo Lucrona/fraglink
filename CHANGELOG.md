@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.11] - 2026-11-23
+
+### New
+- You can add a short note when you send a friend request, and they see it on the pop-up and in their request list
+- Sounds in Options actually play: a friend signing in or out, with the Fraglink or Soft pack (or no sounds)
+- Your custom status shows up for friends, in the list and the info panel
+
+### Changes
+- If a Steam game in the catalogue has exactly one app id, the app uses that game's name instead of a generic steam id
+
+### Fixes
+- The game name under your own account was getting cut off early in Flat Navy and Flat Grey. It now uses the space it has, and hovering still shows the full name
+
 ## [0.3.0-beta.10.1] - 2026-11-02
 
 ### New
