@@ -104,17 +104,31 @@ pub fn my_presence(app: &AppHandle) -> MyPresence {
         detail: n.detail.filter(|_| share),
         hidden: !share,
     });
-    let custom_on = setting(app, "custom_on").as_deref() == Some("1");
-    let custom_status = if custom_on {
-        setting(app, "custom_status").filter(|t| !t.trim().is_empty())
-    } else {
-        None
-    };
+    // Read through this same guard. setting() locks the engine again, and
+    // std::sync::Mutex is not re-entrant — that hung the tray on every
+    // 0.3.0-beta.11 start (icon showed, clicks did nothing).
+    let custom_on = e.tracker.store.get_setting("custom_on").ok().flatten();
+    let custom_text = e.tracker.store.get_setting("custom_status").ok().flatten();
+    let custom_status = published_custom_status(custom_on.as_deref(), custom_text.as_deref());
     MyPresence {
         status,
         game,
         custom_status,
     }
+}
+
+/// Custom status sent to friends: only when the toggle is on and the text is not blank.
+pub fn published_custom_status(
+    custom_on: Option<&str>,
+    custom_status: Option<&str>,
+) -> Option<String> {
+    if custom_on != Some("1") {
+        return None;
+    }
+    custom_status
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
 }
 
 /// beta.5: the user's own name for a program they added, so their own profile shows
@@ -718,6 +732,55 @@ mod tests {
             ..prefs()
         };
         assert!(!should_toast(&fp(true), &off, false, None, 1000));
+    }
+
+    #[test]
+    fn published_custom_status_rules() {
+        assert_eq!(
+            published_custom_status(Some("1"), Some("Looking to Play")),
+            Some("Looking to Play".into())
+        );
+        assert_eq!(
+            published_custom_status(Some("1"), Some("  hi  ")),
+            Some("hi".into())
+        );
+        assert_eq!(published_custom_status(Some("1"), Some("   ")), None);
+        assert_eq!(published_custom_status(Some("1"), Some("")), None);
+        assert_eq!(published_custom_status(Some("1"), None), None);
+        assert_eq!(
+            published_custom_status(Some("0"), Some("Looking to Play")),
+            None
+        );
+        assert_eq!(published_custom_status(None, Some("Looking to Play")), None);
+    }
+
+    #[test]
+    fn my_presence_does_not_reenter_the_engine_lock() {
+        // setup() builds the tray then calls my_presence on the UI thread.
+        // setting() takes the engine mutex; a second lock on the same thread
+        // deadlocks (std::sync::Mutex is not re-entrant) and the tray icon
+        // appears but never responds. Keep reads on the existing guard.
+        let src = include_str!("friends.rs");
+        let start = src.find("pub fn my_presence").expect("my_presence");
+        let rest = &src[start..];
+        let end = rest[1..]
+            .find(
+                "
+pub fn ",
+            )
+            .map(|i| i + 1)
+            .unwrap_or(rest.len());
+        let body = &rest[..end];
+        assert!(
+            !body.contains("setting(app"),
+            "my_presence must not call setting(app, ...) while the engine lock is held"
+        );
+        let m = std::sync::Mutex::new(0);
+        let _g = m.lock().unwrap();
+        assert!(
+            m.try_lock().is_err(),
+            "a second lock on the same thread would hang the tray"
+        );
     }
 
     #[test]

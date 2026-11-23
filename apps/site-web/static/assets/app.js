@@ -397,15 +397,21 @@ async function latest() {
   const p = j.platforms && (j.platforms["windows-x86_64"] || Object.values(j.platforms)[0]);
   return { version: String(j.version || "").replace(/-(\d+)$/, "-dev.$1"), raw: j.version, url: p && p.url, date: j.pub_date, notes: j.notes };
 }
+/* Short, stable name for the website Download button. The updater still
+   uses the versioned URL in /updates/latest.json, so signatures stay as they are. */
+const STABLE_DOWNLOAD = "/download/fraglink-setup.exe";
 async function fillDownload() {
   const btns = $$("[data-dl]"), vers = $$("[data-ver]");
   /* staff can point the links somewhere else in Admin > Site settings (empty = built in) */
   const links = await featuresReady.then(() => LINKS).catch(() => LINKS);
   $$("[data-link]").forEach(a => { if (links[a.dataset.link]) a.href = links[a.dataset.link]; });
-  if (links.link_download) btns.forEach(b => { b.href = links.link_download; b.removeAttribute("aria-disabled"); });
+  if (links.link_download) {
+    btns.forEach(b => { b.href = links.link_download; b.removeAttribute("aria-disabled"); });
+  } else {
+    btns.forEach(b => { b.href = STABLE_DOWNLOAD; b.removeAttribute("aria-disabled"); });
+  }
   try {
     const l = await latest();
-    btns.forEach(b => { if (l.url && !links.link_download) b.href = l.url; b.removeAttribute("aria-disabled"); });
     vers.forEach(v => { v.textContent = "Version " + l.version + (l.date ? " · " + fullDay(l.date) : "") + " · Windows 10/11, 64-bit"; });
   } catch (e) {
     vers.forEach(v => { v.textContent = "Download's not available right now. Try again in a few minutes."; });

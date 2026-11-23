@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.11.1] - 2026-11-23
+
+### Fixes
+- The app could freeze on startup after 0.3.0-beta.11, with the tray icon showing but not responding to clicks. That's fixed.
+- The website Download button now saves the installer as fraglink-setup.exe
+
 ## [0.3.0-beta.11] - 2026-11-23
 
 ### New

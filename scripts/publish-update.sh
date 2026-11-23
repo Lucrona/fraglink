@@ -3,6 +3,8 @@
 # latest.json from a GitHub Actions run to the server's /var/www/fraglink-updates (Caddy serves it
 # at https://playfraglink.com/updates/ and http://119.42.54.86/updates/). Installed clients check
 # latest.json at startup and every hour. The previous manifest is kept as latest.json.prev.
+# A copy of the NSIS installer is also published as fraglink-setup.exe for the website
+# Download button (https://playfraglink.com/download/fraglink-setup.exe).
 #
 #   scripts/publish-update.sh <run-id>      # the CI run of the release tag
 #
@@ -19,6 +21,10 @@ unzip -q "$TMP/a.zip" -d "$TMP"
 EXE=$(ls "$TMP"/nsis/*-setup.exe)
 test -f "$EXE.sig" && test -f "$TMP/nsis/latest.json"
 scp -i "$KEY" "$EXE" "$EXE.sig" "$USER_@$HOST:/var/www/fraglink-updates/"
+# Website Download uses this short name. latest.json still points at the
+# versioned file, so signatures and already-installed apps are unchanged.
+BASE=$(basename "$EXE")
+ssh -i "$KEY" "$USER_@$HOST" "cd /var/www/fraglink-updates && cp -f '$BASE' fraglink-setup.exe.new && mv -f fraglink-setup.exe.new fraglink-setup.exe"
 # latest.json last, so clients never see a manifest before its installer is there
 scp -i "$KEY" "$TMP/nsis/latest.json" "$USER_@$HOST:/var/www/fraglink-updates/latest.json.new"
 ssh -i "$KEY" "$USER_@$HOST" 'cd /var/www/fraglink-updates && cp latest.json latest.json.prev && mv latest.json.new latest.json'
