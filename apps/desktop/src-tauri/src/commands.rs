@@ -915,9 +915,22 @@ pub async fn account_change_email(
 }
 
 #[tauri::command]
-pub async fn friend_add(app: AppHandle, handle: String) -> CmdResult<String> {
+pub async fn friend_add(
+    app: AppHandle,
+    handle: String,
+    message: Option<String>,
+) -> CmdResult<String> {
     let h = clean_handle(&handle)?;
-    friend_call(app, move |c| c.friend_request(&h)).await
+    let msg = message.and_then(|m| {
+        let t: String = m.chars().filter(|c| !c.is_control()).take(200).collect();
+        let t = t.trim().to_string();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t)
+        }
+    });
+    friend_call(app, move |c| c.friend_request(&h, msg.as_deref())).await
 }
 
 #[tauri::command]

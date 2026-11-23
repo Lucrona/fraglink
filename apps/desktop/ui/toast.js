@@ -40,9 +40,11 @@
     const st = req ? 'st-req' : p.game_id ? 'st-game' : 'st-on';
     const lead = !friend ? `<i class="gi">${icon}</i>` : `<span class="jl">${avatar(p)}${p.game_id && p.icon ? `<i class="jg">${icon}</i>` : ''}<i class="jb ${st}"></i></span>`;
     const sub = req ? p.game : (SHOW_REALM ? p.detail || '' : '');
+    const note = req ? (p.message || p.detail || '') : '';
     // Steam-style: bold name / action ("is now playing", "played 1h 33m of") / game name
     // on its own accent line (wraps to 2 lines, then …)
     body.innerHTML = `${lead}<div class="tx"><b>${esc(p.title)}</b><span class="ln">${esc(p.line)}</span>` +
+      `${note ? `<span class="g msg">“${esc(note)}”</span>` : ''}` +
       `${!req && p.game ? `<span class="g">${esc(p.game)}</span>` : ''}${req ? '<span class="jq"><button type="button" class="ok" data-acc="1">Accept</button><button type="button" data-acc="0">Ignore</button></span>' : sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
     // beta.9: Accept / Ignore right on the request toast (the rest of the toast still opens the app)
     body.querySelectorAll('button[data-acc]').forEach(b => b.addEventListener('click', e => {
@@ -87,7 +89,7 @@
         long: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'x', game: 'The Elder Scrolls V: Skyrim Special Edition Anniversary Upgrade Bundle Deluxe', icon: '' },
         online: { kind: 'friend:nova', title: 'Nova', line: 'logged on', game_id: '', game: '', avatar_color: 3 },
         update: { kind: 'update:0.3.0-beta.9', title: 'Update ready', line: 'is ready to install', game: 'v0.3.0-beta.9' },
-        request: { kind: 'request:riftwalker', title: 'Riftwalker', line: 'wants to be your friend', game_id: '', game: '@riftwalker', avatar_preset: 3, avatar_color: 2 },
+        request: { kind: 'request:riftwalker', title: 'Riftwalker', line: 'wants to be your friend', game_id: '', game: '@riftwalker', message: 'Add me to your friends list', avatar_preset: 3, avatar_color: 2 },
         playing: { kind: 'friend:dizz', title: 'Dizz', line: 'is now playing', game_id: 'wow', game: 'World of Warcraft', detail: 'Frostmourne', avatar_color: 0, avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#b0632a"/><circle cx="32" cy="25" r="12" fill="#f1d9c0"/><path d="M10 64c2-15 12-22 22-22s20 7 22 22z" fill="#2b2f3a"/></svg>'), icon: q.get('icon') || '' } })[t]); return; }
     try {
       const st = await window.FL.settings();

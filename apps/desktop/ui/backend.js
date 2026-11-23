@@ -36,7 +36,7 @@
       syncSignOut: () => inv('sync_sign_out'),
       friends: () => inv('friends_state'),
       friendsRefresh: () => inv('friends_refresh'),
-      friendAdd: (handle) => inv('friend_add', { handle }),
+      friendAdd: (handle, message) => inv('friend_add', { handle, message: message || null }),
       friendRespond: (handle, accept) => inv('friend_respond', { handle, accept }),
       friendRemove: (handle) => inv('friend_remove', { handle }),
       friendBlock: (handle, block) => inv('friend_block', { handle, block }),
@@ -111,7 +111,7 @@
   ];
   const settings = { skin: localStorage.getItem('fl-skin') || 'dark', friend_toasts: '1', friend_toasts_dnd: '1', zoom: '2', toasts: '1', status: 'online' };
   try { Object.assign(settings, JSON.parse(new URLSearchParams(location.search).get('set') || '{}')); } catch (e) { /* preview only */ }
-  let paused = false;
+  let paused = new URLSearchParams(location.search).get('paused') === '1';
   const ok = v => Promise.resolve(v);
   const ago = d => Math.floor(Date.now() / 1000) - d * 86400;
   const prompted = [
@@ -160,7 +160,7 @@
     syncLogin: () => ok(),
     syncSignup: () => ok(),
     friendSearch: (q) => ok({ users: [{ handle: q.replace(/@.*/, ''), display_name: q.replace(/@.*/, '') }, { handle: q + '_2', display_name: 'Another ' + q }] }),
-    friendAdd: (h) => { mockFriends.outgoing.push({ handle: h, display_name: h, created_at: new Date().toISOString() }); return ok('pending'); },
+    friendAdd: (h, message) => { mockFriends.outgoing.push({ handle: h, display_name: h, created_at: new Date().toISOString(), message: message || undefined }); return ok('pending'); },
     friendRespond: (h, a) => { const r = mockFriends.incoming.find(x => x.handle === h); mockFriends.incoming = mockFriends.incoming.filter(x => x !== r); if (a && r) mockFriends.friends.push({ handle: h, display_name: r.display_name, since: new Date().toISOString(), presence: { status: 'online' } }); return ok(); },
     friendRemove: (h) => { mockFriends.friends = mockFriends.friends.filter(f => f.handle !== h); mockFriends.outgoing = mockFriends.outgoing.filter(f => f.handle !== h); return ok(); },
     accountInfo: () => ok({ ...mockPriv, mfa: { enabled: true, backup_codes_left: 8 }, handle: 'Lucrona', display_name: 'Lucrona', email: 'lucrona@example.com', email_verified: false, share_activity: settings.share_activity_mock !== '0', avatar: { kind: 'upload', color: 0, url_64: '/api/v1/avatars/m/me-64.webp', url_32: '/api/v1/avatars/m/me-32.webp' } }),
@@ -251,13 +251,13 @@
   const mockFriends = {
     friends: [
       { handle: 'diZZ_Spinner', display_name: 'Dizz', avatar: { kind: 'upload', color: 0, url_184: '/api/v1/avatars/m/dizz-184.webp', url_64: '/api/v1/avatars/m/dizz-64.webp', url_32: '/api/v1/avatars/m/dizz-32.webp' }, since: iso(400 * 86400), presence: { status: 'online', game_id: 'wow', game_name: 'World of Warcraft', game_detail: 'Frostmourne', session_started_at: iso(48 * 60 + 12) } },
-      { handle: 'riftwalker', display_name: 'Riftwalker', avatar: { kind: 'preset', preset: 3, color: 2 }, since: iso(220 * 86400), presence: { status: 'online', game_id: null, game_name: null } },
+      { handle: 'riftwalker', display_name: 'Riftwalker', avatar: { kind: 'preset', preset: 3, color: 2 }, since: iso(220 * 86400), presence: { status: 'online', game_id: null, game_name: null, custom_status: 'Looking to Play' } },
       { handle: 'nova', display_name: 'Nova', avatar: { kind: 'upload', color: 3, url_184: '/api/v1/avatars/m/nova-184.webp', url_64: '/api/v1/avatars/m/nova-64.webp', url_32: '/api/v1/avatars/m/nova-32.webp' }, since: iso(90 * 86400), presence: { status: 'online', game_id: 'steam:570', game_name: 'Dota 2', session_started_at: iso(38 * 60) } },
-      { handle: 'grimm', display_name: 'Grimm', avatar: { kind: 'default', color: 4 }, since: iso(40 * 86400), presence: { status: 'away', game_id: null, game_name: null } },
+      { handle: 'grimm', display_name: 'Grimm', avatar: { kind: 'default', color: 4 }, since: iso(40 * 86400), presence: { status: 'away', game_id: null, game_name: null, custom_status: 'back in a bit' } },
       { handle: 'kestrel', display_name: 'Kestrel', avatar: { kind: 'default', color: 1 }, since: iso(12 * 86400), presence: { status: 'online', game_id: 'unlisted', game_name: 'a game', session_started_at: iso(12 * 60) } },
       { handle: 'pixelmoth', display_name: 'PixelMoth', avatar: { kind: 'preset', preset: 9, color: 5 }, since: iso(5 * 86400), presence: { status: 'offline', game_id: null, game_name: null } },
     ],
-    incoming: [{ handle: 'oldmate', display_name: 'Old Mate', avatar: { kind: 'default', color: 2 }, created_at: iso(3600) }],
+    incoming: [{ handle: 'oldmate', display_name: 'Old Mate', avatar: { kind: 'default', color: 2 }, created_at: iso(3600), message: 'Add me to your friends list' }],
     outgoing: [{ handle: 'zed', display_name: 'Zed', avatar: { kind: 'default', color: 5 }, created_at: iso(7200) }],
     blocked: [],
   };

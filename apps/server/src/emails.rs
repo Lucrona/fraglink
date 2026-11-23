@@ -214,29 +214,41 @@ pub fn friend_request(
     from_handle: &str,
     friends_url: &str,
     turn_off_url: &str,
+    message: Option<&str>,
 ) -> Email {
     let who = if from_name.is_empty() || from_name == from_handle {
         format!("@{from_handle}")
     } else {
         format!("{from_name} (@{from_handle})")
     };
+    let note = message.map(str::trim).filter(|m| !m.is_empty());
     let pre = format!("{who} sent you a friend request.");
+    let text_note = note
+        .map(|m| format!("\nThey said:\n{m}\n"))
+        .unwrap_or_default();
     let text_body = format!(
-        "Hi {to_name},\n\n{who} sent you a friend request on Fraglink.\n\nSee it here:\n{friends_url}\n\nTurn off these emails:\n{turn_off_url}\n\nFraglink"
+        "Hi {to_name},\n\n{who} sent you a friend request on Fraglink.{text_note}\nSee it here:\n{friends_url}\n\nTurn off these emails:\n{turn_off_url}\n\nFraglink"
     );
+    let mut paras = vec![
+        format!("Hi {},", esc(to_name)),
+        format!(
+            r##"<b style="color:#10161f;">{}</b> wants to be friends on Fraglink."##,
+            esc(&who)
+        ),
+    ];
+    if let Some(m) = note {
+        paras.push(format!(
+            r##"They said: “<span style="color:#10161f;">{}</span>”"##,
+            esc(m)
+        ));
+    }
     Email {
         subject: format!("{who} wants to be friends on Fraglink"),
         text: text_body,
         html: layout(Parts {
             preheader: &pre,
             heading: "New friend request",
-            paras: vec![
-                format!("Hi {},", esc(to_name)),
-                format!(
-                    r##"<b style="color:#10161f;">{}</b> wants to be friends on Fraglink."##,
-                    esc(&who)
-                ),
-            ],
+            paras,
             button: Some(("See friend request", friends_url)),
             after: vec![format!(
                 r##"Don't want these emails? <a href="{}" style="color:#5b6b7c;">Turn off friend request emails</a>."##,
@@ -310,6 +322,7 @@ mod tests {
                     "riftwalker",
                     &format!("{site}/friends"),
                     &format!("{site}/api/v1/notify/off?token=EXAMPLE"),
+                    None,
                 ),
             ),
             ("welcome", super::welcome("Lucrona", "lucrona")),
@@ -348,7 +361,11 @@ mod tests {
             "bob",
             "https://playfraglink.com/friends",
             "https://playfraglink.com/api/v1/notify/off?token=abc",
+            Some("Hello <script>"),
         );
+        assert!(fr.html.contains("Hello &lt;script&gt;"));
+        assert!(!fr.html.contains("<script>"));
+        assert!(fr.text.contains("Hello <script>"));
         assert!(fr.subject.contains("@bob"));
         assert!(fr.html.contains("Bob &lt;x&gt;"));
         assert!(fr.html.contains("Turn off friend request emails"));

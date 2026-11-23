@@ -44,6 +44,9 @@ pub struct RequestView {
     pub display_name: String,
     pub created_at: DateTime<Utc>,
     pub avatar: serde_json::Value,
+    /// Optional note the requester wrote (already sanitised, max 200 chars).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -158,7 +161,14 @@ pub async fn test_handles(st: &AppState) -> ApiResult<Vec<String>> {
         .await?)
 }
 
-pub async fn request(st: &AppState, me: &Person, handle: &str) -> ApiResult<RequestOutcome> {
+pub const REQUEST_MESSAGE_MAX: usize = 200;
+
+pub async fn request(
+    st: &AppState,
+    me: &Person,
+    handle: &str,
+    message: Option<&str>,
+) -> ApiResult<RequestOutcome> {
     crate::features::require(
         st,
         "friend_requests",
@@ -190,7 +200,21 @@ pub async fn request(st: &AppState, me: &Person, handle: &str) -> ApiResult<Requ
     .await?;
     match existing {
         Some((s, _)) if s == "accepted" => return Ok(RequestOutcome::Accepted),
-        Some((_, by)) if by == me.id => return Ok(RequestOutcome::Pending),
+        Some((_, by)) if by == me.id => {
+            if let Some(msg) = sanitize_request_message(message) {
+                sqlx::query(
+                    "UPDATE friendships SET message = $3
+                     WHERE user_a = $1 AND user_b = $2 AND status = 'pending' AND requested_by = $4",
+                )
+                .bind(a)
+                .bind(b)
+                .bind(&msg)
+                .bind(me.id)
+                .execute(&st.db)
+                .await?;
+            }
+            return Ok(RequestOutcome::Pending);
+        }
         Some(_) => {
             // They already asked me: asking back accepts.
             accept(st, me, &other).await?;
@@ -213,10 +237,12 @@ pub async fn request(st: &AppState, me: &Person, handle: &str) -> ApiResult<Requ
             "Too many friend requests. Try again later.",
         ));
     }
-    sqlx::query("INSERT INTO friendships(user_a, user_b, status, requested_by) VALUES($1, $2, 'pending', $3) ON CONFLICT DO NOTHING")
+    let msg = sanitize_request_message(message);
+    sqlx::query("INSERT INTO friendships(user_a, user_b, status, requested_by, message) VALUES($1, $2, 'pending', $3, $4) ON CONFLICT DO NOTHING")
         .bind(a)
         .bind(b)
         .bind(me.id)
+        .bind(&msg)
         .execute(&st.db)
         .await?;
     st.hub.send(
@@ -224,9 +250,10 @@ pub async fn request(st: &AppState, me: &Person, handle: &str) -> ApiResult<Requ
         ServerMsg::FriendRequest {
             handle: me.handle.clone(),
             display_name: me.display_name.clone(),
+            message: msg.clone(),
         },
     );
-    maybe_mail_request(st, me, &other).await;
+    maybe_mail_request(st, me, &other, msg.as_deref()).await;
     Ok(RequestOutcome::Pending)
 }
 
@@ -394,9 +421,10 @@ pub async fn list(st: &AppState, me: Uuid) -> ApiResult<FriendsList> {
         Uuid,
         DateTime<Utc>,
         Option<DateTime<Utc>>,
+        Option<String>,
     );
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT u.id, u.handle, u.display_name, f.status, f.requested_by, f.created_at, f.accepted_at
+        "SELECT u.id, u.handle, u.display_name, f.status, f.requested_by, f.created_at, f.accepted_at, f.message
          FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END
          WHERE (f.user_a = $1 OR f.user_b = $1) AND u.deleted_at IS NULL AND u.banned_at IS NULL AND u.delete_after IS NULL
          ORDER BY lower(u.handle)",
@@ -418,7 +446,7 @@ pub async fn list(st: &AppState, me: Uuid) -> ApiResult<FriendsList> {
             .unwrap_or_else(|| crate::avatars::avatar_json(*id, None, None, None))
     };
     let mut out = FriendsList::default();
-    for (id, handle, display_name, status, by, created, accepted) in rows {
+    for (id, handle, display_name, status, by, created, accepted, message) in rows {
         if status == "accepted" {
             out.friends.push(FriendView {
                 presence: pres.get(&id).cloned().unwrap_or_default(),
@@ -433,6 +461,7 @@ pub async fn list(st: &AppState, me: Uuid) -> ApiResult<FriendsList> {
                 display_name,
                 created_at: created,
                 avatar: av(&id),
+                message,
             });
         } else {
             out.incoming.push(RequestView {
@@ -440,6 +469,7 @@ pub async fn list(st: &AppState, me: Uuid) -> ApiResult<FriendsList> {
                 display_name,
                 created_at: created,
                 avatar: av(&id),
+                message,
             });
         }
     }
@@ -465,8 +495,8 @@ const FRIEND_REQUEST_MAIL_PER_DAY: i64 = 20;
 
 /// Email the recipient about a new friend request when their preference allows it.
 /// Failures are logged only; requesting never waits on mail.
-async fn maybe_mail_request(st: &AppState, from: &Person, to: &Person) {
-    if let Err(e) = try_mail_request(st, from, to).await {
+async fn maybe_mail_request(st: &AppState, from: &Person, to: &Person, message: Option<&str>) {
+    if let Err(e) = try_mail_request(st, from, to, message).await {
         tracing::info!(
             from = %from.handle,
             to = %to.handle,
@@ -476,7 +506,12 @@ async fn maybe_mail_request(st: &AppState, from: &Person, to: &Person) {
     }
 }
 
-async fn try_mail_request(st: &AppState, from: &Person, to: &Person) -> ApiResult<()> {
+async fn try_mail_request(
+    st: &AppState,
+    from: &Person,
+    to: &Person,
+    message: Option<&str>,
+) -> ApiResult<()> {
     // Test accounts: only mail when both sides are test (so real users never get
     // mail from hidden test accounts, and we can still exercise the path).
     let (from_test, to_test): (bool, bool) = sqlx::query_as(
@@ -546,6 +581,7 @@ async fn try_mail_request(st: &AppState, from: &Person, to: &Person) -> ApiResul
         &from.handle,
         &friends_url,
         &off_url,
+        message,
     );
     crate::mailer::send_email(st, &email, &e);
     sqlx::query(
@@ -557,4 +593,40 @@ async fn try_mail_request(st: &AppState, from: &Person, to: &Person) -> ApiResul
     .execute(&st.db)
     .await?;
     Ok(())
+}
+
+/// Trim, drop control characters, cap at [`REQUEST_MESSAGE_MAX`]. Empty after that is `None`.
+pub fn sanitize_request_message(message: Option<&str>) -> Option<String> {
+    let raw = message.unwrap_or("").trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let cleaned: String = raw
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(REQUEST_MESSAGE_MAX)
+        .collect();
+    let cleaned = cleaned.trim().to_string();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+#[cfg(test)]
+mod sanitize_tests {
+    use super::sanitize_request_message;
+
+    #[test]
+    fn drops_controls_and_caps_length() {
+        assert_eq!(sanitize_request_message(None), None);
+        assert_eq!(sanitize_request_message(Some("   ")), None);
+        assert_eq!(
+            sanitize_request_message(Some("  hi\u{7} there  ")).as_deref(),
+            Some("hi there")
+        );
+        let long = "a".repeat(250);
+        assert_eq!(sanitize_request_message(Some(&long)).unwrap().len(), 200);
+    }
 }

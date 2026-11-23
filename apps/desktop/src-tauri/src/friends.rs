@@ -51,7 +51,7 @@ pub struct FriendsShared {
     dirty: AtomicBool,
 }
 
-fn setting(app: &AppHandle, k: &str) -> Option<String> {
+pub(crate) fn setting(app: &AppHandle, k: &str) -> Option<String> {
     let st = app.state::<AppState>();
     let e = st.engine.lock_ok();
     e.tracker.store.get_setting(k).ok().flatten()
@@ -104,7 +104,17 @@ pub fn my_presence(app: &AppHandle) -> MyPresence {
         detail: n.detail.filter(|_| share),
         hidden: !share,
     });
-    MyPresence { status, game }
+    let custom_on = setting(app, "custom_on").as_deref() == Some("1");
+    let custom_status = if custom_on {
+        setting(app, "custom_status").filter(|t| !t.trim().is_empty())
+    } else {
+        None
+    };
+    MyPresence {
+        status,
+        game,
+        custom_status,
+    }
 }
 
 /// beta.5: the user's own name for a program they added, so their own profile shows
@@ -169,6 +179,10 @@ pub fn should_toast(
 /// "<name> logged on": they were offline in our list and are now online/away.
 pub fn signed_on(old: Option<&str>, new: &str) -> bool {
     old == Some("offline") && matches!(new, "online" | "away")
+}
+
+pub fn signed_off(old: Option<&str>, new: &str) -> bool {
+    matches!(old, Some("online") | Some("away")) && new == "offline"
 }
 
 pub fn should_toast_logon(
@@ -480,6 +494,7 @@ pub fn apply_presence(list: &mut Value, p: &FriendPresence) {
                     "game_name": p.game_name,
                     "game_detail": p.game_detail,
                     "session_started_at": p.session_started_at,
+                    "custom_status": p.custom_status,
                 });
             }
         }
@@ -552,10 +567,16 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
                     },
                 );
             }
+            if signed_on(was.as_deref(), &p.status) {
+                crate::sounds::maybe_play(app, "signin");
+            } else if signed_off(was.as_deref(), &p.status) {
+                crate::sounds::maybe_play(app, "signout");
+            }
         }
         Event::FriendRequest {
             handle,
             display_name,
+            message,
         } => {
             refresh(app, client);
             let p = prefs(app);
@@ -576,7 +597,8 @@ fn handle(app: &AppHandle, client: &Client, ev: Event) {
                         game_id: String::new(),
                         game: format!("@{handle}"),
                         icon: None,
-                        detail: String::new(),
+                        detail: message.clone().unwrap_or_default(),
+                        message: message.unwrap_or_default(),
                         ..Default::default()
                     },
                 );
@@ -627,6 +649,7 @@ mod tests {
             game_name: Some("Dota 2".into()),
             game_detail: None,
             session_started_at: None,
+            custom_status: None,
         }
     }
     fn prefs() -> ToastPrefs {
@@ -645,6 +668,10 @@ mod tests {
         assert!(!signed_on(None, "online")); // first snapshot: no toast
         assert!(!signed_on(Some("online"), "online"));
         assert!(!signed_on(Some("offline"), "offline"));
+        assert!(signed_off(Some("online"), "offline"));
+        assert!(signed_off(Some("away"), "offline"));
+        assert!(!signed_off(Some("offline"), "offline"));
+        assert!(!signed_off(None, "offline"));
         assert!(should_toast_logon("a", &prefs(), false, None, 1000));
         assert!(!should_toast_logon("a", &prefs(), true, None, 1000));
     }

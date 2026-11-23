@@ -26,6 +26,7 @@ fn main() {
     sock.send_presence(&MyPresence {
         status: a[2].clone(),
         game,
+        custom_status: None,
     })
     .expect("send");
     let mut last_ping = Instant::now();

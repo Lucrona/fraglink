@@ -627,9 +627,10 @@ html[class*=theme-flat] body.skin-dark .xf-win:has(#status-btn[data-st=away]) #p
 html[class*=theme-flat] body.skin-dark .xf-win:has(#status-btn[data-st=busy]) #px-av::after { background: var(--fbusy); }
 html[class*=theme-flat] body.skin-dark .xf-win:has(#status-btn[data-st=offline]) #px-av::after { background: var(--foff); }
 html[class*=theme-flat] body.skin-dark .xf-identity #px-user { display: block; max-width: calc(100% - 20px); font-size: 14px; line-height: 16px; }
-html[class*=theme-flat] body.skin-dark .xf-status { top: 98px; left: 58px; right: auto; width: 160px; height: 18px; background: none; border: 0; z-index: 2; }
+/* left = identity 10px + padding-left 50px; right = identity 10px + padding-right 8px; top = identity top + padding-top 8px + name line-height 16px */
+html[class*=theme-flat] body.skin-dark .xf-status { top: 99px; left: 60px; right: 18px; width: auto; height: 18px; background: none; border: 0; z-index: 2; }
 html[class*=theme-flat] body.skin-dark .xf-status-field { position: absolute; inset: 0; background: none; border: 0; border-radius: 3px; box-shadow: none; }
-html[class*=theme-flat] body.skin-dark .st-btn { font: 12px/18px var(--flat-font); color: var(--fmut); height: 18px; width: 100%; padding: 0 16px 0 0; text-align: left; background: none; }
+html[class*=theme-flat] body.skin-dark .st-btn { font: 12px/18px var(--flat-font); color: var(--fmut); height: 18px; width: 100%; padding: 0; text-align: left; background: none; }
 html[class*=theme-flat] body.skin-dark .st-btn .st-gi, html[class*=theme-flat] body.skin-dark .st-btn .st-gi img { width: 16px; height: 16px; border-radius: 4px; }
 html[class*=theme-flat] body.skin-dark .xf-status-arrow { top: 3px; left: auto; right: 0; width: 12px; height: 13px; background: none; border: 0; box-shadow: none; }
 html[class*=theme-flat] body.skin-dark .xf-status-arrow::after { border-top-color: var(--ftx); }
@@ -648,7 +649,7 @@ html[class*=theme-flat] body.skin-dark .xf-list { left: 56px; right: 10px; top: 
 html[class*=theme-flat] body.skin-dark.has-news .dk-vtabs { top: 157px; }
 html[class*=theme-flat] body.skin-dark.has-news .xf-list { top: 157px; }
 html[class*=theme-flat] body.skin-dark.has-news .xf-identity { top: 99px; }
-html[class*=theme-flat] body.skin-dark.has-news .xf-status { top: 122px; }
+html[class*=theme-flat] body.skin-dark.has-news .xf-status { top: 123px; }
 html[class*=theme-flat] body.skin-dark .xf-grid { padding: 0 6px; box-sizing: border-box; font-size: 13px; }
 html[class*=theme-flat] body.skin-dark .xf-head { margin: 0 -6px; height: auto; padding: 5px 8px; background: var(--f3); border: 0; color: var(--fmut); font: 700 11px/13px var(--flat-font); letter-spacing: .04em; text-transform: uppercase; }
 html[class*=theme-flat] body.skin-dark .xf-head span { padding-left: 6px; background: none; color: var(--fmut); }
@@ -775,7 +776,10 @@ html[class*=theme-flat] body.skin-dark #menubar .xf-menu > span { color: var(--f
 html[class*=theme-flat] body.skin-dark #menubar .xf-menu:hover > span, html[class*=theme-flat] body.skin-dark #menubar .xf-menu.open > span { color: var(--ftx) !important; background: var(--f3); }
 html[class*=theme-flat] body.skin-dark #menubar .xf-menu > span u { text-decoration: none; }
 html[class*=theme-flat] body.skin-dark .xf-status .st-btn::before { display: none; }
-html[class*=theme-flat] body.skin-dark .xf-status .st-btn span { flex: 0 1 auto; text-align: left; padding-right: 0; color: var(--fmut); }
+html[class*=theme-flat] body.skin-dark .xf-status .st-btn { display: flex; align-items: center; justify-content: flex-start; padding: 0; }
+html[class*=theme-flat] body.skin-dark .xf-status .st-btn span { display: flex; align-items: center; justify-content: flex-start; flex: 1 1 auto; min-width: 0; max-width: 100%; text-align: left; padding-right: 0; color: var(--fmut); overflow: hidden; }
+html[class*=theme-flat] body.skin-dark .xf-status .st-btn span .st-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: inherit; }
+html[class*=theme-flat] body.skin-dark .xf-status .st-btn span::after { flex: none; }
 html[class*=theme-flat] body.skin-dark .xf-status .st-btn[data-st=away] span { color: var(--faway); }
 /* beta.9: the arrow lives on the span, the only part of the status bar that takes clicks (.xf-status is pointer-events:none), so clicking it opens the menu. */
 html[class*=theme-flat] body.skin-dark .xf-status .st-btn span { cursor: pointer; }

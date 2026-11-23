@@ -1374,6 +1374,10 @@ pub fn person(a: &AuthUser) -> friends::Person {
 #[derive(Deserialize)]
 pub struct HandleReq {
     pub handle: String,
+    /// Optional personal message with a friend request (max 200 chars). Older
+    /// clients omit it.
+    #[serde(default)]
+    pub message: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1397,7 +1401,7 @@ async fn friend_request(
 ) -> ApiResult<Json<Value>> {
     check_origin(&a, &headers, &st)?;
     st.rate_limit(format!("friendreq:{}", a.user.id), 30, 60 * MINUTE)?;
-    let outcome = friends::request(&st, &person(&a), &r.handle).await?;
+    let outcome = friends::request(&st, &person(&a), &r.handle, r.message.as_deref()).await?;
     Ok(Json(json!({ "status": outcome })))
 }
 

@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Fraglink",
-  "version": "0.3.0-beta.10.1",
+  "version": "0.3.0-beta.11",
   "identifier": "gg.fraglink.desktop",
+  "mainBinaryName": "fraglink",
   "build": {
     "frontendDist": "../ui"
   },
@@ -68,7 +69,7 @@
         "startMenuFolder": "Fraglink"
       },
       "wix": {
-        "version": "0.3.0.101"
+        "version": "0.3.0.110"
       }
     },
     "createUpdaterArtifacts": true

@@ -261,10 +261,12 @@
   // A game the server can't name yet (a program someone tagged that isn't on Fraglink's
   // list): friends just see "Playing a game" (the server sends game_id "unlisted").
   const UNLISTED = 'unlisted';
+  const customOf = f => ((f.presence && f.presence.custom_status) || f.custom || '').trim();
   function statusText(f) {
     if ((f.kind === 'playing' || f.kind === 'fof') && f.game === UNLISTED) return 'Playing a game' + (f.away ? ' (Away)' : '');
     if (f.kind === 'playing' || f.kind === 'fof') return GAMES[f.game].name + (f.away ? ' (Away)' : '');
-    if (f.kind === 'online' || f.kind === 'req' || f.kind === 'out') return f.status;
+    if (f.kind === 'online') return customOf(f) || f.status;
+    if (f.kind === 'req' || f.kind === 'out') return f.status;
     return 'Offline';
   }
   function row(f, cls = '') {
@@ -346,10 +348,10 @@
     for (const f of l.friends || []) {
       const p = f.presence || {}, name = f.display_name || f.handle, base = { id: 'u:' + f.handle, handle: f.handle, name, avatar: f.avatar, real: true, since: f.since, presence: p, week: 0, total: 0 };
       if (p.status !== 'offline' && p.game_id) out.push({ ...base, kind: 'playing', game: ensureGame(p.game_id, p.game_name), detail: p.game_detail || '', server: sinceText(p.session_started_at), info: '', away: p.status === 'away' });
-      else if (p.status === 'online' || p.status === 'away') out.push({ ...base, kind: 'online', status: p.status === 'away' ? 'Away' : 'Online' });
+      else if (p.status === 'online' || p.status === 'away') out.push({ ...base, kind: 'online', status: p.status === 'away' ? 'Away' : 'Online', custom: p.custom_status || '' });
       else out.push({ ...base, kind: 'off', last: '' });
     }
-    for (const q of l.incoming || []) out.push({ id: 'u:' + q.handle, handle: q.handle, avatar: q.avatar, name: q.display_name || q.handle, kind: 'req', status: 'Wants to add you', info: '', real: true, incoming: true });
+    for (const q of l.incoming || []) out.push({ id: 'u:' + q.handle, handle: q.handle, avatar: q.avatar, name: q.display_name || q.handle, kind: 'req', status: 'Wants to add you', info: q.message || '', message: q.message || '', real: true, incoming: true });
     for (const q of l.outgoing || []) out.push({ id: 'u:' + q.handle, handle: q.handle, avatar: q.avatar, name: q.display_name || q.handle, kind: 'out', status: 'Request sent', info: '', real: true });
     return out;
   }
@@ -713,7 +715,10 @@
   function friendStatus(f) {
     const playing = f.kind === 'playing' || f.kind === 'fof';
     if (playing) return f.away ? ['away', 'In game · Away'] : ['game', 'In game'];
-    if (f.kind === 'online') return f.status === 'Away' ? ['away', 'Away'] : ['on', 'Online'];
+    if (f.kind === 'online') {
+      const c = customOf(f);
+      return f.status === 'Away' ? ['away', c ? 'Away · ' + c : 'Away'] : ['on', c || 'Online'];
+    }
     if (f.kind === 'req') return ['off', 'Friend request'];
     if (f.kind === 'out') return ['off', 'Request sent'];
     return ['off', 'Offline'];
@@ -733,12 +738,13 @@
     const [dot, stText] = friendStatus(f);
     const since = f.since ? 'Friends since ' + new Date(f.since).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
     let h = `<div class="sf-head" data-tip="${esc(since)}">${avatarHtml(f, 48)}<div class="sf-id"><div class="sf-name">${esc(f.name)}</div>${f.handle || f.real ? `<div class="sf-user">@${H}</div>` : ''}<div class="sf-st"><i class="sf-dot ${dot}"></i>${esc(stText)}</div></div></div>`;
-    if (f.kind === 'req') return h + `<p class="sf-note">Wants to be your friend.</p><div class="sf-foot"><button class="dk-btn" data-action="friend-accept" data-handle="${H}">Accept</button><button class="dk-btn" data-action="friend-decline" data-handle="${H}">Decline</button><a class="sf-small" data-action="friend-block" data-handle="${H}">Block</a></div>`;
+    if (f.kind === 'req') return h + `<p class="sf-note">Wants to be your friend.</p>${f.message ? `<p class="sf-note sf-msg">“${esc(f.message)}”</p>` : ''}<div class="sf-foot"><button class="dk-btn" data-action="friend-accept" data-handle="${H}">Accept</button><button class="dk-btn" data-action="friend-decline" data-handle="${H}">Decline</button><a class="sf-small" data-action="friend-block" data-handle="${H}">Block</a></div>`;
     if (f.kind === 'out') return h + `<p class="sf-note">Friend request sent. They'll show up here once they accept.</p><div class="sf-foot"><a class="sf-small" data-action="friend-remove" data-handle="${H}">Cancel request</a></div>`;
     if (playing) {
       h += sfSec('Playing Game') + `<div class="sf-game"><i class="gi sf-gi">${friendGameIcon(f.game)}</i><div class="sf-gn"><b data-tip="${esc(gameLabel(f))}">${esc(gameLabel(f))}</b></div></div>`;
       if (realmOf(f)) h += kv('Realm', esc(realmOf(f)));
     }
+    if (customOf(f) && f.kind !== 'req' && f.kind !== 'out') h += kv('Status', esc(customOf(f)));
     if (f.kind === 'off' && f.last) h += kv('Last online', esc(f.last));
     if (f.kind === 'fof') {
       const m = mutualOf(f);
@@ -1208,7 +1214,7 @@
       if (rel === 'friend' || rel === 'out') { Object.assign(A, { out: rel === 'friend' ? `${h} is already your friend.` : `Request already sent to ${h}.`, bad: true }); renderAddFriend(); return; }
       Object.assign(A, { busy: true, out: '', bad: false }); renderAddFriend();
       try {
-        const r = await FLB.friendAdd(h);
+        const r = await FLB.friendAdd(h, A.msg);
         if (state.addFriend !== A) return;
         state.addFriend = null; render();
         flash(r === 'accepted' ? (rel === 'in' ? `You and ${h} are now friends.` : `${h} is already your friend.`) : `Friend request sent to ${h}.`);
@@ -1535,7 +1541,7 @@
     const btn = $('#status-btn'), np = LIVE.glance && LIVE.glance.now_playing, custom = SET().custom_status || '';
     const customOn = SET().custom_on === '1' && custom;
     btn.disabled = signedOut();
-    if (btn.disabled) { btn.querySelector('span').textContent = 'Offline'; btn.dataset.user = '(Offline)'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
+    if (btn.disabled) { btn.querySelector('span').innerHTML = '<b class="st-txt">Offline</b>'; btn.dataset.user = '(Offline)'; $('#username').textContent = '(Offline)'; if ($('#px-user')) $('#px-user').textContent = '(Offline)'; return; }
     const auto = myStatus === 'online' && autoAway, game = np && setOn('share_game') ? np.name : '';
     const txt = auto ? (game ? game + ' (Away)' : 'Away') : myStatus === 'away' ? 'Away' : myStatus === 'invisible' ? 'Invisible' : customOn ? custom : game ? game : 'Online';
     // hover: the game with its detail (WoW realm), e.g. "Playing World of Warcraft: Forever · Frostmourne"
@@ -1543,7 +1549,7 @@
     const tipTxt = detail && txt.includes(game) ? txt.replace(game, game + detail) : txt;
     // the game's 16 px icon and its name (no "Playing"; the hover says it), nothing when not in a game
     const stIcon = game && txt.startsWith(game) ? `<i class="st-gi">${gameIcon(ensureGame(np.game_id, np.name))}</i>` : '';
-    btn.querySelector('span').innerHTML = stIcon + esc(txt); btn.dataset.tip = (detail ? '' : game && txt.startsWith(game) ? 'Playing ' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
+    btn.querySelector('span').innerHTML = stIcon + `<b class="st-txt">${esc(txt)}</b>`; btn.dataset.tip = (detail ? '' : game && txt.startsWith(game) ? 'Playing ' : 'Status: ') + tipTxt + (auto ? ' (no keyboard or mouse input for 10 minutes)' : '');
     btn.dataset.st = shownStatus();
     const me = realMode() && LIVE.friends.me ? LIVE.friends.me : ME.name;
     // nickname shown, username (permanent) in the hover; click either to change the nickname
@@ -1587,7 +1593,7 @@
     const r = btn.getBoundingClientRect(); // viewport px (already includes the text-size zoom)
     showMenu(items, r.left, r.bottom, id => {
       if (id === 'custom') {
-        notice('Set Custom Status', `Shown under your name in this window. <em>(Friends see it in a later update.)</em><br><input id="custom-status" maxlength="60" value="${esc(SET().custom_status || '')}" autocomplete="off" />`, [{ label: 'Cancel', action: 'notice-close' }, { label: 'OK', action: 'custom-status-go', primary: true }]);
+        notice('Set Custom Status', `Shown under your name, and your friends can see it too.<br><input id="custom-status" maxlength="60" value="${esc(SET().custom_status || '')}" autocomplete="off" />`, [{ label: 'Cancel', action: 'notice-close' }, { label: 'OK', action: 'custom-status-go', primary: true }]);
         setTimeout(() => $('#custom-status') && $('#custom-status').focus(), 0);
       } else if (id === 'looking') useCustom(LOOKING);
       else if (id.startsWith('h:')) useCustom(hist[+id.slice(2)]);
