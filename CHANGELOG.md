@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0-beta.11.2] - 2026-11-23
+
+### Fixes
+- If an update was already sitting ready, choosing Update in the tray could install that older copy instead of checking again. It now always checks for the latest and only installs that.
+
 ## [0.3.0-beta.11.1] - 2026-11-23
 
 ### Fixes
