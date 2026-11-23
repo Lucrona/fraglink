@@ -129,6 +129,7 @@ pub async fn insert_sql(
     st: &AppState,
     e: New,
 ) -> Result<i64, sqlx::Error> {
+    let e = with_name(st, e).await;
     let list = e_list(&e, st);
     sqlx::query_scalar(
         "INSERT INTO game_catalogue_history
@@ -148,6 +149,83 @@ pub async fn insert_sql(
     .bind(&list)
     .fetch_one(&mut **tx)
     .await
+}
+
+/// Put the game's shown name in for its raw id, in the summary as well
+/// ("Updated icon for steam:4705510" -> "Updated icon for Happy Wheels").
+pub fn named_summary(summary: &str, id: &str, name: &str) -> String {
+    if id.is_empty() || name.is_empty() || name == UNLISTED_TITLE {
+        return summary.to_string();
+    }
+    // whole ids only ("cs" must not touch "icons"), and keep within the 300-char limit
+    let part = |c: char| c.is_alphanumeric() || matches!(c, '_' | ':' | '-' | '.');
+    let mut out = String::with_capacity(summary.len());
+    let mut rest = summary;
+    while let Some(i) = rest.find(id) {
+        let before = rest[..i].chars().next_back();
+        let after = rest[i + id.len()..].chars().next();
+        let bounded_after = match after {
+            None => true,
+            // a trailing full stop ends the sentence, it isn't part of the id
+            Some('.') => rest[i + id.len() + 1..]
+                .chars()
+                .next()
+                .is_none_or(|c| !part(c)),
+            Some(c) => !part(c),
+        };
+        out.push_str(&rest[..i]);
+        if before.is_none_or(|c| !part(c)) && bounded_after {
+            out.push_str(name);
+        } else {
+            out.push_str(id);
+        }
+        rest = &rest[i + id.len()..];
+    }
+    out.push_str(rest);
+    if out.chars().count() > 300 {
+        return summary.to_string();
+    }
+    out
+}
+
+/// A row recorded with a game id but no name gets the game's public name.
+async fn with_name(st: &AppState, mut e: New) -> New {
+    if e.game_name.is_none() {
+        if let Some(id) = e.game_id.clone() {
+            if let Ok(Some(n)) = crate::names::public_name(st, &id).await {
+                if !n.is_empty() && n != UNLISTED_TITLE {
+                    e.summary = named_summary(&e.summary, &id, &n);
+                    e.game_name = Some(n);
+                }
+            }
+        }
+    }
+    e
+}
+
+/// Read-time fill for rows stored without a name (nothing is rewritten).
+async fn fill_names(st: &AppState, rows: &mut [HistRow]) {
+    let ids: Vec<String> = rows
+        .iter()
+        .filter(|r| r.6.is_none())
+        .filter_map(|r| r.5.clone())
+        .collect();
+    if ids.is_empty() {
+        return;
+    }
+    let Ok(names) = crate::names::public_names(st, &ids).await else {
+        return;
+    };
+    for r in rows.iter_mut().filter(|r| r.6.is_none()) {
+        let Some(id) = r.5.clone() else { continue };
+        if let Some(n) = names
+            .get(&id)
+            .filter(|n| !n.is_empty() && **n != UNLISTED_TITLE)
+        {
+            r.7 = named_summary(&r.7, &id, n);
+            r.6 = Some(n.clone());
+        }
+    }
 }
 
 fn e_list(e: &New, st: &AppState) -> Option<String> {
@@ -461,7 +539,7 @@ async fn admin_list(
     .bind(typ)
     .fetch_one(&st.db)
     .await?;
-    let rows: Vec<HistRow> = sqlx::query_as(
+    let mut rows: Vec<HistRow> = sqlx::query_as(
         "SELECT id, created_at, actor_kind, actor_label, action, game_id, game_name,
                 summary, diff, public, hidden_from_public, list_updated
          FROM game_catalogue_history
@@ -476,6 +554,7 @@ async fn admin_list(
     .bind(offset)
     .fetch_all(&st.db)
     .await?;
+    fill_names(&st, &mut rows).await;
     Ok(Json(json!({
         "entries": rows.into_iter().map(to_json).collect::<Vec<_>>(),
         "total": total,
@@ -567,7 +646,7 @@ async fn public_updates(
     Query(q): Query<ListQ>,
 ) -> ApiResult<Json<Value>> {
     let (_, limit) = page(&q, PUBLIC_UPDATES, 20);
-    let rows: Vec<HistRow> = sqlx::query_as(
+    let mut rows: Vec<HistRow> = sqlx::query_as(
         "SELECT id, created_at, actor_kind, actor_label, action, game_id, game_name,
                 summary, diff, public, hidden_from_public, list_updated
          FROM game_catalogue_history
@@ -578,6 +657,7 @@ async fn public_updates(
     .bind(limit)
     .fetch_all(&st.db)
     .await?;
+    fill_names(&st, &mut rows).await;
     // Public payload: no actor handles, no hidden flags, no staff-only diffs for detection etc.
     // Manual and added/renamed/icon diffs are names and icons only.
     let entries: Vec<Value> = rows
@@ -771,4 +851,44 @@ pub async fn public_catalogue(st: &AppState) -> ApiResult<Vec<CatalogueEntry>> {
     // Public catalogue steam ids plus every games-table steam_appid (including hidden rows).
     crate::home::remember_art_appids(st, appids.values().copied());
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::named_summary;
+
+    #[test]
+    fn named_summary_swaps_whole_ids_only() {
+        assert_eq!(
+            named_summary(
+                "Updated icon for steam:4705510",
+                "steam:4705510",
+                "Happy Wheels"
+            ),
+            "Updated icon for Happy Wheels"
+        );
+        assert_eq!(
+            named_summary("Renamed steam:4705510.", "steam:4705510", "Happy Wheels"),
+            "Renamed Happy Wheels."
+        );
+        // part of a longer id or word: left alone
+        assert_eq!(
+            named_summary("Updated icon for steam:47055100", "steam:4705510", "X"),
+            "Updated icon for steam:47055100"
+        );
+        assert_eq!(
+            named_summary("Updated icon for on", "on", "Onward"),
+            "Updated icon for Onward"
+        );
+        assert_eq!(named_summary("Updated icon", "", "X"), "Updated icon");
+        assert_eq!(
+            named_summary("Updated icon for a", "a", ""),
+            "Updated icon for a"
+        );
+        let long = "n".repeat(300);
+        assert_eq!(
+            named_summary("Updated icon for a", "a", &long),
+            "Updated icon for a"
+        );
+    }
 }

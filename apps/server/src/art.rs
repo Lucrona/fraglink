@@ -5,7 +5,9 @@
 //! Sources, first hit wins:
 //! 1. an admin override (Games admin: upload or URL), kept until removed,
 //! 2. Steam's store header for the game's Steam app id (our `games` table, the
-//!    detectable list's Steam SKUs, or `steam:<appid>` ids),
+//!    detectable list's Steam SKUs, or `steam:<appid>` ids). Newer Steam apps have no
+//!    `<appid>/header.jpg`, so the `header_image` URL the game page warmer stored for
+//!    that app is tried next (Steam image hosts only, see [`stored_header_ok`]),
 //! 3. the game's cover image (or splash) from its entry in the Discord application
 //!    directory (covers Battle.net, Star Citizen, Riot, Epic-only games...),
 //!
@@ -123,6 +125,61 @@ pub async fn fetch(url: &str) -> Option<Vec<u8>> {
     (b.len() <= MAX_FETCH).then(|| b.to_vec())
 }
 
+/// Hosts Steam serves store art from.
+const STEAM_IMAGE_HOSTS: [&str; 7] = [
+    "shared.akamai.steamstatic.com",
+    "shared.fastly.steamstatic.com",
+    "shared.cloudflare.steamstatic.com",
+    "cdn.akamai.steamstatic.com",
+    "cdn.fastly.steamstatic.com",
+    "cdn.cloudflare.steamstatic.com",
+    "steamcdn-a.akamaihd.net",
+];
+
+/// A stored header URL we're willing to fetch for `appid`: https on a Steam image host
+/// (or the configured art CDN's own origin, for mirrors and tests), no credentials or
+/// odd ports, and a `.jpg` under that same app's folder.
+pub fn stored_header_ok(url: &str, appid: u32, art_cdn: &str) -> bool {
+    let Ok(u) = url::Url::parse(url) else {
+        return false;
+    };
+    if !u.username().is_empty() || u.password().is_some() {
+        return false;
+    }
+    let host = u.host_str().unwrap_or("");
+    let steam = u.scheme() == "https" && u.port().is_none() && STEAM_IMAGE_HOSTS.contains(&host);
+    let mirror = url::Url::parse(art_cdn).ok().is_some_and(|c| {
+        c.scheme() == u.scheme()
+            && c.host_str() == u.host_str()
+            && c.port_or_known_default() == u.port_or_known_default()
+    });
+    if !(steam || mirror) {
+        return false;
+    }
+    let p = u.path();
+    let legacy = format!("/steam/apps/{appid}/");
+    let assets = format!("/store_item_assets/steam/apps/{appid}/");
+    (p.starts_with(&legacy) || p.starts_with(&assets)) && p.ends_with(".jpg") && !p.contains("..")
+}
+
+/// The store header URL the game page warmer saved for this Steam app, if it passes
+/// [`stored_header_ok`]. Read-only; no Steam call.
+pub async fn stored_header_url(st: &AppState, appid: u32) -> Option<String> {
+    let url: Option<String> = sqlx::query_scalar(
+        "SELECT details_json->>'header_image' FROM game_feed_cache
+         WHERE steam_appid = $1 AND details_ok IS TRUE
+           AND details_json->>'header_image' IS NOT NULL
+         ORDER BY details_fetched_at DESC NULLS LAST
+         LIMIT 1",
+    )
+    .bind(appid as i32)
+    .fetch_optional(&st.db)
+    .await
+    .ok()
+    .flatten();
+    url.filter(|u| stored_header_ok(u, appid, &st.cfg.steam_art_cdn))
+}
+
 /// Cover/splash image URL for a Discord application id (public, no auth).
 pub async fn discord_cover(app_id: &str) -> Option<String> {
     let base = std::env::var("FRAGLINK_DISCORD_API")
@@ -181,6 +238,13 @@ async fn resolve(st: &AppState, id: &str) -> Option<Vec<u8>> {
         if let Some(b) = fetch(&url).await {
             if let Some(j) = normalise(&b) {
                 return Some(j);
+            }
+        }
+        if let Some(url) = stored_header_url(st, appid).await {
+            if let Some(b) = fetch(&url).await {
+                if let Some(j) = normalise(&b) {
+                    return Some(j);
+                }
             }
         }
     }
@@ -294,6 +358,48 @@ pub fn routes() -> axum::Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stored_header_only_on_steam_hosts_for_the_same_app() {
+        let cdn = "https://cdn.cloudflare.steamstatic.com/steam/apps";
+        for ok in [
+            "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/4705510/2a6f/header.jpg?t=1763",
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4705510/header.jpg",
+            "https://cdn.akamai.steamstatic.com/steam/apps/4705510/header.jpg",
+            "https://steamcdn-a.akamaihd.net/steam/apps/4705510/header.jpg",
+        ] {
+            assert!(stored_header_ok(ok, 4705510, cdn), "{ok}");
+        }
+        for bad in [
+            // another app, another host, plain http, odd port, credentials, not a jpg
+            "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/570/header.jpg",
+            "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/47055100/header.jpg",
+            "https://evil.example/store_item_assets/steam/apps/4705510/header.jpg",
+            "https://shared.akamai.steamstatic.com.evil.example/steam/apps/4705510/header.jpg",
+            "http://shared.akamai.steamstatic.com/steam/apps/4705510/header.jpg",
+            "https://shared.akamai.steamstatic.com:8443/steam/apps/4705510/header.jpg",
+            "https://u:p@shared.akamai.steamstatic.com/steam/apps/4705510/header.jpg",
+            "https://shared.akamai.steamstatic.com/steam/apps/4705510/header.png",
+            "https://shared.akamai.steamstatic.com/steam/apps/4705510/../570/header.jpg",
+            "https://127.0.0.1/steam/apps/4705510/header.jpg",
+            "not a url",
+            "",
+        ] {
+            assert!(!stored_header_ok(bad, 4705510, cdn), "{bad}");
+        }
+        // the configured art CDN's own origin (mirrors, tests) is fine, other ports aren't
+        let mirror = "http://127.0.0.1:4000/apps";
+        assert!(stored_header_ok(
+            "http://127.0.0.1:4000/store_item_assets/steam/apps/7/h/header.jpg",
+            7,
+            mirror
+        ));
+        assert!(!stored_header_ok(
+            "http://127.0.0.1:4001/store_item_assets/steam/apps/7/h/header.jpg",
+            7,
+            mirror
+        ));
+    }
     #[test]
     fn crops_to_banner() {
         let img = image::RgbImage::from_pixel(1000, 1000, image::Rgb([10, 20, 30]));
