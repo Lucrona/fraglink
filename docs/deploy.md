@@ -15,7 +15,9 @@ forward fix.
 
 Health check: `GET /api/v1/health` → `{"ok":true,"version":"…"}`.
 
-Desktop auto-updates are served from the same host (`/updates/latest.json`). After
+Desktop auto-updates are served from the same host (`/updates/latest.json`). The website
+Download button uses a stable copy of that installer at `/download/fraglink-setup.exe`
+(`latest.json` and its signatures stay on the versioned filename). After
 CI builds a tagged release:
 
 ```sh

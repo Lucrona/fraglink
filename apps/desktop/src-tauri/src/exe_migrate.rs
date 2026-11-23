@@ -222,10 +222,37 @@ mod tests {
             run_command_needs_rewrite(old, r"D:\Other\Fraglink", neu),
             None
         );
-        // Already the current name.
+        // Already the current name (10.1 and beta.11 both use fraglink.exe).
         assert_eq!(
             run_command_needs_rewrite(
                 r#""C:\Users\Lu\AppData\Local\Fraglink\fraglink.exe""#,
+                dir,
+                neu
+            ),
+            None
+        );
+        // Windows treats Fraglink.exe as the same file; do not rewrite or delete it.
+        assert_eq!(
+            run_command_needs_rewrite(
+                r#""C:\Users\Lu\AppData\Local\Fraglink\Fraglink.exe""#,
+                dir,
+                neu
+            ),
+            None
+        );
+        // Unquoted leftover still rewrites; a current-name key does not.
+        assert_eq!(
+            run_command_needs_rewrite(
+                r"C:\Users\Lu\AppData\Local\Fraglink\fraglink-desktop.exe",
+                dir,
+                neu
+            )
+            .as_deref(),
+            Some(r#""C:\Users\Lu\AppData\Local\Fraglink\fraglink.exe""#)
+        );
+        assert_eq!(
+            run_command_needs_rewrite(
+                r"C:\Users\Lu\AppData\Local\Fraglink\fraglink.exe --minimized",
                 dir,
                 neu
             ),

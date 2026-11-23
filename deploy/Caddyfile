@@ -2,13 +2,40 @@
 
 import /etc/caddy/beta-gate.caddy
 
-(fraglink) {
-	encode gzip
-	# desktop auto-update files (latest.json + signed installers), put there by scripts/publish-update.sh
+# latest.json + signed installers, put there by scripts/publish-update.sh.
+# /updates/fraglink-setup.exe is a stable copy of the current NSIS installer for
+# the website Download button. latest.json still points at the versioned file
+# (and its .sig), so already-installed apps keep updating as before.
+(updates_files) {
 	handle_path /updates/* {
 		root * /var/www/fraglink-updates
+		@setup path /fraglink-setup.exe
+		header @setup Content-Disposition "attachment; filename=\"fraglink-setup.exe\""
+		header @setup Content-Type "application/octet-stream"
+		header @setup Cache-Control "no-cache"
+		@manifest path /latest.json /latest.json.prev
+		header @manifest Cache-Control "no-cache"
 		file_server
 	}
+}
+
+# Same file under a short path on the Download page. Must come before the
+# catch-all that would serve /download as the HTML page.
+(stable_installer) {
+	handle /download/fraglink-setup.exe {
+		root * /var/www/fraglink-updates
+		rewrite * /fraglink-setup.exe
+		header Content-Disposition "attachment; filename=\"fraglink-setup.exe\""
+		header Content-Type "application/octet-stream"
+		header Cache-Control "no-cache"
+		file_server
+	}
+}
+
+(fraglink) {
+	encode gzip
+	import updates_files
+	import stable_installer
 	reverse_proxy 127.0.0.1:8787
 }
 
@@ -60,10 +87,8 @@ playfraglink.com {
 	@page_html path_regexp page_html ^/([a-z0-9_-]+)\.html$
 	redir @page_html /{re.page_html.1} 308
 	# desktop auto-update files (latest.json + signed installers), put there by scripts/publish-update.sh
-	handle_path /updates/* {
-		root * /var/www/fraglink-updates
-		file_server
-	}
+	import updates_files
+	import stable_installer
 	# Brand images (Discord webhook avatars, embed thumbnails/banners), from the media kit.
 	handle /brand/* {
 		root * /var/www/fraglink-site
@@ -164,11 +189,8 @@ Disallow: /
 	handle /api/* {
 		reverse_proxy 127.0.0.1:8787
 	}
-	handle_path /updates/* {
-		root * /var/www/fraglink-updates
-		header Cache-Control "no-cache"
-		file_server
-	}
+	import updates_files
+	import stable_installer
 	# official game icons from the server (/icons/g/ is the preview site's alias)
 	handle /icons/games/* {
 		reverse_proxy 127.0.0.1:8787
