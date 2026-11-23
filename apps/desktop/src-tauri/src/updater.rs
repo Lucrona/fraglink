@@ -198,7 +198,9 @@ async fn detect_games(app: &AppHandle) {
 async fn find(app: &AppHandle) -> Result<Option<Update>, String> {
     app.updater_builder()
         .version_comparator(|current, remote| is_newer(&current, &remote.version))
-        .build()
+        .header("Cache-Control", "no-cache")
+        .and_then(|b| b.header("Pragma", "no-cache"))
+        .and_then(|b| b.build())
         .map_err(|e| e.to_string())?
         .check()
         .await
@@ -363,35 +365,49 @@ pub enum Manual {
     },
 }
 
-/// "Check for Updates": check now; install straight away when there is one.
+/// Re-read latest.json and make `ready` match it. A package already sitting
+/// in memory is discarded when the server has a newer build (the 11.1 miss:
+/// "Restart to Update" / "Check for Updates" installed a staged older copy).
+async fn refresh_ready(app: &AppHandle) -> Result<Option<String>, String> {
+    let found = match tokio::time::timeout(Duration::from_secs(20), find(app)).await {
+        Ok(Ok(u)) => u,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => return Err("The update server didn't answer.".into()),
+    };
+    let Some(up) = found else {
+        if ready_version(app).is_some() {
+            log::info!("discarding staged update; already on the latest");
+            *app.state::<UpdateState>().ready.lock_ok() = None;
+            clear_marker(app);
+        }
+        return Ok(None);
+    };
+    if !should_replace_staged(ready_version(app).as_deref(), &up.version) {
+        return Ok(Some(up.version));
+    }
+    if let Some(old) = ready_version(app) {
+        log::info!("discarding staged update {old}; latest is {}", up.version);
+        *app.state::<UpdateState>().ready.lock_ok() = None;
+        clear_marker(app);
+    }
+    let _ = app.emit(FOUND_EVENT, crate::dev_version(&up.version));
+    if !download_with_progress(app, up, false).await {
+        return Err("The update couldn't be downloaded.".into());
+    }
+    Ok(ready_version(app))
+}
+
+/// "Check for Updates": always re-check latest.json; install that build only.
 pub async fn check_now(app: &AppHandle) -> Manual {
     let current = crate::dev_version(&app.package_info().version.to_string());
     if crate::is_sim(app) {
         return Manual::UpToDate { version: current };
     }
-    if ready_version(app).is_none() {
-        let found = match tokio::time::timeout(Duration::from_secs(20), find(app)).await {
-            Ok(Ok(u)) => u,
-            Ok(Err(e)) => return Manual::Failed { message: e },
-            Err(_) => {
-                return Manual::Failed {
-                    message: "The update server didn't answer.".into(),
-                }
-            }
-        };
-        let Some(up) = found else {
-            return Manual::UpToDate { version: current };
-        };
-        let _ = app.emit(FOUND_EVENT, crate::dev_version(&up.version));
-        if !download_with_progress(app, up, false).await {
-            return Manual::Failed {
-                message: "The update couldn't be downloaded.".into(),
-            };
-        }
-    }
-    let version = ready_version(app)
-        .map(|v| crate::dev_version(&v))
-        .unwrap_or_default();
+    let version = match refresh_ready(app).await {
+        Ok(Some(v)) => crate::dev_version(&v),
+        Ok(None) => return Manual::UpToDate { version: current },
+        Err(message) => return Manual::Failed { message },
+    };
     let app2 = app.clone();
     // install after this answer reaches the UI
     tauri::async_runtime::spawn(async move {
@@ -410,9 +426,10 @@ pub fn update_available(app: AppHandle) -> Option<String> {
     ready_version(&app)
 }
 
-/// Title-bar arrow / tray item: install the ready update and restart, no questions.
+/// Title-bar arrow / toast: re-check latest.json, then install that build.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    refresh_ready(&app).await?;
     install(&app).await
 }
 
@@ -422,10 +439,14 @@ pub async fn check_for_updates(app: AppHandle) -> Manual {
     check_now(&app).await
 }
 
-/// Tray "Restart to Update".
+/// Tray "Restart to Update": re-check latest.json first, then install that build.
 pub fn install_from_tray(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        if let Err(e) = refresh_ready(&app).await {
+            log::warn!("update re-check failed: {e}");
+            return;
+        }
         if let Err(e) = install(&app).await {
             log::warn!("update install failed: {e}");
         }
@@ -462,9 +483,17 @@ pub fn is_newer(current: &semver::Version, remote: &semver::Version) -> bool {
     remote > current
 }
 
+/// Drop a staged package unless it is exactly the build latest.json names.
+pub fn should_replace_staged(staged: Option<&str>, latest: &str) -> bool {
+    match staged {
+        None => true,
+        Some(s) => s != latest,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::is_newer;
+    use super::{is_newer, should_replace_staged};
     fn v(s: &str) -> semver::Version {
         semver::Version::parse(s).unwrap()
     }
@@ -482,5 +511,25 @@ mod tests {
         assert!(!is_newer(&v("0.3.0-beta.1"), &v("0.2.0-21")));
         assert!(!is_newer(&v("0.3.0-beta.2"), &v("0.3.0-beta.2")));
         assert!(!is_newer(&v("0.3.0"), &v("0.3.0-beta.5")));
+        assert!(is_newer(&v("0.3.0-beta.11"), &v("0.3.0-beta.11.1")));
+        assert!(!is_newer(&v("0.3.0-beta.11.1"), &v("0.3.0-beta.11")));
+    }
+
+    #[test]
+    fn staged_package_is_dropped_when_latest_moved_on() {
+        assert!(should_replace_staged(None, "0.3.0-beta.11.1"));
+        assert!(should_replace_staged(
+            Some("0.3.0-beta.11"),
+            "0.3.0-beta.11.1"
+        ));
+        assert!(!should_replace_staged(
+            Some("0.3.0-beta.11.1"),
+            "0.3.0-beta.11.1"
+        ));
+        // A rollback: don't keep a staged copy the feed no longer names.
+        assert!(should_replace_staged(
+            Some("0.3.0-beta.11.1"),
+            "0.3.0-beta.11"
+        ));
     }
 }
