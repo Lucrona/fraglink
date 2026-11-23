@@ -3181,9 +3181,14 @@ async fn media_get(
         Some((app, _)) => crate::art::discord_cover(app).await,
         None => None,
     };
-    let art_steam = src
-        .steam_appid
-        .map(|a| format!("{}/{a}/header.jpg", st.cfg.steam_art_cdn));
+    let art_steam = match src.steam_appid {
+        Some(a) => Some(
+            crate::art::stored_header_url(&st, a)
+                .await
+                .unwrap_or_else(|| format!("{}/{a}/header.jpg", st.cfg.steam_art_cdn)),
+        ),
+        None => None,
+    };
     let k = crate::icons::key(&id);
     let custom_icon = game_overrides::custom_icon_dir(&st)
         .join(format!("{k}-64.png"))

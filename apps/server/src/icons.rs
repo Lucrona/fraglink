@@ -6,7 +6,8 @@
 //! 1. the game's icon from the detectable list (`icon_hash`), fetched from the
 //!    application icon CDN,
 //! 2. Steam's community icon for the game's app id (184 px "full" version first),
-//!    with the hash from our `games` table or Steam's store API.
+//!    with the hash from our `games` table or Steam's store API. Newer Steam apps
+//!    are only on the community_assets host, which is tried last.
 //!
 //! A game with neither gets 404 and the app falls back to the exe icon on the
 //! user's PC or a generic glyph. Apps only ever download icons from this server.
@@ -256,6 +257,17 @@ async fn fetch(st: &AppState, s: &Sources) -> Option<Vec<u8>> {
             if let Some(b) = download(&url).await {
                 return Some(b);
             }
+        }
+    }
+    // Newer Steam apps only have their community icon on the community_assets host.
+    if let Some(url) = fraglink_core::icons::steam_cdn_icon_url(
+        &st.cfg.steam_community_assets_url,
+        appid,
+        &hash,
+        false,
+    ) {
+        if let Some(b) = download(&url).await {
+            return Some(b);
         }
     }
     None

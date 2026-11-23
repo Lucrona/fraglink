@@ -620,6 +620,20 @@ fn send_jpeg(b: Vec<u8>) -> Response {
         .into_response()
 }
 
+async fn fetch_header_jpeg(url: &str, max: usize) -> Option<Vec<u8>> {
+    let r = reqwest::Client::new()
+        .get(url)
+        .timeout(Duration::from_secs(8))
+        .send()
+        .await
+        .ok()?;
+    if !r.status().is_success() {
+        return None;
+    }
+    let b = r.bytes().await.ok()?;
+    (b.len() < max && b.starts_with(&[0xff, 0xd8])).then(|| b.to_vec())
+}
+
 async fn art(State(st): State<AppState>, Path(file): Path<String>, headers: HeaderMap) -> Response {
     let Some(appid) = file
         .strip_suffix(".jpg")
@@ -658,20 +672,13 @@ async fn art(State(st): State<AppState>, Path(file): Path<String>, headers: Head
     }
     let url = format!("{}/{appid}/header.jpg", st.cfg.steam_art_cdn);
     let max = st.cfg.art_max_bytes;
-    let got = async {
-        let r = reqwest::Client::new()
-            .get(&url)
-            .timeout(Duration::from_secs(8))
-            .send()
-            .await
-            .ok()?;
-        if !r.status().is_success() {
-            return None;
+    let mut got = fetch_header_jpeg(&url, max).await;
+    if got.is_none() {
+        // newer Steam apps: the warmer's stored header_image (Steam image hosts only)
+        if let Some(stored) = crate::art::stored_header_url(&st, appid).await {
+            got = fetch_header_jpeg(&stored, max).await;
         }
-        let b = r.bytes().await.ok()?;
-        (b.len() < max && b.starts_with(&[0xff, 0xd8])).then(|| b.to_vec())
     }
-    .await;
     let _ = std::fs::create_dir_all(&d);
     expire_art_misses(&d, st.cfg.art_miss_ttl_secs);
     match got {

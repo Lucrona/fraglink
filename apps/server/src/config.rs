@@ -21,6 +21,9 @@ pub struct Config {
     pub app_icon_cdn_url: String,
     /// `FRAGLINK_STEAM_ICON_CDN`: base of Steam community icons (server side only).
     pub steam_cdn_url: String,
+    /// `FRAGLINK_STEAM_COMMUNITY_ASSETS`: newer host for the same community icons
+    /// (`<base>/<appid>/<hash>.jpg`). Newer Steam apps are only on this one.
+    pub steam_community_assets_url: String,
     /// `FRAGLINK_DATA_DIR` (default `/var/lib/fraglink`): cached game lists and the
     /// optional `detect-overrides.json`.
     pub data_dir: std::path::PathBuf,
@@ -117,6 +120,9 @@ impl Config {
             steam_cdn_url: var("FRAGLINK_STEAM_ICON_CDN").unwrap_or_else(|| {
                 "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps".into()
             }),
+            steam_community_assets_url: var("FRAGLINK_STEAM_COMMUNITY_ASSETS").unwrap_or_else(
+                || "https://shared.akamai.steamstatic.com/community_assets/images/apps".into(),
+            ),
             data_dir: var("FRAGLINK_DATA_DIR")
                 .unwrap_or_else(|| "/var/lib/fraglink".into())
                 .into(),
@@ -230,6 +236,7 @@ impl Config {
             presence_idle_secs: crate::presence::IDLE_TIMEOUT_SECS,
             app_icon_cdn_url: "http://127.0.0.1:9".into(),
             steam_cdn_url: "http://127.0.0.1:9/apps".into(),
+            steam_community_assets_url: "http://127.0.0.1:9/community_assets".into(),
             data_dir: std::env::temp_dir().join("fraglink-server-tests"),
             detectable_url: "http://127.0.0.1:9/detectable".into(),
             steam_store_url: None,
