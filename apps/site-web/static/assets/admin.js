@@ -1656,13 +1656,51 @@ async function detectTest() {
 }
 
 /* ---------- Missing artwork ---------- */
+const AR = { q: "", status: "", offset: 0, last: "" };
+
 async function missingArt() {
-  const d = await api("/admin/artwork");
+  await loadArt();
+}
+
+async function loadArt() {
+  const d = await api("/admin/artwork?" + new URLSearchParams({ q: AR.q, status: AR.status, offset: AR.offset }));
+  AR.offset = d.offset;
+  const size = d.page_size || 50;
+  const to = d.offset + d.rows.length;
+  const pager = d.total > size ? `<div class="pager"><button class="btn sm" data-aroff="${Math.max(0, d.offset - size)}" ${d.offset ? "" : "disabled"}>‹ Prev</button><span>${d.rows.length ? `${d.offset + 1}–${to}` : "0"} of ${num(d.total)}</span><button class="btn sm" data-aroff="${d.offset + size}" ${to < d.total ? "" : "disabled"}>Next ›</button></div>` : "";
   view.innerHTML = `<section class="panel"><h2><span class="tab">Missing artwork <span class="dimt">${num(d.total)}</span></span></h2>
-    <p class="note">${esc(d.note)} Replace one icon from the game editor. There is no bulk replace.</p>
+    <div class="tools"><input class="in grow" type="search" id="arq" placeholder="Search name or id" value="${esc(AR.q)}" autocomplete="off">
+      <select class="in" id="arst"><option value="">Any status</option>
+        ${[["not_cached","Not cached"],["unavailable","Unavailable"],["missing","Missing"]].map(([v,l]) => `<option value="${v}" ${AR.status === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <button class="btn" id="arfetch" ${d.rows.length ? "" : "disabled"}>Fetch art for this page</button></div>
+    <p class="note">${esc(d.note)} You can still set a custom banner from the game editor.</p>
+    <div class="note" id="arprog"${AR.last ? "" : " hidden"}>${esc(AR.last)}</div>
     ${d.rows.length ? `<table class="gl"><thead><tr><th>Game</th><th>Status</th><th></th></tr></thead><tbody>
-      ${d.rows.map(r => `<tr><td>${esc(r.name)} <span class="mono dimt">${esc(r.id)}</span></td><td>${esc(r.status)}<div class="dimt">${esc(r.detail)}</div></td><td class="rt"><a class="btn sm" href="#games/id:${encodeURIComponent(r.id)}">Edit artwork</a></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No missing icons in this page.</div>`}
-    </section>`;
+      ${d.rows.map(r => `<tr data-arid="${esc(r.id)}"><td>${esc(r.name)} <span class="mono dimt">${esc(r.id)}</span></td><td>${esc(r.status)}<div class="dimt">${esc(r.detail)}</div></td><td class="rt"><button class="btn sm" data-arone="${esc(r.id)}">Fetch</button> <a class="btn sm" href="#games/id:${encodeURIComponent(r.id)}">Edit artwork</a></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No games are missing a banner in this page.</div>`}
+    ${pager}</section>`;
+  let t; $("#arq").oninput = e => { clearTimeout(t); t = setTimeout(() => { AR.q = e.target.value.trim(); AR.offset = 0; loadArt(); }, 300); };
+  $("#arst").onchange = e => { AR.status = e.target.value; AR.offset = 0; loadArt(); };
+  view.querySelectorAll("[data-aroff]").forEach(btn => {
+    btn.onclick = () => { if (btn.disabled) return; AR.offset = +btn.dataset.aroff; loadArt().then(() => view.scrollIntoView({ block: "start" })); };
+  });
+  $("#arfetch").onclick = e => fetchArt(d.rows.map(r => r.id), e.currentTarget);
+  view.querySelectorAll("[data-arone]").forEach(btn => {
+    btn.onclick = () => fetchArt([btn.dataset.arone], btn);
+  });
+}
+
+async function fetchArt(ids, btn) {
+  if (!ids.length) return;
+  AR.last = `Fetching art for ${ids.length} game${ids.length === 1 ? "" : "s"}…`;
+  const prog = $("#arprog");
+  if (prog) { prog.hidden = false; prog.textContent = AR.last; }
+  await act(btn, async () => {
+    const d = await api("/admin/artwork/fetch", { method: "POST", body: { ids } });
+    const found = d.fetched || 0, miss = d.still_missing || 0;
+    AR.last = found ? `Found art for ${found} game${found === 1 ? "" : "s"}.` : "No new banners were found.";
+    if (miss) AR.last += ` ${miss} still ${miss === 1 ? "has" : "have"} none.`;
+    await loadArt();
+  });
 }
 
 /* ---------- Data checks ---------- */

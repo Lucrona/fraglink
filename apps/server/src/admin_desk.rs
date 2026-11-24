@@ -24,6 +24,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/admin/detect-test", post(detect_test))
         .route("/api/v1/admin/artwork", get(artwork))
+        .route("/api/v1/admin/artwork/fetch", post(artwork_fetch))
         .route("/api/v1/admin/undo", get(undo_list).post(undo_apply))
         .route("/api/v1/admin/data-checks", get(data_checks))
         .route("/api/v1/admin/review-history", get(history))
@@ -147,7 +148,33 @@ fn not_repro(id: &str, label: &str, detail: &str) -> Value {
 }
 
 // ---------------------------------------------------------------------------
-// Missing artwork. Never fetches an icon.
+// Missing /games banner art. Fetch uses the same sources as the public proxy.
+
+const ART_PAGE: i64 = 50;
+const ART_FETCH_MAX: usize = 50;
+
+fn art_detail(status: &str) -> &'static str {
+    match status {
+        "unavailable" => {
+            "A previous look found no banner. Fetch art tries again and clears that miss."
+        }
+        "not_cached" => {
+            "A Steam or games-list source may exist, but no banner is cached yet. Fetch art uses the same lookup as /games."
+        }
+        _ => "No banner on disk and no Steam or games-list source on this server. Fetch art still tries the same lookup as /games.",
+    }
+}
+
+fn may_have_art_source(st: &AppState, id: &str, listed: bool, has_steam_row: bool) -> bool {
+    listed
+        || has_steam_row
+        || id.starts_with("steam:")
+        || st
+            .sigs
+            .get(id)
+            .and_then(|g| g.steam_appids.first().copied())
+            .is_some()
+}
 
 async fn artwork(
     State(st): State<AppState>,
@@ -156,31 +183,28 @@ async fn artwork(
 ) -> ApiResult<Json<Value>> {
     s.need(Role::Admin)?;
     let ids = catalogue_ids(&st).await?;
-    let custom = crate::game_overrides::custom_icon_dir(&st);
-    let cache = st.cfg.data_dir.join("icon-cache");
     let idx = st.games.icon_index();
+    let steam_rows: BTreeSet<String> = sqlx::query_scalar(
+        "SELECT id FROM games WHERE steam_appid IS NOT NULL AND id NOT LIKE 'manual:%'",
+    )
+    .fetch_all(&st.db)
+    .await?
+    .into_iter()
+    .collect();
     let mut rows = Vec::new();
     for id in ids {
-        let k = crate::icons::key(&id);
-        let has_file = custom.join(format!("{k}-32.png")).is_file()
-            || cache.join(format!("{k}-32.png")).is_file();
-        if has_file {
-            continue;
-        }
-        let miss = cache.join(format!("{k}.miss")).is_file();
-        let listed = idx.by_slug.contains_key(&id);
-        let steam = st
-            .sigs
-            .get(&id)
-            .and_then(|g| g.steam_appids.first().copied())
-            .is_some()
-            || id.starts_with("steam:");
-        let status = if miss {
-            "unavailable"
-        } else if listed || steam {
-            "not_cached"
-        } else {
-            "missing"
+        let status = match crate::art::list_status(
+            crate::art::has_banner(&st, &id),
+            crate::art::has_miss(&st, &id),
+            may_have_art_source(
+                &st,
+                &id,
+                idx.by_slug.contains_key(&id),
+                steam_rows.contains(&id),
+            ),
+        ) {
+            Some(s) => s,
+            None => continue,
         };
         if let Some(want) = q.status.as_deref().filter(|s| !s.is_empty()) {
             if want != status {
@@ -199,11 +223,7 @@ async fn artwork(
             "id": id,
             "name": name,
             "status": status,
-            "detail": match status {
-                "unavailable" => "A previous look found no official icon. Nothing is fetched again from this page.",
-                "not_cached" => "A games-list or Steam source may exist, but no file is cached. Opening the game editor fetches one icon; this queue does not.",
-                _ => "No icon file and no games-list or Steam source on this server.",
-            },
+            "detail": art_detail(status),
         }));
     }
     rows.sort_by(|a, b| {
@@ -214,10 +234,14 @@ async fn artwork(
     });
     let total = rows.len() as i64;
     let off = q.offset.unwrap_or(0).max(0);
-    let page: Vec<Value> = rows.into_iter().skip(off as usize).take(50).collect();
+    let page: Vec<Value> = rows
+        .into_iter()
+        .skip(off as usize)
+        .take(ART_PAGE as usize)
+        .collect();
     Ok(Json(json!({
-        "total": total, "offset": off, "page_size": 50, "rows": page,
-        "note": "This list only looks at files already on the server. It does not download icons.",
+        "total": total, "offset": off, "page_size": ART_PAGE, "rows": page,
+        "note": "Games without a banner for /games. Fetch art uses the same lookup as searching a game, including the stored Steam header and Discord cover, and retries even if a previous look found nothing.",
     })))
 }
 
@@ -229,6 +253,99 @@ struct ArtQ {
     status: Option<String>,
     #[serde(default)]
     offset: Option<i64>,
+}
+
+#[derive(Deserialize)]
+struct ArtFetch {
+    #[serde(default)]
+    ids: Vec<String>,
+}
+
+async fn artwork_fetch(
+    State(st): State<AppState>,
+    s: Staff,
+    Json(r): Json<ArtFetch>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let mut want = Vec::new();
+    let mut seen = BTreeSet::new();
+    for raw in r.ids {
+        let id = raw.trim();
+        if id.is_empty() || id.len() > 120 || id.chars().any(char::is_control) {
+            return Err(bad("bad_id", "That game id is not valid."));
+        }
+        if seen.insert(id.to_string()) {
+            want.push(id.to_string());
+        }
+        if want.len() > ART_FETCH_MAX {
+            return Err(bad("too_many", "Fetch at most 50 games at a time."));
+        }
+    }
+    if want.is_empty() {
+        return Err(bad("no_ids", "Pick at least one game to fetch art for."));
+    }
+    let catalogue: BTreeSet<String> = catalogue_ids(&st).await?.into_iter().collect();
+    let ids: Vec<String> = want
+        .into_iter()
+        .filter(|id| catalogue.contains(id))
+        .collect();
+    if ids.is_empty() {
+        return Err(bad(
+            "unknown_game",
+            "None of those ids are in the catalogue.",
+        ));
+    }
+
+    use futures_util::stream::{self, StreamExt};
+    let st_c = st.clone();
+    let rows: Vec<Value> = stream::iter(ids.clone())
+        .map(|id| {
+            let st = st_c.clone();
+            async move {
+                let found = crate::art::retry(&st, &id).await;
+                let name = crate::names::list_name(&st, &id).unwrap_or_else(|| id.clone());
+                let status = if found {
+                    "found"
+                } else {
+                    crate::art::list_status(false, crate::art::has_miss(&st, &id), true)
+                        .unwrap_or("unavailable")
+                };
+                json!({
+                    "id": id,
+                    "name": name,
+                    "found": found,
+                    "status": status,
+                    "detail": if found {
+                        "Banner is now cached, the same way /games would show it."
+                    } else {
+                        art_detail(status)
+                    },
+                })
+            }
+        })
+        .buffer_unordered(4)
+        .collect()
+        .await;
+
+    let fetched = rows
+        .iter()
+        .filter(|r| r["found"].as_bool() == Some(true))
+        .count();
+    let still_missing = rows.len() - fetched;
+    let _ = audit(
+        &st,
+        &s,
+        "artwork.fetch",
+        "artwork",
+        serde_json::Value::Null,
+        json!({ "ids": ids, "fetched": fetched, "still_missing": still_missing }),
+    )
+    .await;
+    Ok(Json(json!({
+        "fetched": fetched,
+        "still_missing": still_missing,
+        "rows": rows,
+    })))
 }
 
 async fn catalogue_ids(st: &AppState) -> ApiResult<Vec<String>> {

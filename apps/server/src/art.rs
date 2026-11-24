@@ -228,6 +228,60 @@ pub fn purge(st: &AppState, id: &str) {
     let _ = std::fs::remove_file(d.join(format!("{k}.miss")));
 }
 
+/// A usable banner is already on disk (admin override or a still-fresh cache hit).
+pub fn has_banner(st: &AppState, id: &str) -> bool {
+    override_path(st, id).is_file() || fresh(&dir(st).join(format!("{}.jpg", key(id))), 30 * 86400)
+}
+
+/// A previous look recorded no art. [`retry`] clears this so the same sources as
+/// `/api/v1/game-art` can be tried again.
+pub fn has_miss(st: &AppState, id: &str) -> bool {
+    dir(st).join(format!("{}.miss", key(id))).is_file()
+}
+
+pub fn clear_miss(st: &AppState, id: &str) {
+    let _ = std::fs::remove_file(dir(st).join(format!("{}.miss", key(id))));
+}
+
+/// Status on the Admin missing-artwork list. Games with a banner are omitted.
+pub fn list_status(has_banner: bool, has_miss: bool, has_source: bool) -> Option<&'static str> {
+    if has_banner {
+        return None;
+    }
+    Some(if has_miss {
+        "unavailable"
+    } else if has_source {
+        "not_cached"
+    } else {
+        "missing"
+    })
+}
+
+/// Drop a `.miss` marker and fetch with the same sources as the public game-art
+/// proxy (Steam header, stored `header_image`, then Discord cover).
+pub async fn retry(st: &AppState, id: &str) -> bool {
+    clear_miss(st, id);
+    let d = dir(st);
+    let k = key(id);
+    let p = d.join(format!("{k}.jpg"));
+    let _ = std::fs::create_dir_all(&d);
+    match resolve(st, id).await {
+        Some(b) => {
+            let _ = std::fs::write(&p, &b);
+            clear_miss(st, id);
+            true
+        }
+        None => {
+            if p.is_file() {
+                clear_miss(st, id);
+                return true;
+            }
+            let _ = std::fs::write(d.join(format!("{k}.miss")), b"");
+            false
+        }
+    }
+}
+
 async fn resolve(st: &AppState, id: &str) -> Option<Vec<u8>> {
     let s = crate::icons::only(
         crate::icons::sources(st, id).await,
@@ -408,5 +462,13 @@ mod tests {
         let j = normalise(&buf.into_inner()).unwrap();
         let back = image::load_from_memory(&j).unwrap();
         assert_eq!((back.width(), back.height()), (W, H));
+    }
+
+    #[test]
+    fn list_status_drops_games_once_art_is_on_disk() {
+        assert_eq!(list_status(true, true, true), None);
+        assert_eq!(list_status(false, true, true), Some("unavailable"));
+        assert_eq!(list_status(false, false, true), Some("not_cached"));
+        assert_eq!(list_status(false, false, false), Some("missing"));
     }
 }
