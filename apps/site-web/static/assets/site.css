@@ -1214,6 +1214,9 @@ a.cp-slot{color:inherit;text-decoration:none}a.cp-slot:hover{background:var(--ro
 .chip[disabled]{opacity:.45;cursor:default}
 .ar-notice{min-height:38px;margin:0 12px 8px}
 .ar-notice .alert{margin:0}
+#arfetch,#arall{flex:0 0 auto;text-align:center}
+#arfetch{min-width:26ch}
+#arall{min-width:19ch}
 .ar-backfill{margin:0 12px 12px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;min-height:32px}
 .ar-backfill .dimt{margin-right:4px}
 table.gl{width:100%;border-collapse:collapse}
