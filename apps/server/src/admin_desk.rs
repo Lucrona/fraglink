@@ -25,6 +25,10 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/detect-test", post(detect_test))
         .route("/api/v1/admin/artwork", get(artwork))
         .route("/api/v1/admin/artwork/fetch", post(artwork_fetch))
+        .route(
+            "/api/v1/admin/artwork/backfill",
+            get(artwork_backfill).post(artwork_backfill_act),
+        )
         .route("/api/v1/admin/undo", get(undo_list).post(undo_apply))
         .route("/api/v1/admin/data-checks", get(data_checks))
         .route("/api/v1/admin/review-history", get(history))
@@ -239,9 +243,11 @@ async fn artwork(
         .skip(off as usize)
         .take(ART_PAGE as usize)
         .collect();
+    let backfill = crate::art_backfill::status(&st).await?;
     Ok(Json(json!({
         "total": total, "offset": off, "page_size": ART_PAGE, "rows": page,
         "note": "Games without a banner for /games. Fetch art uses the same lookup as searching a game, including the stored Steam header and Discord cover, and retries even if a previous look found nothing.",
+        "backfill": backfill,
     })))
 }
 
@@ -348,7 +354,43 @@ async fn artwork_fetch(
     })))
 }
 
-async fn catalogue_ids(st: &AppState) -> ApiResult<Vec<String>> {
+#[derive(Deserialize)]
+struct BackfillAct {
+    action: String,
+}
+
+async fn artwork_backfill(State(st): State<AppState>, s: Staff) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    Ok(Json(crate::art_backfill::status(&st).await?))
+}
+
+async fn artwork_backfill_act(
+    State(st): State<AppState>,
+    s: Staff,
+    Json(r): Json<BackfillAct>,
+) -> ApiResult<Json<Value>> {
+    s.need(Role::Admin)?;
+    let action = r.action.trim().to_ascii_lowercase();
+    let by = s.user.handle.as_str();
+    let out = match action.as_str() {
+        "start" => crate::art_backfill::start(&st, by).await?,
+        "stop" => crate::art_backfill::stop(&st).await?,
+        "resume" => crate::art_backfill::resume(&st, by).await?,
+        _ => return Err(bad("bad_action", "Use start, stop, or resume.")),
+    };
+    let _ = audit(
+        &st,
+        &s,
+        &format!("artwork.backfill_{action}"),
+        "artwork",
+        serde_json::Value::Null,
+        out.clone(),
+    )
+    .await;
+    Ok(Json(out))
+}
+
+pub(crate) async fn catalogue_ids(st: &AppState) -> ApiResult<Vec<String>> {
     let mut ids = BTreeSet::new();
     if let Some(db) = crate::games::detectable_db(st) {
         for g in db.games() {

@@ -210,6 +210,15 @@ impl GameLists {
         *self.built.write().unwrap_or_else(|e| e.into_inner()) = Some(b);
     }
 
+    /// Put an empty list in place so `current()` does not fall back to the bundled
+    /// Discord snapshot (used by tests that need a tiny catalogue).
+    pub fn install_empty(&self) {
+        let json = br#"{"v":1,"updated":"","games":[]}"#.to_vec();
+        if let Ok(b) = built_from_json(json, 0, String::new(), None) {
+            self.install(b);
+        }
+    }
+
     /// Discord's name for a Fraglink game id, if it is on the detectable list.
     pub fn detectable_name(&self, id: &str) -> Option<String> {
         self.current().and_then(|b| b.names.get(id).cloned())

@@ -1656,7 +1656,7 @@ async function detectTest() {
 }
 
 /* ---------- Missing artwork ---------- */
-const AR = { q: "", status: "", offset: 0, last: "", kind: "", seq: 0, busy: false };
+const AR = { q: "", status: "", offset: 0, last: "", kind: "", seq: 0, busy: false, bf: null, bfTimer: null };
 
 async function missingArt() {
   await loadArt();
@@ -1700,9 +1700,11 @@ async function loadArt() {
     <div class="tools"><input class="in grow" type="search" id="arq" placeholder="Search name or id" value="${esc(AR.q)}" autocomplete="off">
       <select class="in" id="arst"><option value="">Any status</option>
         ${[["not_cached","Not cached"],["unavailable","Unavailable"],["missing","Missing"]].map(([v,l]) => `<option value="${v}" ${AR.status === v ? "selected" : ""}>${l}</option>`).join("")}</select>
-      <button class="btn" id="arfetch" ${d.rows.length ? "" : "disabled"}>Fetch art for this page</button></div>
-    <p class="note">${esc(d.note)} You can still set a custom banner from the game editor.</p>
+      <button class="btn" id="arfetch" ${d.rows.length ? "" : "disabled"}>Fetch art for this page</button>
+      <button class="btn" id="arall" type="button">Fetch all missing</button></div>
+    <p class="note">${esc(d.note)} You can still set a custom banner from the game editor. Fetch all missing walks the whole catalogue slowly in the background.</p>
     <div class="ar-notice"><div class="${artNoticeClass()}" id="arprog"${AR.last ? "" : " hidden"}>${AR.last ? esc(AR.last) : ""}</div></div>
+    <div class="ar-backfill" id="arbf"></div>
     ${d.rows.length ? `<table class="gl"><thead><tr><th>Game</th><th>Status</th><th></th></tr></thead><tbody>
       ${d.rows.map(r => `<tr data-arid="${esc(r.id)}"><td>${esc(r.name)} <span class="mono dimt">${esc(r.id)}</span></td><td>${esc(r.status)}<div class="dimt">${esc(r.detail)}</div></td><td class="rt"><button class="btn sm" data-arone="${esc(r.id)}">Fetch</button> <a class="btn sm" href="#games/id:${encodeURIComponent(r.id)}">Edit artwork</a></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No games are missing a banner in this page.</div>`}
     ${pager}</section>`;
@@ -1715,7 +1717,74 @@ async function loadArt() {
   view.querySelectorAll("[data-arone]").forEach(btn => {
     btn.onclick = () => fetchArt([btn.dataset.arone]);
   });
+  $("#arall").onclick = () => backfillAct("start");
+  renderBackfill(d.backfill || AR.bf);
   if (AR.busy) artBusy(true);
+}
+
+function backfillLine(bf) {
+  if (!bf) return "";
+  if (!bf.enabled) return "Fetch all missing is switched off on this server.";
+  const n = k => Number(bf[k] || 0);
+  if (bf.status === "idle") return "No backfill is running.";
+  const head = { running: "Running", stopped: "Stopped", finished: "Finished" }[bf.status] || bf.status;
+  return `${head}: ${num(n("done"))} done, ${num(n("found"))} found, ${num(n("remaining"))} remaining.`;
+}
+
+function stopBfPoll() {
+  if (AR.bfTimer) { clearInterval(AR.bfTimer); AR.bfTimer = null; }
+}
+
+function syncBfPoll() {
+  const running = AR.bf && AR.bf.status === "running";
+  if (!running) { stopBfPoll(); return; }
+  if (AR.bfTimer) return;
+  AR.bfTimer = setInterval(pollBackfill, 2000);
+}
+
+async function pollBackfill() {
+  if (!$("#arbf")) { stopBfPoll(); return; }
+  try {
+    const bf = await api("/admin/artwork/backfill");
+    const was = AR.bf && AR.bf.status;
+    renderBackfill(bf);
+    if (was === "running" && bf.status === "finished") {
+      stopBfPoll();
+      await loadArt();
+    }
+  } catch (e) {}
+}
+
+function renderBackfill(bf) {
+  AR.bf = bf || null;
+  const box = $("#arbf");
+  if (!box) return;
+  if (!AR.bf) { box.innerHTML = ""; stopBfPoll(); return; }
+  let acts = "";
+  if (AR.bf.can_stop) acts += `<button class="btn" id="arstop" type="button">Stop</button>`;
+  if (AR.bf.can_resume) acts += `<button class="btn" id="arresume" type="button">Resume</button>`;
+  box.innerHTML = `<span class="dimt">${esc(backfillLine(AR.bf))}</span>${acts}`;
+  const all = $("#arall");
+  if (all) {
+    all.disabled = !AR.bf.can_start;
+    all.title = AR.bf.enabled ? "" : "Art backfill is switched off on this server.";
+  }
+  const stop = $("#arstop");
+  if (stop) stop.onclick = () => backfillAct("stop");
+  const resume = $("#arresume");
+  if (resume) resume.onclick = () => backfillAct("resume");
+  syncBfPoll();
+}
+
+async function backfillAct(action) {
+  try {
+    const bf = await api("/admin/artwork/backfill", { method: "POST", body: { action } });
+    renderBackfill(bf);
+  } catch (e) {
+    AR.last = e.message || "Couldn't update the backfill.";
+    AR.kind = "err";
+    showArtNotice();
+  }
 }
 
 async function fetchArt(ids) {

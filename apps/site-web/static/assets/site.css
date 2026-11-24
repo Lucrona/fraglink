@@ -1214,6 +1214,8 @@ a.cp-slot{color:inherit;text-decoration:none}a.cp-slot:hover{background:var(--ro
 .chip[disabled]{opacity:.45;cursor:default}
 .ar-notice{min-height:38px;margin:0 12px 8px}
 .ar-notice .alert{margin:0}
+.ar-backfill{margin:0 12px 12px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;min-height:32px}
+.ar-backfill .dimt{margin-right:4px}
 table.gl{width:100%;border-collapse:collapse}
 table.gl th{color:#f0b060;background:#0f161f;border-bottom:1px solid #000;padding:6px 8px}
 table.gl th.srt{cursor:pointer}table.gl th.srt.on:after{content:" ▾";color:#fff}

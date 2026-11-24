@@ -48,7 +48,8 @@ pub struct Config {
     /// `FRAGLINK_SITE_DIR` (default `/var/www/fraglink-beta`): the built website, for the
     /// profile page the server sends with per-profile robots tags.
     pub site_dir: std::path::PathBuf,
-    /// `FRAGLINK_ART_CACHE_BYTES` (default 1 GiB): max total size of `{data_dir}/art/{appid}.jpg`.
+    /// `FRAGLINK_ART_CACHE_BYTES` (default 1 GiB): max total size of cached Steam headers
+    /// (`{data_dir}/art/{appid}.jpg`) and /games banners (`{data_dir}/art/g/*.jpg`).
     pub art_cache_bytes: u64,
     /// `FRAGLINK_ART_MAX_BYTES` (default 1_500_000): max size of one fetched header image.
     pub art_max_bytes: usize,
@@ -81,6 +82,13 @@ pub struct Config {
     /// `FRAGLINK_PUBLIC_WEEK_TZ` (default Australia/Sydney): the zone used for
     /// public "this week" figures on game pages and the Games tab.
     pub public_week_tz: String,
+    /// `FRAGLINK_ART_BACKFILL` (default on): allows staff to start a slow walk
+    /// of catalogue games with no /games banner. Nothing starts on its own.
+    /// Set to `off`, `0`, `false`, or `no` to disable the button and any run.
+    pub art_backfill: bool,
+    /// `FRAGLINK_ART_BACKFILL_EVERY_SECS` (default 5): pause between games in a
+    /// staff-started backfill. Does not start a run by itself.
+    pub art_backfill_every_secs: u64,
     /// `FRAGLINK_GAME_WARMER` (default on): background walk of the catalogue
     /// so game pages fill in without waiting for a first view.
     pub game_warmer: bool,
@@ -199,6 +207,17 @@ impl Config {
                 .unwrap_or(18_000),
             public_week_tz: var("FRAGLINK_PUBLIC_WEEK_TZ")
                 .unwrap_or_else(|| crate::activity::DEFAULT_TZ.into()),
+            art_backfill: var("FRAGLINK_ART_BACKFILL")
+                .map(|s| {
+                    !matches!(
+                        s.to_ascii_lowercase().as_str(),
+                        "off" | "0" | "false" | "no"
+                    )
+                })
+                .unwrap_or(true),
+            art_backfill_every_secs: var("FRAGLINK_ART_BACKFILL_EVERY_SECS")
+                .and_then(|s| s.trim().parse().ok())
+                .unwrap_or(5),
             game_warmer: var("FRAGLINK_GAME_WARMER")
                 .map(|s| {
                     !matches!(
@@ -259,6 +278,8 @@ impl Config {
             game_trending_ratio: 1.5,
             game_trending_min_secs: 18_000,
             public_week_tz: crate::activity::DEFAULT_TZ.into(),
+            art_backfill: true,
+            art_backfill_every_secs: 0,
             game_warmer: false,
             game_warmer_news_ttl_secs: 12 * 3600,
             wikipedia_url: None,

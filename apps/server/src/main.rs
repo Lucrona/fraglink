@@ -31,6 +31,9 @@ async fn main() -> anyhow::Result<()> {
     );
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     let state = AppState::new(db, cfg);
+    // A run that was in progress is left stopped; staff can resume it.
+    // Do not spawn a worker here — nothing starts on its own.
+    fraglink_server::art_backfill::pause_on_boot(&state).await;
     fraglink_server::presence::reset_all(&state)
         .await
         .map_err(|e| anyhow::anyhow!(e.message))?;

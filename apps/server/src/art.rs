@@ -27,6 +27,10 @@ pub const W: u32 = 460;
 pub const H: u32 = 215;
 const MAX_FETCH: usize = 6 * 1024 * 1024;
 
+pub fn cache_key(id: &str) -> String {
+    key(id)
+}
+
 fn key(id: &str) -> String {
     Sha256::digest(id.as_bytes())[..12]
         .iter()
@@ -243,6 +247,63 @@ pub fn clear_miss(st: &AppState, id: &str) {
     let _ = std::fs::remove_file(dir(st).join(format!("{}.miss", key(id))));
 }
 
+/// How long until a `.miss` marker expires, if it is still fresh.
+pub fn miss_remaining(st: &AppState, id: &str) -> Option<std::time::Duration> {
+    let p = dir(st).join(format!("{}.miss", key(id)));
+    let age = std::fs::metadata(&p)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())?;
+    let ttl = Duration::from_secs(st.cfg.art_miss_ttl_secs);
+    (age < ttl).then(|| ttl - age)
+}
+
+/// LRU-evict cached banners in `art/g/` until the directory is at or under the
+/// configured cap. Override files are never touched. `keep` is not deleted.
+pub fn evict_banners(st: &AppState, keep: Option<&std::path::Path>) {
+    evict_banner_dir(&dir(st), st.cfg.art_cache_bytes, keep);
+}
+
+pub fn evict_banner_dir(d: &std::path::Path, cap: u64, keep: Option<&std::path::Path>) {
+    let Ok(rd) = std::fs::read_dir(d) else {
+        return;
+    };
+    let mut files: Vec<(std::time::SystemTime, u64, std::path::PathBuf)> = Vec::new();
+    for e in rd.flatten() {
+        let name = e.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if !name.ends_with(".jpg") {
+            continue;
+        }
+        let Ok(meta) = e.metadata() else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let mtime = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        files.push((mtime, meta.len(), e.path()));
+    }
+    let mut total: u64 = files.iter().map(|f| f.1).sum();
+    if total <= cap {
+        return;
+    }
+    files.sort_by_key(|f| f.0);
+    for (_, size, path) in &files {
+        if total <= cap {
+            break;
+        }
+        if keep.is_some_and(|k| path == k) {
+            continue;
+        }
+        if std::fs::remove_file(path).is_ok() {
+            total = total.saturating_sub(*size);
+        }
+    }
+}
+
 /// Status on the Admin missing-artwork list. Games with a banner are omitted.
 pub fn list_status(has_banner: bool, has_miss: bool, has_source: bool) -> Option<&'static str> {
     if has_banner {
@@ -267,7 +328,9 @@ pub async fn retry(st: &AppState, id: &str) -> bool {
     let _ = std::fs::create_dir_all(&d);
     match resolve(st, id).await {
         Some(b) => {
+            evict_banners(st, Some(&p));
             let _ = std::fs::write(&p, &b);
+            evict_banners(st, Some(&p));
             clear_miss(st, id);
             true
         }
@@ -470,5 +533,30 @@ mod tests {
         assert_eq!(list_status(false, true, true), Some("unavailable"));
         assert_eq!(list_status(false, false, true), Some("not_cached"));
         assert_eq!(list_status(false, false, false), Some("missing"));
+    }
+
+    #[test]
+    fn evict_banner_dir_drops_oldest_until_under_cap() {
+        let d = tempfile::tempdir().unwrap();
+        let a = d.path().join("a.jpg");
+        let b = d.path().join("b.jpg");
+        let c = d.path().join("c.jpg");
+        std::fs::write(&a, vec![0; 80]).unwrap();
+        std::fs::write(&b, vec![0; 80]).unwrap();
+        std::fs::write(&c, vec![0; 80]).unwrap();
+        let old = std::time::SystemTime::now() - Duration::from_secs(60);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&a)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        evict_banner_dir(d.path(), 160, Some(&c));
+        assert!(!a.exists(), "oldest should go first");
+        assert!(b.exists());
+        assert!(c.exists(), "keep must stay");
+        evict_banner_dir(d.path(), 0, None);
+        assert!(!b.exists());
+        assert!(!c.exists());
     }
 }

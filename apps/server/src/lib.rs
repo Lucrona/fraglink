@@ -14,6 +14,7 @@ pub mod alerts;
 pub mod all_games;
 pub mod api;
 pub mod art;
+pub mod art_backfill;
 pub mod auth;
 pub mod avatars;
 pub mod config;
@@ -111,6 +112,8 @@ pub struct AppState {
     pub game_slugs: Arc<Mutex<crate::game_pages::SlugIndex>>,
     /// Process-wide cap on outbound store / news fetches.
     pub feed_gate: Arc<crate::game_pages::FeedGate>,
+    /// Staff-started /games banner backfill. Never starts a run by itself.
+    pub art_backfill: Arc<crate::art_backfill::Ctl>,
 }
 
 impl AppState {
@@ -136,6 +139,7 @@ impl AppState {
             art_appids: Arc::new(Mutex::new(crate::home::ArtAppids::default())),
             game_slugs: Arc::new(Mutex::new(crate::game_pages::SlugIndex::default())),
             feed_gate: Arc::new(crate::game_pages::FeedGate::default()),
+            art_backfill: crate::art_backfill::Ctl::new(),
         }
     }
 
