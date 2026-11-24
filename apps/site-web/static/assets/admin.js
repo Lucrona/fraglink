@@ -1656,13 +1656,91 @@ async function detectTest() {
 }
 
 /* ---------- Missing artwork ---------- */
+const AR = { q: "", status: "", offset: 0, last: "", kind: "", seq: 0, busy: false };
+
 async function missingArt() {
-  const d = await api("/admin/artwork");
+  await loadArt();
+}
+
+function artNoticeClass() {
+  return "alert" + (AR.kind === "err" ? " err" : AR.kind === "info" ? " info" : AR.kind === "ok" ? " ok" : "");
+}
+
+function showArtNotice() {
+  const el = $("#arprog");
+  if (!el) return;
+  el.className = artNoticeClass();
+  el.textContent = AR.last || "";
+  el.hidden = !AR.last;
+}
+
+function artBusy(on) {
+  AR.busy = on;
+  ["#arq", "#arst"].forEach(sel => { const el = $(sel, view); if (el) el.disabled = on; });
+  view.querySelectorAll("[data-aroff]").forEach(b => { b.disabled = on || b.hasAttribute("disabled"); });
+  view.querySelectorAll("#arfetch, [data-arone]").forEach(b => {
+    if (on) {
+      if (b.dataset.aridle == null) b.dataset.aridle = b.textContent;
+      b.disabled = true;
+      b.textContent = "Fetching…";
+    } else {
+      if (b.dataset.aridle != null) { b.textContent = b.dataset.aridle; delete b.dataset.aridle; }
+      b.disabled = b.id === "arfetch" && !view.querySelector("[data-arone]");
+    }
+  });
+}
+
+async function loadArt() {
+  const d = await api("/admin/artwork?" + new URLSearchParams({ q: AR.q, status: AR.status, offset: AR.offset }));
+  AR.offset = d.offset;
+  const size = d.page_size || 50;
+  const to = d.offset + d.rows.length;
+  const pager = d.total > size ? `<div class="pager"><button class="btn sm" data-aroff="${Math.max(0, d.offset - size)}" ${d.offset ? "" : "disabled"}>‹ Prev</button><span>${d.rows.length ? `${d.offset + 1}–${to}` : "0"} of ${num(d.total)}</span><button class="btn sm" data-aroff="${d.offset + size}" ${to < d.total ? "" : "disabled"}>Next ›</button></div>` : "";
   view.innerHTML = `<section class="panel"><h2><span class="tab">Missing artwork <span class="dimt">${num(d.total)}</span></span></h2>
-    <p class="note">${esc(d.note)} Replace one icon from the game editor. There is no bulk replace.</p>
+    <div class="tools"><input class="in grow" type="search" id="arq" placeholder="Search name or id" value="${esc(AR.q)}" autocomplete="off">
+      <select class="in" id="arst"><option value="">Any status</option>
+        ${[["not_cached","Not cached"],["unavailable","Unavailable"],["missing","Missing"]].map(([v,l]) => `<option value="${v}" ${AR.status === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <button class="btn" id="arfetch" ${d.rows.length ? "" : "disabled"}>Fetch art for this page</button></div>
+    <p class="note">${esc(d.note)} You can still set a custom banner from the game editor.</p>
+    <div class="ar-notice"><div class="${artNoticeClass()}" id="arprog"${AR.last ? "" : " hidden"}>${AR.last ? esc(AR.last) : ""}</div></div>
     ${d.rows.length ? `<table class="gl"><thead><tr><th>Game</th><th>Status</th><th></th></tr></thead><tbody>
-      ${d.rows.map(r => `<tr><td>${esc(r.name)} <span class="mono dimt">${esc(r.id)}</span></td><td>${esc(r.status)}<div class="dimt">${esc(r.detail)}</div></td><td class="rt"><a class="btn sm" href="#games/id:${encodeURIComponent(r.id)}">Edit artwork</a></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No missing icons in this page.</div>`}
-    </section>`;
+      ${d.rows.map(r => `<tr data-arid="${esc(r.id)}"><td>${esc(r.name)} <span class="mono dimt">${esc(r.id)}</span></td><td>${esc(r.status)}<div class="dimt">${esc(r.detail)}</div></td><td class="rt"><button class="btn sm" data-arone="${esc(r.id)}">Fetch</button> <a class="btn sm" href="#games/id:${encodeURIComponent(r.id)}">Edit artwork</a></td></tr>`).join("")}</tbody></table>` : `<div class="body empty">No games are missing a banner in this page.</div>`}
+    ${pager}</section>`;
+  let t; $("#arq").oninput = e => { if (AR.busy) return; clearTimeout(t); t = setTimeout(() => { if (AR.busy) return; AR.q = e.target.value.trim(); AR.offset = 0; loadArt(); }, 300); };
+  $("#arst").onchange = e => { if (AR.busy) return; AR.status = e.target.value; AR.offset = 0; loadArt(); };
+  view.querySelectorAll("[data-aroff]").forEach(btn => {
+    btn.onclick = () => { if (AR.busy || btn.disabled) return; AR.offset = +btn.dataset.aroff; loadArt().then(() => view.scrollIntoView({ block: "start" })); };
+  });
+  $("#arfetch").onclick = () => fetchArt(d.rows.map(r => r.id));
+  view.querySelectorAll("[data-arone]").forEach(btn => {
+    btn.onclick = () => fetchArt([btn.dataset.arone]);
+  });
+  if (AR.busy) artBusy(true);
+}
+
+async function fetchArt(ids) {
+  if (!ids.length || AR.busy) return;
+  const seq = ++AR.seq;
+  AR.kind = "info";
+  AR.last = `Fetching art for ${ids.length} game${ids.length === 1 ? "" : "s"}…`;
+  artBusy(true);
+  showArtNotice();
+  try {
+    const d = await api("/admin/artwork/fetch", { method: "POST", body: { ids } });
+    if (seq !== AR.seq) return;
+    const found = d.fetched || 0, miss = d.still_missing || 0;
+    AR.last = found ? `Found art for ${found} game${found === 1 ? "" : "s"}.` : "No new banners were found.";
+    if (miss) AR.last += ` ${miss} still ${miss === 1 ? "has" : "have"} none.`;
+    AR.kind = found ? "ok" : "info";
+    AR.busy = false;
+    await loadArt();
+  } catch (e) {
+    if (seq !== AR.seq) return;
+    AR.last = e.message || "Couldn't fetch art.";
+    AR.kind = "err";
+    AR.busy = false;
+    await loadArt();
+  }
 }
 
 /* ---------- Data checks ---------- */
